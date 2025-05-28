@@ -15,6 +15,10 @@ class ChatFileType(str, Enum):
     PLAIN_TEXT = "plain_text"
     CSV = "csv"
 
+    # NOTE(rkuo): don't understand the motivation for this
+    # "user knowledge" is not a file type, it's a source or intent
+    USER_KNOWLEDGE = "user_knowledge"
+
 
 class FileDescriptor(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column

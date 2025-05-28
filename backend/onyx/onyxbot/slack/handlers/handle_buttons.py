@@ -15,7 +15,6 @@ from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.connectors.slack.utils import make_slack_api_rate_limited
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
@@ -252,9 +251,11 @@ def handle_publish_ephemeral_message_button(
             citations=citation_list,
             chat_message_id=chat_message_id,
             docs=QADocsResponse(
-                top_documents=chat_message_detail.context_docs.top_documents
-                if chat_message_detail.context_docs
-                else [],
+                top_documents=(
+                    chat_message_detail.context_docs.top_documents
+                    if chat_message_detail.context_docs
+                    else []
+                ),
                 predicted_flow=None,
                 predicted_search=None,
                 applied_source_filters=None,
@@ -553,8 +554,7 @@ def handle_followup_resolved_button(
 
     # Delete the message with the option to mark resolved
     if not immediate:
-        slack_call = make_slack_api_rate_limited(client.web_client.chat_delete)
-        response = slack_call(
+        response = client.web_client.chat_delete(
             channel=channel_id,
             ts=message_ts,
         )

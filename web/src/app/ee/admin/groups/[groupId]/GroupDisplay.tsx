@@ -7,7 +7,6 @@ import { AddMemberForm } from "./AddMemberForm";
 import { updateUserGroup, updateCuratorStatus } from "./lib";
 import { LoadingAnimation } from "@/components/Loading";
 import {
-  ConnectorIndexingStatus,
   User,
   UserGroup,
   UserRole,

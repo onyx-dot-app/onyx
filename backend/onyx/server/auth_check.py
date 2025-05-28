@@ -31,6 +31,7 @@ PUBLIC_ENDPOINT_SPECS = [
     # just gets the version of Onyx (e.g. 0.3.11)
     ("/version", {"GET"}),
     # stuff related to basic auth
+    ("/auth/refresh", {"POST"}),
     ("/auth/register", {"POST"}),
     ("/auth/login", {"POST"}),
     ("/auth/logout", {"POST"}),
@@ -50,6 +51,7 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/connectors_health", {"GET"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
+    ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator
 ]
 
 

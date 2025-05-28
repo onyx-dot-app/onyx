@@ -15,13 +15,9 @@ import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
-import { ThreeDotsLoader } from "@/components/Loading";
-import { buildCCPairInfoUrl } from "./lib";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { ErrorCallout } from "@/components/ErrorCallout";
-import { InfoIcon, SearchIcon } from "@/components/icons/icons";
-import Link from "next/link";
+import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import {
   Tooltip,
@@ -29,10 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-
-const ITEMS_PER_PAGE = 8;
-const PAGES_PER_BATCH = 8;
+import { FaBarsProgress } from "react-icons/fa6";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -43,7 +36,6 @@ export interface IndexingAttemptsTableProps {
 }
 
 export function IndexingAttemptsTable({
-  ccPair,
   indexAttempts,
   currentPage,
   totalPages,
@@ -84,14 +76,14 @@ export function IndexingAttemptsTable({
           <TableRow>
             <TableHead>Time Started</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>New Doc Cnt</TableHead>
+            <TableHead className="whitespace-nowrap">New Docs</TableHead>
             <TableHead>
-              <div className="w-fit">
+              <div className="w-fit whitespace-nowrap">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help flex items-center">
-                        Total Doc Cnt
+                      <span className="flex items-center">
+                        Total Docs
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>
                     </TooltipTrigger>
@@ -146,7 +138,35 @@ export function IndexingAttemptsTable({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>{indexAttempt.total_docs_indexed}</TableCell>
+                <TableCell>
+                  <div className="flex items-center">
+                    {indexAttempt.total_docs_indexed}
+                    {indexAttempt.from_beginning && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help flex items-center">
+                              <FaBarsProgress className="ml-2 h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            This index attempt{" "}
+                            {indexAttempt.status === "in_progress" ||
+                            indexAttempt.status === "not_started"
+                              ? "is"
+                              : "was"}{" "}
+                            a full re-index. All documents from the source{" "}
+                            {indexAttempt.status === "in_progress" ||
+                            indexAttempt.status === "not_started"
+                              ? "are being "
+                              : "were "}
+                            synced into the system.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <div>
                     {indexAttempt.status === "success" && (

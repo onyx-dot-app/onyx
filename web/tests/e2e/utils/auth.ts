@@ -18,7 +18,7 @@ export async function loginAs(
         ? TEST_ADMIN2_CREDENTIALS
         : TEST_USER_CREDENTIALS;
 
-  await page.goto("http://localhost:3000/auth/login", { timeout: 1000 });
+  await page.goto("http://localhost:3000/auth/login");
 
   await page.fill("#email", email);
   await page.fill("#password", password);
@@ -32,7 +32,7 @@ export async function loginAs(
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
 
     // If redirect to /chat doesn't happen, go to /auth/login
-    await page.goto("http://localhost:3000/auth/signup", { timeout: 1000 });
+    await page.goto("http://localhost:3000/auth/signup");
 
     await page.fill("#email", email);
     await page.fill("#password", password);
@@ -76,7 +76,14 @@ export async function loginAsRandomUser(page: Page) {
   // Click the signup button
   await page.click('button[type="submit"]');
   try {
-    await page.waitForURL("http://localhost:3000/chat");
+    // Wait for 2 seconds to ensure the signup process completes
+    await page.waitForTimeout(3000);
+    // Refresh the page to ensure everything is loaded properly
+    // await page.reload();
+
+    await page.waitForURL("http://localhost:3000/chat?new_team=true");
+    // Wait for the page to be fully loaded after refresh
+    await page.waitForLoadState("networkidle");
   } catch (error) {
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
     throw new Error("Failed to sign up and redirect to chat page");

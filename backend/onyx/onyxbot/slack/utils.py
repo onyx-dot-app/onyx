@@ -30,7 +30,6 @@ from onyx.configs.onyxbot_configs import (
 from onyx.configs.onyxbot_configs import (
     DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
 )
-from onyx.connectors.slack.utils import make_slack_api_rate_limited
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
@@ -125,13 +124,18 @@ def update_emote_react(
             )
             return
 
-        func = client.reactions_remove if remove else client.reactions_add
-        slack_call = make_slack_api_rate_limited(func)  # type: ignore
-        slack_call(
-            name=emoji,
-            channel=channel,
-            timestamp=message_ts,
-        )
+        if remove:
+            client.reactions_remove(
+                name=emoji,
+                channel=channel,
+                timestamp=message_ts,
+            )
+        else:
+            client.reactions_add(
+                name=emoji,
+                channel=channel,
+                timestamp=message_ts,
+            )
     except SlackApiError as e:
         if remove:
             logger.error(f"Failed to remove Reaction due to: {e}")
@@ -141,7 +145,7 @@ def update_emote_react(
 
 def remove_onyx_bot_tag(message_str: str, client: WebClient) -> str:
     bot_tag_id = get_onyx_bot_slack_bot_id(web_client=client)
-    return re.sub(rf"<@{bot_tag_id}>\s", "", message_str)
+    return re.sub(rf"<@{bot_tag_id}>\s*", "", message_str)
 
 
 def _check_for_url_in_block(block: Block) -> bool:
@@ -200,9 +204,8 @@ def respond_in_thread_or_channel(
 
     message_ids: list[str] = []
     if not receiver_ids:
-        slack_call = make_slack_api_rate_limited(client.chat_postMessage)
         try:
-            response = slack_call(
+            response = client.chat_postMessage(
                 channel=channel,
                 text=text,
                 blocks=blocks,
@@ -224,7 +227,7 @@ def respond_in_thread_or_channel(
             blocks_without_urls.append(_build_error_block(str(e)))
 
             # Try again wtihout blocks containing url
-            response = slack_call(
+            response = client.chat_postMessage(
                 channel=channel,
                 text=text,
                 blocks=blocks_without_urls,
@@ -236,11 +239,9 @@ def respond_in_thread_or_channel(
 
         message_ids.append(response["message_ts"])
     else:
-        slack_call = make_slack_api_rate_limited(client.chat_postEphemeral)
-
         for receiver in receiver_ids:
             try:
-                response = slack_call(
+                response = client.chat_postEphemeral(
                     channel=channel,
                     user=receiver,
                     text=text,
@@ -263,7 +264,7 @@ def respond_in_thread_or_channel(
                 blocks_without_urls.append(_build_error_block(str(e)))
 
                 # Try again wtihout blocks containing url
-                response = slack_call(
+                response = client.chat_postEphemeral(
                     channel=channel,
                     user=receiver,
                     text=text,
@@ -500,7 +501,7 @@ def fetch_user_semantic_id_from_id(
     if not user_id:
         return None
 
-    response = make_slack_api_rate_limited(client.users_info)(user=user_id)
+    response = client.users_info(user=user_id)
     if not response["ok"]:
         return None
 

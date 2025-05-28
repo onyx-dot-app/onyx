@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SlackBot } from "@/lib/types";
+import { EditIcon } from "@/components/icons/icons";
 
 const NUM_IN_PAGE = 20;
 
@@ -30,7 +31,7 @@ function ClickableTableRow({
 
   useEffect(() => {
     router.prefetch(url);
-  }, [router]);
+  }, [router, url]);
 
   const navigate = () => {
     router.push(url);
@@ -83,7 +84,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
               >
                 <TableCell>
                   <div className="flex items-center">
-                    <FiEdit className="mr-4" />
+                    <EditIcon className="mr-4" />
                     {slackBot.name}
                   </div>
                 </TableCell>

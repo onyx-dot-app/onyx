@@ -1,0 +1,8 @@
+# combines all the other requirements files
+# Primarily for testing.
+# It's generally better to install just the requirements for what you are trying to run
+
+-r default.txt
+-r ee.txt
+-r model_server.txt
+-r dev.txt

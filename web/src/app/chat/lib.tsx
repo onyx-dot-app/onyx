@@ -26,6 +26,7 @@ import {
   StreamingError,
   ToolCallMetadata,
   AgenticMessageResponseIDInfo,
+  UserKnowledgeFilePacket,
 } from "./interfaces";
 import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
@@ -156,34 +157,15 @@ export type PacketType =
   | SubQuestionPiece
   | ExtendedToolResponse
   | RefinedAnswerImprovement
-  | AgenticMessageResponseIDInfo;
+  | AgenticMessageResponseIDInfo
+  | UserKnowledgeFilePacket;
 
-export async function* sendMessage({
-  regenerate,
-  message,
-  fileDescriptors,
-  parentMessageId,
-  chatSessionId,
-  promptId,
-  filters,
-  selectedDocumentIds,
-  queryOverride,
-  forceSearch,
-  modelProvider,
-  modelVersion,
-  temperature,
-  systemPromptOverride,
-  useExistingUserMessage,
-  alternateAssistantId,
-  signal,
-  useLanggraph,
-}: {
+export interface SendMessageParams {
   regenerate: boolean;
   message: string;
   fileDescriptors: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
-  promptId: number | null | undefined;
   filters: Filters | null;
   selectedDocumentIds: number[] | null;
   queryOverride?: string;
@@ -195,8 +177,34 @@ export async function* sendMessage({
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
+  userFileIds?: number[];
+  userFolderIds?: number[];
+  forceUserFileSearch?: boolean;
   useLanggraph?: boolean;
-}): AsyncGenerator<PacketType, void, unknown> {
+}
+
+export async function* sendMessage({
+  regenerate,
+  message,
+  fileDescriptors,
+  userFileIds,
+  userFolderIds,
+  parentMessageId,
+  chatSessionId,
+  filters,
+  selectedDocumentIds,
+  queryOverride,
+  forceSearch,
+  modelProvider,
+  modelVersion,
+  temperature,
+  systemPromptOverride,
+  useExistingUserMessage,
+  alternateAssistantId,
+  signal,
+  forceUserFileSearch,
+  useLanggraph,
+}: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
   const body = JSON.stringify({
@@ -204,19 +212,19 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     message: message,
-    prompt_id: promptId,
+    // just use the default prompt for the assistant.
+    // should remove this in the future, as we don't support multiple prompts for a
+    // single assistant anyways
+    prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
+    force_user_file_search: forceUserFileSearch,
     file_descriptors: fileDescriptors,
+    user_file_ids: userFileIds,
+    user_folder_ids: userFolderIds,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
-          run_search:
-            promptId === null ||
-            promptId === undefined ||
-            queryOverride ||
-            forceSearch
-              ? "always"
-              : "auto",
+          run_search: queryOverride || forceSearch ? "always" : "auto",
           real_time: true,
           filters: filters,
         }
@@ -632,7 +640,11 @@ export function personaIncludesRetrieval(selectedPersona: Persona) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
+      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(
+        tool.in_code_tool_id
+      ) &&
+      selectedPersona.user_file_ids?.length === 0 &&
+      selectedPersona.user_folder_ids?.length === 0
   );
 }
 
@@ -653,7 +665,7 @@ const PARAMS_TO_SKIP = [
 ];
 
 export function buildChatUrl(
-  existingSearchParams: ReadonlyURLSearchParams,
+  existingSearchParams: ReadonlyURLSearchParams | null,
   chatSessionId: string | null,
   personaId: number | null,
   search?: boolean
@@ -670,7 +682,7 @@ export function buildChatUrl(
     finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
   }
 
-  existingSearchParams.forEach((value, key) => {
+  existingSearchParams?.forEach((value, key) => {
     if (!PARAMS_TO_SKIP.includes(key)) {
       finalSearchParams.push(`${key}=${value}`);
     }
@@ -704,7 +716,7 @@ export async function uploadFilesForChat(
   return [responseJson.files as FileDescriptor[], null];
 }
 
-export async function useScrollonStream({
+export function useScrollonStream({
   chatState,
   scrollableDivRef,
   scrollDist,
@@ -802,5 +814,5 @@ export async function useScrollonStream({
         });
       }
     }
-  }, [chatState, distance, scrollDist, scrollableDivRef]);
+  }, [chatState, distance, scrollDist, scrollableDivRef, enableAutoScroll]);
 }

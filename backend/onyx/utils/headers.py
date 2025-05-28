@@ -57,13 +57,13 @@ def get_relevant_headers(
 
 
 def get_litellm_additional_request_headers(
-    headers: dict[str, str] | Headers
+    headers: dict[str, str] | Headers,
 ) -> dict[str, str]:
     return get_relevant_headers(headers, LITELLM_PASS_THROUGH_HEADERS)
 
 
 def build_llm_extra_headers(
-    additional_headers: dict[str, str] | None = None
+    additional_headers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     extra_headers: dict[str, str] = {}
     if additional_headers:
@@ -74,6 +74,6 @@ def build_llm_extra_headers(
 
 
 def get_custom_tool_additional_request_headers(
-    headers: dict[str, str] | Headers
+    headers: dict[str, str] | Headers,
 ) -> dict[str, str]:
     return get_relevant_headers(headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS)

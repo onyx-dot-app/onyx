@@ -25,7 +25,12 @@ from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
-@pytest.mark.xfail(reason="flaky - see DAN-789 for example", strict=False)
+# NOTE(rkuo): it isn't yet clear if the reason these were previously xfail'd
+# still exists. May need to xfail again if flaky (DAN-789)
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission tests are enterprise only",
+)
 def test_slack_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
@@ -221,7 +226,12 @@ def test_slack_permission_sync(
     assert private_message not in onyx_doc_message_strings
 
 
-@pytest.mark.xfail(reason="flaky", strict=False)
+# NOTE(rkuo): it isn't yet clear if the reason these were previously xfail'd
+# still exists. May need to xfail again if flaky (DAN-789)
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission tests are enterprise only",
+)
 def test_slack_group_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,

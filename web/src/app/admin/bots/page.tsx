@@ -1,12 +1,9 @@
 "use client";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { FiPlusSquare } from "react-icons/fi";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import { SourceIcon } from "@/components/SourceIcon";
 import { SlackBotTable } from "./SlackBotTable";
 import { useSlackBots } from "./[bot-id]/hooks";

@@ -347,7 +347,6 @@ export default function NRFPage({
             <p className="p-4">Loading login info…</p>
           ) : authType == "basic" ? (
             <LoginPage
-              showPageRedirect
               authUrl={null}
               authTypeMetadata={{
                 authType: authType as AuthType,

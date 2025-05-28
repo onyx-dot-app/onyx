@@ -10,14 +10,12 @@ from simple_salesforce.bulk2 import SFBulk2Handler
 from simple_salesforce.bulk2 import SFBulk2Type
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.sqlite_functions import has_at_least_one_object_of_type
-from onyx.connectors.salesforce.utils import get_object_type_path
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def _build_time_filter_for_salesforce(
+def _build_last_modified_time_filter_for_salesforce(
     start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
 ) -> str:
     if start is None or end is None:
@@ -27,6 +25,19 @@ def _build_time_filter_for_salesforce(
     return (
         f" WHERE LastModifiedDate > {start_datetime.isoformat()} "
         f"AND LastModifiedDate < {end_datetime.isoformat()}"
+    )
+
+
+def _build_created_date_time_filter_for_salesforce(
+    start: SecondsSinceUnixEpoch | None, end: SecondsSinceUnixEpoch | None
+) -> str:
+    if start is None or end is None:
+        return ""
+    start_datetime = datetime.fromtimestamp(start, UTC)
+    end_datetime = datetime.fromtimestamp(end, UTC)
+    return (
+        f" WHERE CreatedDate > {start_datetime.isoformat()} "
+        f"AND CreatedDate < {end_datetime.isoformat()}"
     )
 
 
@@ -109,23 +120,6 @@ def _check_if_object_type_is_empty(
     return True
 
 
-def _check_for_existing_csvs(sf_type: str) -> list[str] | None:
-    # Check if the csv already exists
-    if os.path.exists(get_object_type_path(sf_type)):
-        existing_csvs = [
-            os.path.join(get_object_type_path(sf_type), f)
-            for f in os.listdir(get_object_type_path(sf_type))
-            if f.endswith(".csv")
-        ]
-        # If the csv already exists, return the path
-        # This is likely due to a previous run that failed
-        # after downloading the csv but before the data was
-        # written to the db
-        if existing_csvs:
-            return existing_csvs
-    return None
-
-
 def _build_bulk_query(sf_client: Salesforce, sf_type: str, time_filter: str) -> str:
     queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
@@ -133,15 +127,14 @@ def _build_bulk_query(sf_client: Salesforce, sf_type: str, time_filter: str) -> 
 
 
 def _bulk_retrieve_from_salesforce(
-    sf_client: Salesforce,
-    sf_type: str,
-    time_filter: str,
+    sf_client: Salesforce, sf_type: str, time_filter: str, target_dir: str
 ) -> tuple[str, list[str] | None]:
+    """Returns a tuple of
+    1. the salesforce object type
+    2. the list of CSV's
+    """
     if not _check_if_object_type_is_empty(sf_client, sf_type, time_filter):
         return sf_type, None
-
-    if existing_csvs := _check_for_existing_csvs(sf_type):
-        return sf_type, existing_csvs
 
     query = _build_bulk_query(sf_client, sf_type, time_filter)
 
@@ -159,46 +152,81 @@ def _bulk_retrieve_from_salesforce(
     )
 
     logger.info(f"Downloading {sf_type}")
-    logger.info(f"Query: {query}")
+
+    logger.debug(f"Query: {query}")
 
     try:
         # This downloads the file to a file in the target path with a random name
         results = bulk_2_type.download(
             query=query,
-            path=get_object_type_path(sf_type),
+            path=target_dir,
             max_records=1000000,
         )
-        all_download_paths = [result["file"] for result in results]
+
+        # prepend each downloaded csv with the object type (delimiter = '.')
+        all_download_paths: list[str] = []
+        for result in results:
+            original_file_path = result["file"]
+            directory, filename = os.path.split(original_file_path)
+            new_filename = f"{sf_type}.{filename}"
+            new_file_path = os.path.join(directory, new_filename)
+            os.rename(original_file_path, new_file_path)
+            all_download_paths.append(new_file_path)
         logger.info(f"Downloaded {sf_type} to {all_download_paths}")
         return sf_type, all_download_paths
     except Exception as e:
-        logger.info(f"Failed to download salesforce csv for object type {sf_type}: {e}")
+        logger.error(
+            f"Failed to download salesforce csv for object type {sf_type}: {e}"
+        )
+        logger.warning(f"Exceptioning query for object type {sf_type}: {query}")
         return sf_type, None
 
 
 def fetch_all_csvs_in_parallel(
     sf_client: Salesforce,
-    object_types: set[str],
+    all_types_to_filter: dict[str, bool],
     start: SecondsSinceUnixEpoch | None,
     end: SecondsSinceUnixEpoch | None,
+    target_dir: str,
 ) -> dict[str, list[str] | None]:
     """
     Fetches all the csvs in parallel for the given object types
     Returns a dict of (sf_type, full_download_path)
     """
-    time_filter = _build_time_filter_for_salesforce(start, end)
+
+    # these types don't query properly and need looking at
+    # problem_types: set[str] = {
+    #     "ContentDocumentLink",
+    #     "RecordActionHistory",
+    #     "PendingOrderSummary",
+    #     "UnifiedActivityRelation",
+    # }
+
+    # these types don't have a LastModifiedDate field and instead use CreatedDate
+    created_date_types: set[str] = {
+        "AccountHistory",
+        "AccountTag",
+        "EntitySubscription",
+    }
+
+    last_modified_time_filter = _build_last_modified_time_filter_for_salesforce(
+        start, end
+    )
+    created_date_time_filter = _build_created_date_time_filter_for_salesforce(
+        start, end
+    )
+
     time_filter_for_each_object_type = {}
-    # We do this outside of the thread pool executor because this requires
-    # a database connection and we don't want to block the thread pool
-    # executor from running
-    for sf_type in object_types:
-        """Only add time filter if there is at least one object of the type
-        in the database. We aren't worried about partially completed object update runs
-        because this occurs after we check for existing csvs which covers this case"""
-        if has_at_least_one_object_of_type(sf_type):
-            time_filter_for_each_object_type[sf_type] = time_filter
-        else:
+
+    for sf_type, apply_filter in all_types_to_filter.items():
+        if not apply_filter:
             time_filter_for_each_object_type[sf_type] = ""
+            continue
+
+        if sf_type in created_date_types:
+            time_filter_for_each_object_type[sf_type] = created_date_time_filter
+        else:
+            time_filter_for_each_object_type[sf_type] = last_modified_time_filter
 
     # Run the bulk retrieve in parallel
     with ThreadPoolExecutor() as executor:
@@ -207,7 +235,8 @@ def fetch_all_csvs_in_parallel(
                 sf_client=sf_client,
                 sf_type=object_type,
                 time_filter=time_filter_for_each_object_type[object_type],
+                target_dir=target_dir,
             ),
-            object_types,
+            all_types_to_filter.keys(),
         )
         return dict(results)

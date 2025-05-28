@@ -1,5 +1,3 @@
-import { User } from "@/lib/types";
-
 export interface CustomRefreshTokenResponse {
   access_token: string;
   refresh_token: string;

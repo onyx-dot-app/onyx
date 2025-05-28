@@ -1,10 +1,4 @@
-import React, {
-  Dispatch,
-  FC,
-  SetStateAction,
-  useEffect,
-  useState,
-} from "react";
+import React, { FC, useEffect, useState } from "react";
 import CredentialSubText from "@/components/credentials/CredentialFields";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -78,27 +72,29 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
       <AccessTypeForm connector={connector} />
       <AccessTypeGroupSelector connector={connector} />
 
-      {config.advanced_values.length > 0 && (
-        <>
-          <AdvancedOptionsToggle
-            showAdvancedOptions={showAdvancedOptions}
-            setShowAdvancedOptions={setShowAdvancedOptions}
-          />
-          {showAdvancedOptions &&
-            config.advanced_values.map(
-              (field) =>
-                !field.hidden && (
-                  <RenderField
-                    key={field.name}
-                    field={field}
-                    values={values}
-                    connector={connector}
-                    currentCredential={currentCredential}
-                  />
-                )
-            )}
-        </>
-      )}
+      {config.advanced_values.length > 0 &&
+        (!config.advancedValuesVisibleCondition ||
+          config.advancedValuesVisibleCondition(values, currentCredential)) && (
+          <>
+            <AdvancedOptionsToggle
+              showAdvancedOptions={showAdvancedOptions}
+              setShowAdvancedOptions={setShowAdvancedOptions}
+            />
+            {showAdvancedOptions &&
+              config.advanced_values.map(
+                (field) =>
+                  !field.hidden && (
+                    <RenderField
+                      key={field.name}
+                      field={field}
+                      values={values}
+                      connector={connector}
+                      currentCredential={currentCredential}
+                    />
+                  )
+              )}
+          </>
+        )}
     </>
   );
 };

@@ -5,12 +5,16 @@ import string
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
+from typing import Any
 from typing import cast
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Protocol
 from typing import Tuple
+from typing import TypeVar
 
 import jwt
 from email_validator import EmailNotValidError
@@ -52,6 +56,7 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -87,7 +92,7 @@ from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_with_tenant
+from onyx.db.engine import get_async_session_context_manager
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -100,6 +105,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -249,7 +255,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id = fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
         )(user_email)
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
                 tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
@@ -292,7 +298,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         user: User
 
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
             verify_email_is_invited(user_create.email)
             verify_email_domain(user_create.email)
@@ -317,7 +323,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except exceptions.UserAlreadyExists:
                 user = await self.get_by_email(user_create.email)
                 # Handle case where user has used product outside of web and is now creating an account through web
-                if not user.role.is_web_login() and user_create.role.is_web_login():
+
+                if (
+                    not user.role.is_web_login()
+                    and isinstance(user_create, UserCreate)
+                    and user_create.role.is_web_login()
+                ):
                     user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
@@ -358,9 +369,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 reason="Password must contain at least one special character from the following set: "
                 f"{PASSWORD_SPECIAL_CHARS}."
             )
-
         return
 
+    @log_function_time(print_only=True)
     async def oauth_callback(
         self,
         oauth_name: str,
@@ -393,7 +404,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Proceed with the tenant context
         token = None
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
             verify_email_in_whitelist(account_email, tenant_id)
@@ -512,6 +523,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             return user
 
+    async def on_after_login(
+        self,
+        user: User,
+        request: Optional[Request] = None,
+        response: Optional[Response] = None,
+    ) -> None:
+        try:
+            if response and request and ANONYMOUS_USER_COOKIE_NAME in request.cookies:
+                response.delete_cookie(
+                    ANONYMOUS_USER_COOKIE_NAME,
+                    # Ensure cookie deletion doesn't override other cookies by setting the same path/domain
+                    path="/",
+                    domain=None,
+                    secure=WEB_DOMAIN.startswith("https"),
+                )
+                logger.debug(f"Deleted anonymous user cookie for user {user.email}")
+        except Exception:
+            logger.exception("Error deleting anonymous user cookie")
+
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
@@ -583,9 +613,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         logger.notice(
             f"Verification requested for user {user.id}. Verification token: {token}"
         )
+        user_count = await get_user_count()
+        send_user_verification_email(
+            user.email, token, new_organization=user_count == 1
+        )
 
-        send_user_verification_email(user.email, token)
-
+    @log_function_time(print_only=True)
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -611,7 +644,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return None
 
         # Create a tenant-specific session
-        async with get_async_session_with_tenant(tenant_id) as tenant_session:
+        async with get_async_session_context_manager(tenant_id) as tenant_session:
             tenant_user_db: SQLAlchemyUserDatabase = SQLAlchemyUserDatabase(
                 tenant_session, User
             )
@@ -690,16 +723,20 @@ cookie_transport = CookieTransport(
 )
 
 
-def get_redis_strategy() -> RedisStrategy:
-    return TenantAwareRedisStrategy()
+T = TypeVar("T", covariant=True)
+ID = TypeVar("ID", contravariant=True)
 
 
-def get_database_strategy(
-    access_token_db: AccessTokenDatabase[AccessToken] = Depends(get_access_token_db),
-) -> DatabaseStrategy:
-    return DatabaseStrategy(
-        access_token_db, lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS
-    )
+# Protocol for strategies that support token refreshing without inheritance.
+class RefreshableStrategy(Protocol):
+    """Protocol for authentication strategies that support token refreshing."""
+
+    async def refresh_token(self, token: Optional[str], user: Any) -> str:
+        """
+        Refresh an existing token by extending its lifetime.
+        Returns either the same token with extended expiration or a new token.
+        """
+        ...
 
 
 class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
@@ -758,6 +795,75 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         redis = await get_async_redis_connection()
         await redis.delete(f"{self.key_prefix}{token}")
 
+    async def refresh_token(self, token: Optional[str], user: User) -> str:
+        """Refresh a token by extending its expiration time in Redis."""
+        if token is None:
+            # If no token provided, create a new one
+            return await self.write_token(user)
+
+        redis = await get_async_redis_connection()
+        token_key = f"{self.key_prefix}{token}"
+
+        # Check if token exists
+        token_data_str = await redis.get(token_key)
+        if not token_data_str:
+            # Token not found, create new one
+            return await self.write_token(user)
+
+        # Token exists, extend its lifetime
+        token_data = json.loads(token_data_str)
+        await redis.set(
+            token_key,
+            json.dumps(token_data),
+            ex=self.lifetime_seconds,
+        )
+
+        return token
+
+
+class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]):
+    """Database strategy with token refreshing capabilities."""
+
+    def __init__(
+        self,
+        access_token_db: AccessTokenDatabase[AccessToken],
+        lifetime_seconds: Optional[int] = None,
+    ):
+        super().__init__(access_token_db, lifetime_seconds)
+        self._access_token_db = access_token_db
+
+    async def refresh_token(self, token: Optional[str], user: User) -> str:
+        """Refresh a token by updating its expiration time in the database."""
+        if token is None:
+            return await self.write_token(user)
+
+        # Find the token in database
+        access_token = await self._access_token_db.get_by_token(token)
+
+        if access_token is None:
+            # Token not found, create new one
+            return await self.write_token(user)
+
+        # Update expiration time
+        new_expires = datetime.now(timezone.utc) + timedelta(
+            seconds=float(self.lifetime_seconds or SESSION_EXPIRE_TIME_SECONDS)
+        )
+        await self._access_token_db.update(access_token, {"expires": new_expires})
+
+        return token
+
+
+def get_redis_strategy() -> TenantAwareRedisStrategy:
+    return TenantAwareRedisStrategy()
+
+
+def get_database_strategy(
+    access_token_db: AccessTokenDatabase[AccessToken] = Depends(get_access_token_db),
+) -> RefreshableDatabaseStrategy:
+    return RefreshableDatabaseStrategy(
+        access_token_db, lifetime_seconds=SESSION_EXPIRE_TIME_SECONDS
+    )
+
 
 if AUTH_BACKEND == AuthBackend.REDIS:
     auth_backend = AuthenticationBackend(
@@ -805,6 +911,88 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
         ) -> Response:
             user, token = user_token
             return await backend.logout(strategy, user, token)
+
+        return router
+
+    def get_refresh_router(
+        self,
+        backend: AuthenticationBackend,
+        requires_verification: bool = REQUIRE_EMAIL_VERIFICATION,
+    ) -> APIRouter:
+        """
+        Provide a router for session token refreshing.
+        """
+        # Import the oauth_refresher here to avoid circular imports
+        from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
+
+        router = APIRouter()
+
+        get_current_user_token = self.authenticator.current_user_token(
+            active=True, verified=requires_verification
+        )
+
+        refresh_responses: OpenAPIResponseType = {
+            **{
+                status.HTTP_401_UNAUTHORIZED: {
+                    "description": "Missing token or inactive user."
+                }
+            },
+            **backend.transport.get_openapi_login_responses_success(),
+        }
+
+        @router.post(
+            "/refresh", name=f"auth:{backend.name}.refresh", responses=refresh_responses
+        )
+        async def refresh(
+            user_token: Tuple[models.UP, str] = Depends(get_current_user_token),
+            strategy: Strategy[models.UP, models.ID] = Depends(backend.get_strategy),
+            user_manager: BaseUserManager[models.UP, models.ID] = Depends(
+                get_user_manager
+            ),
+            db_session: AsyncSession = Depends(get_async_session),
+        ) -> Response:
+            try:
+                user, token = user_token
+                logger.info(f"Processing token refresh request for user {user.email}")
+
+                # Check if user has OAuth accounts that need refreshing
+                await check_and_refresh_oauth_tokens(
+                    user=cast(User, user),
+                    db_session=db_session,
+                    user_manager=cast(Any, user_manager),
+                )
+
+                # Check if strategy supports refreshing
+                supports_refresh = hasattr(strategy, "refresh_token") and callable(
+                    getattr(strategy, "refresh_token")
+                )
+
+                if supports_refresh:
+                    try:
+                        refresh_method = getattr(strategy, "refresh_token")
+                        new_token = await refresh_method(token, user)
+                        logger.info(
+                            f"Successfully refreshed session token for user {user.email}"
+                        )
+                        return await backend.transport.get_login_response(new_token)
+                    except Exception as e:
+                        logger.error(f"Error refreshing session token: {str(e)}")
+                        # Fallback to logout and login if refresh fails
+                        await backend.logout(strategy, user, token)
+                        return await backend.login(strategy, user)
+
+                # Fallback: logout and login again
+                logger.info(
+                    "Strategy doesn't support refresh - using logout/login flow"
+                )
+                await backend.logout(strategy, user, token)
+                return await backend.login(strategy, user)
+            except Exception as e:
+                logger.error(f"Unexpected error in refresh endpoint: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Token refresh failed: {str(e)}",
+                )
 
         return router
 
@@ -1041,14 +1229,23 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
         }
         state = generate_state_token(state_data, state_secret)
+
+        # Get the basic authorization URL
         authorization_url = await oauth_client.get_authorization_url(
             authorize_redirect_url,
             state,
             scopes,
         )
 
+        # For Google OAuth, add parameters to request refresh tokens
+        if oauth_client.name == "google":
+            authorization_url = add_url_params(
+                authorization_url, {"access_type": "offline", "prompt": "consent"}
+            )
+
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
+    @log_function_time(print_only=True)
     @router.get(
         "/callback",
         name=callback_route_name,
@@ -1136,6 +1333,7 @@ def get_oauth_router(
         # Login user
         response = await backend.login(strategy, user)
         await user_manager.on_after_login(user, request, response)
+
         # Prepare redirect response
         if tenant_id is None:
             # Use URL utility to add parameters
@@ -1145,9 +1343,14 @@ def get_oauth_router(
             # No parameters to add
             redirect_response = RedirectResponse(next_url, status_code=302)
 
-        # Copy headers and other attributes from 'response' to 'redirect_response'
+        # Copy headers from auth response to redirect response, with special handling for Set-Cookie
         for header_name, header_value in response.headers.items():
-            redirect_response.headers[header_name] = header_value
+            # FastAPI can have multiple Set-Cookie headers as a list
+            if header_name.lower() == "set-cookie" and isinstance(header_value, list):
+                for cookie_value in header_value:
+                    redirect_response.headers.append(header_name, cookie_value)
+            else:
+                redirect_response.headers[header_name] = header_value
 
         if hasattr(response, "body"):
             redirect_response.body = response.body

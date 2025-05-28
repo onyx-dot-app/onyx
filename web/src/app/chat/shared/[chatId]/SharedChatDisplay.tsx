@@ -16,28 +16,28 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
 import FunctionalHeader from "@/components/chat/Header";
 import FixedLogo from "@/components/logo/FixedLogo";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 function BackToOnyxButton({
   documentSidebarVisible,
 }: {
   documentSidebarVisible: boolean;
 }) {
-  const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
 
   return (
     <div className="absolute bottom-0 bg-background w-full flex border-t border-border py-4">
       <div className="mx-auto">
-        <Button onClick={() => router.push("/chat")}>
+        <Link href="/chat">
           Back to GPT Lab Chat
-        </Button>
+        </Link>
       </div>
       <div
         style={{ transition: "width 0.30s ease-out" }}
@@ -67,7 +67,7 @@ export function SharedChatDisplay({
     useState<number | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [presentingDocument, setPresentingDocument] =
-    useState<OnyxDocument | null>(null);
+    useState<MinimalOnyxDocument | null>(null);
 
   const toggleDocumentSidebar = () => {
     setDocumentSidebarVisible(!documentSidebarVisible);
@@ -106,6 +106,7 @@ export function SharedChatDisplay({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
+              humanMessage={messages[0]}
               agenticMessage={false}
               isSharedChat={true}
               selectedMessage={
@@ -162,6 +163,7 @@ export function SharedChatDisplay({
             `}
               >
                 <DocumentResults
+                  humanMessage={messages[0]}
                   agenticMessage={false}
                   modal={false}
                   isSharedChat={true}
@@ -232,6 +234,7 @@ export function SharedChatDisplay({
                             key={message.messageId}
                             content={message.message}
                             files={message.files}
+                            setPresentingDocument={setPresentingDocument}
                           />
                         );
                       } else if (message.type === "assistant") {

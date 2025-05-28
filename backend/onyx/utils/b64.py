@@ -6,7 +6,7 @@ def get_image_type_from_bytes(raw_b64_bytes: bytes) -> str:
 
     if magic_number.startswith(b"\x89PNG"):
         mime_type = "image/png"
-    elif magic_number.startswith(b"\xFF\xD8"):
+    elif magic_number.startswith(b"\xff\xd8"):
         mime_type = "image/jpeg"
     elif magic_number.startswith(b"GIF8"):
         mime_type = "image/gif"

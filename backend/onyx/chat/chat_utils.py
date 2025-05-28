@@ -90,9 +90,11 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
         source_type=inference_section.center_chunk.source_type,
         metadata=inference_section.center_chunk.metadata,
         updated_at=inference_section.center_chunk.updated_at,
-        link=inference_section.center_chunk.source_links[0]
-        if inference_section.center_chunk.source_links
-        else None,
+        link=(
+            inference_section.center_chunk.source_links[0]
+            if inference_section.center_chunk.source_links
+            else None
+        ),
         source_links=inference_section.center_chunk.source_links,
         match_highlights=inference_section.center_chunk.match_highlights,
     )

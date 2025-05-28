@@ -1,12 +1,12 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
-import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FiPlusCircle, FiPlus, FiX, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
-import { FilterManager, LlmManager } from "@/lib/hooks";
+import { FilterManager, getDisplayNameForModel, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import {
@@ -27,7 +27,7 @@ import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
+import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
 import { DocumentSet, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -37,9 +37,9 @@ import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
-import { FidgetSpinner } from "react-loader-spinner";
-import { LoadingAnimation } from "@/components/Loading";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { useDocumentsContext } from "../my-documents/DocumentsContext";
+import { UploadIntent } from "../ChatPage";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -172,6 +172,7 @@ export const SourceChip = ({
 );
 
 interface ChatInputBarProps {
+  toggleDocSelection: () => void;
   removeDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
@@ -186,9 +187,8 @@ interface ChatInputBarProps {
   selectedAssistant: Persona;
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
   toggleDocumentSidebar: () => void;
-  files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
-  handleFileUpload: (files: File[]) => void;
+  handleFileUpload: (files: File[], intent: UploadIntent) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   filterManager: FilterManager;
   availableSources: SourceMetadata[];
@@ -200,6 +200,7 @@ interface ChatInputBarProps {
 }
 
 export function ChatInputBar({
+  toggleDocSelection,
   retrievalEnabled,
   removeDocs,
   toggleDocumentSidebar,
@@ -216,7 +217,6 @@ export function ChatInputBar({
   selectedAssistant,
   setAlternativeAssistant,
 
-  files,
   setFiles,
   handleFileUpload,
   textAreaRef,
@@ -229,6 +229,22 @@ export function ChatInputBar({
   setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
+  const {
+    selectedFiles,
+    selectedFolders,
+    removeSelectedFile,
+    removeSelectedFolder,
+    currentMessageFiles,
+    setCurrentMessageFiles,
+  } = useDocumentsContext();
+
+  // Create a Set of IDs from currentMessageFiles for efficient lookup
+  // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
+  const currentMessageFileIds = useMemo(
+    () => new Set(currentMessageFiles.map((f) => String(f.id))), // Ensure IDs are strings for comparison
+    [currentMessageFiles]
+  );
+
   const settings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -253,7 +269,7 @@ export function ChatInputBar({
       }
       if (pastedFiles.length > 0) {
         event.preventDefault();
-        handleFileUpload(pastedFiles);
+        handleFileUpload(pastedFiles, UploadIntent.ATTACH_TO_MESSAGE);
       }
     }
   };
@@ -394,17 +410,16 @@ export function ChatInputBar({
         }
       }
     }
+
     if (!showPrompts && !showSuggestions) {
       return;
     }
-
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setTabbingIconIndex((tabbingIconIndex) =>
         Math.min(
           tabbingIconIndex + 1,
-          // showPrompts ? filteredPrompts.length :
-          assistantTagOptions.length
+          showPrompts ? filteredPrompts.length : assistantTagOptions.length
         )
       );
     } else if (e.key === "ArrowUp") {
@@ -432,13 +447,14 @@ export function ChatInputBar({
               ref={suggestionsRef}
               className="text-sm absolute w-[calc(100%-2rem)] top-0 transform -translate-y-full"
             >
-              <div className="rounded-lg py-1 sm-1.5 bg-input-background border border-border dark:border-none shadow-lg px-1.5 mt-2 z-10">
+              <div className="rounded-lg py-1 overflow-y-auto max-h-[200px] sm-1.5 bg-input-background border border-border dark:border-none shadow-lg px-1.5 mt-2 z-10">
                 {assistantTagOptions.map((currentAssistant, index) => (
                   <button
                     key={index}
                     className={`px-2 ${
-                      tabbingIconIndex == index && "bg-neutral-200"
-                    } rounded items-center rounded-lg content-start flex gap-x-1 py-2 w-full hover:bg-neutral-200/90 cursor-pointer`}
+                      tabbingIconIndex == index &&
+                      "bg-neutral-200 dark:bg-neutral-800"
+                    } rounded items-center rounded-lg content-start flex gap-x-1 py-2 w-full hover:bg-neutral-200/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                     onClick={() => {
                       updatedTaggedAssistant(currentAssistant);
                     }}
@@ -460,8 +476,8 @@ export function ChatInputBar({
                   target="_self"
                   className={`${
                     tabbingIconIndex == assistantTagOptions.length &&
-                    "bg-neutral-200"
-                  } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full items-center hover:bg-neutral-200/90 cursor-pointer`}
+                    "bg-neutral-200 dark:bg-neutral-800"
+                  } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full items-center hover:bg-neutral-200/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                   href="/assistants/new"
                 >
                   <FiPlus size={17} />
@@ -476,14 +492,15 @@ export function ChatInputBar({
               ref={suggestionsRef}
               className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full"
             >
-              <div className="rounded-lg py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
+              <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
                 {filteredPrompts.map(
                   (currentPrompt: InputPrompt, index: number) => (
                     <button
                       key={index}
                       className={`px-2 ${
-                        tabbingIconIndex == index && "bg-background-dark/75"
-                      } rounded content-start flex gap-x-1 py-1.5 w-full hover:bg-background-dark/90 cursor-pointer`}
+                        tabbingIconIndex == index &&
+                        "bg-background-dark/75 dark:bg-neutral-800/75"
+                      } rounded content-start flex gap-x-1 py-1.5 w-full hover:bg-background-dark/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                       onClick={() => {
                         updateInputPrompt(currentPrompt);
                       }}
@@ -501,8 +518,8 @@ export function ChatInputBar({
                   target="_self"
                   className={`${
                     tabbingIconIndex == filteredPrompts.length &&
-                    "bg-background-dark/75"
-                  } px-3 flex gap-x-1 py-2 w-full rounded-lg items-center hover:bg-background-dark/90 cursor-pointer`}
+                    "bg-background-dark/75 dark:bg-neutral-800/75"
+                  } px-3 flex gap-x-1 py-2 w-full rounded-lg items-center hover:bg-background-dark/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                   href="/chat/input-prompts"
                 >
                   <FiPlus size={17} />
@@ -544,21 +561,6 @@ export function ChatInputBar({
                     {alternativeAssistant.name}
                   </p>
                   <div className="flex gap-x-1 ml-auto">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button>
-                            <Hoverable icon={FiInfo} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs flex flex-wrap">
-                            {alternativeAssistant.description}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
                     <Hoverable
                       icon={FiX}
                       onClick={() => setAlternativeAssistant(null)}
@@ -628,7 +630,9 @@ export function ChatInputBar({
             />
 
             {(selectedDocuments.length > 0 ||
-              files.length > 0 ||
+              selectedFiles.length > 0 ||
+              selectedFolders.length > 0 ||
+              currentMessageFiles.length > 0 ||
               filterManager.timeRange ||
               filterManager.selectedDocumentSets.length > 0 ||
               filterManager.selectedTags.length > 0 ||
@@ -651,6 +655,29 @@ export function ChatInputBar({
                       />
                     ))}
 
+                  {/* This is excluding image types because they get rendered differently via currentMessageFiles.map
+                  Seems quite hacky ... all rendering should probably be done in one place? */}
+                  {selectedFiles.map(
+                    (file) =>
+                      !currentMessageFileIds.has(
+                        String(file.file_id || file.id)
+                      ) && (
+                        <SourceChip
+                          key={file.id}
+                          icon={<FileIcon size={16} />}
+                          title={file.name}
+                          onRemove={() => removeSelectedFile(file)}
+                        />
+                      )
+                  )}
+                  {selectedFolders.map((folder) => (
+                    <SourceChip
+                      key={folder.id}
+                      icon={<FolderIcon size={16} />}
+                      title={folder.name}
+                      onRemove={() => removeSelectedFolder(folder)}
+                    />
+                  ))}
                   {filterManager.timeRange && (
                     <SourceChip
                       truncateTitle={false}
@@ -680,7 +707,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-
                   {filterManager.selectedSources.length > 0 &&
                     filterManager.selectedSources.map((source, index) => (
                       <SourceChip
@@ -701,7 +727,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-
                   {selectedDocuments.length > 0 && (
                     <SourceChip
                       key="selected-documents"
@@ -713,8 +738,7 @@ export function ChatInputBar({
                       onRemove={removeDocs}
                     />
                   )}
-
-                  {files.map((file, index) =>
+                  {currentMessageFiles.map((file, index) =>
                     file.type === ChatFileType.IMAGE ? (
                       <SourceChip
                         key={`file-${index}`}
@@ -725,13 +749,14 @@ export function ChatInputBar({
                             <img
                               className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
                               src={buildImgUrl(file.id)}
+                              alt={file.name || "Uploaded image"}
                             />
                           )
                         }
                         title={file.name || "File" + file.id}
                         onRemove={() => {
-                          setFiles(
-                            files.filter(
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
                               (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );
@@ -743,8 +768,8 @@ export function ChatInputBar({
                         icon={<FileIcon className="text-red-500" size={16} />}
                         title={file.name || "File"}
                         onRemove={() => {
-                          setFiles(
-                            files.filter(
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
                               (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );
@@ -763,20 +788,9 @@ export function ChatInputBar({
                   name="File"
                   Icon={FiPlusCircle}
                   onClick={() => {
-                    const input = document.createElement("input");
-                    input.type = "file";
-                    input.multiple = true;
-                    input.onchange = (event: any) => {
-                      const files = Array.from(
-                        event?.target?.files || []
-                      ) as File[];
-                      if (files.length > 0) {
-                        handleFileUpload(files);
-                      }
-                    };
-                    input.click();
+                    toggleDocSelection();
                   }}
-                  tooltipContent={"Upload files"}
+                  tooltipContent={"Upload files and attach user files"}
                 />
 
                 <LLMPopover
@@ -784,12 +798,38 @@ export function ChatInputBar({
                   llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
+                  trigger={
+                    <button
+                      className="dark:text-white text-black focus:outline-none"
+                      data-testid="llm-popover-trigger"
+                    >
+                      <ChatInputOption
+                        minimize
+                        toggle
+                        flexPriority="stiff"
+                        name={getDisplayNameForModel(
+                          llmManager?.currentLlm.modelName || "Models"
+                        )}
+                        Icon={getProviderIcon(
+                          llmManager?.currentLlm.provider || "anthropic",
+                          llmManager?.currentLlm.modelName ||
+                            "claude-3-5-sonnet-20240620"
+                        )}
+                        tooltipContent="Switch models"
+                      />
+                    </button>
+                  }
                 />
 
                 {retrievalEnabled && (
                   <FilterPopup
                     availableSources={availableSources}
-                    availableDocumentSets={availableDocumentSets}
+                    availableDocumentSets={
+                      selectedAssistant.document_sets &&
+                      selectedAssistant.document_sets.length > 0
+                        ? selectedAssistant.document_sets
+                        : availableDocumentSets
+                    }
                     availableTags={availableTags}
                     filterManager={filterManager}
                     trigger={

@@ -182,7 +182,6 @@ services:
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       # Indexing Configs
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-}
-      - NUM_INDEXING_WORKERS=${NUM_INDEXING_WORKERS:-}
       - ENABLED_CONNECTOR_TYPES=${ENABLED_CONNECTOR_TYPES:-}
       - DISABLE_INDEX_UPDATE_ON_SWAP=${DISABLE_INDEX_UPDATE_ON_SWAP:-}
       - DASK_JOB_CLIENT_ENABLED=${DASK_JOB_CLIENT_ENABLED:-}
@@ -244,8 +243,6 @@ services:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - log_store:/var/log/persisted-logs
     logging:
       driver: json-file
       options:
@@ -423,4 +420,3 @@ volumes:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-  log_store:  # for logs that we don't want to lose on container restarts

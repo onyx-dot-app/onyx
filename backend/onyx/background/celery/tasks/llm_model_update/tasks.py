@@ -10,6 +10,7 @@ from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
+from onyx.db.models import ModelConfiguration
 
 
 def _process_model_list_response(model_list_json: Any) -> list[str]:
@@ -88,7 +89,10 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
             return None
 
         # log change if any
-        old_models = set(default_provider.model_names or [])
+        old_models = set(
+            model_configuration.name
+            for model_configuration in default_provider.model_configurations
+        )
         new_models = set(available_models)
         added_models = new_models - old_models
         removed_models = old_models - new_models
@@ -99,7 +103,23 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
             task_logger.info(f"Removing models: {sorted(removed_models)}")
 
         # Update the provider's model list
-        default_provider.model_names = available_models
+        # Remove models that are no longer available
+        db_session.query(ModelConfiguration).filter(
+            ModelConfiguration.llm_provider_id == default_provider.id,
+            ModelConfiguration.name.notin_(available_models),
+        ).delete(synchronize_session=False)
+
+        # Add new models
+        for available_model_name in available_models:
+            db_session.merge(
+                ModelConfiguration(
+                    llm_provider_id=default_provider.id,
+                    name=available_model_name,
+                    is_visible=False,
+                    max_input_tokens=None,
+                )
+            )
+
         # if the default model is no longer available, set it to the first model in the list
         if default_provider.default_model_name not in available_models:
             task_logger.info(

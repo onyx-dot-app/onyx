@@ -43,7 +43,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import { CheckFormField } from "@/components/ui/CheckField";
-import { Input } from "@/components/ui/input";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -184,8 +183,31 @@ export function SlackChannelConfigFormFields({
         name: channel.name,
         value: channel.id,
       }));
+    },
+    {
+      shouldRetryOnError: false, // don't spam the Slack API
+      dedupingInterval: 60000, // Limit re-fetching to once per minute
     }
   );
+
+  // Define the helper text based on the state
+  const channelHelperText = useMemo(() => {
+    if (isLoading || error) {
+      // No helper text needed during loading or if there's an error
+      // (error message is shown separately)
+      return null;
+    }
+    if (!channelOptions || channelOptions.length === 0) {
+      return "No channels found. You can type any channel name in directly.";
+    }
+
+    let helpText = `Select a channel from the dropdown list or type any channel name in directly.`;
+    if (channelOptions.length >= 500) {
+      return `${helpText} (Retrieved the first ${channelOptions.length} channels.)`;
+    }
+
+    return helpText;
+  }, [isLoading, error, channelOptions]);
 
   if (isLoading) {
     return <ThreeDotsLoader />;
@@ -250,15 +272,15 @@ export function SlackChannelConfigFormFields({
                       onSearchTermChange={(term) => {
                         form.setFieldValue("channel_name", term);
                       }}
+                      allowCustomValues={true}
                     />
                   )}
                 </Field>
-                <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
-                  Note: This list shows public and private channels where the
-                  bot is a member (up to 500 channels). If you don&apos;t see a
-                  channel, make sure the bot is added to that channel in Slack
-                  first, or type the channel name manually.
-                </p>
+                {channelHelperText && (
+                  <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
+                    {channelHelperText}
+                  </p>
+                )}
               </>
             )}
           </>

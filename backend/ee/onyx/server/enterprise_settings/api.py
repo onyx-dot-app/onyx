@@ -15,8 +15,8 @@ from sqlalchemy.orm import Session
 
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
-from ee.onyx.server.enterprise_settings.store import _LOGO_FILENAME
-from ee.onyx.server.enterprise_settings.store import _LOGOTYPE_FILENAME
+from ee.onyx.server.enterprise_settings.store import get_logo_filename
+from ee.onyx.server.enterprise_settings.store import get_logotype_filename
 from ee.onyx.server.enterprise_settings.store import load_analytics_script
 from ee.onyx.server.enterprise_settings.store import load_settings
 from ee.onyx.server.enterprise_settings.store import store_analytics_script
@@ -28,8 +28,12 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import PostgresBackedFileStore
+from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import get_current_tenant_id
 
 admin_router = APIRouter(prefix="/admin/enterprise-settings")
 basic_router = APIRouter(prefix="/enterprise-settings")
@@ -118,6 +122,11 @@ def put_settings(
 
 @basic_router.get("")
 def fetch_settings() -> EnterpriseSettings:
+    if MULTI_TENANT:
+        tenant_id = get_current_tenant_id()
+        if not tenant_id or tenant_id == POSTGRES_DEFAULT_SCHEMA:
+            raise BasicAuthenticationError(detail="User must authenticate")
+
     return load_settings()
 
 
@@ -131,31 +140,49 @@ def put_logo(
     upload_logo(file=file, db_session=db_session, is_logotype=is_logotype)
 
 
-def fetch_logo_or_logotype(is_logotype: bool, db_session: Session) -> Response:
+def fetch_logo_helper(db_session: Session) -> Response:
     try:
-        file_store = get_default_file_store(db_session)
-        filename = _LOGOTYPE_FILENAME if is_logotype else _LOGO_FILENAME
-        file_io = file_store.read_file(filename, mode="b")
-        # NOTE: specifying "image/jpeg" here, but it still works for pngs
-        # TODO: do this properly
-        return Response(content=file_io.read(), media_type="image/jpeg")
+        file_store = PostgresBackedFileStore(db_session)
+        onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
+        if not onyx_file:
+            raise ValueError("get_onyx_file returned None!")
     except Exception:
         raise HTTPException(
             status_code=404,
-            detail=f"No {'logotype' if is_logotype else 'logo'} file found",
+            detail="No logo file found",
         )
+    else:
+        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
+
+
+def fetch_logotype_helper(db_session: Session) -> Response:
+    try:
+        file_store = PostgresBackedFileStore(db_session)
+        onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
+        if not onyx_file:
+            raise ValueError("get_onyx_file returned None!")
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail="No logotype file found",
+        )
+    else:
+        return Response(content=onyx_file.data, media_type=onyx_file.mime_type)
 
 
 @basic_router.get("/logotype")
 def fetch_logotype(db_session: Session = Depends(get_session)) -> Response:
-    return fetch_logo_or_logotype(is_logotype=True, db_session=db_session)
+    return fetch_logotype_helper(db_session)
 
 
 @basic_router.get("/logo")
 def fetch_logo(
     is_logotype: bool = False, db_session: Session = Depends(get_session)
 ) -> Response:
-    return fetch_logo_or_logotype(is_logotype=is_logotype, db_session=db_session)
+    if is_logotype:
+        return fetch_logotype_helper(db_session)
+
+    return fetch_logo_helper(db_session)
 
 
 @admin_router.put("/custom-analytics-script")

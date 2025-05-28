@@ -5,6 +5,7 @@ Revises: 173cae5bba26
 Create Date: 2024-03-21 12:05:23.956734
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 from onyx.configs.constants import DocumentSource

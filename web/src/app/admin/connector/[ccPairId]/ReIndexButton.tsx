@@ -4,13 +4,10 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
 import { triggerIndexing } from "./lib";
-import { mutate } from "swr";
-import { buildCCPairInfoUrl, getTooltipMessage } from "./lib";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Separator } from "@/components/ui/separator";
 import { ConnectorCredentialPairStatus } from "./types";
-import { CCPairStatus } from "@/components/Status";
 import { getCCPairStatusMessage } from "@/lib/ccPair";
 
 function ReIndexPopup({

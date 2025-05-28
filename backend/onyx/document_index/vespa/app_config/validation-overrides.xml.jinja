@@ -1,0 +1,11 @@
+<validation-overrides>
+    <allow
+        until="{{ until_date }}"
+        comment="We need to be able to create/delete indices for swapping models">schema-removal</allow>
+    <allow
+        until="{{ until_date }}"
+        comment="We need to be able to update the schema for updates to the Onyx schema">indexing-change</allow>
+    <allow 
+        until="{{ until_date }}"
+        comment="Prevents old alt indices from interfering with changes">field-type-change</allow>
+</validation-overrides>

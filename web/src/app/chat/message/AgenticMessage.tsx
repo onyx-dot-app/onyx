@@ -43,6 +43,14 @@ import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
+import { ThinkingBox } from "./thinkingBox/ThinkingBox";
+import {
+  hasCompletedThinkingTokens,
+  hasPartialThinkingTokens,
+  extractThinkingContent,
+  isThinkingComplete,
+  removeThinkingTokens,
+} from "../utils/thinkingTokens";
 
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -50,9 +58,7 @@ import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { StatusRefinement } from "../Refinement";
 import { copyAll, handleCopy } from "./copyingUtils";
-import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
-import { ErrorBanner, Resubmit } from "./Resubmit";
+import { ErrorBanner } from "./Resubmit";
 import { transformLinkUri } from "@/lib/utils";
 
 export const AgenticMessage = ({
@@ -138,6 +144,14 @@ export const AgenticMessage = ({
 
     let processed = incoming;
 
+    // Apply thinking tokens processing first
+    if (
+      hasCompletedThinkingTokens(processed) ||
+      hasPartialThinkingTokens(processed)
+    ) {
+      processed = removeThinkingTokens(processed) as string;
+    }
+
     const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
     const matches = processed.match(codeBlockRegex);
     if (matches) {
@@ -175,10 +189,34 @@ export const AgenticMessage = ({
   const finalContent = processContent(content) as string;
   const finalAlternativeContent = processContent(alternativeContent) as string;
 
+  // Check if content contains thinking tokens
+  const hasThinkingTokens = useMemo(() => {
+    return (
+      hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content)
+    );
+  }, [content]);
+
+  // Extract thinking content
+  const thinkingContent = useMemo(() => {
+    if (!hasThinkingTokens) return "";
+    return extractThinkingContent(content);
+  }, [content, hasThinkingTokens]);
+
+  // Track if thinking is complete
+  const isThinkingTokenComplete = useMemo(() => {
+    return isThinkingComplete(thinkingContent);
+  }, [thinkingContent]);
+
+  // Enable streaming when thinking tokens are detected
+  useEffect(() => {
+    if (hasThinkingTokens) {
+      setAllowStreaming(true);
+    }
+  }, [hasThinkingTokens]);
+
   const [isViewingInitialAnswer, setIsViewingInitialAnswer] = useState(true);
 
   const [canShowResponse, setCanShowResponse] = useState(isComplete);
-  const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
 
@@ -455,6 +493,16 @@ export const AgenticMessage = ({
                       unToggle={false}
                     />
                   )}
+                  {/* Render thinking box if thinking tokens exist */}
+                  {hasThinkingTokens && thinkingContent && (
+                    <div className="mb-2 mt-1">
+                      <ThinkingBox
+                        content={thinkingContent}
+                        isComplete={isComplete || false}
+                        isStreaming={!isThinkingTokenComplete || !isComplete}
+                      />
+                    </div>
+                  )}
                   {/* For debugging purposes */}
                   {/* <SubQuestionProgress subQuestions={subQuestions || []} /> */}
                   {/*  */}
@@ -597,7 +645,6 @@ export const AgenticMessage = ({
                                 onDropdownVisibleChange={
                                   setIsRegenerateDropdownVisible
                                 }
-                                onHoverChange={setIsRegenerateHovered}
                                 selectedAssistant={currentPersona!}
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
@@ -613,16 +660,10 @@ export const AgenticMessage = ({
                           absolute -bottom-5
                           z-10
                           invisible ${
-                            (isHovering ||
-                              isRegenerateHovered ||
-                              settings?.isMobile) &&
-                            "!visible"
+                            (isHovering || settings?.isMobile) && "!visible"
                           }
                           opacity-0 ${
-                            (isHovering ||
-                              isRegenerateHovered ||
-                              settings?.isMobile) &&
-                            "!opacity-100"
+                            (isHovering || settings?.isMobile) && "!opacity-100"
                           }
                           translate-y-2 ${
                             (isHovering || settings?.isMobile) &&
@@ -697,7 +738,6 @@ export const AgenticMessage = ({
                                 }
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
-                                onHoverChange={setIsRegenerateHovered}
                               />
                             </CustomTooltip>
                           )}

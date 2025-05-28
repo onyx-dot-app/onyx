@@ -10,7 +10,6 @@ import * as Yup from "yup";
 import { requestEmailVerification } from "../lib";
 import { useState } from "react";
 import { Spinner } from "@/components/Spinner";
-import { set } from "lodash";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
@@ -108,7 +107,10 @@ export function EmailPasswordForm({
               // server-side provider values)
               window.location.href = "/auth/waiting-on-verification";
             } else {
-              // See above comment
+              // The searchparam is purely for multi tenant developement purposes.
+              // It replicates the behavior of the case where a user
+              // has signed up with email / password as the only user to an instance
+              // and has just completed verification
               window.location.href = nextUrl
                 ? encodeURI(nextUrl)
                 : `/chat${isSignup && !isJoin ? "?new_team=true" : ""}`;
@@ -148,9 +150,6 @@ export function EmailPasswordForm({
               name="password"
               label="Password"
               type="password"
-              includeForgotPassword={
-                NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup
-              }
               placeholder="**************"
             />
 

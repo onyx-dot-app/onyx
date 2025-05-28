@@ -8,7 +8,6 @@ from pydantic import model_validator
 
 from ee.onyx.server.manage.models import StandardAnswer
 from onyx.chat.models import CitationInfo
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import SubQuestionIdentifier
@@ -107,7 +106,7 @@ class AgentSubQuery(SubQuestionIdentifier):
 
     @staticmethod
     def make_dict_by_level_and_question_index(
-        original_dict: dict[tuple[int, int, int], "AgentSubQuery"]
+        original_dict: dict[tuple[int, int, int], "AgentSubQuery"],
     ) -> dict[int, dict[int, list["AgentSubQuery"]]]:
         """Takes a dict of tuple(level, question num, query_id) to sub queries.
 
@@ -164,8 +163,6 @@ class ChatBasicResponse(BaseModel):
     cited_documents: dict[int, str] | None = None
 
     # FOR BACKWARDS COMPATIBILITY
-    # TODO: deprecate both of these
-    simple_search_docs: list[SimpleDoc] | None = None
     llm_chunks_indices: list[int] | None = None
 
     # agentic fields
@@ -220,4 +217,3 @@ class OneShotQAResponse(BaseModel):
     llm_selected_doc_indices: list[int] | None = None
     error_msg: str | None = None
     chat_message_id: int | None = None
-    contexts: OnyxContexts | None = None

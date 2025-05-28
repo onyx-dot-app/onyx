@@ -31,13 +31,13 @@ export function NewTeamModal() {
   const { setPopup } = usePopup();
 
   useEffect(() => {
-    const hasNewTeamParam = searchParams.has("new_team");
+    const hasNewTeamParam = searchParams?.has("new_team");
     if (hasNewTeamParam) {
       setShowNewTeamModal(true);
       fetchTenantInfo();
 
       // Remove the new_team parameter from the URL without page reload
-      const newParams = new URLSearchParams(searchParams.toString());
+      const newParams = new URLSearchParams(searchParams?.toString() || "");
       newParams.delete("new_team");
       const newUrl =
         window.location.pathname +

@@ -10,10 +10,10 @@ import { ChatBanner } from "@/app/chat/ChatBanner";
 import LogoWithText from "../header/LogoWithText";
 import { NewChatIcon } from "../icons/icons";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { ModeToggle } from "@/app/chat/modal/ThemeToggle";
 
 export default function FunctionalHeader({
   page,
+  removeHeight,
   currentChatSession,
   setSharingModalVisible,
   toggleSidebar = () => null,
@@ -23,6 +23,7 @@ export default function FunctionalHeader({
   toggleUserSettings,
   hideUserDropdown,
 }: {
+  removeHeight?: boolean;
   reset?: () => void;
   page: pageType;
   sidebarToggled?: boolean;
@@ -68,7 +69,11 @@ export default function FunctionalHeader({
     router.push(newChatUrl);
   };
   return (
-    <div className="left-0 sticky top-0 z-20 w-full relative flex">
+    <div
+      className={`left-0 sticky top-0 z-20 w-full relative flex ${
+        removeHeight ? "h-0" : ""
+      }`}
+    >
       <div className="items-end flex mt-2 text-text-700 relative flex w-full">
         <LogoWithText
           assistantId={currentChatSession?.persona_id}

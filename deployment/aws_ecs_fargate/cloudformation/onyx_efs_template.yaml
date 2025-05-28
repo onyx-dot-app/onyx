@@ -1,0 +1,128 @@
+Parameters:
+
+  EFSName:
+    Type: String
+    Default: onyx-efs
+  Environment:
+    Type: String
+    Default: production
+  VpcID:
+    Type: String
+    Default: vpc-0f230ca52bb04c722 
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
+
+Resources:
+
+  OnyxEfs:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      BackupPolicy: 
+        Status: ENABLED
+      Encrypted: True
+      PerformanceMode: generalPurpose
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub ${Environment}-${EFSName}-${AWS::Region}-${AWS::AccountId}
+      FileSystemProtection:
+        ReplicationOverwriteProtection: ENABLED
+      ThroughputMode: elastic
+
+  VespaEngineTmpEfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      AccessPointTags: 
+        - Key: Name
+          Value: vespaengine-tmp
+      FileSystemId: !Ref OnyxEfs
+      RootDirectory: 
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0755"
+        Path: /var/tmp
+
+  VespaEngineDataEfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      AccessPointTags: 
+        - Key: Name
+          Value: vespaengine-data
+      FileSystemId: !Ref OnyxEfs
+      RootDirectory: 
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0755"
+        Path: /opt/vespa/var
+
+  PostgresDataEfsAccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      AccessPointTags: 
+        - Key: Name
+          Value: postgres-data
+      FileSystemId: !Ref OnyxEfs
+      RootDirectory: 
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "0755"
+        Path: /var/lib/postgresql/data
+
+  EFSMountTarget1:
+    DependsOn: OnyxEfs
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref OnyxEfs
+      SubnetId: !Select [0, !Ref SubnetIDs]
+      SecurityGroups:
+        - !Ref EFSSecurityGroupMountTargets
+
+  EFSMountTarget2:
+    DependsOn: OnyxEfs
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref OnyxEfs
+      SubnetId: !Select [1, !Ref SubnetIDs]
+      SecurityGroups:
+        - !Ref EFSSecurityGroupMountTargets
+
+  EFSSecurityGroupMountTargets:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for EFS Mount Targets
+      VpcId: !Ref VpcID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  OutputOnyxEfsId:
+    Description: Onyx Filesystem Id
+    Value: !Ref OnyxEfs
+    Export:
+      Name: !Sub ${AWS::StackName}-OnyxEfsId
+  OutputVespaEngineTmpEfsAccessPoint:
+    Description: VespaEngine Tmp AP
+    Value: !Ref VespaEngineTmpEfsAccessPoint
+    Export:
+      Name: !Sub ${AWS::StackName}-VespaEngineTmpEfsAccessPoint
+  OutputVespaEngineDataEfsAccessPoint:
+    Description: VespaEngine Data Ap
+    Value: !Ref VespaEngineDataEfsAccessPoint
+    Export:
+      Name: !Sub ${AWS::StackName}-VespaEngineDataEfsAccessPoint
+  OutputPostgresDataEfsAccessPoint:
+    Description: Postgres Data AP
+    Value: !Ref PostgresDataEfsAccessPoint
+    Export:
+      Name: !Sub ${AWS::StackName}-PostgresDataEfsAccessPoint
+  OutputEFSSecurityGroupMountTargets:
+    Description: EFS Security Group
+    Value: !Ref EFSSecurityGroupMountTargets
+    Export:
+      Name: !Sub ${AWS::StackName}-EFSSecurityGroupMountTargets

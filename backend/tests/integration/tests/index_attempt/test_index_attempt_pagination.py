@@ -33,6 +33,7 @@ def _verify_index_attempt_pagination(
         # Verify time ordering within the page (descending order)
         for attempt in paginated_result.items:
             if last_time_started is not None:
+                assert attempt.time_started is not None
                 assert (
                     attempt.time_started <= last_time_started
                 ), "Index attempts not in descending time order"

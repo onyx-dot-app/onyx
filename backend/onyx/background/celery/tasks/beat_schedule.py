@@ -21,6 +21,7 @@ BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 # we have a better implementation (backpressure, etc)
 # Note that DynamicTenantScheduler can adjust the runtime value for this via Redis
 CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0
+CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = []
@@ -58,6 +59,17 @@ beat_task_templates.extend(
             "name": "check-for-vespa-sync",
             "task": OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             "schedule": timedelta(seconds=20),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
+            "name": "check-for-user-file-folder-sync",
+            "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
+            "schedule": timedelta(
+                days=1
+            ),  # This should essentially always be triggered manually for user folder updates.
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -169,8 +181,18 @@ beat_cloud_tasks: list[dict] = [
     },
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants",
-        "task": OnyxCeleryTask.CHECK_AVAILABLE_TENANTS,
+        "task": OnyxCeleryTask.CLOUD_CHECK_AVAILABLE_TENANTS,
         "schedule": timedelta(minutes=10),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.HIGH,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-pidbox",
+        "task": OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX,
+        "schedule": timedelta(hours=4),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
@@ -192,6 +214,26 @@ if not MULTI_TENANT:
                     "priority": OnyxCeleryPriority.MEDIUM,
                     "expires": BEAT_EXPIRES_DEFAULT,
                     "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
+            {
+                "name": "monitor-process-memory",
+                "task": OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
+                "schedule": timedelta(minutes=5),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
+            {
+                "name": "celery-beat-heartbeat",
+                "task": OnyxCeleryTask.CELERY_BEAT_HEARTBEAT,
+                "schedule": timedelta(minutes=1),
+                "options": {
+                    "priority": OnyxCeleryPriority.HIGHEST,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
         ]

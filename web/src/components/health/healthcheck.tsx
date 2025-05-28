@@ -35,7 +35,7 @@ export const HealthCheckBanner = () => {
   useEffect(() => {
     if (userError && userError.status === 403) {
       logout().then(() => {
-        if ((!pathname.includes("/auth")) && (!pathname.includes("/pages"))) {
+        if ((!pathname?.includes("/auth")) && (!pathname?.includes("/pages"))) {
           setShowLoggedOutModal(true);
         }
       });
@@ -61,7 +61,7 @@ export const HealthCheckBanner = () => {
       expirationTimeoutRef.current = setTimeout(() => {
         setExpired(true);
 
-        if ((!pathname.includes("/auth")) && (!pathname.includes("/pages"))) {
+        if ((!pathname?.includes("/auth")) && (!pathname?.includes("/pages"))) {
           setShowLoggedOutModal(true);
         }
       }, timeUntilExpire);
@@ -205,13 +205,13 @@ export const HealthCheckBanner = () => {
   }
 
   if (error instanceof RedirectError || expired) {
-    if ((!pathname.includes("/auth")) && (!pathname.includes("/pages"))) {
+    if ((!pathname?.includes("/auth")) && (!pathname?.includes("/pages"))) {
       setShowLoggedOutModal(true);
     }
     return null;
   } else {
     return (
-      <div className="fixed top-0 left-0 z-[101] w-full text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-text-200">
+      <div className="fixed top-0 left-0 z-[101] w-full text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-neutral-50 dark:text-neutral-100">
         <p className="font-bold pb-1">The backend is currently unavailable.</p>
 
         <p className="px-1">

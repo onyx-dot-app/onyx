@@ -5,6 +5,7 @@ Revises: 767f1c2a00eb
 Create Date: 2023-09-19 16:13:42.299715
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.schema import Sequence, CreateSequence

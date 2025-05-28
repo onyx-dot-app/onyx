@@ -26,7 +26,13 @@ export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
   blurb: string
 ) => {
-  if (!matchHighlights || matchHighlights.length === 0) {
+  // if there are no match highlights, or if it's really short, just use the blurb
+  // this is to prevent the UI from showing something like `...` for the summary
+  const MIN_MATCH_HIGHLIGHT_LENGTH = 5;
+  if (
+    !matchHighlights ||
+    matchHighlights.length <= MIN_MATCH_HIGHLIGHT_LENGTH
+  ) {
     return blurb;
   }
 
@@ -431,19 +437,20 @@ export function CompactDocumentCard({
   url?: string;
   updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
-  console.log("document", document);
   return (
     <div
       onClick={() => {
         openDocument(document, updatePresentingDocument);
       }}
-      className="max-w-[200px]  gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
+      className="max-w-[250px]  gap-y-1 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
     >
-      <div className="text-sm  !pb-0 !mb-0 font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
+      <div className="text-sm  flex gap-x-2 !pb-0 !mb-0 font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0  w-full">
         {icon}
-        {(document.semantic_identifier || document.document_id).slice(0, 40)}
-        {(document.semantic_identifier || document.document_id).length > 40 &&
-          "..."}
+        <p className="gap-0 p-0 m-0 line-clamp-2">
+          {(document.semantic_identifier || document.document_id).slice(0, 40)}
+          {(document.semantic_identifier || document.document_id).length > 40 &&
+            "..."}
+        </p>
       </div>
       {document.blurb && (
         <div className="text-xs mb-0 text-neutral-600 dark:text-neutral-300 line-clamp-2">
@@ -473,7 +480,7 @@ export function CompactQuestionCard({
   return (
     <div
       onClick={() => openQuestion(question)}
-      className="max-w-[250px] gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
+      className="max-w-[350px] gap-y-1 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
     >
       <div className="text-sm !pb-0 !mb-0 font-semibold flex items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
         Question

@@ -17,6 +17,7 @@ from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
+from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import DOC_PERMISSION_SYNC_PERIODS
@@ -46,7 +47,7 @@ from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import update_connector_credential_pair
+from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -64,11 +65,14 @@ from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSyn
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import doc_permission_sync_ctx
 from onyx.utils.logger import format_error_for_logging
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
 
 
 logger = setup_logger()
@@ -95,9 +99,6 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
-    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
-        return False
-
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:
@@ -105,9 +106,10 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
 
     source_sync_period = DOC_PERMISSION_SYNC_PERIODS.get(cc_pair.connector.source)
 
-    # If RESTRICTED_FETCH_PERIOD[source] is None, we always run the sync.
     if not source_sync_period:
-        return True
+        source_sync_period = DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
+
+    source_sync_period *= int(OnyxRuntime.get_doc_permission_sync_multiplier())
 
     # If the last sync is greater than the full fetch period, we run the sync
     next_sync = last_perm_sync + timedelta(seconds=source_sync_period)
@@ -285,7 +287,7 @@ def try_creating_permissions_sync_task(
             ),
             queue=OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
             task_id=custom_task_id,
-            priority=OnyxCeleryPriority.HIGH,
+            priority=OnyxCeleryPriority.MEDIUM,
         )
 
         # fill in the celery task id
@@ -420,12 +422,7 @@ def connector_permission_sync_generator_task(
                 task_logger.exception(
                     f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
                 )
-                update_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    status=ConnectorCredentialPairStatus.INVALID,
-                )
+                # TODO: add some notification to the admins here
                 raise
 
             source_type = cc_pair.connector.source
@@ -453,23 +450,37 @@ def connector_permission_sync_generator_task(
             redis_connector.permissions.set_fence(new_payload)
 
             callback = PermissionSyncCallback(redis_connector, lock, r)
-            document_external_accesses: list[DocExternalAccess] = doc_sync_func(
-                cc_pair, callback
+
+            # pass in the capability to fetch all existing docs for the cc_pair
+            # this is can be used to determine documents that are "missing" and thus
+            # should no longer be accessible. The decision as to whether we should find
+            # every document during the doc sync process is connector-specific.
+            def fetch_all_existing_docs_fn() -> list[str]:
+                return get_document_ids_for_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                )
+
+            document_external_accesses = doc_sync_func(
+                cc_pair, fetch_all_existing_docs_fn, callback
             )
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
             )
-            tasks_generated = redis_connector.permissions.generate_tasks(
-                celery_app=self.app,
-                lock=lock,
-                new_permissions=document_external_accesses,
-                source_string=source_type,
-                connector_id=cc_pair.connector.id,
-                credential_id=cc_pair.credential.id,
-            )
-            if tasks_generated is None:
-                return None
+
+            tasks_generated = 0
+            for doc_external_access in document_external_accesses:
+                redis_connector.permissions.generate_tasks(
+                    celery_app=self.app,
+                    lock=lock,
+                    new_permissions=[doc_external_access],
+                    source_string=source_type,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                )
+                tasks_generated += 1
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks finished. "
@@ -881,6 +892,18 @@ def monitor_ccpair_permissions_taskset(
         f"remaining={remaining} "
         f"initial={initial}"
     )
+
+    # Add telemetry for permission syncing progress
+    optional_telemetry(
+        record_type=RecordType.PERMISSION_SYNC_PROGRESS,
+        data={
+            "cc_pair_id": cc_pair_id,
+            "total_docs_synced": initial if initial is not None else 0,
+            "remaining_docs_to_sync": remaining,
+        },
+        tenant_id=tenant_id,
+    )
+
     if remaining > 0:
         return
 
@@ -890,6 +913,13 @@ def monitor_ccpair_permissions_taskset(
         f"cc_pair={cc_pair_id} "
         f"id={payload.id} "
         f"num_synced={initial}"
+    )
+
+    # Add telemetry for permission syncing complete
+    optional_telemetry(
+        record_type=RecordType.PERMISSION_SYNC_COMPLETE,
+        data={"cc_pair_id": cc_pair_id},
+        tenant_id=tenant_id,
     )
 
     update_sync_record_status(

@@ -1,21 +1,15 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import {
-  ChatSessionMinimal,
-  OnyxBotAnalytics,
-  QueryAnalytics,
-  UserAnalytics,
-} from "./usage/types";
+import { OnyxBotAnalytics, QueryAnalytics, UserAnalytics } from "./usage/types";
 import { useState } from "react";
 import { buildApiPath } from "@/lib/urlBuilder";
-import { Feedback } from "@/lib/types";
 
 import {
   convertDateToEndOfDay,
   convertDateToStartOfDay,
   getXDaysAgo,
 } from "./dateUtils";
-import { DateRange, THIRTY_DAYS } from "./DateRangeSelector";
+import { THIRTY_DAYS } from "./DateRangeSelector";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 
 export const useTimeRange = () => {

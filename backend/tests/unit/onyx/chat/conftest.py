@@ -9,8 +9,6 @@ from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContext
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import DocumentSource
@@ -18,8 +16,8 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.utils import get_max_input_tokens
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
@@ -46,14 +44,21 @@ def prompt_config() -> PromptConfig:
 
 @pytest.fixture
 def mock_llm() -> MagicMock:
+    model_provider = "openai"
+    model_name = "gpt-4o"
+
     mock_llm_obj = MagicMock(spec=LLM)
     mock_llm_obj.config = LLMConfig(
-        model_provider="openai",
-        model_name="gpt-4o",
+        model_provider=model_provider,
+        model_name=model_name,
         temperature=0.0,
         api_key=None,
         api_base=None,
         api_version=None,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
     )
     return mock_llm_obj
 
@@ -81,6 +86,8 @@ def mock_inference_sections() -> list[InferenceSection]:
                 source_links={0: "https://example.com/doc1"},
                 match_highlights=[],
                 image_file_name=None,
+                doc_summary="",
+                chunk_context="",
             ),
             chunks=MagicMock(),
         ),
@@ -104,6 +111,8 @@ def mock_inference_sections() -> list[InferenceSection]:
                 source_links={0: "https://example.com/doc2"},
                 match_highlights=[],
                 image_file_name=None,
+                doc_summary="",
+                chunk_context="",
             ),
             chunks=MagicMock(),
         ),
@@ -120,24 +129,7 @@ def mock_search_results(
 
 
 @pytest.fixture
-def mock_contexts(mock_inference_sections: list[InferenceSection]) -> OnyxContexts:
-    return OnyxContexts(
-        contexts=[
-            OnyxContext(
-                content=section.combined_content,
-                document_id=section.center_chunk.document_id,
-                semantic_identifier=section.center_chunk.semantic_identifier,
-                blurb=section.center_chunk.blurb,
-            )
-            for section in mock_inference_sections
-        ]
-    )
-
-
-@pytest.fixture
-def mock_search_tool(
-    mock_contexts: OnyxContexts, mock_search_results: list[LlmDoc]
-) -> MagicMock:
+def mock_search_tool(mock_search_results: list[LlmDoc]) -> MagicMock:
     mock_tool = MagicMock(spec=SearchTool)
     mock_tool.name = "search"
     mock_tool.build_tool_message_content.return_value = "search_response"
@@ -146,7 +138,6 @@ def mock_search_tool(
         json.loads(doc.model_dump_json()) for doc in mock_search_results
     ]
     mock_tool.run.return_value = [
-        ToolResponse(id=SEARCH_DOC_CONTENT_ID, response=mock_contexts),
         ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=mock_search_results),
     ]
     mock_tool.tool_definition.return_value = {

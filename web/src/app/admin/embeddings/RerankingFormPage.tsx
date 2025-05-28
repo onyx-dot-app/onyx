@@ -457,7 +457,7 @@ const RerankingDetailsForm = forwardRef<
                             ...values,
                             rerank_api_key: value,
                           });
-                          setFieldValue("api_key", value);
+                          setFieldValue("rerank_api_key", value);
                         }}
                         type="password"
                         label={

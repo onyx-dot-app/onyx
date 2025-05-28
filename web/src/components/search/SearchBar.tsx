@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, ChangeEvent, useContext } from "react";
+import React, { KeyboardEvent, ChangeEvent } from "react";
 
 import { MagnifyingGlass } from "@phosphor-icons/react";
 interface FullSearchBarProps {
@@ -26,7 +26,6 @@ import {
 import { useRef } from "react";
 import { SendIcon } from "../icons/icons";
 import { Separator } from "@/components/ui/separator";
-import { CustomTooltip } from "../tooltip/CustomTooltip";
 import KeyboardSymbol from "@/lib/browserUtilities";
 import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
 import { HorizontalSourceSelector } from "./filtering/HorizontalSourceSelector";

@@ -56,7 +56,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync",
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation",
     ]
 
     cmd_worker_indexing = [
@@ -70,6 +70,19 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=indexing@%n",
         "--queues=connector_indexing",
+    ]
+
+    cmd_worker_user_files_indexing = [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.indexing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=1",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=user_files_indexing@%n",
+        "--queues=user_files_indexing",
     ]
 
     cmd_worker_monitoring = [
@@ -110,6 +123,13 @@ def run_jobs() -> None:
         cmd_worker_indexing, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
 
+    worker_user_files_indexing_process = subprocess.Popen(
+        cmd_worker_user_files_indexing,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
     worker_monitoring_process = subprocess.Popen(
         cmd_worker_monitoring,
         stdout=subprocess.PIPE,
@@ -134,6 +154,10 @@ def run_jobs() -> None:
     worker_indexing_thread = threading.Thread(
         target=monitor_process, args=("INDEX", worker_indexing_process)
     )
+    worker_user_files_indexing_thread = threading.Thread(
+        target=monitor_process,
+        args=("USER_FILES_INDEX", worker_user_files_indexing_process),
+    )
     worker_monitoring_thread = threading.Thread(
         target=monitor_process, args=("MONITORING", worker_monitoring_process)
     )
@@ -143,6 +167,7 @@ def run_jobs() -> None:
     worker_light_thread.start()
     worker_heavy_thread.start()
     worker_indexing_thread.start()
+    worker_user_files_indexing_thread.start()
     worker_monitoring_thread.start()
     beat_thread.start()
 
@@ -150,6 +175,7 @@ def run_jobs() -> None:
     worker_light_thread.join()
     worker_heavy_thread.join()
     worker_indexing_thread.join()
+    worker_user_files_indexing_thread.join()
     worker_monitoring_thread.join()
     beat_thread.join()
 

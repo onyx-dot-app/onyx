@@ -1,0 +1,209 @@
+name: Run MIT Integration Tests v2
+concurrency:
+  group: Run-MIT-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  merge_group:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+  CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
+  CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
+  CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
+  PLATFORM_PAIR: linux-amd64
+jobs:
+  integration-tests-mit:
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # tag every docker image with "test" so that we can spin up the correct set
+      # of images during testing
+
+      # We don't need to build the Web Docker image since it's not yet used
+      # in the integration tests. We have a separate action to verify that it builds
+      # successfully.
+      - name: Pull Web Docker image
+        run: |
+          docker pull onyxdotapp/onyx-web-server:latest
+          docker tag onyxdotapp/onyx-web-server:latest onyxdotapp/onyx-web-server:test
+
+      # we use the runs-on cache for docker builds
+      # in conjunction with runs-on runners, it has better speed and unlimited caching
+      # https://runs-on.com/caching/s3-cache-for-github-actions/
+      # https://runs-on.com/caching/docker/
+      # https://github.com/moby/buildkit#s3-cache-experimental
+
+      # images are built and run locally for testing purposes. Not pushed.
+      - name: Build Backend Docker image
+        uses: ./.github/actions/custom-build-and-push
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          tags: onyxdotapp/onyx-backend:test
+          push: false
+          load: true
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+
+      - name: Build Model Server Docker image
+        uses: ./.github/actions/custom-build-and-push
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.model_server
+          platforms: linux/amd64
+          tags: onyxdotapp/onyx-model-server:test
+          push: false
+          load: true
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+
+      - name: Build integration test Docker image
+        uses: ./.github/actions/custom-build-and-push
+        with:
+          context: ./backend
+          file: ./backend/tests/integration/Dockerfile
+          platforms: linux/amd64
+          tags: onyxdotapp/onyx-integration:test
+          push: false
+          load: true
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+
+      # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
+      - name: Start Docker containers
+        run: |
+          cd deployment/docker_compose
+          AUTH_TYPE=basic \
+          POSTGRES_POOL_PRE_PING=true \
+          POSTGRES_USE_NULL_POOL=true \
+          REQUIRE_EMAIL_VERIFICATION=false \
+          DISABLE_TELEMETRY=true \
+          IMAGE_TAG=test \
+          INTEGRATION_TESTS_MODE=true \
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d
+        id: start_docker
+
+      - name: Wait for service to be ready
+        run: |
+          echo "Starting wait-for-service script..."
+
+          docker logs -f onyx-stack-api_server-1 &
+
+          start_time=$(date +%s)
+          timeout=300  # 5 minutes in seconds
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+            
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. Service did not become ready in 5 minutes."
+              exit 1
+            fi
+            
+            # Use curl with error handling to ignore specific exit code 56
+            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "curl_error")
+            
+            if [ "$response" = "200" ]; then
+              echo "Service is ready!"
+              break
+            elif [ "$response" = "curl_error" ]; then
+              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
+            else
+              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
+            fi
+            
+            sleep 5
+          done
+          echo "Finished waiting for service."
+
+      - name: Start Mock Services
+        run: |
+          cd backend/tests/integration/mock_services
+          docker compose -f docker-compose.mock-it-services.yml \
+            -p mock-it-services-stack up -d
+
+      # NOTE: Use pre-ping/null to reduce flakiness due to dropped connections
+      - name: Run Standard Integration Tests
+        run: |
+          echo "Running integration tests..."
+          docker run --rm --network onyx-stack_default \
+            --name test-runner \
+            -e POSTGRES_HOST=relational_db \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=password \
+            -e POSTGRES_DB=postgres \
+            -e POSTGRES_POOL_PRE_PING=true \
+            -e POSTGRES_USE_NULL_POOL=true \
+            -e VESPA_HOST=index \
+            -e REDIS_HOST=cache \
+            -e API_SERVER_HOST=api_server \
+            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
+            -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
+            -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
+            -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
+            -e TEST_WEB_HOSTNAME=test-runner \
+            -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
+            -e MOCK_CONNECTOR_SERVER_PORT=8001 \
+            onyxdotapp/onyx-integration:test \
+            /app/tests/integration/tests \
+            /app/tests/integration/connector_job_tests
+        continue-on-error: true
+        id: run_tests
+
+      - name: Check test results
+        run: |
+          if [ ${{ steps.run_tests.outcome }} == 'failure' ]; then
+            echo "Integration tests failed. Exiting with error."
+            exit 1
+          else
+            echo "All integration tests passed successfully."
+          fi
+
+      # ------------------------------------------------------------
+      # Always gather logs BEFORE "down":
+      - name: Dump API server logs
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color api_server > $GITHUB_WORKSPACE/api_server.log || true
+
+      - name: Dump all-container logs (optional)
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-all-logs
+          path: ${{ github.workspace }}/docker-compose.log
+      # ------------------------------------------------------------
+
+      - name: Stop Docker containers
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p onyx-stack down -v

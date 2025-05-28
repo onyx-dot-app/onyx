@@ -45,7 +45,7 @@ export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
                       className="mr-1 my-auto cursor-pointer"
                       onClick={() =>
                         router.push(
-                          `/admin/tools/edit/${tool.id}?u=${Date.now()}`
+                          `/admin/actions/edit/${tool.id}?u=${Date.now()}`
                         )
                       }
                     />

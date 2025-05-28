@@ -12,6 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import execute_single_retrieval
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
@@ -301,7 +302,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 q=query,
                 continue_on_404_or_403=True,
             ):
-                full_threads = execute_paginated_retrieval(
+                full_threads = execute_single_retrieval(
                     retrieval_function=gmail_service.users().threads().get,
                     list_key=None,
                     userId=user_email,

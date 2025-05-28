@@ -73,7 +73,7 @@ def _extract_answer_quotes_freeform(
 
 
 def _extract_answer_quotes_json(
-    answer_dict: dict[str, str | list[str]]
+    answer_dict: dict[str, str | list[str]],
 ) -> tuple[Optional[str], Optional[list[str]]]:
     answer_dict = {k.lower(): v for k, v in answer_dict.items()}
     answer = str(answer_dict.get("answer"))

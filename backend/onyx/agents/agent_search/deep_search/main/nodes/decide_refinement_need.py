@@ -26,7 +26,7 @@ def decide_refinement_need(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
 
-    decision = True  # TODO: just for current testing purposes
+    decision = graph_config.behavior.allow_refinement
 
     if state.answer_error:
         return RequireRefinemenEvalUpdate(

@@ -5,6 +5,7 @@ Revises: fad14119fb92
 Create Date: 2024-04-15 01:36:02.952809
 
 """
+
 import json
 from typing import cast
 from alembic import op

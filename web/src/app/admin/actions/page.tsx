@@ -1,7 +1,5 @@
 import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { FiPlusSquare } from "react-icons/fi";
-import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";

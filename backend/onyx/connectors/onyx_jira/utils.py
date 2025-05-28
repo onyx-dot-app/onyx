@@ -1,4 +1,5 @@
 """Module with custom fields processing functions"""
+
 import os
 from typing import Any
 from typing import List
@@ -22,8 +23,8 @@ JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
 def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
     display_name = None
     email = None
-    if hasattr(obj, "display_name"):
-        display_name = obj.display_name
+    if hasattr(obj, "displayName"):
+        display_name = obj.displayName
     else:
         display_name = obj.get("displayName")
 
@@ -198,14 +199,14 @@ class CommonFieldExtractor:
     def get_issue_common_fields(jira: Issue) -> dict:
         return {
             "Priority": jira.fields.priority.name if jira.fields.priority else None,
-            "Reporter": jira.fields.reporter.displayName
-            if jira.fields.reporter
-            else None,
-            "Assignee": jira.fields.assignee.displayName
-            if jira.fields.assignee
-            else None,
+            "Reporter": (
+                jira.fields.reporter.displayName if jira.fields.reporter else None
+            ),
+            "Assignee": (
+                jira.fields.assignee.displayName if jira.fields.assignee else None
+            ),
             "Status": jira.fields.status.name if jira.fields.status else None,
-            "Resolution": jira.fields.resolution.name
-            if jira.fields.resolution
-            else None,
+            "Resolution": (
+                jira.fields.resolution.name if jira.fields.resolution else None
+            ),
         }

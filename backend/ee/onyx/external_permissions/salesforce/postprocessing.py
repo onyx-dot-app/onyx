@@ -51,13 +51,14 @@ def _get_objects_access_for_user_email_from_salesforce(
 
     # This is cached in the function so the first query takes an extra 0.1-0.3 seconds
     # but subsequent queries by the same user are essentially instant
-    start_time = time.time()
+    start_time = time.monotonic()
     user_id = get_salesforce_user_id_from_email(salesforce_client, user_email)
-    end_time = time.time()
+    end_time = time.monotonic()
     logger.info(
         f"Time taken to get Salesforce user ID: {end_time - start_time} seconds"
     )
     if user_id is None:
+        logger.warning(f"User '{user_email}' not found in Salesforce")
         return None
 
     # This is the only query that is not cached in the function
@@ -65,6 +66,7 @@ def _get_objects_access_for_user_email_from_salesforce(
     object_id_to_access = get_objects_access_for_user_id(
         salesforce_client, user_id, list(object_ids)
     )
+    logger.debug(f"Object ID to access: {object_id_to_access}")
     return object_id_to_access
 
 

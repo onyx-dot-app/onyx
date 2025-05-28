@@ -1,5 +1,6 @@
 import logging
 import multiprocessing
+import os
 import time
 from typing import Any
 from typing import cast
@@ -34,7 +35,6 @@ from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGrou
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import ColoredFormatter
 from onyx.utils.logger import PlainFormatter
@@ -225,7 +225,7 @@ def wait_for_redis(sender: Any, **kwargs: Any) -> None:
     Will raise WorkerShutdown to kill the celery worker if the timeout
     is reached."""
 
-    r = get_shared_redis_client()
+    r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
 
     WAIT_INTERVAL = 5
     WAIT_LIMIT = 60
@@ -306,12 +306,12 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:
 
 
 def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
-    logger.info("Running as a secondary celery worker.")
+    logger.info(f"Running as a secondary celery worker: pid={os.getpid()}")
 
     # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
     WAIT_LIMIT = 60
-    r = get_shared_redis_client()
+    r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
     time_start = time.monotonic()
 
     logger.info("Waiting for primary worker to be ready...")
@@ -446,7 +446,6 @@ def set_task_finished_log_level(logLevel: int) -> None:
 
 
 class TenantContextFilter(logging.Filter):
-
     """Logging filter to inject tenant ID into the logger's name."""
 
     def filter(self, record: logging.LogRecord) -> bool:

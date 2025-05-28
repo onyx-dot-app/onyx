@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
-from onyx.background.celery.versioned_apps.primary import app as primary_app
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.document_set import check_document_sets_are_public
@@ -52,7 +52,7 @@ def create_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    primary_app.send_task(
+    client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
@@ -85,7 +85,7 @@ def patch_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    primary_app.send_task(
+    client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
@@ -108,7 +108,7 @@ def delete_document_set(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    primary_app.send_task(
+    client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,

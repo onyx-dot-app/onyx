@@ -8,6 +8,10 @@ from langgraph.graph.state import CompiledStateGraph
 
 from onyx.agents.agent_search.basic.graph_builder import basic_graph_builder
 from onyx.agents.agent_search.basic.states import BasicInput
+from onyx.agents.agent_search.dc_search_analysis.graph_builder import (
+    divide_and_conquer_graph_builder,
+)
+from onyx.agents.agent_search.dc_search_analysis.states import MainInput as DCMainInput
 from onyx.agents.agent_search.deep_search.main.graph_builder import (
     main_graph_builder as main_graph_builder_a,
 )
@@ -26,7 +30,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
 from onyx.chat.models import ToolResponse
-from onyx.configs.agent_configs import ALLOW_REFINEMENT
+from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_context_manager
@@ -47,7 +51,6 @@ def _parse_agent_event(
     Parse the event into a typed object.
     Return None if we are not interested in the event.
     """
-
     event_type = event["event"]
 
     # We always just yield the event data, but this piece is useful for two development reasons:
@@ -82,7 +85,7 @@ def _parse_agent_event(
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput,
+    graph_input: BasicInput | MainInput | DCMainInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -96,12 +99,12 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput,
+    input: BasicInput | MainInput | DCMainInput,
 ) -> AnswerStream:
     config.behavior.perform_initial_search_decomposition = (
         INITIAL_SEARCH_DECOMPOSITION_ENABLED
     )
-    config.behavior.allow_refinement = ALLOW_REFINEMENT
+    config.behavior.allow_refinement = AGENT_ALLOW_REFINEMENT
 
     for event in manage_sync_streaming(
         compiled_graph=compiled_graph, config=config, graph_input=input
@@ -143,6 +146,16 @@ def run_basic_graph(
     graph = basic_graph_builder()
     compiled_graph = graph.compile()
     input = BasicInput(unused=True)
+    return run_graph(compiled_graph, config, input)
+
+
+def run_dc_graph(
+    config: GraphConfig,
+) -> AnswerStream:
+    graph = divide_and_conquer_graph_builder()
+    compiled_graph = graph.compile()
+    input = DCMainInput(log_messages=[])
+    config.inputs.search_request.query = config.inputs.search_request.query.strip()
     return run_graph(compiled_graph, config, input)
 
 

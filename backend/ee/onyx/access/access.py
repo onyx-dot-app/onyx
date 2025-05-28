@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.external_perm import fetch_external_groups_for_user
+from ee.onyx.db.external_perm import fetch_public_external_group_ids
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
 from ee.onyx.external_permissions.post_query_censoring import (
@@ -63,6 +64,8 @@ def _get_access_for_documents(
         document_ids=document_ids,
     )
 
+    all_public_ext_u_group_ids = set(fetch_public_external_group_ids(db_session))
+
     access_map = {}
     for document_id, non_ee_access in non_ee_access_dict.items():
         document = doc_id_map[document_id]
@@ -89,16 +92,19 @@ def _get_access_for_documents(
         # If its censored, then it's public anywhere during the search and then permissions are
         # applied after the search
         is_public_anywhere = (
-            document.is_public or non_ee_access.is_public or is_only_censored
+            document.is_public
+            or non_ee_access.is_public
+            or is_only_censored
+            or any(u_group in all_public_ext_u_group_ids for u_group in ext_u_groups)
         )
 
         # To avoid collisions of group namings between connectors, they need to be prefixed
-        access_map[document_id] = DocumentAccess(
-            user_emails=non_ee_access.user_emails,
-            user_groups=set(user_group_info.get(document_id, [])),
+        access_map[document_id] = DocumentAccess.build(
+            user_emails=list(non_ee_access.user_emails),
+            user_groups=user_group_info.get(document_id, []),
             is_public=is_public_anywhere,
-            external_user_emails=ext_u_emails,
-            external_user_group_ids=ext_u_groups,
+            external_user_emails=list(ext_u_emails),
+            external_user_group_ids=list(ext_u_groups),
         )
     return access_map
 

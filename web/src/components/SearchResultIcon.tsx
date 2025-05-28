@@ -1,3 +1,4 @@
+"use client";
 import { useState, useEffect } from "react";
 import faviconFetch from "favicon-fetch";
 import { SourceIcon } from "./SourceIcon";
@@ -49,7 +50,7 @@ export function SearchResultIcon({ url }: { url: string }) {
   if (!faviconUrl) {
     return <SourceIcon sourceType={ValidSources.Web} iconSize={18} />;
   }
-  if (url.includes("docs.onyx.app")) {
+  if (url.includes("onyx.app")) {
     return <OnyxIcon size={18} className="dark:text-[#fff] text-[#000]" />;
   }
 

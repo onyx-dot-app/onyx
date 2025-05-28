@@ -1,5 +1,6 @@
 import json
 import os
+import resource
 from collections.abc import Callable
 
 import pytest
@@ -61,6 +62,28 @@ def parse_credentials(env_str: str) -> dict:
         return json.loads(unescaped)
 
 
+def get_credentials_from_env(email: str, oauth: bool) -> dict:
+    if oauth:
+        raw_credential_string = os.environ[_USER_TO_OAUTH_CREDENTIALS_MAP[email]]
+    else:
+        raw_credential_string = os.environ[
+            _USER_TO_SERVICE_ACCOUNT_CREDENTIALS_MAP[email]
+        ]
+
+    refried_credential_string = json.dumps(parse_credentials(raw_credential_string))
+
+    cred_key = (
+        DB_CREDENTIALS_DICT_TOKEN_KEY
+        if oauth
+        else DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+    )
+    return {
+        cred_key: refried_credential_string,
+        DB_CREDENTIALS_PRIMARY_ADMIN_KEY: email,
+        DB_CREDENTIALS_AUTHENTICATION_METHOD: GoogleOAuthAuthenticationMethod.UPLOADED.value,
+    }
+
+
 @pytest.fixture
 def google_drive_oauth_uploaded_connector_factory() -> (
     Callable[..., GoogleDriveConnector]
@@ -84,13 +107,7 @@ def google_drive_oauth_uploaded_connector_factory() -> (
             shared_folder_urls=shared_folder_urls,
         )
 
-        json_string = os.environ[_USER_TO_OAUTH_CREDENTIALS_MAP[primary_admin_email]]
-        refried_json_string = json.dumps(parse_credentials(json_string))
-        credentials_json = {
-            DB_CREDENTIALS_DICT_TOKEN_KEY: refried_json_string,
-            DB_CREDENTIALS_PRIMARY_ADMIN_KEY: primary_admin_email,
-            DB_CREDENTIALS_AUTHENTICATION_METHOD: GoogleOAuthAuthenticationMethod.UPLOADED.value,
-        }
+        credentials_json = get_credentials_from_env(primary_admin_email, oauth=True)
         connector.load_credentials(credentials_json)
         return connector
 
@@ -109,6 +126,7 @@ def google_drive_service_acct_connector_factory() -> (
         my_drive_emails: str | None,
         shared_folder_urls: str | None,
         include_files_shared_with_me: bool,
+        specific_user_emails: str | None = None,
     ) -> GoogleDriveConnector:
         print("Creating GoogleDriveConnector with service account credentials")
         connector = GoogleDriveConnector(
@@ -118,21 +136,33 @@ def google_drive_service_acct_connector_factory() -> (
             my_drive_emails=my_drive_emails,
             shared_folder_urls=shared_folder_urls,
             include_files_shared_with_me=include_files_shared_with_me,
+            specific_user_emails=specific_user_emails,
         )
-
-        json_string = os.environ[
-            _USER_TO_SERVICE_ACCOUNT_CREDENTIALS_MAP[primary_admin_email]
-        ]
-        refried_json_string = json.dumps(parse_credentials(json_string))
 
         # Load Service Account Credentials
-        connector.load_credentials(
-            {
-                DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: refried_json_string,
-                DB_CREDENTIALS_PRIMARY_ADMIN_KEY: primary_admin_email,
-                DB_CREDENTIALS_AUTHENTICATION_METHOD: GoogleOAuthAuthenticationMethod.UPLOADED.value,
-            }
+        credentials_json = get_credentials_from_env(
+            email=primary_admin_email, oauth=False
         )
+        connector.load_credentials(credentials_json)
         return connector
 
     return _connector_factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def set_resource_limits() -> None:
+    # the google sdk is aggressive about using up file descriptors and
+    # macos is stingy ... these tests will fail randomly unless the descriptor limit is raised
+    RLIMIT_MINIMUM = 2048
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    desired_soft = min(RLIMIT_MINIMUM, hard)  # Pick your target here
+
+    print(f"Open file limit: soft={soft} hard={hard} soft_required={RLIMIT_MINIMUM}")
+
+    if soft < desired_soft:
+        print(f"Raising open file limit: {soft} -> {desired_soft}")
+        resource.setrlimit(resource.RLIMIT_NOFILE, (desired_soft, hard))
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print(f"New open file limit: soft={soft} hard={hard}")
+    return

@@ -1,0 +1,16 @@
+{
+  // Naming, likely doesn't need to be changed
+  "OnyxNamespace": "onyx",
+  "Environment": "production",
+  "EFSName": "onyx-efs",
+
+  // Region and VPC Stuff
+  "AWSRegion": "us-east-2",
+  "VpcID": "YOUR_VPC_ID",
+  "SubnetIDs": "YOUR_SUBNET_ID1,YOUR_SUBNET_ID2",
+
+  // Domain and ACM Stuff
+  "DomainName": "YOUR_DOMAIN e.g ecs.onyx.app",
+  "ValidationMethod": "DNS",
+  "HostedZoneId": ""  // Only specify if using Route 53 for DNS
+} 

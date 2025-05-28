@@ -23,9 +23,11 @@ INDEXING_MODEL_SERVER_PORT = int(
 # Onyx custom Deep Learning Models
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
-INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
-INTENT_MODEL_TAG = "v1.0.3"
-
+INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
+# INTENT_MODEL_TAG = "v1.0.3"
+INTENT_MODEL_TAG: str | None = None
+INFORMATION_CONTENT_MODEL_VERSION = "onyx-dot-app/information-content-model"
+INFORMATION_CONTENT_MODEL_TAG: str | None = None
 
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
@@ -56,12 +58,13 @@ INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
+# This should just be the filename base without extension or path.
 LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
 DEV_LOGGING_ENABLED = os.environ.get("DEV_LOGGING_ENABLED", "").lower() == "true"
 # notset, debug, info, notice, warning, error, or critical
-LOG_LEVEL = os.environ.get("LOG_LEVEL", "info")
+LOG_LEVEL = os.environ.get("LOG_LEVEL") or "info"
 
 # Timeout for API-based embedding models
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
@@ -97,6 +100,7 @@ PRESERVED_SEARCH_FIELDS = [
     "api_url",
     "index_name",
     "multipass_indexing",
+    "enable_contextual_rag",
     "model_dim",
     "normalize",
     "passage_prefix",
@@ -138,7 +142,10 @@ else:
 # Multi-tenancy configuration
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
-POSTGRES_DEFAULT_SCHEMA = os.environ.get("POSTGRES_DEFAULT_SCHEMA") or "public"
+POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE = "public"
+POSTGRES_DEFAULT_SCHEMA = (
+    os.environ.get("POSTGRES_DEFAULT_SCHEMA") or POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+)
 DEFAULT_REDIS_PREFIX = os.environ.get("DEFAULT_REDIS_PREFIX") or "default"
 
 
@@ -277,3 +284,20 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_intfloat_multilingual_e5_small",
     ),
 ]
+# Maximum (least severe) downgrade factor for chunks above the cutoff
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX") or 1.0
+)
+# Minimum (most severe) downgrade factor for short chunks below the cutoff if no content
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.7
+)
+# Temperature for the information content classification model
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE") or 4.0
+)
+# Cutoff below which we start using the information content classification model
+# (cutoff length number itself is still considered 'short'))
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
+)

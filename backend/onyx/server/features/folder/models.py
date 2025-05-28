@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from onyx.server.query_and_chat.models import ChatSessionDetails
 
 
-class FolderResponse(BaseModel):
+class UserFolderSnapshot(BaseModel):
     folder_id: int
     folder_name: str | None
     display_priority: int
@@ -13,7 +13,7 @@ class FolderResponse(BaseModel):
 
 
 class GetUserFoldersResponse(BaseModel):
-    folders: list[FolderResponse]
+    folders: list[UserFolderSnapshot]
 
 
 class FolderCreationRequest(BaseModel):

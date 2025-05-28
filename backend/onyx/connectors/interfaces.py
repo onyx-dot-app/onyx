@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from types import TracebackType
 from typing import Any
 from typing import Generic
+from typing import TypeAlias
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -19,10 +20,11 @@ SecondsSinceUnixEpoch = float
 
 GenerateDocumentsOutput = Iterator[list[Document]]
 GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
-CheckpointOutput = Generator[Document | ConnectorFailure, None, ConnectorCheckpoint]
+
+CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 
-class BaseConnector(abc.ABC):
+class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
     # Common image file extensions supported across connectors
     IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -57,6 +59,14 @@ class BaseConnector(abc.ABC):
         Default is a no-op (always successful).
         """
 
+    def set_allow_images(self, value: bool) -> None:
+        """Implement if the underlying connector wants to skip/allow image downloading
+        based on the application level image analysis setting."""
+
+    def build_dummy_checkpoint(self) -> CT:
+        # TODO: find a way to make this work without type: ignore
+        return ConnectorCheckpoint(has_more=True)  # type: ignore
+
 
 # Large set update or reindex, generally pulling a complete state or from a savestate file
 class LoadConnector(BaseConnector):
@@ -74,6 +84,8 @@ class PollConnector(BaseConnector):
         raise NotImplementedError
 
 
+# Slim connectors can retrieve just the ids and
+# permission syncing information for connected documents
 class SlimConnector(BaseConnector):
     @abc.abstractmethod
     def retrieve_all_slim_documents(
@@ -186,14 +198,17 @@ class EventConnector(BaseConnector):
         raise NotImplementedError
 
 
-class CheckpointConnector(BaseConnector):
+CheckpointOutput: TypeAlias = Generator[Document | ConnectorFailure, None, CT]
+
+
+class CheckpointedConnector(BaseConnector[CT]):
     @abc.abstractmethod
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-        checkpoint: ConnectorCheckpoint,
-    ) -> CheckpointOutput:
+        checkpoint: CT,
+    ) -> CheckpointOutput[CT]:
         """Yields back documents or failures. Final return is the new checkpoint.
 
         Final return can be access via either:
@@ -213,4 +228,13 @@ class CheckpointConnector(BaseConnector):
         checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint)
         ```
         """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def build_dummy_checkpoint(self) -> CT:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
+        """Validate the checkpoint json and return the checkpoint object"""
         raise NotImplementedError

@@ -10,6 +10,7 @@ forum, followed by the board name. For example:
 The `load_from_state` method is used to load documents from the forum. It takes an optional `state` parameter, which
 can be used to specify a state from which to start loading documents.
 """
+
 import re
 from datetime import datetime
 from datetime import timedelta

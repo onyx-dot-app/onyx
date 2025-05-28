@@ -1,4 +1,4 @@
-import json
+import sys
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -39,14 +39,18 @@ class TextSection(Section):
     """Section containing text content"""
 
     text: str
-    link: str | None = None
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.text) + sys.getsizeof(self.link)
 
 
 class ImageSection(Section):
     """Section containing an image reference"""
 
     image_file_name: str
-    link: str | None = None
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.image_file_name) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):
@@ -111,6 +115,14 @@ class BasicExpertInfo(BaseModel):
             )
         )
 
+    def __sizeof__(self) -> int:
+        size = sys.getsizeof(self.display_name)
+        size += sys.getsizeof(self.first_name)
+        size += sys.getsizeof(self.middle_initial)
+        size += sys.getsizeof(self.last_name)
+        size += sys.getsizeof(self.email)
+        return size
+
 
 class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
@@ -164,6 +176,35 @@ class DocumentBase(BaseModel):
                 attributes.append(k + INDEX_SEPARATOR + v)
         return attributes
 
+    def __sizeof__(self) -> int:
+        size = sys.getsizeof(self.id)
+        for section in self.sections:
+            size += sys.getsizeof(section)
+        size += sys.getsizeof(self.source)
+        size += sys.getsizeof(self.semantic_identifier)
+        size += sys.getsizeof(self.doc_updated_at)
+        size += sys.getsizeof(self.chunk_count)
+
+        if self.primary_owners is not None:
+            for primary_owner in self.primary_owners:
+                size += sys.getsizeof(primary_owner)
+        else:
+            size += sys.getsizeof(self.primary_owners)
+
+        if self.secondary_owners is not None:
+            for secondary_owner in self.secondary_owners:
+                size += sys.getsizeof(secondary_owner)
+        else:
+            size += sys.getsizeof(self.secondary_owners)
+
+        size += sys.getsizeof(self.title)
+        size += sys.getsizeof(self.from_ingestion_api)
+        size += sys.getsizeof(self.additional_info)
+        return size
+
+    def get_text_content(self) -> str:
+        return " ".join([section.text for section in self.sections if section.text])
+
 
 class Document(DocumentBase):
     """Used for Onyx ingestion api, the ID is required"""
@@ -178,9 +219,11 @@ class Document(DocumentBase):
     @classmethod
     def from_base(cls, base: DocumentBase) -> "Document":
         return cls(
-            id=make_url_compatible(base.id)
-            if base.id
-            else "ingestion_api_" + make_url_compatible(base.semantic_identifier),
+            id=(
+                make_url_compatible(base.id)
+                if base.id
+                else "ingestion_api_" + make_url_compatible(base.semantic_identifier)
+            ),
             sections=base.sections,
             source=base.source or DocumentSource.INGESTION_API,
             semantic_identifier=base.semantic_identifier,
@@ -191,6 +234,12 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
         )
+
+    def __sizeof__(self) -> int:
+        size = super().__sizeof__()
+        size += sys.getsizeof(self.id)
+        size += sys.getsizeof(self.source)
+        return size
 
 
 class IndexingDocument(Document):
@@ -210,9 +259,11 @@ class IndexingDocument(Document):
             )
         else:
             section_len = sum(
-                len(section.text)
-                if isinstance(section, TextSection) and section.text is not None
-                else 0
+                (
+                    len(section.text)
+                    if isinstance(section, TextSection) and section.text is not None
+                    else 0
+                )
                 for section in self.sections
             )
 
@@ -225,28 +276,28 @@ class SlimDocument(BaseModel):
 
 
 class IndexAttemptMetadata(BaseModel):
-    batch_num: int | None = None
     connector_id: int
     credential_id: int
+    batch_num: int | None = None
+    attempt_id: int | None = None
+    request_id: str | None = None
+
+    # Work in progress: will likely contain metadata about cc pair / index attempt
+    structured_id: str | None = None
 
 
 class ConnectorCheckpoint(BaseModel):
     # TODO: maybe move this to something disk-based to handle extremely large checkpoints?
-    checkpoint_content: dict
     has_more: bool
-
-    @classmethod
-    def build_dummy_checkpoint(cls) -> "ConnectorCheckpoint":
-        return ConnectorCheckpoint(checkpoint_content={}, has_more=True)
 
     def __str__(self) -> str:
         """String representation of the checkpoint, with truncation for large checkpoint content."""
         MAX_CHECKPOINT_CONTENT_CHARS = 1000
 
-        content_str = json.dumps(self.checkpoint_content)
+        content_str = self.model_dump_json()
         if len(content_str) > MAX_CHECKPOINT_CONTENT_CHARS:
             content_str = content_str[: MAX_CHECKPOINT_CONTENT_CHARS - 3] + "..."
-        return f"ConnectorCheckpoint(checkpoint_content={content_str}, has_more={self.has_more})"
+        return content_str
 
 
 class DocumentFailure(BaseModel):

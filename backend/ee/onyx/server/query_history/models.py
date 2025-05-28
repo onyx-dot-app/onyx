@@ -3,12 +3,17 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
+from onyx.background.task_utils import extract_task_id_from_query_history_report_name
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import SessionType
+from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
+from onyx.db.models import PGFileStore
+from onyx.db.models import TaskQueueState
 
 
 class AbridgedSearchDoc(BaseModel):
@@ -127,9 +132,9 @@ class ChatSessionMinimal(BaseModel):
             ),
             time_created=chat_session.time_created,
             feedback_type=session_feedback_type,
-            flow_type=SessionType.SLACK
-            if chat_session.onyxbot_flow
-            else SessionType.CHAT,
+            flow_type=(
+                SessionType.SLACK if chat_session.onyxbot_flow else SessionType.CHAT
+            ),
             conversation_length=len(
                 [
                     message
@@ -216,3 +221,59 @@ class QuestionAnswerPairSnapshot(BaseModel):
             "time_created": str(self.time_created),
             "flow_type": self.flow_type,
         }
+
+
+class QueryHistoryExport(BaseModel):
+    task_id: str
+    status: TaskStatus
+    start: datetime
+    end: datetime
+    start_time: datetime
+
+    @classmethod
+    def from_task(
+        cls,
+        task_queue_state: TaskQueueState,
+    ) -> "QueryHistoryExport":
+        start_end = task_queue_state.task_name.removeprefix(
+            f"{QUERY_HISTORY_TASK_NAME_PREFIX}_"
+        )
+        start, end = start_end.split("_")
+
+        if not task_queue_state.start_time:
+            raise RuntimeError("The start time of the task must always be present")
+
+        return cls(
+            task_id=task_queue_state.task_id,
+            status=task_queue_state.status,
+            start=datetime.fromisoformat(start),
+            end=datetime.fromisoformat(end),
+            start_time=task_queue_state.start_time,
+        )
+
+    @classmethod
+    def from_file(
+        cls,
+        file: PGFileStore,
+    ) -> "QueryHistoryExport":
+        if not file.file_metadata or not isinstance(file.file_metadata, dict):
+            raise RuntimeError(
+                "The file metadata must be non-null, and must be of type `dict[str, str]`"
+            )
+
+        metadata = QueryHistoryFileMetadata.model_validate(dict(file.file_metadata))
+        task_id = extract_task_id_from_query_history_report_name(file.file_name)
+
+        return cls(
+            task_id=task_id,
+            status=TaskStatus.SUCCESS,
+            start=metadata.start,
+            end=metadata.end,
+            start_time=metadata.start_time,
+        )
+
+
+class QueryHistoryFileMetadata(BaseModel):
+    start: datetime
+    end: datetime
+    start_time: datetime

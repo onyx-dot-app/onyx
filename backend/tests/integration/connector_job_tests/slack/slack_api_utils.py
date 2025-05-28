@@ -8,6 +8,7 @@ Assumptions:
     - chat:write
     - chat:write.public
 """
+
 from typing import Any
 from uuid import uuid4
 

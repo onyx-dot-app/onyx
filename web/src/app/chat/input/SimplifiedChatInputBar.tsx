@@ -7,7 +7,7 @@ import {
   InputBarPreview,
   InputBarPreviewImageProvider,
 } from "../files/InputBarPreview";
-import { OpenAIIcon, SendIcon } from "@/components/icons/icons";
+import { SendIcon } from "@/components/icons/icons";
 import { HorizontalSourceSelector } from "@/components/search/filtering/HorizontalSourceSelector";
 import { Tag } from "@/lib/types";
 

@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon, SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import { openDocument } from "@/lib/search/utils";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { ValidSources } from "@/lib/types";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
+import { truncateString } from "@/lib/utils";
+import { FileResponse } from "../my-documents/DocumentsContext";
 
 interface SourcesDisplayProps {
   documents: OnyxDocument[];
@@ -54,9 +56,111 @@ export const SourceCard: React.FC<{
 
       <div className="flex items-center gap-1 mt-1">
         <ResultIcon doc={document} size={18} />
+
         <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0">
           {truncatedIdentifier}
         </div>
+      </div>
+    </button>
+  );
+};
+
+export const FileSourceCard: React.FC<{
+  document: FileResponse;
+  setPresentingDocument: (document: FileResponse) => void;
+  relevantDocument: OnyxDocument | undefined;
+}> = ({ document, setPresentingDocument, relevantDocument }) => {
+  const openDocument = () => {
+    if (document.link_url) {
+      window.open(document.link_url, "_blank");
+    } else {
+      setPresentingDocument(document as any);
+    }
+  };
+  const fileName = document.name || document.id;
+
+  return (
+    <button
+      onClick={openDocument}
+      className="w-full max-w-[260px] h-[80px] p-3
+             text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80
+             cursor-pointer rounded-lg
+             flex flex-col justify-between"
+    >
+      <div
+        className="
+        text-text-900 text-xs
+        font-medium leading-tight
+        whitespace-normal
+        break-all
+        line-clamp-2 
+        text-ellipsis
+      "
+      >
+        {relevantDocument
+          ? buildDocumentSummaryDisplay(
+              relevantDocument?.match_highlights || [],
+              relevantDocument?.blurb || ""
+            )
+          : "This file has not been indexed yet"}
+      </div>
+
+      <div className="flex items-center gap-1 mt-1">
+        {getFileIconFromFileNameAndLink(document.name, document.link_url)}
+        <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0">
+          {truncateString(document.name, 45)}
+        </div>
+      </div>
+    </button>
+  );
+};
+
+export const FileSourceCardInResults: React.FC<{
+  document: FileResponse;
+  setPresentingDocument: (document: FileResponse) => void;
+  relevantDocument: OnyxDocument | undefined;
+}> = ({ document, setPresentingDocument, relevantDocument }) => {
+  const openDocument = () => {
+    if (document.link_url) {
+      window.open(document.link_url, "_blank");
+    } else {
+      setPresentingDocument(document as any);
+    }
+  };
+  return (
+    <button
+      onClick={openDocument}
+      className="w-full rounded-xl 
+             text-left bg-background hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700
+             cursor-pointer
+             flex flex-col 
+             border border-neutral-200 dark:border-neutral-700
+             px-3 py-2.5 my-1"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <div className="flex-shrink-0">
+          {getFileIconFromFileNameAndLink(document.name, document.link_url)}
+        </div>
+        <div className="text-neutral-900 dark:text-neutral-300 text-sm font-semibold truncate flex-1 min-w-0">
+          {truncateString(document.name, 45)}
+        </div>
+      </div>
+
+      <div
+        className="
+        text-neutral-900 dark:text-neutral-300 text-sm
+        font-normal leading-snug
+        whitespace-normal
+        break-all
+        line-clamp-3
+        overflow-hidden
+        mt-2
+      "
+      >
+        {buildDocumentSummaryDisplay(
+          relevantDocument?.match_highlights || [],
+          relevantDocument?.blurb || ""
+        )}
       </div>
     </button>
   );

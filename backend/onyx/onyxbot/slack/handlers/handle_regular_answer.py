@@ -98,10 +98,9 @@ def handle_regular_answer(
     # to public docs.
 
     user = None
-    if message_info.is_bot_dm or send_as_ephemeral:
-        if message_info.email:
-            with get_session_with_current_tenant() as db_session:
-                user = get_user_by_email(message_info.email, db_session)
+    if message_info.email:
+        with get_session_with_current_tenant() as db_session:
+            user = get_user_by_email(message_info.email, db_session)
 
     target_thread_ts = (
         None
@@ -178,7 +177,9 @@ def handle_regular_answer(
     )
     @rate_limits(client=client, channel=channel, thread_ts=message_ts_to_respond_to)
     def _get_slack_answer(
-        new_message_request: CreateChatMessageRequest, onyx_user: User | None
+        new_message_request: CreateChatMessageRequest,
+        # pass in `None` to make the answer based on public documents only
+        onyx_user: User | None,
     ) -> ChatOnyxBotResponse:
         with get_session_with_current_tenant() as db_session:
             packets = stream_chat_message_objects(
@@ -234,7 +235,13 @@ def handle_regular_answer(
                 db_session=db_session,
             )
 
-        answer = _get_slack_answer(new_message_request=answer_request, onyx_user=user)
+        # if it's a DM or ephemeral message, answer based on private documents.
+        # otherwise, answer based on public documents ONLY as to not leak information.
+        can_search_over_private_docs = message_info.is_bot_dm or send_as_ephemeral
+        answer = _get_slack_answer(
+            new_message_request=answer_request,
+            onyx_user=user if can_search_over_private_docs else None,
+        )
 
     except Exception as e:
         logger.exception(
@@ -399,7 +406,7 @@ def handle_regular_answer(
         skip_ai_feedback = True
     else:
         offer_ephemeral_publication = False
-        skip_ai_feedback = False if feedback_reminder_id else True
+        skip_ai_feedback = False
 
     all_blocks = build_slack_response_blocks(
         message_info=message_info,

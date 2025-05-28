@@ -152,6 +152,6 @@ def list_tools(
     return [
         ToolSnapshot.from_model(tool)
         for tool in tools
-        if tool.in_code_tool_id != ImageGenerationTool.name
+        if tool.in_code_tool_id != ImageGenerationTool._NAME
         or is_image_generation_available(db_session=db_session)
     ]

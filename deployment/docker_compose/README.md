@@ -1,4 +1,4 @@
-<!-- DANSWER_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/docker_compose/README.md"} -->
+<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/docker_compose/README.md"} -->
 
 # Deploying Onyx using Docker Compose
 

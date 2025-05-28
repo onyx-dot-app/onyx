@@ -6,7 +6,6 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -125,10 +124,16 @@ const StandardAnswersTableRow = ({
             ? `\`${standardAnswer.keyword}\``
             : standardAnswer.keyword}
         </ReactMarkdown>,
-        <CustomCheckbox
+        <div
           key={`match_regex-${standardAnswer.id}`}
-          checked={standardAnswer.match_regex}
-        />,
+          className="flex items-center"
+        >
+          {standardAnswer.match_regex ? (
+            <span className="text-green-500 font-medium">Yes</span>
+          ) : (
+            <span className="text-gray-500">No</span>
+          )}
+        </div>,
         <ReactMarkdown
           key={`answer-${standardAnswer.id}`}
           className="prose dark:prose-invert"
@@ -291,8 +296,8 @@ const StandardAnswersTable = ({
           ))}
         </div>
       </div>
-      <div className="mx-auto">
-        <Table className="w-full flex items-stretch">
+      <div className="flex flex-col w-full mx-auto">
+        <Table className="w-full">
           <TableHeader>
             <TableRow>
               {columns.map((column) => (
@@ -315,11 +320,13 @@ const StandardAnswersTable = ({
             )}
           </TableBody>
         </Table>
-        {paginatedStandardAnswers.length === 0 && (
-          <div className="flex justify-center">
-            <Text>No matching standard answers found...</Text>
-          </div>
-        )}
+        <div>
+          {paginatedStandardAnswers.length === 0 && (
+            <div className="flex justify-center">
+              <Text>No matching standard answers found...</Text>
+            </div>
+          )}
+        </div>
         {paginatedStandardAnswers.length > 0 && (
           <>
             <div className="mt-4">

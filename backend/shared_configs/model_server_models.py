@@ -4,6 +4,7 @@ from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 
+
 Embedding = list[float]
 
 
@@ -73,7 +74,20 @@ class IntentResponse(BaseModel):
     keywords: list[str]
 
 
+class InformationContentClassificationRequests(BaseModel):
+    queries: list[str]
+
+
 class SupportedEmbeddingModel(BaseModel):
     name: str
     dim: int
     index_name: str
+
+
+class ContentClassificationPrediction(BaseModel):
+    predicted_label: int
+    content_boost_factor: float
+
+
+class InformationContentClassificationResponses(BaseModel):
+    information_content_classifications: list[ContentClassificationPrediction]

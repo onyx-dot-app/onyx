@@ -1,9 +1,12 @@
 import copy
+import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 
 import litellm  # type: ignore
 import tiktoken
@@ -29,28 +32,45 @@ from litellm.exceptions import Timeout  # type: ignore
 from litellm.exceptions import UnprocessableEntityError  # type: ignore
 
 from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
+from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
+from onyx.configs.app_configs import USE_CHUNK_SUMMARY
+from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import MessageType
+from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
+from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_TOKEN_ESTIMATE
+from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
 
+
+if TYPE_CHECKING:
+    from onyx.server.manage.llm.models import LLMProviderView
+
+
 logger = setup_logger()
+
+MAX_CONTEXT_TOKENS = 100
+ONE_MILLION = 1_000_000
+CHUNKS_PER_DOC_ESTIMATE = 5
 
 
 def litellm_exception_to_error_msg(
     e: Exception,
     llm: LLM,
     fallback_to_error_msg: bool = False,
-    custom_error_msg_mappings: dict[str, str]
-    | None = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
 ) -> str:
     error_msg = str(e)
 
@@ -119,7 +139,12 @@ def _build_content(
     text_files = [
         file
         for file in files
-        if file.file_type in (ChatFileType.PLAIN_TEXT, ChatFileType.CSV)
+        if file.file_type
+        in (
+            ChatFileType.PLAIN_TEXT,
+            ChatFileType.CSV,
+            ChatFileType.USER_KNOWLEDGE,
+        )
     ]
 
     if not text_files:
@@ -127,7 +152,18 @@ def _build_content(
 
     final_message_with_files = "FILES:\n\n"
     for file in text_files:
-        file_content = file.content.decode("utf-8")
+        try:
+            file_content = file.content.decode("utf-8")
+        except UnicodeDecodeError:
+            # Try to decode as binary
+            try:
+                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
+            except Exception:
+                file_content = f"[Binary file content - {file.file_type} format]"
+                logger.exception(
+                    f"Could not decode binary file content for file type: {file.file_type}"
+                )
+                # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
@@ -155,7 +191,6 @@ def build_content_with_imgs(
 
     img_urls = img_urls or []
     b64_imgs = b64_imgs or []
-
     message_main_content = _build_content(message, files)
 
     if exclude_images or (not img_files and not img_urls):
@@ -225,7 +260,7 @@ def message_to_prompt_and_imgs(message: BaseMessage) -> tuple[str, list[str]]:
 
 
 def dict_based_prompt_to_langchain_prompt(
-    messages: list[dict[str, str]]
+    messages: list[dict[str, str]],
 ) -> list[BaseMessage]:
     prompt: list[BaseMessage] = []
     for message in messages:
@@ -350,6 +385,7 @@ def test_llm(llm: LLM) -> str | None:
     return error_msg
 
 
+@lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
     starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
 
@@ -403,17 +439,90 @@ def _find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | N
     for model_name in filtered_model_names:
         model_obj = model_map.get(f"{provider}/{model_name}")
         if model_obj:
-            logger.debug(f"Using model object for {provider}/{model_name}")
             return model_obj
 
     # Then try all model names without provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(model_name)
         if model_obj:
-            logger.debug(f"Using model object for {model_name}")
             return model_obj
 
     return None
+
+
+def get_llm_contextual_cost(
+    llm: LLM,
+) -> float:
+    """
+    Approximate the cost of using the given LLM for indexing with Contextual RAG.
+
+    We use a precomputed estimate for the number of tokens in the contextualizing prompts,
+    and we assume that every chunk is maximized in terms of content and context.
+    We also assume that every document is maximized in terms of content, as currently if
+    a document is longer than a certain length, its summary is used instead of the full content.
+
+    We expect that the first assumption will overestimate more than the second one
+    underestimates, so this should be a fairly conservative price estimate. Also,
+    this does not account for the cost of documents that fit within a single chunk
+    which do not get contextualized.
+    """
+
+    # calculate input costs
+    num_tokens = ONE_MILLION
+    num_input_chunks = num_tokens // DOC_EMBEDDING_CONTEXT_SIZE
+
+    # We assume that the documents are MAX_TOKENS_FOR_FULL_INCLUSION tokens long
+    # on average.
+    num_docs = num_tokens // MAX_TOKENS_FOR_FULL_INCLUSION
+
+    num_input_tokens = 0
+    num_output_tokens = 0
+
+    if not USE_CHUNK_SUMMARY and not USE_DOCUMENT_SUMMARY:
+        return 0
+
+    if USE_CHUNK_SUMMARY:
+        # Each per-chunk prompt includes:
+        # - The prompt tokens
+        # - the document tokens
+        # - the chunk tokens
+
+        # for each chunk, we prompt the LLM with the contextual RAG prompt
+        # and the full document content (or the doc summary, so this is an overestimate)
+        num_input_tokens += num_input_chunks * (
+            CONTEXTUAL_RAG_TOKEN_ESTIMATE + MAX_TOKENS_FOR_FULL_INCLUSION
+        )
+
+        # in aggregate, each chunk content is used as a prompt input once
+        # so the full input size is covered
+        num_input_tokens += num_tokens
+
+        # A single MAX_CONTEXT_TOKENS worth of output is generated per chunk
+        num_output_tokens += num_input_chunks * MAX_CONTEXT_TOKENS
+
+    # going over each doc once means all the tokens, plus the prompt tokens for
+    # the summary prompt. This CAN happen even when USE_DOCUMENT_SUMMARY is false,
+    # since doc summaries are used for longer documents when USE_CHUNK_SUMMARY is true.
+    # So, we include this unconditionally to overestimate.
+    num_input_tokens += num_tokens + num_docs * DOCUMENT_SUMMARY_TOKEN_ESTIMATE
+    num_output_tokens += num_docs * MAX_CONTEXT_TOKENS
+
+    try:
+        usd_per_prompt, usd_per_completion = litellm.cost_per_token(
+            model=llm.config.model_name,
+            prompt_tokens=num_input_tokens,
+            completion_tokens=num_output_tokens,
+        )
+    except Exception:
+        logger.exception(
+            "An unexpected error occurred while calculating cost for model "
+            f"{llm.config.model_name} (potentially due to malformed name). "
+            "Assuming cost is 0."
+        )
+        return 0
+
+    # Costs are in USD dollars per million tokens
+    return usd_per_prompt + usd_per_completion
 
 
 def get_llm_max_tokens(
@@ -453,14 +562,10 @@ def get_llm_max_tokens(
 
         if "max_input_tokens" in model_obj:
             max_tokens = model_obj["max_input_tokens"]
-            logger.debug(
-                f"Max tokens for {model_name}: {max_tokens} (from max_input_tokens)"
-            )
             return max_tokens
 
         if "max_tokens" in model_obj:
             max_tokens = model_obj["max_tokens"]
-            logger.debug(f"Max tokens for {model_name}: {max_tokens} (from max_tokens)")
             return max_tokens
 
         logger.error(f"No max tokens found for LLM: {model_name}")
@@ -482,21 +587,16 @@ def get_llm_max_output_tokens(
         model_obj = model_map.get(f"{model_provider}/{model_name}")
         if not model_obj:
             model_obj = model_map[model_name]
-            logger.debug(f"Using model object for {model_name}")
         else:
-            logger.debug(f"Using model object for {model_provider}/{model_name}")
+            pass
 
         if "max_output_tokens" in model_obj:
             max_output_tokens = model_obj["max_output_tokens"]
-            logger.info(f"Max output tokens for {model_name}: {max_output_tokens}")
             return max_output_tokens
 
         # Fallback to a fraction of max_tokens if max_output_tokens is not specified
         if "max_tokens" in model_obj:
             max_output_tokens = int(model_obj["max_tokens"] * 0.1)
-            logger.info(
-                f"Fallback max output tokens for {model_name}: {max_output_tokens} (10% of max_tokens)"
-            )
             return max_output_tokens
 
         logger.error(f"No max output tokens found for LLM: {model_name}")
@@ -533,9 +633,27 @@ def get_max_input_tokens(
     )
 
     if input_toks <= 0:
-        raise RuntimeError("No tokens for input for the LLM given settings")
+        return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
     return input_toks
+
+
+def get_max_input_tokens_from_llm_provider(
+    llm_provider: "LLMProviderView",
+    model_name: str,
+) -> int:
+    max_input_tokens = None
+    for model_configuration in llm_provider.model_configurations:
+        if model_configuration.name == model_name:
+            max_input_tokens = model_configuration.max_input_tokens
+    return (
+        max_input_tokens
+        if max_input_tokens
+        else get_max_input_tokens(
+            model_provider=llm_provider.name,
+            model_name=model_name,
+        )
+    )
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:

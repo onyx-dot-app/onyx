@@ -25,6 +25,10 @@ inputs:
   tags:
     description: 'Image tags'
     required: true
+  no-cache:
+    description: 'Read from cache'
+    required: false
+    default: 'false'
   cache-from:
     description: 'Cache sources'
     required: false
@@ -55,6 +59,7 @@ runs:
         push: ${{ inputs.push }}
         load: ${{ inputs.load }}
         tags: ${{ inputs.tags }}
+        no-cache: ${{ inputs.no-cache }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
 
@@ -77,6 +82,7 @@ runs:
         push: ${{ inputs.push }}
         load: ${{ inputs.load }}
         tags: ${{ inputs.tags }}
+        no-cache: ${{ inputs.no-cache }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
 
@@ -99,6 +105,7 @@ runs:
         push: ${{ inputs.push }}
         load: ${{ inputs.load }}
         tags: ${{ inputs.tags }}
+        no-cache: ${{ inputs.no-cache }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
 

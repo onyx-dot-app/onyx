@@ -5,6 +5,7 @@ Revises: f1ca58b2f2ec
 Create Date: 2025-01-29 07:48:46.784041
 
 """
+
 import logging
 from typing import cast
 from alembic import op

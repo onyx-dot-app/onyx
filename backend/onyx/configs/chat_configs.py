@@ -3,7 +3,7 @@ import os
 INPUT_PROMPT_YAML = "./onyx/seeding/input_prompts.yaml"
 PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
 PERSONAS_YAML = "./onyx/seeding/personas.yaml"
-
+USER_FOLDERS_YAML = "./onyx/seeding/user_folders.yaml"
 NUM_RETURNED_HITS = 50
 # Used for LLM filtering and reranking
 # We want this to be approximately the number of results we want to show on the first page
@@ -15,6 +15,9 @@ MAX_CHUNKS_FED_TO_CHAT = float(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 10.0)
 # For Chat, need to keep enough space for history and other prompt pieces
 # ~3k input, half for docs, half for chat history + prompts
 CHAT_TARGET_CHUNK_PERCENTAGE = 512 * 3 / 3072
+
+# Maximum percentage of the context window to fill with selected sections
+SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE = 0.8
 
 # 1 / (1 + DOC_TIME_DECAY * doc-age-in-years), set to 0 to have no decay
 # Capped in Vespa at 0.5
@@ -93,3 +96,9 @@ BING_API_KEY = os.environ.get("BING_API_KEY") or None
 ENABLE_CONNECTOR_CLASSIFIER = os.environ.get("ENABLE_CONNECTOR_CLASSIFIER", False)
 
 VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)
+
+# Whether or not to use the semantic & keyword search expansions for Basic Search
+USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
+    os.environ.get("USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH", "false").lower()
+    == "true"
+)

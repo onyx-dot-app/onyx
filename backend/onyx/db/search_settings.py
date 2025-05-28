@@ -62,6 +62,9 @@ def create_search_settings(
         multipass_indexing=search_settings.multipass_indexing,
         embedding_precision=search_settings.embedding_precision,
         reduced_dimension=search_settings.reduced_dimension,
+        enable_contextual_rag=search_settings.enable_contextual_rag,
+        contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
+        contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
         multilingual_expansion=search_settings.multilingual_expansion,
         disable_rerank_for_streaming=search_settings.disable_rerank_for_streaming,
         rerank_model_name=search_settings.rerank_model_name,
@@ -319,6 +322,7 @@ def get_old_default_embedding_model() -> IndexingSetting:
         passage_prefix=(ASYM_PASSAGE_PREFIX if is_overridden else ""),
         index_name="danswer_chunk",
         multipass_indexing=False,
+        enable_contextual_rag=False,
         api_url=None,
     )
 
@@ -333,5 +337,6 @@ def get_new_default_embedding_model() -> IndexingSetting:
         passage_prefix=ASYM_PASSAGE_PREFIX,
         index_name=f"danswer_chunk_{clean_model_name(DOCUMENT_ENCODER_MODEL)}",
         multipass_indexing=False,
+        enable_contextual_rag=False,
         api_url=None,
     )

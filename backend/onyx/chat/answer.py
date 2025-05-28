@@ -10,6 +10,7 @@ from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
 from onyx.agents.agent_search.run_graph import run_basic_graph
+from onyx.agents.agent_search.run_graph import run_dc_graph
 from onyx.agents.agent_search.run_graph import run_main_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
@@ -30,7 +31,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import QUERY_FIELD
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
-from onyx.utils.gpu_utils import gpu_status_request
+from onyx.utils.gpu_utils import fast_gpu_status_request
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -63,7 +64,7 @@ class Answer:
         use_agentic_search: bool = False,
     ) -> None:
         self.is_connected: Callable[[], bool] | None = is_connected
-        self._processed_stream: (list[AnswerPacket] | None) = None
+        self._processed_stream: list[AnswerPacket] | None = None
         self._is_cancelled = False
 
         search_tools = [tool for tool in (tools or []) if isinstance(tool, SearchTool)]
@@ -88,8 +89,9 @@ class Answer:
             rerank_settings is not None
             and rerank_settings.rerank_provider_type is not None
         )
-
-        allow_agent_reranking = gpu_status_request() or using_cloud_reranking
+        allow_agent_reranking = (
+            fast_gpu_status_request(indexing=False) or using_cloud_reranking
+        )
 
         # TODO: this is a hack to force the query to be used for the search tool
         #       this should be removed once we fully unify graph inputs (i.e.
@@ -141,11 +143,18 @@ class Answer:
             yield from self._processed_stream
             return
 
-        run_langgraph = (
-            run_main_graph
-            if self.graph_config.behavior.use_agentic_search
-            else run_basic_graph
-        )
+        if self.graph_config.behavior.use_agentic_search:
+            run_langgraph = run_main_graph
+        elif (
+            self.graph_config.inputs.search_request.persona
+            and self.graph_config.inputs.search_request.persona.description.startswith(
+                "DivCon Beta Agent"
+            )
+        ):
+            run_langgraph = run_dc_graph
+        else:
+            run_langgraph = run_basic_graph
+
         stream = run_langgraph(
             self.graph_config,
         )
@@ -158,7 +167,6 @@ class Answer:
                 break
             processed_stream.append(packet)
             yield packet
-
         self._processed_stream = processed_stream
 
     @property
@@ -203,9 +211,9 @@ class Answer:
         return citations
 
     def citations_by_subquestion(self) -> dict[SubQuestionKey, list[CitationInfo]]:
-        citations_by_subquestion: dict[
-            SubQuestionKey, list[CitationInfo]
-        ] = defaultdict(list)
+        citations_by_subquestion: dict[SubQuestionKey, list[CitationInfo]] = (
+            defaultdict(list)
+        )
         basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
         for packet in self.processed_streamed_output:
             if isinstance(packet, CitationInfo):

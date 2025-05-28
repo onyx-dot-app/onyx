@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 import requests
 from retry import retry
 
@@ -10,8 +12,7 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 
-@retry(tries=5, delay=5)
-def gpu_status_request(indexing: bool = True) -> bool:
+def _get_gpu_status_from_model_server(indexing: bool) -> bool:
     if indexing:
         model_server_url = f"{INDEXING_MODEL_SERVER_HOST}:{INDEXING_MODEL_SERVER_PORT}"
     else:
@@ -28,3 +29,14 @@ def gpu_status_request(indexing: bool = True) -> bool:
     except requests.RequestException as e:
         logger.error(f"Error: Unable to fetch GPU status. Error: {str(e)}")
         raise  # Re-raise exception to trigger a retry
+
+
+@retry(tries=5, delay=5)
+def gpu_status_request(indexing: bool) -> bool:
+    return _get_gpu_status_from_model_server(indexing)
+
+
+@lru_cache(maxsize=1)
+def fast_gpu_status_request(indexing: bool) -> bool:
+    """For use in sync flows, where we don't want to retry / we want to cache this."""
+    return gpu_status_request(indexing=indexing)

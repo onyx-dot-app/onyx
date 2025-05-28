@@ -9,14 +9,15 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_provider
+from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
-from onyx.server.manage.llm.models import FullLLMProvider
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -62,7 +63,7 @@ def get_llms_for_persona(
         )
 
     with get_session_context_manager() as db_session:
-        llm_provider = fetch_provider(db_session, provider_name)
+        llm_provider = fetch_llm_provider_view(db_session, provider_name)
 
     if not llm_provider:
         raise ValueError("No LLM provider found")
@@ -86,6 +87,9 @@ def get_llms_for_persona(
             temperature=temperature_override,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=llm_provider, model_name=model
+            ),
         )
 
     return _create_llm(model), _create_llm(fast_model)
@@ -106,7 +110,7 @@ def get_default_llm_with_vision(
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
 
-    def create_vision_llm(provider: FullLLMProvider, model: str) -> LLM:
+    def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
         """Helper to create an LLM if the provider supports image input."""
         return get_llm(
             provider=provider.provider,
@@ -120,21 +124,21 @@ def get_default_llm_with_vision(
             temperature=temperature,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=provider, model_name=model
+            ),
         )
 
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
         default_provider = fetch_default_vision_provider(db_session)
-        if (
-            default_provider
-            and default_provider.default_vision_model
-            and model_supports_image_input(
+        if default_provider and default_provider.default_vision_model:
+            if model_supports_image_input(
                 default_provider.default_vision_model, default_provider.provider
-            )
-        ):
-            return create_vision_llm(
-                default_provider, default_provider.default_vision_model
-            )
+            ):
+                return create_vision_llm(
+                    default_provider, default_provider.default_vision_model
+                )
 
         # Fall back to searching all providers
         providers = fetch_existing_llm_providers(db_session)
@@ -142,16 +146,78 @@ def get_default_llm_with_vision(
     if not providers:
         return None
 
-    # Find the first provider that supports image input
+    # Check all providers for viable vision models
     for provider in providers:
+        provider_view = LLMProviderView.from_model(provider)
+
+        # First priority: Check if provider has a default_vision_model
         if provider.default_vision_model and model_supports_image_input(
             provider.default_vision_model, provider.provider
         ):
-            return create_vision_llm(
-                FullLLMProvider.from_model(provider), provider.default_vision_model
-            )
+            return create_vision_llm(provider_view, provider.default_vision_model)
+
+        # If no model-configurations are specified, try default models in priority order
+        if not provider.model_configurations:
+            # Try default_model_name
+            if provider.default_model_name and model_supports_image_input(
+                provider.default_model_name, provider.provider
+            ):
+                return create_vision_llm(provider_view, provider.default_model_name)
+
+            # Try fast_default_model_name
+            if provider.fast_default_model_name and model_supports_image_input(
+                provider.fast_default_model_name, provider.provider
+            ):
+                return create_vision_llm(
+                    provider_view, provider.fast_default_model_name
+                )
+
+        # Otherwise, if model-configurations are specified, check each model
+        else:
+            for model_configuration in provider.model_configurations:
+                if model_supports_image_input(
+                    model_configuration.name, provider.provider
+                ):
+                    return create_vision_llm(provider_view, model_configuration.name)
 
     return None
+
+
+def llm_from_provider(
+    model_name: str,
+    llm_provider: LLMProviderView,
+    timeout: int | None = None,
+    temperature: float | None = None,
+    additional_headers: dict[str, str] | None = None,
+    long_term_logger: LongTermLogger | None = None,
+) -> LLM:
+    return get_llm(
+        provider=llm_provider.provider,
+        model=model_name,
+        deployment_name=llm_provider.deployment_name,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        custom_config=llm_provider.custom_config,
+        timeout=timeout,
+        temperature=temperature,
+        additional_headers=additional_headers,
+        long_term_logger=long_term_logger,
+        max_input_tokens=get_max_input_tokens_from_llm_provider(
+            llm_provider=llm_provider, model_name=model_name
+        ),
+    )
+
+
+def get_llm_for_contextual_rag(model_name: str, model_provider: str) -> LLM:
+    with get_session_context_manager() as db_session:
+        llm_provider = fetch_llm_provider_view(db_session, model_provider)
+    if not llm_provider:
+        raise ValueError("No LLM provider with name {} found".format(model_provider))
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=llm_provider,
+    )
 
 
 def get_default_llms(
@@ -179,14 +245,9 @@ def get_default_llms(
         raise ValueError("No fast default model name found")
 
     def _create_llm(model: str) -> LLM:
-        return get_llm(
-            provider=llm_provider.provider,
-            model=model,
-            deployment_name=llm_provider.deployment_name,
-            api_key=llm_provider.api_key,
-            api_base=llm_provider.api_base,
-            api_version=llm_provider.api_version,
-            custom_config=llm_provider.custom_config,
+        return llm_from_provider(
+            model_name=model,
+            llm_provider=llm_provider,
             timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
@@ -199,6 +260,7 @@ def get_default_llms(
 def get_llm(
     provider: str,
     model: str,
+    max_input_tokens: int,
     deployment_name: str | None,
     api_key: str | None = None,
     api_base: str | None = None,
@@ -224,4 +286,5 @@ def get_llm(
         extra_headers=build_llm_extra_headers(additional_headers),
         model_kwargs=_build_extra_model_kwargs(provider),
         long_term_logger=long_term_logger,
+        max_input_tokens=max_input_tokens,
     )

@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
+  VpcID:
+    Type: String
+    Default: vpc-098cfa79d637dabff
+  ServiceName:
+    Type: String
+    Default: onyx-postgres
+  TaskCpu:
+    Type: String
+    Default: "1024"
+  TaskMemory:
+    Type: String
+    Default: "2048"
+  TaskDesiredCount:
+    Type: Number
+    Default: 1
+
+Resources:
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSClusterName"
+      CapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Base: 0
+          Weight: 1
+      TaskDefinition: !Ref TaskDefinition
+      ServiceName: !Sub ${Environment}-${ServiceName}-service
+      SchedulingStrategy: REPLICA
+      DesiredCount: !Ref TaskDesiredCount
+      AvailabilityZoneRebalancing: DISABLED
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref SecurityGroup
+          Subnets: !Ref SubnetIDs
+      PlatformVersion: LATEST
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 0
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      ServiceConnectConfiguration:
+        Enabled: false
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ServiceDiscoveryService.Arn
+      Tags:
+        - Key: app
+          Value: onyx
+        - Key: service
+          Value: !Ref ServiceName
+        - Key: env
+          Value: !Ref Environment
+      EnableECSManagedTags: true
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub Onyx SecurityGroup access to EFS mount and ${ServiceName}.
+      GroupName: !Sub ${Environment}-${ServiceName}
+      VpcId: !Ref VpcID
+      SecurityGroupIngress:
+        - FromPort: 5432
+          ToPort: 5432
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+        - FromPort: 5432
+          ToPort: 5432
+          IpProtocol: tcp
+          CidrIpv6: "::/0"
+        - FromPort: 2049
+          ToPort: 2049
+          IpProtocol: tcp
+          SourceSecurityGroupId:
+            Fn::ImportValue:
+              Fn::Sub: "${Environment}-onyx-efs-EFSSecurityGroupMountTargets"
+
+  ServiceDiscoveryService:
+    Type: "AWS::ServiceDiscovery::Service"
+    Properties:
+      Name: !Sub ${Environment}-${ServiceName}-service
+      DnsConfig:
+        DnsRecords:
+          - Type: "A"
+            TTL: 15
+      NamespaceId:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${Environment}-${ServiceName}-TaskDefinition
+      TaskRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskRole"
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskExecutionRole"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      Volumes:
+        - Name: efs-volume-data
+          EFSVolumeConfiguration:
+            FilesystemId:
+              Fn::ImportValue:
+                Fn::Sub: "${Environment}-onyx-efs-OnyxEfsId"
+            RootDirectory: "/"
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId:
+                Fn::ImportValue:
+                  Fn::Sub: "${Environment}-onyx-efs-PostgresDataEfsAccessPoint"
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Image: postgres:15.2-alpine
+          Cpu: 0
+          Essential: true
+          StopTimeout: 30
+          Command:
+            - "-c"
+            - "max_connections=250"
+          PortMappings:
+            - Name: postgres
+              ContainerPort: 5432
+              HostPort: 5432
+              Protocol: tcp
+              AppProtocol: http
+          Environment:
+            - Name: POSTGRES_USER
+              Value: postgres
+            - Name: PGSSLMODE
+              Value: require
+            - Name: POSTGRES_DB
+              Value: postgres
+          Secrets:
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}/postgres/user/password
+          MountPoints:
+            - SourceVolume: efs-volume-data
+              ContainerPath: /var/lib/postgresql/data
+              ReadOnly: false
+            - SourceVolume: efs-volume-data
+              ContainerPath: /var/lib/postgresql
+              ReadOnly: false
+          User: "1000"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/OnyxPostgresTaskDefinition
+              mode: non-blocking
+              awslogs-create-group: "true"
+              max-buffer-size: "25m"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs

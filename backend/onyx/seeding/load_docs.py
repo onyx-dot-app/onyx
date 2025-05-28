@@ -87,6 +87,9 @@ def _create_indexable_chunks(
             metadata_suffix_keyword="",
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
+            doc_summary="",
+            chunk_context="",
+            contextual_rag_reserved_tokens=0,
             embeddings=ChunkEmbedding(
                 full_embedding=preprocessed_doc["content_embedding"],
                 mini_chunk_embeddings=[],
@@ -95,9 +98,12 @@ def _create_indexable_chunks(
             tenant_id=tenant_id if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA,
             access=default_public_access,
             document_sets=set(),
+            user_file=None,
+            user_folder=None,
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
             image_file_name=None,
+            aggregated_chunk_boost_factor=1.0,
         )
 
         chunks.append(chunk)

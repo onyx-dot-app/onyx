@@ -39,10 +39,13 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
 from onyx.llm.llm_provider_options import ANTHROPIC_MODEL_NAMES
 from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.llm_provider_options import ANTHROPIC_VISIBLE_MODEL_NAMES
 from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
+from onyx.llm.llm_provider_options import OPEN_AI_VISIBLE_MODEL_NAMES
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.configs import MULTI_TENANT
@@ -87,11 +90,15 @@ async def get_or_provision_tenant(
             # If we have a pre-provisioned tenant, assign it to the user
             await assign_tenant_to_user(tenant_id, email, referral_source)
             logger.info(f"Assigned pre-provisioned tenant {tenant_id} to user {email}")
-            return tenant_id
         else:
             # If no pre-provisioned tenant is available, create a new one on-demand
             tenant_id = await create_tenant(email, referral_source)
-            return tenant_id
+
+        # Notify control plane if we have created / assigned a new tenant
+        if not DEV_MODE:
+            await notify_control_plane(tenant_id, email, referral_source)
+
+        return tenant_id
 
     except Exception as e:
         # If we've encountered an error, log and raise an exception
@@ -115,10 +122,6 @@ async def create_tenant(email: str, referral_source: str | None = None) -> str:
     try:
         # Provision tenant on data plane
         await provision_tenant(tenant_id, email)
-
-        # Notify control plane if not already done in provision_tenant
-        if not DEV_MODE and referral_source:
-            await notify_control_plane(tenant_id, email, referral_source)
 
     except Exception as e:
         logger.exception(f"Tenant provisioning failed: {str(e)}")
@@ -269,8 +272,15 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key=ANTHROPIC_DEFAULT_API_KEY,
             default_model_name="claude-3-7-sonnet-20250219",
             fast_default_model_name="claude-3-5-sonnet-20241022",
-            model_names=ANTHROPIC_MODEL_NAMES,
-            display_model_names=["claude-3-5-sonnet-20241022"],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=name,
+                    is_visible=name in ANTHROPIC_VISIBLE_MODEL_NAMES,
+                    max_input_tokens=None,
+                )
+                for name in ANTHROPIC_MODEL_NAMES
+            ],
+            api_key_changed=True,
         )
         try:
             full_provider = upsert_llm_provider(anthropic_provider, db_session)
@@ -283,17 +293,24 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
     if OPENAI_DEFAULT_API_KEY:
-        open_provider = LLMProviderUpsertRequest(
+        openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
             default_model_name="gpt-4o",
             fast_default_model_name="gpt-4o-mini",
-            model_names=OPEN_AI_MODEL_NAMES,
-            display_model_names=["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=model_name,
+                    is_visible=model_name in OPEN_AI_VISIBLE_MODEL_NAMES,
+                    max_input_tokens=None,
+                )
+                for model_name in OPEN_AI_MODEL_NAMES
+            ],
+            api_key_changed=True,
         )
         try:
-            full_provider = upsert_llm_provider(open_provider, db_session)
+            full_provider = upsert_llm_provider(openai_provider, db_session)
             update_default_provider(full_provider.id, db_session)
         except Exception as e:
             logger.error(f"Failed to configure OpenAI provider: {e}")
@@ -404,7 +421,6 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
             headers=headers,
             json=payload.model_dump(),
         ) as response:
-            print(response)
             if response.status != 200:
                 error_text = await response.text()
                 logger.error(f"Control plane tenant creation failed: {error_text}")
@@ -504,8 +520,11 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations
-        await asyncio.to_thread(run_alembic_migrations, tenant_id)
+        # Run Alembic migrations in a way that isolates it from the current event loop
+        # Create a new event loop for this synchronous operation
+        loop = asyncio.get_event_loop()
+        # Use run_in_executor which properly isolates the thread execution
+        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
@@ -559,7 +578,3 @@ async def assign_tenant_to_user(
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
         raise Exception("Failed to assign tenant to user")
-
-    # Notify control plane with retry logic
-    if not DEV_MODE:
-        await notify_control_plane(tenant_id, email, referral_source)

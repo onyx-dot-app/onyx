@@ -1,16 +1,16 @@
 from collections.abc import Generator
-from dataclasses import dataclass
-from dataclasses import fields
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 from typing import Optional
 
 import requests
+from pydantic import BaseModel
 from retry import retry
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP
+from onyx.configs.app_configs import NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rl_requests,
@@ -25,6 +25,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
@@ -38,8 +39,7 @@ _NOTION_CALL_TIMEOUT = 30  # 30 seconds
 # TODO: Tables need to be ingested, Pages need to have their metadata ingested
 
 
-@dataclass
-class NotionPage:
+class NotionPage(BaseModel):
     """Represents a Notion Page object"""
 
     id: str
@@ -49,17 +49,10 @@ class NotionPage:
     properties: dict[str, Any]
     url: str
 
-    database_name: str | None  # Only applicable to the database type page (wiki)
-
-    def __init__(self, **kwargs: dict[str, Any]) -> None:
-        names = set([f.name for f in fields(self)])
-        for k, v in kwargs.items():
-            if k in names:
-                setattr(self, k, v)
+    database_name: str | None = None  # Only applicable to the database type page (wiki)
 
 
-@dataclass
-class NotionBlock:
+class NotionBlock(BaseModel):
     """Represents a Notion Block object"""
 
     id: str  # Used for the URL
@@ -69,19 +62,12 @@ class NotionBlock:
     prefix: str
 
 
-@dataclass
-class NotionSearchResponse:
+class NotionSearchResponse(BaseModel):
     """Represents the response from the Notion Search API"""
 
     results: list[dict[str, Any]]
     next_cursor: Optional[str]
     has_more: bool = False
-
-    def __init__(self, **kwargs: dict[str, Any]) -> None:
-        names = set([f.name for f in fields(self)])
-        for k, v in kwargs.items():
-            if k in names:
-                setattr(self, k, v)
 
 
 class NotionConnector(LoadConnector, PollConnector):
@@ -95,7 +81,7 @@ class NotionConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        recursive_index_enabled: bool = NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP,
+        recursive_index_enabled: bool = not NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP,
         root_page_id: str | None = None,
     ) -> None:
         """Initialize with parameters."""
@@ -464,23 +450,53 @@ class NotionConnector(LoadConnector, PollConnector):
             page_blocks, child_page_ids = self._read_blocks(page.id)
             all_child_page_ids.extend(child_page_ids)
 
-            if not page_blocks:
-                continue
+            # okay to mark here since there's no way for this to not succeed
+            # without a critical failure
+            self.indexed_pages.add(page.id)
 
-            page_title = (
-                self._read_page_title(page) or f"Untitled Page with ID {page.id}"
-            )
+            raw_page_title = self._read_page_title(page)
+            page_title = raw_page_title or f"Untitled Page with ID {page.id}"
+
+            if not page_blocks:
+                if not raw_page_title:
+                    logger.warning(
+                        f"No blocks OR title found for page with ID '{page.id}'. Skipping."
+                    )
+                    continue
+
+                logger.debug(f"No blocks found for page with ID '{page.id}'")
+                """
+                Something like:
+
+                TITLE
+
+                PROP1: PROP1_VALUE
+                PROP2: PROP2_VALUE
+                """
+                text = page_title
+                if page.properties:
+                    text += "\n\n" + "\n".join(
+                        [f"{key}: {value}" for key, value in page.properties.items()]
+                    )
+                sections = [
+                    TextSection(
+                        link=f"{page.url}",
+                        text=text,
+                    )
+                ]
+            else:
+                sections = [
+                    TextSection(
+                        link=f"{page.url}#{block.id.replace('-', '')}",
+                        text=block.prefix + block.text,
+                    )
+                    for block in page_blocks
+                ]
 
             yield (
                 Document(
                     id=page.id,
-                    sections=[
-                        TextSection(
-                            link=f"{page.url}#{block.id.replace('-', '')}",
-                            text=block.prefix + block.text,
-                        )
-                        for block in page_blocks
-                    ],
+                    sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.NOTION,
                     semantic_identifier=page_title,
                     doc_updated_at=datetime.fromisoformat(
@@ -560,9 +576,9 @@ class NotionConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Applies integration token to headers"""
-        self.headers[
-            "Authorization"
-        ] = f'Bearer {credentials["notion_integration_token"]}'
+        self.headers["Authorization"] = (
+            f'Bearer {credentials["notion_integration_token"]}'
+        )
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:

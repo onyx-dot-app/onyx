@@ -10,7 +10,6 @@ import {
 import { IndexAttemptError } from "./types";
 import { localizeAndPrettify } from "@/lib/time";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { PageSelector } from "@/components/PageSelector";
 
 interface IndexAttemptErrorsModalProps {

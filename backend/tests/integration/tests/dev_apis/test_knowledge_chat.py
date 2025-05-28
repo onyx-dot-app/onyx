@@ -1,3 +1,6 @@
+import os
+
+import pytest
 import requests
 
 from onyx.configs.constants import MessageType
@@ -12,6 +15,10 @@ from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="/chat/send-message-simple-with-history is enterprise only",
+)
 def test_all_stream_chat_message_objects_outputs(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

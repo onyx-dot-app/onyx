@@ -3,7 +3,11 @@ import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
 import { TrashIcon } from "@/components/icons/icons";
 import { FaPlus } from "react-icons/fa";
-import { AdvancedSearchConfiguration, EmbeddingPrecision } from "../interfaces";
+import {
+  AdvancedSearchConfiguration,
+  EmbeddingPrecision,
+  LLMContextualCost,
+} from "../interfaces";
 import {
   BooleanFormField,
   Label,
@@ -12,6 +16,13 @@ import {
 } from "@/components/admin/connectors/Field";
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 import { StringOrNumberOption } from "@/components/Dropdown";
+import useSWR from "swr";
+import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
+import { getDisplayNameForModel } from "@/lib/hooks";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+
+// Number of tokens to show cost calculation for
+const COST_CALCULATION_TOKENS = 1_000_000;
 
 interface AdvancedEmbeddingFormPageProps {
   updateAdvancedEmbeddingDetails: (
@@ -45,14 +56,66 @@ const AdvancedEmbeddingFormPage = forwardRef<
     },
     ref
   ) => {
+    // Fetch contextual costs
+    const { data: contextualCosts, error: costError } = useSWR<
+      LLMContextualCost[]
+    >(LLM_CONTEXTUAL_COST_ADMIN_URL, errorHandlingFetcher);
+
+    const llmOptions: StringOrNumberOption[] = React.useMemo(
+      () =>
+        (contextualCosts || []).map((cost) => {
+          return {
+            name: getDisplayNameForModel(cost.model_name),
+            value: cost.model_name,
+          };
+        }),
+      [contextualCosts]
+    );
+
+    // Helper function to format cost as USD
+    const formatCost = (cost: number) => {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(cost);
+    };
+
+    // Get cost info for selected model
+    const getSelectedModelCost = (modelName: string | null) => {
+      if (!contextualCosts || !modelName) return null;
+      return contextualCosts.find((cost) => cost.model_name === modelName);
+    };
+
+    // Get the current value for the selector based on the parent state
+    const getCurrentLLMValue = React.useMemo(() => {
+      if (!advancedEmbeddingDetails.contextual_rag_llm_name) return null;
+      return advancedEmbeddingDetails.contextual_rag_llm_name;
+    }, [advancedEmbeddingDetails.contextual_rag_llm_name]);
+
     return (
       <div className="py-4 rounded-lg max-w-4xl px-4 mx-auto">
         <Formik
           innerRef={ref}
-          initialValues={advancedEmbeddingDetails}
+          initialValues={{
+            ...advancedEmbeddingDetails,
+            contextual_rag_llm: getCurrentLLMValue,
+          }}
           validationSchema={Yup.object().shape({
             multilingual_expansion: Yup.array().of(Yup.string()),
             multipass_indexing: Yup.boolean(),
+            enable_contextual_rag: Yup.boolean(),
+            contextual_rag_llm: Yup.string()
+              .nullable()
+              .test(
+                "required-if-contextual-rag",
+                "LLM must be selected when Contextual RAG is enabled",
+                function (value) {
+                  const enableContextualRag = this.parent.enable_contextual_rag;
+                  console.log("enableContextualRag", enableContextualRag);
+                  console.log("value", value);
+                  return !enableContextualRag || value !== null;
+                }
+              ),
             disable_rerank_for_streaming: Yup.boolean(),
             num_rerank: Yup.number()
               .required("Number of results to rerank is required")
@@ -79,10 +142,26 @@ const AdvancedEmbeddingFormPage = forwardRef<
           validate={(values) => {
             // Call updateAdvancedEmbeddingDetails for each changed field
             Object.entries(values).forEach(([key, value]) => {
-              updateAdvancedEmbeddingDetails(
-                key as keyof AdvancedSearchConfiguration,
-                value
-              );
+              if (key === "contextual_rag_llm") {
+                const selectedModel = (contextualCosts || []).find(
+                  (cost) => cost.model_name === value
+                );
+                if (selectedModel) {
+                  updateAdvancedEmbeddingDetails(
+                    "contextual_rag_llm_provider",
+                    selectedModel.provider
+                  );
+                  updateAdvancedEmbeddingDetails(
+                    "contextual_rag_llm_name",
+                    selectedModel.model_name
+                  );
+                }
+              } else {
+                updateAdvancedEmbeddingDetails(
+                  key as keyof AdvancedSearchConfiguration,
+                  value
+                );
+              }
             });
 
             // Run validation and report errors
@@ -96,6 +175,23 @@ const AdvancedEmbeddingFormPage = forwardRef<
                   .shape({
                     multilingual_expansion: Yup.array().of(Yup.string()),
                     multipass_indexing: Yup.boolean(),
+                    enable_contextual_rag: Yup.boolean(),
+                    contextual_rag_llm: Yup.string()
+                      .nullable()
+                      .test(
+                        "required-if-contextual-rag",
+                        "LLM must be selected when Contextual RAG is enabled",
+                        function (value) {
+                          const enableContextualRag =
+                            this.parent.enable_contextual_rag;
+                          console.log(
+                            "enableContextualRag2",
+                            enableContextualRag
+                          );
+                          console.log("value2", value);
+                          return !enableContextualRag || value !== null;
+                        }
+                      ),
                     disable_rerank_for_streaming: Yup.boolean(),
                     num_rerank: Yup.number()
                       .required("Number of results to rerank is required")
@@ -190,6 +286,56 @@ const AdvancedEmbeddingFormPage = forwardRef<
                 label="Disable Rerank for Streaming"
                 name="disable_rerank_for_streaming"
               />
+              <BooleanFormField
+                subtext="Enable contextual RAG for all chunk sizes."
+                optional
+                label="Contextual RAG"
+                name="enable_contextual_rag"
+              />
+              <div>
+                <SelectorFormField
+                  name="contextual_rag_llm"
+                  label="Contextual RAG LLM"
+                  subtext={
+                    costError
+                      ? "Error loading LLM models. Please try again later."
+                      : !contextualCosts
+                        ? "Loading available LLM models..."
+                        : values.enable_contextual_rag
+                          ? "Select the LLM model to use for contextual RAG processing."
+                          : "Enable Contextual RAG above to select an LLM model."
+                  }
+                  options={llmOptions}
+                  disabled={
+                    !values.enable_contextual_rag ||
+                    !contextualCosts ||
+                    !!costError
+                  }
+                />
+                {values.enable_contextual_rag &&
+                  values.contextual_rag_llm &&
+                  !costError && (
+                    <div className="mt-2 text-sm text-text-600">
+                      {contextualCosts ? (
+                        <>
+                          Estimated cost for processing{" "}
+                          {COST_CALCULATION_TOKENS.toLocaleString()} tokens:{" "}
+                          <span className="font-medium">
+                            {getSelectedModelCost(values.contextual_rag_llm)
+                              ? formatCost(
+                                  getSelectedModelCost(
+                                    values.contextual_rag_llm
+                                  )!.cost
+                                )
+                              : "Cost information not available"}
+                          </span>
+                        </>
+                      ) : (
+                        "Loading cost information..."
+                      )}
+                    </div>
+                  )}
+              </div>
               <NumberInput
                 description="Number of results to rerank"
                 optional={false}

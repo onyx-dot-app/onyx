@@ -146,10 +146,8 @@ def generate_validate_refined_answer(
     consolidated_context_docs = structured_subquestion_docs.cited_documents
 
     counter = 0
-    for original_doc_number, original_doc in enumerate(
-        original_question_verified_documents
-    ):
-        if original_doc_number not in structured_subquestion_docs.cited_documents:
+    for original_doc in original_question_verified_documents:
+        if original_doc not in structured_subquestion_docs.cited_documents:
             if (
                 counter <= AGENT_MIN_ORIG_QUESTION_DOCS
                 or len(consolidated_context_docs)
@@ -183,7 +181,6 @@ def generate_validate_refined_answer(
     for tool_response in yield_search_responses(
         query=question,
         get_retrieved_sections=lambda: answer_generation_documents.context_documents,
-        get_reranked_sections=lambda: answer_generation_documents.streaming_documents,
         get_final_context_sections=lambda: answer_generation_documents.context_documents,
         search_query_info=query_info,
         get_section_relevance=lambda: relevance_list,
@@ -247,9 +244,7 @@ def generate_validate_refined_answer(
     revision_question_efficiency = (
         len(total_answered_questions) / len(initial_answered_sub_questions)
         if initial_answered_sub_questions
-        else 10.0
-        if refined_answered_sub_questions
-        else 1.0
+        else 10.0 if refined_answered_sub_questions else 1.0
     )
 
     sub_question_answer_str = "\n\n------\n\n".join(
@@ -272,9 +267,9 @@ def generate_validate_refined_answer(
 
     relevant_docs_str = format_docs(answer_generation_documents.context_documents)
     relevant_docs_str = trim_prompt_piece(
-        model.config,
-        relevant_docs_str,
-        base_prompt
+        config=model.config,
+        prompt_piece=relevant_docs_str,
+        reserved_str=base_prompt
         + question
         + sub_question_answer_str
         + initial_answer
@@ -291,9 +286,11 @@ def generate_validate_refined_answer(
                     sub_question_answer_str
                 ),
                 relevant_docs=relevant_docs_str,
-                initial_answer=remove_document_citations(initial_answer)
-                if initial_answer
-                else None,
+                initial_answer=(
+                    remove_document_citations(initial_answer)
+                    if initial_answer
+                    else None
+                ),
                 persona_specification=persona_contextualized_prompt,
                 date_prompt=prompt_enrichment_components.date_str,
             )
@@ -308,9 +305,11 @@ def generate_validate_refined_answer(
         for message in model.stream(
             msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
-            max_tokens=AGENT_MAX_TOKENS_ANSWER_GENERATION
-            if _should_restrict_tokens(model.config)
-            else None,
+            max_tokens=(
+                AGENT_MAX_TOKENS_ANSWER_GENERATION
+                if _should_restrict_tokens(model.config)
+                else None
+            ),
         ):
             # TODO: in principle, the answer here COULD contain images, but we don't support that yet
             content = message.content

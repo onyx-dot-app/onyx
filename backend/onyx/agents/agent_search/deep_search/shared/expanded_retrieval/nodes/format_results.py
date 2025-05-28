@@ -57,7 +57,6 @@ def format_results(
         for tool_response in yield_search_responses(
             query=state.question,
             get_retrieved_sections=lambda: reranked_documents,
-            get_reranked_sections=lambda: state.retrieved_documents,
             get_final_context_sections=lambda: reranked_documents,
             search_query_info=query_info,
             get_section_relevance=lambda: relevance_list,

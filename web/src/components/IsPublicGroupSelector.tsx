@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
 import Text from "@/components/ui/text";
 import { FiUsers } from "react-icons/fi";
-import { Separator } from "@/components/ui/separator";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/admin/connectors/Field";
@@ -74,7 +73,6 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 
   return (
     <div>
-      <Separator />
       {isAdmin && (
         <>
           <BooleanFormField

@@ -1,4 +1,4 @@
-<!-- DANSWER_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/README.md"} -->
+<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/README.md"} -->
 
 # Deploying Onyx
 

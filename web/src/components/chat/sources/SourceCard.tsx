@@ -1,11 +1,11 @@
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { truncateString } from "@/lib/utils";
-import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
+import { FileResponse } from "@/app/chat/my-documents/DocumentsContext";
 
 export const ResultIcon = ({
   doc,
@@ -25,35 +25,6 @@ export const ResultIcon = ({
     </div>
   );
 };
-
-// export default function SourceCard({
-//   doc,
-//   setPresentingDocument,
-// }: {
-//   doc: OnyxDocument;
-//   setPresentingDocument?: (document: OnyxDocument) => void;
-// }) {
-//   return (
-//     <div
-//       key={doc.document_id}
-//       onClick={() => openDocument(doc, setPresentingDocument)}
-//       className="cursor-pointer h-[80px] text-left overflow-hidden flex flex-col gap-0.5 rounded-lg px-3 py-2 bg-accent-background hover:bg-accent-background-hovered w-[200px]"
-//     >
-//       <div className="line-clamp-1 font-semibold text-ellipsis text-text-900  flex h-6 items-center gap-2 text-sm">
-//         {doc.is_internet || doc.source_type === "web" ? (
-//           <WebResultIcon url={doc.link} />
-//         ) : (
-//           <SourceIcon sourceType={doc.source_type} iconSize={18} />
-//         )}
-//         <p>{truncateString(doc.semantic_identifier || doc.document_id, 20)}</p>
-//       </div>
-//       <div className="line-clamp-2 text-sm font-semibold"></div>
-//       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
-//         {doc.blurb}
-//       </div>
-//     </div>
-//   );
-// }
 
 interface SeeMoreBlockProps {
   toggleDocumentSelection: () => void;
@@ -154,13 +125,92 @@ export function SeeMoreBlock({
     <button
       onClick={toggleDocumentSelection}
       className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
-        h-[80px] p-3 border border-[1.5px] border-new-background-light   text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
     >
       <div className="flex items-center gap-1">
         {docs.length > 2 && iconsToRender.map((icon, index) => icon)}
       </div>
       <div className="text-text-darker text-xs font-semibold">
         {toggled ? "Hide Results" : "Show All"}
+      </div>
+    </button>
+  );
+}
+
+export function getUniqueFileIcons(files: FileResponse[]): JSX.Element[] {
+  const uniqueIcons: JSX.Element[] = [];
+  const seenExtensions = new Set<string>();
+
+  // Helper function to get a styled icon
+  const getStyledIcon = (
+    fileName: string,
+    fileId: number,
+    link_url?: string | null
+  ) => {
+    return React.cloneElement(
+      getFileIconFromFileNameAndLink(fileName, link_url),
+      {
+        key: `file-${fileId}`,
+      }
+    );
+  };
+
+  for (const file of files) {
+    uniqueIcons.push(getStyledIcon(file.name, file.id, file.link_url));
+  }
+
+  // If we have zero icons, use a fallback
+  if (uniqueIcons.length === 0) {
+    return [
+      getFileIconFromFileNameAndLink("fallback1.txt"),
+      getFileIconFromFileNameAndLink("fallback2.txt"),
+      getFileIconFromFileNameAndLink("fallback3.txt"),
+    ];
+  }
+
+  // Duplicate last icon if fewer than 3 icons
+  while (uniqueIcons.length < 3) {
+    // The last icon in the array
+    const lastIcon = uniqueIcons[uniqueIcons.length - 1];
+    // Clone it with a new key
+    uniqueIcons.push(
+      React.cloneElement(lastIcon, {
+        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+      })
+    );
+  }
+
+  // Slice to just the first 3 if there are more than 3
+  return uniqueIcons.slice(0, 3);
+}
+
+export function FilesSeeMoreBlock({
+  toggleDocumentSelection,
+  files,
+  toggled,
+  fullWidth = false,
+}: {
+  toggleDocumentSelection: () => void;
+  files: FileResponse[];
+  toggled: boolean;
+  fullWidth?: boolean;
+}) {
+  const [iconsToRender, setIconsToRender] = useState<JSX.Element[]>([]);
+  useEffect(() => {
+    setIconsToRender(files.length > 2 ? getUniqueFileIcons(files) : []);
+  }, [files]);
+
+  return (
+    <button
+      onClick={toggleDocumentSelection}
+      className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+    >
+      <div className="flex items-center gap-1">
+        {files.length > 2 && iconsToRender.map((icon, index) => icon)}
+      </div>
+      <div className="text-text-darker text-xs font-semibold">
+        {toggled ? "Hide Files" : "Show All Files"}
       </div>
     </button>
   );

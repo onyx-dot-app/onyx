@@ -1,18 +1,15 @@
 "use client";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 import { Dispatch, SetStateAction, useState } from "react";
 import {
   CloudEmbeddingProvider,
   CloudEmbeddingModel,
   AVAILABLE_MODELS,
-  INVALID_OLD_MODEL,
   HostedEmbeddingModel,
-  EmbeddingModelDescriptor,
   EmbeddingProvider,
 } from "../../../components/embedding/interfaces";
-import { Connector } from "@/lib/connectors/connectors";
 import OpenEmbeddingPage from "./pages/OpenEmbeddingPage";
 import CloudEmbeddingPage from "./pages/CloudEmbeddingPage";
 import { ProviderCreationModal } from "./modals/ProviderCreationModal";

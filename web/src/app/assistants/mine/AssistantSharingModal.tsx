@@ -13,7 +13,6 @@ import {
 } from "@/lib/assistants/shareAssistant";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Bubble } from "@/components/Bubble";
-import { useRouter } from "next/navigation";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Spinner } from "@/components/Spinner";
 import { useAssistants } from "@/components/context/AssistantsContext";

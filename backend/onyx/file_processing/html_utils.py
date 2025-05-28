@@ -216,6 +216,6 @@ def web_html_cleanup(
         page_text = format_document_soup(soup)
 
     # 200B is ZeroWidthSpace which we don't care for
-    cleaned_text = page_text.replace("\u200B", "")
+    cleaned_text = page_text.replace("\u200b", "")
 
     return ParsedHTML(title=title, cleaned_text=cleaned_text)

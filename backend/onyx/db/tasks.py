@@ -1,8 +1,12 @@
+from datetime import datetime
+
 from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import delete
 
+from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine import get_db_current_time
 from onyx.db.models import TaskQueueState
@@ -46,15 +50,75 @@ def get_latest_task_by_type(
 def register_task(
     task_name: str,
     db_session: Session,
+    task_id: str = "",
+    status: TaskStatus = TaskStatus.PENDING,
+    start_time: datetime | None = None,
 ) -> TaskQueueState:
     new_task = TaskQueueState(
-        task_id="", task_name=task_name, status=TaskStatus.PENDING
+        task_id=task_id,
+        task_name=task_name,
+        status=status,
+        start_time=start_time,
     )
 
     db_session.add(new_task)
     db_session.commit()
 
     return new_task
+
+
+def get_task_with_id(
+    db_session: Session,
+    task_id: str,
+) -> TaskQueueState | None:
+    return db_session.scalar(
+        select(TaskQueueState).where(TaskQueueState.task_id == task_id)
+    )
+
+
+def delete_task_with_id(
+    db_session: Session,
+    task_id: str,
+) -> None:
+    db_session.execute(delete(TaskQueueState).where(TaskQueueState.task_id == task_id))
+    db_session.commit()
+
+
+def get_all_query_history_export_tasks(
+    db_session: Session,
+) -> list[TaskQueueState]:
+    return list(
+        db_session.scalars(
+            select(TaskQueueState).where(
+                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}_%")
+            )
+        )
+    )
+
+
+def mark_task_as_started_with_id(
+    db_session: Session,
+    task_id: str,
+) -> None:
+    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    if not task:
+        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
+
+    task.status = TaskStatus.STARTED
+    db_session.commit()
+
+
+def mark_task_as_finished_with_id(
+    db_session: Session,
+    task_id: str,
+    success: bool = True,
+) -> None:
+    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    if not task:
+        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
+
+    task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
+    db_session.commit()
 
 
 def mark_task_start(

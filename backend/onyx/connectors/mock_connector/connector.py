@@ -2,8 +2,9 @@ from typing import Any
 
 import httpx
 from pydantic import BaseModel
+from typing_extensions import override
 
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
@@ -15,14 +16,18 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class MockConnectorCheckpoint(ConnectorCheckpoint):
+    last_document_id: str | None = None
+
+
 class SingleConnectorYield(BaseModel):
     documents: list[Document]
-    checkpoint: ConnectorCheckpoint
+    checkpoint: MockConnectorCheckpoint
     failures: list[ConnectorFailure]
     unhandled_exception: str | None = None
 
 
-class MockConnector(CheckpointConnector):
+class MockConnector(CheckpointedConnector[MockConnectorCheckpoint]):
     def __init__(
         self,
         mock_server_host: str,
@@ -48,7 +53,7 @@ class MockConnector(CheckpointConnector):
     def _get_mock_server_url(self, endpoint: str) -> str:
         return f"http://{self.mock_server_host}:{self.mock_server_port}/{endpoint}"
 
-    def _save_checkpoint(self, checkpoint: ConnectorCheckpoint) -> None:
+    def _save_checkpoint(self, checkpoint: MockConnectorCheckpoint) -> None:
         response = self.client.post(
             self._get_mock_server_url("add-checkpoint"),
             json=checkpoint.model_dump(mode="json"),
@@ -59,8 +64,8 @@ class MockConnector(CheckpointConnector):
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-        checkpoint: ConnectorCheckpoint,
-    ) -> CheckpointOutput:
+        checkpoint: MockConnectorCheckpoint,
+    ) -> CheckpointOutput[MockConnectorCheckpoint]:
         if self.connector_yields is None:
             raise ValueError("No connector yields configured")
 
@@ -84,3 +89,13 @@ class MockConnector(CheckpointConnector):
             yield failure
 
         return current_yield.checkpoint
+
+    @override
+    def build_dummy_checkpoint(self) -> MockConnectorCheckpoint:
+        return MockConnectorCheckpoint(
+            has_more=True,
+            last_document_id=None,
+        )
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> MockConnectorCheckpoint:
+        return MockConnectorCheckpoint.model_validate_json(checkpoint_json)

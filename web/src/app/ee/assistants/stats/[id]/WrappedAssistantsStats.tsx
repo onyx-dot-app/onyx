@@ -1,16 +1,15 @@
 "use client";
-import SidebarWrapper from "../../../../assistants/SidebarWrapper";
+
+import SidebarWrapper from "@/app/assistants/SidebarWrapper";
 import { AssistantStats } from "./AssistantStats";
 
 export default function WrappedAssistantsStats({
-  initiallyToggled,
   assistantId,
 }: {
-  initiallyToggled: boolean;
   assistantId: number;
 }) {
   return (
-    <SidebarWrapper initiallyToggled={initiallyToggled}>
+    <SidebarWrapper>
       <AssistantStats assistantId={assistantId} />
     </SidebarWrapper>
   );

@@ -1,11 +1,16 @@
+from typing import cast
+
+import numpy as np
 import torch
 import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download  # type: ignore
+from setfit import SetFitModel  # type: ignore[import]
 from transformers import AutoTokenizer  # type: ignore
 from transformers import BatchEncoding  # type: ignore
 from transformers import PreTrainedTokenizer  # type: ignore
 
+from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.onyx_torch_model import ConnectorClassifier
 from model_server.onyx_torch_model import HybridClassifier
@@ -13,11 +18,22 @@ from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
+)
+from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
+)
 from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import INFORMATION_CONTENT_MODEL_TAG
+from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
+from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
@@ -25,20 +41,25 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/custom")
 
-_CONNECTOR_CLASSIFIER_TOKENIZER: AutoTokenizer | None = None
+_CONNECTOR_CLASSIFIER_TOKENIZER: PreTrainedTokenizer | None = None
 _CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
 
-_INTENT_TOKENIZER: AutoTokenizer | None = None
+_INTENT_TOKENIZER: PreTrainedTokenizer | None = None
 _INTENT_MODEL: HybridClassifier | None = None
 
+_INFORMATION_CONTENT_MODEL: SetFitModel | None = None
 
-def get_connector_classifier_tokenizer() -> AutoTokenizer:
+_INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = ""  # spec to model version!
+
+
+def get_connector_classifier_tokenizer() -> PreTrainedTokenizer:
     global _CONNECTOR_CLASSIFIER_TOKENIZER
     if _CONNECTOR_CLASSIFIER_TOKENIZER is None:
         # The tokenizer details are not uploaded to the HF hub since it's just the
         # unmodified distilbert tokenizer.
-        _CONNECTOR_CLASSIFIER_TOKENIZER = AutoTokenizer.from_pretrained(
-            "distilbert-base-uncased"
+        _CONNECTOR_CLASSIFIER_TOKENIZER = cast(
+            PreTrainedTokenizer,
+            AutoTokenizer.from_pretrained("distilbert-base-uncased"),
         )
     return _CONNECTOR_CLASSIFIER_TOKENIZER
 
@@ -74,18 +95,21 @@ def get_local_connector_classifier(
     return _CONNECTOR_CLASSIFIER_MODEL
 
 
-def get_intent_model_tokenizer() -> AutoTokenizer:
+def get_intent_model_tokenizer() -> PreTrainedTokenizer:
     global _INTENT_TOKENIZER
     if _INTENT_TOKENIZER is None:
         # The tokenizer details are not uploaded to the HF hub since it's just the
         # unmodified distilbert tokenizer.
-        _INTENT_TOKENIZER = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+        _INTENT_TOKENIZER = cast(
+            PreTrainedTokenizer,
+            AutoTokenizer.from_pretrained("distilbert-base-uncased"),
+        )
     return _INTENT_TOKENIZER
 
 
 def get_local_intent_model(
     model_name_or_path: str = INTENT_MODEL_VERSION,
-    tag: str = INTENT_MODEL_TAG,
+    tag: str | None = INTENT_MODEL_TAG,
 ) -> HybridClassifier:
     global _INTENT_MODEL
     if _INTENT_MODEL is None:
@@ -102,7 +126,9 @@ def get_local_intent_model(
             try:
                 # Attempt to download the model snapshot
                 logger.notice(f"Downloading model snapshot for {model_name_or_path}")
-                local_path = snapshot_download(repo_id=model_name_or_path, revision=tag)
+                local_path = snapshot_download(
+                    repo_id=model_name_or_path, revision=tag, local_files_only=False
+                )
                 _INTENT_MODEL = HybridClassifier.from_pretrained(local_path)
             except Exception as e:
                 logger.error(
@@ -110,6 +136,44 @@ def get_local_intent_model(
                 )
                 raise
     return _INTENT_MODEL
+
+
+def get_local_information_content_model(
+    model_name_or_path: str = INFORMATION_CONTENT_MODEL_VERSION,
+    tag: str | None = INFORMATION_CONTENT_MODEL_TAG,
+) -> SetFitModel:
+    global _INFORMATION_CONTENT_MODEL
+    if _INFORMATION_CONTENT_MODEL is None:
+        try:
+            # Calculate where the cache should be, then load from local if available
+            logger.notice(
+                f"Loading content information model from local cache: {model_name_or_path}"
+            )
+            local_path = snapshot_download(
+                repo_id=model_name_or_path, revision=tag, local_files_only=True
+            )
+            _INFORMATION_CONTENT_MODEL = SetFitModel.from_pretrained(local_path)
+            logger.notice(
+                f"Loaded content information model from local cache: {local_path}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load content information model directly: {e}")
+            try:
+                # Attempt to download the model snapshot
+                logger.notice(
+                    f"Downloading content information model snapshot for {model_name_or_path}"
+                )
+                local_path = snapshot_download(
+                    repo_id=model_name_or_path, revision=tag, local_files_only=False
+                )
+                _INFORMATION_CONTENT_MODEL = SetFitModel.from_pretrained(local_path)
+            except Exception as e:
+                logger.error(
+                    f"Failed to load content information model even after attempted snapshot download: {e}"
+                )
+                raise
+
+    return _INFORMATION_CONTENT_MODEL
 
 
 def tokenize_connector_classification_query(
@@ -195,6 +259,13 @@ def warm_up_intent_model() -> None:
     )
 
 
+def warm_up_information_content_model() -> None:
+    logger.notice("Warming up Content Model")  # TODO: add version if needed
+
+    information_content_model = get_local_information_content_model()
+    information_content_model(INFORMATION_CONTENT_MODEL_WARM_UP_STRING)
+
+
 @simple_log_function_time()
 def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
     intent_model = get_local_intent_model()
@@ -218,10 +289,121 @@ def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
     return intent_probabilities.tolist(), token_positive_probs
 
 
+@simple_log_function_time()
+def run_content_classification_inference(
+    text_inputs: list[str],
+) -> list[ContentClassificationPrediction]:
+    """
+    Assign a score to the segments in question. The model stored in get_local_information_content_model()
+    creates the 'model score' based on its training, and the scores are then converted to a 0.0-1.0 scale.
+    In the code outside of the model/inference model servers that score will be converted into the actual
+    boost factor.
+    """
+
+    def _prob_to_score(prob: float) -> float:
+        """
+        Conversion of base score to 0.0 - 1.0 score. Note that the min/max values depend on the model!
+        """
+        _MIN_BASE_SCORE = 0.25
+        _MAX_BASE_SCORE = 0.75
+        if prob < _MIN_BASE_SCORE:
+            raw_score = 0.0
+        elif prob < _MAX_BASE_SCORE:
+            raw_score = (prob - _MIN_BASE_SCORE) / (_MAX_BASE_SCORE - _MIN_BASE_SCORE)
+        else:
+            raw_score = 1.0
+        return (
+            INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+            + (
+                INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+                - INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+            )
+            * raw_score
+        )
+
+    _BATCH_SIZE = 32
+    content_model = get_local_information_content_model()
+
+    # Process inputs in batches
+    all_output_classes: list[int] = []
+    all_base_output_probabilities: list[float] = []
+
+    for i in range(0, len(text_inputs), _BATCH_SIZE):
+        batch = text_inputs[i : i + _BATCH_SIZE]
+        batch_with_prefix = []
+        batch_indices = []
+
+        # Pre-allocate results for this batch
+        batch_output_classes: list[np.ndarray] = [np.array(1)] * len(batch)
+        batch_probabilities: list[np.ndarray] = [np.array(1.0)] * len(batch)
+
+        # Pre-process batch to handle long input exceptions
+        for j, text in enumerate(batch):
+            if len(text) == 0:
+                # if no input, treat as non-informative from the model's perspective
+                batch_output_classes[j] = np.array(0)
+                batch_probabilities[j] = np.array(0.0)
+                logger.warning("Input for Content Information Model is empty")
+
+            elif (
+                len(text.split())
+                <= INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH
+            ):
+                # if input is short, use the model
+                batch_with_prefix.append(
+                    _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX + text
+                )
+                batch_indices.append(j)
+            else:
+                # if longer than cutoff, treat as informative (stay with default), but issue warning
+                logger.warning("Input for Content Information Model too long")
+
+        if batch_with_prefix:  # Only run model if we have valid inputs
+            # Get predictions for the batch
+            model_output_classes = content_model(batch_with_prefix)
+            model_output_probabilities = content_model.predict_proba(batch_with_prefix)
+
+            # Place results in the correct positions
+            for idx, batch_idx in enumerate(batch_indices):
+                batch_output_classes[batch_idx] = model_output_classes[idx].numpy()
+                batch_probabilities[batch_idx] = model_output_probabilities[idx][
+                    1
+                ].numpy()  # x[1] is prob of the positive class
+
+        all_output_classes.extend([int(x) for x in batch_output_classes])
+        all_base_output_probabilities.extend([float(x) for x in batch_probabilities])
+
+    logits = [
+        np.log(p / (1 - p)) if p != 0.0 and p != 1.0 else (100 if p == 1.0 else -100)
+        for p in all_base_output_probabilities
+    ]
+    scaled_logits = [
+        logit / INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE
+        for logit in logits
+    ]
+    output_probabilities_with_temp = [
+        np.exp(scaled_logit) / (1 + np.exp(scaled_logit))
+        for scaled_logit in scaled_logits
+    ]
+
+    prediction_scores = [
+        _prob_to_score(p_temp) for p_temp in output_probabilities_with_temp
+    ]
+
+    content_classification_predictions = [
+        ContentClassificationPrediction(
+            predicted_label=predicted_label, content_boost_factor=output_score
+        )
+        for predicted_label, output_score in zip(all_output_classes, prediction_scores)
+    ]
+
+    return content_classification_predictions
+
+
 def map_keywords(
-    input_ids: torch.Tensor, tokenizer: AutoTokenizer, is_keyword: list[bool]
+    input_ids: torch.Tensor, tokenizer: PreTrainedTokenizer, is_keyword: list[bool]
 ) -> list[str]:
-    tokens = tokenizer.convert_ids_to_tokens(input_ids)
+    tokens = tokenizer.convert_ids_to_tokens(input_ids)  # type: ignore
 
     if not len(tokens) == len(is_keyword):
         raise ValueError("Length of tokens and keyword predictions must match")
@@ -362,3 +544,10 @@ async def process_analysis_request(
 
     is_keyword, keywords = run_analysis(intent_request)
     return IntentResponse(is_keyword=is_keyword, keywords=keywords)
+
+
+@router.post("/content-classification")
+async def process_content_classification_request(
+    content_classification_requests: list[str],
+) -> list[ContentClassificationPrediction]:
+    return run_content_classification_inference(content_classification_requests)

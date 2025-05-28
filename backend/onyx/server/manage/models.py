@@ -19,6 +19,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import User
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
@@ -132,6 +133,7 @@ class UserByEmail(BaseModel):
 class UserRoleUpdateRequest(BaseModel):
     user_email: str
     new_role: UserRole
+    explicit_override: bool = False
 
 
 class UserRoleResponse(BaseModel):
@@ -244,7 +246,7 @@ class SlackChannelConfig(BaseModel):
             id=slack_channel_config_model.id,
             slack_bot_id=slack_channel_config_model.slack_bot_id,
             persona=(
-                PersonaSnapshot.from_model(
+                FullPersonaSnapshot.from_model(
                     slack_channel_config_model.persona, allow_deleted=True
                 )
                 if slack_channel_config_model.persona

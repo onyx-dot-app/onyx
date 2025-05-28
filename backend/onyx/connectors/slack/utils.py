@@ -1,5 +1,4 @@
 import re
-import time
 from collections.abc import Callable
 from collections.abc import Generator
 from functools import lru_cache
@@ -17,7 +16,8 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-basic_retry_wrapper = retry_builder()
+# retry after 0.1, 1.2, 3.4, 7.8, 16.6, 34.2 seconds
+basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
@@ -64,71 +64,72 @@ def _make_slack_api_call_paginated(
     return paginated_call
 
 
-def make_slack_api_rate_limited(
-    call: Callable[..., SlackResponse], max_retries: int = 7
-) -> Callable[..., SlackResponse]:
-    """Wraps calls to slack API so that they automatically handle rate limiting"""
+# NOTE(rkuo): we may not need this any more if the integrated retry handlers work as
+# expected.  Do we want to keep this around?
 
-    @wraps(call)
-    def rate_limited_call(**kwargs: Any) -> SlackResponse:
-        last_exception = None
+# def make_slack_api_rate_limited(
+#     call: Callable[..., SlackResponse], max_retries: int = 7
+# ) -> Callable[..., SlackResponse]:
+#     """Wraps calls to slack API so that they automatically handle rate limiting"""
 
-        for _ in range(max_retries):
-            try:
-                # Make the API call
-                response = call(**kwargs)
+#     @wraps(call)
+#     def rate_limited_call(**kwargs: Any) -> SlackResponse:
+#         last_exception = None
 
-                # Check for errors in the response, will raise `SlackApiError`
-                # if anything went wrong
-                response.validate()
-                return response
+#         for _ in range(max_retries):
+#             try:
+#                 # Make the API call
+#                 response = call(**kwargs)
 
-            except SlackApiError as e:
-                last_exception = e
-                try:
-                    error = e.response["error"]
-                except KeyError:
-                    error = "unknown error"
+#                 # Check for errors in the response, will raise `SlackApiError`
+#                 # if anything went wrong
+#                 response.validate()
+#                 return response
 
-                if error == "ratelimited":
-                    # Handle rate limiting: get the 'Retry-After' header value and sleep for that duration
-                    retry_after = int(e.response.headers.get("Retry-After", 1))
-                    logger.info(
-                        f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
-                    )
-                    time.sleep(retry_after)
-                elif error in ["already_reacted", "no_reaction", "internal_error"]:
-                    # Log internal_error and return the response instead of failing
-                    logger.warning(
-                        f"Slack call encountered '{error}', skipping and continuing..."
-                    )
-                    return e.response
-                else:
-                    # Raise the error for non-transient errors
-                    raise
+#             except SlackApiError as e:
+#                 last_exception = e
+#                 try:
+#                     error = e.response["error"]
+#                 except KeyError:
+#                     error = "unknown error"
 
-        # If the code reaches this point, all retries have been exhausted
-        msg = f"Max retries ({max_retries}) exceeded"
-        if last_exception:
-            raise Exception(msg) from last_exception
-        else:
-            raise Exception(msg)
+#                 if error == "ratelimited":
+#                     # Handle rate limiting: get the 'Retry-After' header value and sleep for that duration
+#                     retry_after = int(e.response.headers.get("Retry-After", 1))
+#                     logger.info(
+#                         f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
+#                     )
+#                     time.sleep(retry_after)
+#                 elif error in ["already_reacted", "no_reaction", "internal_error"]:
+#                     # Log internal_error and return the response instead of failing
+#                     logger.warning(
+#                         f"Slack call encountered '{error}', skipping and continuing..."
+#                     )
+#                     return e.response
+#                 else:
+#                     # Raise the error for non-transient errors
+#                     raise
 
-    return rate_limited_call
+#         # If the code reaches this point, all retries have been exhausted
+#         msg = f"Max retries ({max_retries}) exceeded"
+#         if last_exception:
+#             raise Exception(msg) from last_exception
+#         else:
+#             raise Exception(msg)
+
+#     return rate_limited_call
 
 
 def make_slack_api_call_w_retries(
     call: Callable[..., SlackResponse], **kwargs: Any
 ) -> SlackResponse:
-    return basic_retry_wrapper(make_slack_api_rate_limited(call))(**kwargs)
+    return basic_retry_wrapper(call)(**kwargs)
 
 
 def make_paginated_slack_api_call_w_retries(
     call: Callable[..., SlackResponse], **kwargs: Any
 ) -> Generator[dict[str, Any], None, None]:
-    return _make_slack_api_call_paginated(
-        basic_retry_wrapper(make_slack_api_rate_limited(call))
-    )(**kwargs)
+    return _make_slack_api_call_paginated(basic_retry_wrapper(call))(**kwargs)
 
 
 def expert_info_from_slack_id(
@@ -142,7 +143,7 @@ def expert_info_from_slack_id(
     if user_id in user_cache:
         return user_cache[user_id]
 
-    response = make_slack_api_rate_limited(client.users_info)(user=user_id)
+    response = client.users_info(user=user_id)
 
     if not response["ok"]:
         user_cache[user_id] = None
@@ -175,9 +176,7 @@ class SlackTextCleaner:
     def _get_slack_name(self, user_id: str) -> str:
         if user_id not in self._id_to_name_map:
             try:
-                response = make_slack_api_rate_limited(self._client.users_info)(
-                    user=user_id
-                )
+                response = self._client.users_info(user=user_id)
                 # prefer display name if set, since that is what is shown in Slack
                 self._id_to_name_map[user_id] = (
                     response["user"]["profile"]["display_name"]
@@ -268,4 +267,4 @@ class SlackTextCleaner:
     @staticmethod
     def add_zero_width_whitespace_after_tag(message: str) -> str:
         """Add a 0 width whitespace after every @"""
-        return message.replace("@", "@\u200B")
+        return message.replace("@", "@\u200b")

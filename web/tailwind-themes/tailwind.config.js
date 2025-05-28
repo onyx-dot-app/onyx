@@ -108,6 +108,7 @@ module.exports = {
         "accent-background": "var(--accent-background)",
         "accent-background-hovered": "var(--accent-background-hovered)",
         "accent-background-selected": "var(--accent-background-selected)",
+        "background-50": "var(--background-50)",
         "background-dark": "var(--off-white)",
         "background-100": "var(--neutral-100-border-light)",
         "background-125": "var(--neutral-125)",

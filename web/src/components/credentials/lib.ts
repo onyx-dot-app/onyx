@@ -16,7 +16,15 @@ export function createValidationSchema(json_values: Record<string, any>) {
 
     const displayName = getDisplayNameForCredentialKey(key);
 
-    if (json_values[key] === null) {
+    if (typeof json_values[key] === "boolean") {
+      // Ensure false is considered valid
+      schemaFields[key] = Yup.boolean()
+        .nullable()
+        .default(false)
+        .transform((value, originalValue) =>
+          originalValue === undefined ? false : value
+        );
+    } else if (json_values[key] === null) {
       // Field is optional:
       schemaFields[key] = Yup.string()
         .trim()

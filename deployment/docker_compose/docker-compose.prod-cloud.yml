@@ -54,9 +54,6 @@ services:
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # optional, only for debugging purposes
-    volumes:
-      - log_store:/var/log/persisted-logs
     logging:
       driver: json-file
       options:
@@ -236,4 +233,3 @@ volumes:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-  log_store:  # for logs that we don't want to lose on container restarts

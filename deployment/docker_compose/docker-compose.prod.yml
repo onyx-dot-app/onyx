@@ -32,13 +32,14 @@ services:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - log_store:/var/log/persisted-logs
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "6"
+    volumes:
+      - api_server_logs:/var/log
+
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
@@ -76,7 +77,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - log_store:/var/log/persisted-logs
+      - background_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -152,6 +153,8 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/root/.cache/huggingface/
+      # optional, only for debugging purposes
+      - inference_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -180,6 +183,8 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      # optional, only for debugging purposes
+      - indexing_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -264,4 +269,8 @@ volumes:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-  log_store:  # for logs that we don't want to lose on container restarts
+  # for logs that we don't want to lose on container restarts
+  api_server_logs:
+  background_logs:
+  inference_model_server_logs:
+  indexing_model_server_logs:

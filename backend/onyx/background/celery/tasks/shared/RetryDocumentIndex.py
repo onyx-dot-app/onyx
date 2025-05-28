@@ -6,6 +6,7 @@ from tenacity import wait_random_exponential
 
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaDocumentFields
+from onyx.document_index.interfaces import VespaDocumentUserFields
 
 
 class RetryDocumentIndex:
@@ -52,11 +53,13 @@ class RetryDocumentIndex:
         *,
         tenant_id: str,
         chunk_count: int | None,
-        fields: VespaDocumentFields,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
     ) -> int:
         return self.index.update_single(
             doc_id,
             tenant_id=tenant_id,
             chunk_count=chunk_count,
             fields=fields,
+            user_fields=user_fields,
         )

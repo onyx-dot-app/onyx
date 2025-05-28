@@ -8,8 +8,6 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import { EmailPasswordForm } from "../login/EmailPasswordForm";
-import Text from "@/components/ui/text";
-import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";

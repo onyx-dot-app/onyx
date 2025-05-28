@@ -2,7 +2,6 @@
 import { Separator } from "@/components/ui/separator";
 import { IconProps, XIcon } from "./icons/icons";
 import { useRef } from "react";
-import { isEventWithinRef } from "@/lib/contains";
 import ReactDOM from "react-dom";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,8 @@ interface ModalProps {
   heightOverride?: string;
   removeBottomPadding?: boolean;
   removePadding?: boolean;
+  increasedPadding?: boolean;
+  hideOverflow?: boolean;
 }
 
 export function Modal({
@@ -33,14 +34,13 @@ export function Modal({
   width,
   titleSize,
   hideDividerForTitle,
-  height,
   noPadding,
   icon,
   hideCloseButton,
-  noScroll,
   heightOverride,
   removeBottomPadding,
-  removePadding,
+  increasedPadding,
+  hideOverflow,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -77,11 +77,11 @@ export function Modal({
         className={`
           bg-neutral-50 dark:bg-neutral-800
           text-neutral-950 dark:text-neutral-50
-          rounded 
-          shadow-2xl 
-          transform 
-          transition-all 
-          duration-300 
+          rounded
+          shadow-2xl
+          transform
+          transition-all
+          duration-300
           ease-in-out
           relative
           ${width ?? "w-11/12 max-w-4xl"}
@@ -89,7 +89,9 @@ export function Modal({
           ${className || ""}
           flex
           flex-col
+
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
+          ${hideOverflow ? "overflow-hidden" : "overflow-visible"}
         `}
       >
         {onOutsideClick && !hideCloseButton && (
@@ -110,7 +112,7 @@ export function Modal({
                 <h2
                   className={`my-auto flex content-start gap-x-4 font-bold ${
                     titleSize || "text-2xl"
-                  }`}
+                  } ${increasedPadding && "px-6"}`}
                 >
                   {title}
                   {icon && icon({ size: 30 })}

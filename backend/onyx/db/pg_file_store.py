@@ -4,8 +4,12 @@ from typing import IO
 
 from psycopg2.extensions import connection
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import and_
+from sqlalchemy.sql import select
 
+from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import FileType
 from onyx.db.models import PGFileStore
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
@@ -16,6 +20,13 @@ logger = setup_logger()
 
 def get_pg_conn_from_session(db_session: Session) -> connection:
     return db_session.connection().connection.connection  # type: ignore
+
+
+def get_pgfilestore_by_file_name_optional(
+    file_name: str,
+    db_session: Session,
+) -> PGFileStore | None:
+    return db_session.query(PGFileStore).filter_by(file_name=file_name).first()
 
 
 def get_pgfilestore_by_file_name(
@@ -177,3 +188,19 @@ def save_bytes_to_pgfilestore(
         commit=True,
     )
     return pgfilestore
+
+
+def get_query_history_export_files(
+    db_session: Session,
+) -> list[PGFileStore]:
+    return list(
+        db_session.scalars(
+            select(PGFileStore).where(
+                and_(
+                    PGFileStore.file_name.like(f"{QUERY_REPORT_NAME_PREFIX}-%"),
+                    PGFileStore.file_type == FileType.CSV,
+                    PGFileStore.file_origin == FileOrigin.QUERY_HISTORY_CSV,
+                )
+            )
+        )
+    )

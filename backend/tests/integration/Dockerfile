@@ -15,14 +15,16 @@ RUN apt-get update && \
         curl \
         zip \
         ca-certificates \
-        libgnutls30=3.7.9-2+deb12u3 \
-        libblkid1=2.38.1-5+deb12u1 \
-        libmount1=2.38.1-5+deb12u1 \
-        libsmartcols1=2.38.1-5+deb12u1 \
-        libuuid1=2.38.1-5+deb12u1 \
+        libgnutls30 \
+        libblkid1 \
+        libmount1 \
+        libsmartcols1 \
+        libuuid1 \
         libxmlsec1-dev \
         pkg-config \
-        gcc && \
+        gcc \
+        nano \
+        vim && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 

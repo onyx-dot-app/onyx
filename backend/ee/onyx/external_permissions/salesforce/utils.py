@@ -1,10 +1,6 @@
 from simple_salesforce import Salesforce
 from sqlalchemy.orm import Session
 
-from onyx.connectors.salesforce.sqlite_functions import get_user_id_by_email
-from onyx.connectors.salesforce.sqlite_functions import init_db
-from onyx.connectors.salesforce.sqlite_functions import NULL_ID_STRING
-from onyx.connectors.salesforce.sqlite_functions import update_email_to_id_table
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_cc_pairs_for_document
 from onyx.utils.logger import setup_logger
@@ -28,6 +24,8 @@ def get_any_salesforce_client_for_doc_id(
     E.g. there are 2 different credential sets for 2 different salesforce cc_pairs
     but only one has the permissions to access the permissions needed for the query.
     """
+
+    # NOTE: this global seems very very bad
     global _ANY_SALESFORCE_CLIENT
     if _ANY_SALESFORCE_CLIENT is None:
         cc_pairs = get_cc_pairs_for_document(db_session, doc_id)
@@ -42,11 +40,18 @@ def get_any_salesforce_client_for_doc_id(
 
 
 def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
-    query = f"SELECT Id FROM User WHERE Email = '{user_email}'"
+    query = f"SELECT Id FROM User WHERE Username = '{user_email}' AND IsActive = true"
     result = sf_client.query(query)
-    if len(result["records"]) == 0:
-        return None
-    return result["records"][0]["Id"]
+    if len(result["records"]) > 0:
+        return result["records"][0]["Id"]
+
+    # try emails
+    query = f"SELECT Id FROM User WHERE Email = '{user_email}' AND IsActive = true"
+    result = sf_client.query(query)
+    if len(result["records"]) > 0:
+        return result["records"][0]["Id"]
+
+    return None
 
 
 # This contains only the user_ids that we have found in Salesforce.
@@ -77,35 +82,21 @@ def get_salesforce_user_id_from_email(
     salesforce database. (Around 0.1-0.3 seconds)
     If it's cached or stored in the local salesforce database, it's fast (<0.001 seconds).
     """
+
+    # NOTE: this global seems bad
     global _CACHED_SF_EMAIL_TO_ID_MAP
     if user_email in _CACHED_SF_EMAIL_TO_ID_MAP:
         if _CACHED_SF_EMAIL_TO_ID_MAP[user_email] is not None:
             return _CACHED_SF_EMAIL_TO_ID_MAP[user_email]
 
-    db_exists = True
-    try:
-        # Check if the user is already in the database
-        user_id = get_user_id_by_email(user_email)
-    except Exception:
-        init_db()
-        try:
-            user_id = get_user_id_by_email(user_email)
-        except Exception as e:
-            logger.error(f"Error checking if user is in database: {e}")
-            user_id = None
-            db_exists = False
+    # some caching via sqlite existed here before ... check history if interested
 
-    # If no entry is found in the database (indicated by user_id being None)...
+    # ...query Salesforce and store the result in the database
+    user_id = _query_salesforce_user_id(sf_client, user_email)
+
     if user_id is None:
-        # ...query Salesforce and store the result in the database
-        user_id = _query_salesforce_user_id(sf_client, user_email)
-        if db_exists:
-            update_email_to_id_table(user_email, user_id)
-            return user_id
-        elif user_id is None:
-            return None
-    elif user_id == NULL_ID_STRING:
         return None
+
     # If the found user_id is real, cache it
     _CACHED_SF_EMAIL_TO_ID_MAP[user_email] = user_id
     return user_id

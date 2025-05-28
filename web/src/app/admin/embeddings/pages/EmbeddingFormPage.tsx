@@ -64,6 +64,9 @@ export default function EmbeddingForm() {
     useState<AdvancedSearchConfiguration>({
       index_name: "",
       multipass_indexing: true,
+      enable_contextual_rag: false,
+      contextual_rag_llm_name: null,
+      contextual_rag_llm_provider: null,
       multilingual_expansion: [],
       disable_rerank_for_streaming: false,
       api_url: null,
@@ -152,6 +155,9 @@ export default function EmbeddingForm() {
       setAdvancedEmbeddingDetails({
         index_name: searchSettings.index_name,
         multipass_indexing: searchSettings.multipass_indexing,
+        enable_contextual_rag: searchSettings.enable_contextual_rag,
+        contextual_rag_llm_name: searchSettings.contextual_rag_llm_name,
+        contextual_rag_llm_provider: searchSettings.contextual_rag_llm_provider,
         multilingual_expansion: searchSettings.multilingual_expansion,
         disable_rerank_for_streaming:
           searchSettings.disable_rerank_for_streaming,
@@ -197,7 +203,9 @@ export default function EmbeddingForm() {
     searchSettings?.embedding_precision !=
       advancedEmbeddingDetails.embedding_precision ||
     searchSettings?.reduced_dimension !=
-      advancedEmbeddingDetails.reduced_dimension;
+      advancedEmbeddingDetails.reduced_dimension ||
+    searchSettings?.enable_contextual_rag !=
+      advancedEmbeddingDetails.enable_contextual_rag;
 
   const updateSearch = useCallback(async () => {
     if (!selectedProvider) {
@@ -383,6 +391,14 @@ export default function EmbeddingForm() {
                   {searchSettings?.reduced_dimension !=
                     advancedEmbeddingDetails.reduced_dimension && (
                     <li>Reduced dimension modification</li>
+                  )}
+                  {(searchSettings?.enable_contextual_rag !=
+                    advancedEmbeddingDetails.enable_contextual_rag ||
+                    searchSettings?.contextual_rag_llm_name !=
+                      advancedEmbeddingDetails.contextual_rag_llm_name ||
+                    searchSettings?.contextual_rag_llm_provider !=
+                      advancedEmbeddingDetails.contextual_rag_llm_provider) && (
+                    <li>Contextual RAG modification</li>
                   )}
                 </ul>
               </div>

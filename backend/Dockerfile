@@ -102,6 +102,7 @@ COPY ./alembic /app/alembic
 COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
+COPY ./static /app/static
 
 # Escape hatch scripts
 COPY ./scripts/debugging /app/scripts/debugging

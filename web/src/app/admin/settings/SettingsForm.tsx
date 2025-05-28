@@ -13,7 +13,6 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { Modal } from "@/components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
-import { useChatContext } from "@/components/context/ChatContext";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
 

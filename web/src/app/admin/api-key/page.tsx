@@ -6,7 +6,6 @@ import { KeyIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   TableBody,
@@ -22,7 +21,7 @@ import Title from "@/components/ui/title";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
-import { FiCopy, FiEdit2, FiRefreshCw, FiX } from "react-icons/fi";
+import { FiCopy, FiEdit2, FiRefreshCw } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";
@@ -42,11 +41,8 @@ function NewApiKeyModal({
   const [copyClicked, setCopyClicked] = useState(false);
 
   return (
-    <Modal onOutsideClick={onClose}>
+    <Modal title="New API Key" onOutsideClick={onClose}>
       <div className="px-8 py-8">
-        <div className="flex w-full border-b border-border mb-4 pb-4">
-          <Title>New API Key</Title>
-        </div>
         <div className="h-32">
           <Text className="mb-4">
             Make sure you copy your new API key. You won’t be able to see this

@@ -5,6 +5,7 @@ Revises: f13db29f3101
 Create Date: 2025-02-24 11:24:54.396040
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 import json
@@ -18,6 +19,9 @@ revision = "da42808081e3"
 down_revision = "f13db29f3101"
 branch_labels = None
 depends_on = None
+
+
+PRESERVED_CONFIG_KEYS = ["comment_email_blacklist", "batch_size", "labels_to_skip"]
 
 
 def upgrade() -> None:
@@ -61,6 +65,9 @@ def upgrade() -> None:
                 f"WARNING: Jira connector {connector_id} has no project URL configured"
             )
             continue
+        for old_key in PRESERVED_CONFIG_KEYS:
+            if old_key in old_config:
+                new_config[old_key] = old_config[old_key]
 
         # Update the connector config
         conn.execute(
@@ -107,6 +114,10 @@ def downgrade() -> None:
         else:
             continue
 
+        for old_key in PRESERVED_CONFIG_KEYS:
+            if old_key in new_config:
+                old_config[old_key] = new_config[old_key]
+
         # Update the connector config
         conn.execute(
             sa.text(
@@ -116,5 +127,5 @@ def downgrade() -> None:
                 WHERE id = :id
                 """
             ),
-            {"id": connector_id, "old_config": old_config},
+            {"id": connector_id, "old_config": json.dumps(old_config)},
         )

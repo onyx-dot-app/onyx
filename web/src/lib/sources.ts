@@ -6,7 +6,6 @@ import {
   DiscourseIcon,
   Document360Icon,
   DropboxIcon,
-  FileIcon,
   GithubIcon,
   GitlabIcon,
   GlobeIcon,
@@ -44,13 +43,10 @@ import {
   GlobeIcon2,
   FileIcon2,
   GitbookIcon,
+  HighspotIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
-import {
-  OnyxDocument,
-  SourceCategory,
-  SourceMetadata,
-} from "./search/interfaces";
+import { SourceCategory, SourceMetadata } from "./search/interfaces";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
 interface PartialSourceMetadata {
@@ -329,6 +325,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/gitbook",
   },
+  highspot: {
+    icon: HighspotIcon,
+    displayName: "Highspot",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/highspot",
+  },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
   not_applicable: {
@@ -370,7 +372,10 @@ export function listSourceMetadata(): SourceMetadata[] {
   display in the Add Connector page */
   const entries = Object.entries(SOURCE_METADATA_MAP)
     .filter(
-      ([source, _]) => source !== "not_applicable" && source != "ingestion_api"
+      ([source, _]) =>
+        source !== "not_applicable" &&
+        source !== "ingestion_api" &&
+        source !== "mock_connector"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

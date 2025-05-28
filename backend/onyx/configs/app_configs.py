@@ -1,6 +1,8 @@
 import json
 import os
 import urllib.parse
+from datetime import datetime
+from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
@@ -33,6 +35,10 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 )  # 1 day
 DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "true"
 
+# Controls whether to allow admin query history reports with:
+# 1. associated user emails
+# 2. anonymized user emails
+# 3. no queries
 ONYX_QUERY_HISTORY_TYPE = QueryHistoryType(
     (os.environ.get("ONYX_QUERY_HISTORY_TYPE") or QueryHistoryType.NORMAL.value).lower()
 )
@@ -114,9 +120,10 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", None)
 SMTP_PASS = os.environ.get("SMTP_PASS", None)
-#EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
-EMAIL_CONFIGURED = all([SMTP_SERVER]) # we don't have smtp_user and password
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
+
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
+EMAIL_CONFIGURED = all([SMTP_SERVER]) or SENDGRID_API_KEY
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
@@ -154,10 +161,9 @@ VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
 VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
-try:
-    INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE", 16))
-except ValueError:
-    INDEX_BATCH_SIZE = 16
+INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
+
+MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
@@ -166,7 +172,7 @@ POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
 POSTGRES_PASSWORD = urllib.parse.quote_plus(
     os.environ.get("POSTGRES_PASSWORD") or "password"
 )
-POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
@@ -342,10 +348,15 @@ HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     HtmlBasedConnectorTransformLinksStrategy.STRIP,
 )
 
-NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP = (
-    os.environ.get("NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP", "").lower()
+NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP = (
+    os.environ.get("NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP", "").lower()
     == "true"
 )
+
+
+#####
+# Confluence Connector Configs
+#####
 
 CONFLUENCE_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
@@ -370,6 +381,26 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
     os.environ.get("CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD", 200_000)
 )
 
+# A JSON-formatted array. Each item in the array should have the following structure:
+# {
+#     "user_id": "1234567890",
+#     "username": "bob",
+#     "display_name": "Bob Fitzgerald",
+#     "email": "bob@example.com",
+#     "type": "known"
+# }
+_RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = os.environ.get(
+    "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE", ""
+)
+CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
+    list[dict[str, str]] | None,
+    (
+        json.loads(_RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE)
+        if _RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+        else None
+    ),
+)
+
 # Due to breakages in the confluence API, the timezone offset must be specified client side
 # to match the user's specified timezone.
 
@@ -381,10 +412,27 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
 # https://community.developer.atlassian.com/t/confluence-cloud-time-zone-get-via-rest-api/35954/16
 # https://jira.atlassian.com/browse/CONFCLOUD-69670
 
+
+def get_current_tz_offset() -> int:
+    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
+    # remove tzinfo to compare non-timezone-aware objects.
+    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
+    return round(time_diff.total_seconds() / 3600)
+
+
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
 # this will be applied globally, so it probably makes sense to transition this to per
 # connector as some point.
-CONFLUENCE_TIMEZONE_OFFSET = float(os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", 0.0))
+# For the default value, we assume that the user's local timezone is more likely to be
+# correct (i.e. the configured user's timezone or the default server one) than UTC.
+# https://developer.atlassian.com/cloud/confluence/cql-fields/#created
+CONFLUENCE_TIMEZONE_OFFSET = float(
+    os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", get_current_tz_offset())
+)
+
+GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
@@ -414,6 +462,9 @@ EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 # Linear specific configs
 LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
+
+# Slack specific configs
+SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
@@ -459,18 +510,15 @@ CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
 DISABLE_INDEX_UPDATE_ON_SWAP = (
     os.environ.get("DISABLE_INDEX_UPDATE_ON_SWAP", "").lower() == "true"
 )
-# Controls how many worker processes we spin up to index documents in the
-# background. This is useful for speeding up indexing, but does require a
-# fairly large amount of memory in order to increase substantially, since
-# each worker loads the embedding models into memory.
-NUM_INDEXING_WORKERS = int(os.environ.get("NUM_INDEXING_WORKERS") or 1)
-NUM_SECONDARY_INDEXING_WORKERS = int(
-    os.environ.get("NUM_SECONDARY_INDEXING_WORKERS") or NUM_INDEXING_WORKERS
-)
 # More accurate results at the expense of indexing speed and index size (stores additional 4 MINI_CHUNK vectors)
 ENABLE_MULTIPASS_INDEXING = (
     os.environ.get("ENABLE_MULTIPASS_INDEXING", "").lower() == "true"
 )
+# Enable contextual retrieval
+ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
+
+DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
+DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
 # Finer grained chunking for more detail retention
 # Slightly larger since the sentence aware split is a max cutoff so most minichunks will be under MINI_CHUNK_SIZE
 # tokens. But we need it to be at least as big as 1/4th chunk size to avoid having a tiny mini-chunk at the end
@@ -511,6 +559,17 @@ MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
+
+# Use document summary for contextual rag
+USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
+# Use chunk summary for contextual rag
+USE_CHUNK_SUMMARY = os.environ.get("USE_CHUNK_SUMMARY", "true").lower() == "true"
+# Average summary embeddings for contextual rag (not yet implemented)
+AVERAGE_SUMMARY_EMBEDDINGS = (
+    os.environ.get("AVERAGE_SUMMARY_EMBEDDINGS", "false").lower() == "true"
+)
+
+MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
 #####
 # Miscellaneous
@@ -667,4 +726,8 @@ IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
 IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
     "IMAGE_ANALYSIS_SYSTEM_PROMPT",
     DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT,
+)
+
+DISABLE_AUTO_AUTH_REFRESH = (
+    os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
