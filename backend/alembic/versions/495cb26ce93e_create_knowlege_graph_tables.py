@@ -27,9 +27,6 @@ depends_on = None
 
 def upgrade() -> None:
 
-    # Enable pg_trgm extension if not already enabled
-    op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-
     # Create a new permission-less user to be later used for knowledge graph queries.
     # The user will later get temporary read priviledges for a specific view that will be
     # ad hoc generated specific to a knowledge graph query.
@@ -38,6 +35,10 @@ def upgrade() -> None:
     # environment variables MUST be set. Otherwise, an exception will be raised.
 
     if not MULTI_TENANT:
+
+        # Enable pg_trgm extension if not already enabled
+        op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+
         # Create read-only db user here only in single tenant mode. For multi-tenant mode,
         # the user is created in the alembic_tenants migration.
         if not (DB_READONLY_USER and DB_READONLY_PASSWORD):
