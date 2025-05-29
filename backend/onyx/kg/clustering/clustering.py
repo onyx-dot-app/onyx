@@ -13,6 +13,7 @@ from onyx.db.entities import merge_entities
 from onyx.db.entities import transfer_entity
 from onyx.db.models import Document
 from onyx.db.models import KGEntityType
+from onyx.db.models import KGRelationship
 from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_relationship_types_by_id_names
@@ -28,6 +29,7 @@ from onyx.document_index.vespa.kg_interactions import (
 from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
@@ -109,6 +111,36 @@ def _cluster_one_grounded_entity(
     return transferred_entity
 
 
+def _transfer_batch_relationship(
+    relationships: list[KGRelationshipExtractionStaging],
+    entity_translations: dict[str, str],
+    index_name: str,
+    tenant_id: str,
+) -> list[str]:
+    transferred_relationships: list[str] = []
+    added_relationships: list[KGRelationship] = []
+
+    with get_session_with_current_tenant() as db_session:
+        for relationship in relationships:
+            added_relationship = transfer_relationship(
+                db_session=db_session,
+                relationship=relationship,
+                entity_translations=entity_translations,
+            )
+            transferred_relationships.append(relationship.id_name)
+            added_relationships.append(added_relationship)
+        db_session.commit()
+
+    # update vespa
+    for added_relationship in added_relationships:
+        update_kg_chunks_vespa_info_for_relationship(
+            relationship=added_relationship,
+            index_name=index_name,
+            tenant_id=tenant_id,
+        )
+    return transferred_relationships
+
+
 def kg_clustering(
     tenant_id: str, index_name: str, processing_chunk_batch_size: int = 8
 ) -> None:
@@ -159,8 +191,7 @@ def kg_clustering(
         entity_translations[entity.id_name] = added_entity.id_name
     logger.info(f"Transferred {len(transferred_entities)} entities")
 
-    ## Database operations
-
+    ## Transfer the relationship types
     transferred_relationship_types: list[str] = []
     for relationship_type in relationship_types:
         with get_session_with_current_tenant() as db_session:
@@ -176,23 +207,23 @@ def kg_clustering(
             transferred_relationship_types.append(added_relationship_type_id_name)
     logger.info(f"Transferred {len(transferred_relationship_types)} relationship types")
 
-    transferred_relationships: list[str] = []
-    for relationship in relationships:
-        with get_session_with_current_tenant() as db_session:
-            added_relationship = transfer_relationship(
-                db_session=db_session,
-                relationship=relationship,
-                entity_translations=entity_translations,
-            )
-            db_session.commit()
-            transferred_relationships.append(relationship.id_name)
-
-            # update vespa
-            update_kg_chunks_vespa_info_for_relationship(
-                relationship=added_relationship,
-                index_name=index_name,
-                tenant_id=tenant_id,
-            )
+    ## Transfer the relationships in parallel
+    tasks = [
+        (
+            _transfer_batch_relationship,
+            (
+                relationships[batch_i : batch_i + processing_chunk_batch_size],
+                entity_translations,
+                index_name,
+                tenant_id,
+            ),
+        )
+        for batch_i in range(0, len(relationships), processing_chunk_batch_size)
+    ]
+    results = run_functions_tuples_in_parallel(tasks)
+    transferred_relationships = []
+    for result in results:
+        transferred_relationships.extend(result)
     logger.info(f"Transferred {len(transferred_relationships)} relationships")
 
     # delete the added objects from the staging tables
