@@ -360,6 +360,13 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
         else:
             logger.warning(error_str)
         return ""
+    except Exception as e:
+        if "File contains no valid workbook part" in str(e):
+            logger.error(
+                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            )
+            return ""
+        raise e
 
     text_content = []
     for sheet in workbook.worksheets:
