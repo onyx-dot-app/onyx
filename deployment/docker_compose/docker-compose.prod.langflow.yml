@@ -251,7 +251,7 @@ services:
         max-file: "6"
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
-cache:
+  cache:
     image: eqalpha/keydb
     volumes:
       - keydb_volume:/data
