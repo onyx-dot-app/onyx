@@ -1138,6 +1138,10 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+
+        logger.info(
+            f"num drive files retrieved: {len(checkpoint.all_retrieved_file_ids)}"
+        )
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
         return checkpoint
