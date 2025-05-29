@@ -31,11 +31,6 @@ export function DocumentLayout({ children }: DocumentLayoutProps) {
             <span className="ml-2 font-semibold text-lg">onyx</span>
           </div>
           
-          {/* Files heading */}
-          <div className="px-4 pb-2">
-            <h2 className="text-sm font-medium text-text-500/80 dark:text-[#D4D4D4]">Files</h2>
-          </div>
-          
           {/* Sidebar content */}
           <div className="flex-grow overflow-y-auto">
             <DocumentSidebar files={defaultSidebarFiles} />

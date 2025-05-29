@@ -348,5 +348,10 @@ def main():
         raise e
 
 if __name__ == "__main__":
-    """PYTHONPATH=/Users/steven/Desktop/repos/onyx/onyx/backend python3 /Users/steven/Desktop/repos/onyx/onyx/backend/onyx/connectors/oxos_google_drive/file_parser.py"""
+    """
+    TODO:
+        1. We should handle when the link is actually a link to a whole folder and essentially recurse there
+        2. We should better handle notifying us of those types of problems.
+    Run Command: PYTHONPATH=/Users/steven/Desktop/repos/onyx/onyx/backend python3 /Users/steven/Desktop/repos/onyx/onyx/backend/onyx/connectors/oxos_google_drive/file_parser.py
+    """
     main()

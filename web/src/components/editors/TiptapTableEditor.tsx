@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
+import Link from '@tiptap/extension-link';
+import { HighlightWithLink } from '@/lib/tiptap/HighlightWithLink';
 
 interface TiptapTableEditorProps {
   content?: string;
@@ -15,35 +17,32 @@ interface TiptapTableEditorProps {
 }
 
 export function TiptapTableEditor({ content, onChange, editable = true }: TiptapTableEditorProps) {
-  const defaultContent = content || `
-    <table>
-      <tbody>
-        <tr>
-          <th>Constant Name</th>
-          <th>Value</th>
-          <th>Description</th>
-        </tr>
-        <tr>
-          <td>API_BASE_URL</td>
-          <td>https://api.example.com</td>
-          <td>Base URL for API endpoints</td>
-        </tr>
-        <tr>
-          <td>MAX_RETRIES</td>
-          <td>3</td>
-          <td>Maximum number of retry attempts</td>
-        </tr>
-        <tr>
-          <td>TIMEOUT_MS</td>
-          <td>5000</td>
-          <td>Request timeout in milliseconds</td>
-        </tr>
-      </tbody>
-    </table>
-  `;
-
+  // Initialize the editor with the content as-is
+  // The first row is already set as a header row in the DocumentsPage.convertSheetDataToTableHtml function
+  
+  // Function to make links clickable in the editor
+  const enableClickableLinks = () => {
+    // This runs after the editor is mounted
+    setTimeout(() => {
+      const editorElement = document.querySelector('.ProseMirror');
+      if (editorElement) {
+        // Add event listener to handle link clicks
+        editorElement.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement;
+          if (target.tagName === 'A') {
+            const href = target.getAttribute('href');
+            if (href) {
+              window.open(href, '_blank', 'noopener,noreferrer');
+            }
+          }
+        });
+      }
+    }, 100);
+  };
+  
   const editor = useEditor({
     extensions: [
+      // Use StarterKit with default configuration
       StarterKit,
       Table.configure({
         resizable: true,
@@ -51,69 +50,44 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
       TableRow,
       TableHeader,
       TableCell,
+      Link.configure({
+        openOnClick: true,
+        // Make links clickable
+        autolink: true,
+        // Allow the editor to parse links from HTML
+        linkOnPaste: true,
+        // Open links in a new tab
+        HTMLAttributes: {
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          class: 'text-blue-500 underline hover:text-blue-700',
+        },
+      }),
+      HighlightWithLink,
     ],
-    content: defaultContent,
+    content: content || '',
     editable,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML());
     },
-  });
+  }, [content]); // Add content as a dependency to re-initialize editor when content changes
+
+  // Call enableClickableLinks when the editor is ready
+  useEffect(() => {
+    if (editor) {
+      enableClickableLinks();
+    }
+  }, [editor]);
 
   if (!editor) {
     return null;
   }
 
   return (
-    <div className="border border-border rounded-lg p-6 bg-background shadow-sm">
-      {editable && (
-        <div className="mb-6 flex gap-2 flex-wrap pb-4 border-b border-border">
-          <button
-            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Insert Table
-          </button>
-          <button
-            onClick={() => editor.chain().focus().addRowBefore().run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Add Row Before
-          </button>
-          <button
-            onClick={() => editor.chain().focus().addRowAfter().run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Add Row After
-          </button>
-          <button
-            onClick={() => editor.chain().focus().deleteRow().run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Delete Row
-          </button>
-          <button
-            onClick={() => editor.chain().focus().addColumnBefore().run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Add Column Before
-          </button>
-          <button
-            onClick={() => editor.chain().focus().addColumnAfter().run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Add Column After
-          </button>
-          <button
-            onClick={() => editor.chain().focus().deleteColumn().run()}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-background border border-border hover:bg-accent/50 transition-colors"
-          >
-            Delete Column
-          </button>
-        </div>
-      )}
+    <div className="">
       <EditorContent 
         editor={editor} 
-        className="prose prose-sm max-w-none focus:outline-none min-h-[300px] [&_table]:border-collapse [&_table]:border-2 [&_table]:border-border [&_th]:border-2 [&_th]:border-border [&_th]:bg-accent [&_th]:p-2 [&_td]:border-2 [&_td]:border-border [&_td]:p-2 [&_td]:bg-background"
+        className="prose prose-sm max-w-none focus:outline-none min-h-[300px] [&_table]:border-collapse [&_table]:border-2 [&_table]:border-border [&_th]:border-2 [&_th]:border-border [&_th]:bg-accent [&_th]:p-2 [&_td]:border-2 [&_td]:border-border [&_td]:p-2 [&_td]:bg-background [&_a]:text-blue-500 [&_a]:underline [&_a:hover]:text-blue-700"
       />
     </div>
   );

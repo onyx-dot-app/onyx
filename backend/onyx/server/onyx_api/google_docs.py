@@ -10,6 +10,10 @@ from onyx.connectors.google_utils.resources import get_google_docs_service, get_
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
 from onyx.connectors.google_drive.doc_conversion import _download_and_extract_sections_basic
+from onyx.connectors.google_utils.resources import get_sheets_service
+from onyx.connectors.google_drive.google_sheets import get_sheet_metadata
+from onyx.connectors.google_drive.google_sheets import read_spreadsheet
+from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 from onyx.connectors.google_utils.google_auth import get_google_creds
@@ -18,6 +22,13 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
 from onyx.connectors.models import TextSection, ImageSection
+from onyx.connectors.google_utils.google_utils import (
+    _execute_single_retrieval,
+)
+from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import Document
+
 
 logger = setup_logger()
 
@@ -106,10 +117,10 @@ def format_for_tiptap(sections: List[TextSection | ImageSection]) -> List[Dict[s
 
 
 @router.get("/docs/{doc_id}")
-async def get_google_doc_content(
+def get_google_doc_content(
     doc_id: str,
     user: User | None = Depends(current_user),
-) -> Dict[str, Any]:
+) -> Document | ConnectorFailure | None:
     """
     Retrieve Google Docs content by document ID.
     Limited to users with @getvalkai.com and @oxos.com email domains.
@@ -118,47 +129,21 @@ async def get_google_doc_content(
     
     try:
         creds, primary_admin_email = get_google_credentials()
-        docs_service = get_google_docs_service(creds, user_email=primary_admin_email)
         drive_service = get_drive_service(creds, user_email=primary_admin_email)
         
-        file_info = drive_service.files().get(fileId=doc_id, fields="id,name,mimeType").execute()
-        mime_type = file_info.get("mimeType", "")
-        
-        if mime_type != GDriveMimeType.DOC.value:
-            raise HTTPException(
-                status_code=400,
-                detail=f"The provided ID is not a Google Doc. Found: {mime_type}"
-            )
-        
-        try:
-            doc_sections = get_document_sections(docs_service, doc_id)
-            
-            if not doc_sections:
-                file_obj = {
-                    "id": doc_id,
-                    "name": file_info.get("name", ""),
-                    "mimeType": mime_type,
-                    "webViewLink": f"https://docs.google.com/document/d/{doc_id}/edit"
-                }
-                doc_sections = _download_and_extract_sections_basic(file_obj, drive_service, allow_images=True)
-            
-            if not doc_sections:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No content found for document ID: {doc_id}"
-                )
-            
-            return {
-                "document_id": doc_id,
-                "type": "google_doc",
-                "sections": format_for_tiptap(doc_sections)
-            }
-        except Exception as e:
-            logger.error(f"Failed to retrieve Google Doc {doc_id}: {e}")
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Failed to retrieve document: {str(e)}"
-            )
+        # Use execute_single_retrieval for better error handling
+        file = _execute_single_retrieval(
+            retrieval_function=drive_service.files().get,
+            fileId=doc_id,
+            fields="id,name,mimeType,owners,modifiedTime,createdTime,webViewLink,size",
+            supportsAllDrives=True
+        )
+
+        # Convert to document
+        doc = convert_drive_item_to_document(creds, allow_images=False, size_threshold=GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD, retriever_emails=[primary_admin_email], file=file)
+
+        return doc
+
     except Exception as e:
         logger.error(f"Failed to retrieve Google Doc {doc_id}: {e}")
         raise HTTPException(
@@ -167,53 +152,50 @@ async def get_google_doc_content(
         )
 
 
-@router.get("/sheets/{sheet_id}")
-async def get_google_sheet_content(
-    sheet_id: str,
+@router.get("/sheets/{spreadsheet_id}")
+def get_raw_spreadsheet(
+    spreadsheet_id: str,
     user: User | None = Depends(current_user),
-) -> Dict[str, Any]:
-    """
-    Retrieve Google Sheets content by sheet ID.
-    Limited to users with @getvalkai.com and @oxos.com email domains.
-    """
+) -> dict[str, list]:
+    # Authorization check for OxosGoogleDriveConnector usage
     verify_user_domain(user)
-    
+
     try:
+        # Get the sheets service
         creds, primary_admin_email = get_google_credentials()
-        drive_service = get_drive_service(creds, user_email=primary_admin_email)
-        
-        file_info = drive_service.files().get(fileId=sheet_id, fields="id,name,mimeType").execute()
-        
-        mime_type = file_info.get("mimeType", "")
-        if mime_type != GDriveMimeType.SPREADSHEET.value:
-            raise HTTPException(
-                status_code=400,
-                detail=f"The provided ID is not a Google Sheet. Found: {mime_type}"
+        sheets_service = get_sheets_service(creds, primary_admin_email)
+
+        # Get metadata about all sheets in the spreadsheet
+        metadata = get_sheet_metadata(sheets_service, spreadsheet_id)
+
+        if not metadata.get("sheets"):
+            raise ValueError("No sheets found in spreadsheet")
+
+        # Create a dictionary to store all sheet data
+        all_sheets_data = {}
+
+        # Iterate through each sheet and get its data
+        for sheet in metadata["sheets"]:
+            sheet_name = sheet["properties"]["title"]
+
+            # if it's hidden, skip it
+            if sheet["properties"].get("hidden", False):
+                continue
+
+            # Read the spreadsheet data for this sheet
+            sheet_data = read_spreadsheet(
+                creds,
+                primary_admin_email,
+                spreadsheet_id,
+                sheet_name=sheet_name
             )
-        
-        file_obj = {
-            "id": sheet_id,
-            "name": file_info.get("name", ""),
-            "mimeType": mime_type,
-            "webViewLink": f"https://docs.google.com/spreadsheets/d/{sheet_id}/edit"
-        }
-        
-        sections = _download_and_extract_sections_basic(file_obj, drive_service, allow_images=False)
-        
-        if not sections:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No content found for sheet ID: {sheet_id}"
-            )
-        
-        return {
-            "document_id": sheet_id,
-            "type": "google_sheet",
-            "sections": format_for_tiptap(sections)
-        }
+
+            # Add the sheet data to our result dictionary
+            all_sheets_data[sheet_name] = sheet_data.get("values", [])
+
+        return all_sheets_data
+
     except Exception as e:
-        logger.error(f"Failed to retrieve Google Sheet {sheet_id}: {e}")
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Failed to retrieve sheet: {str(e)}"
-        )
+        logger.error(f"Error retrieving spreadsheet data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve spreadsheet data: {str(e)}")
+
