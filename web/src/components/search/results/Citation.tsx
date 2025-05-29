@@ -71,8 +71,8 @@ export function Citation({
                     document_info.updatePresentingDocument
                   )
                 : question_info?.question
-                  ? question_info.openQuestion(question_info.question)
-                  : null;
+                ? question_info.openQuestion(question_info.question)
+                : null;
             }}
             className="inline-flex items-center cursor-pointer transition-all duration-200 ease-in-out"
           >

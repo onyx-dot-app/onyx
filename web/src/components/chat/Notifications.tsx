@@ -54,13 +54,10 @@ export const Notifications = ({
             }
             const personasData: Persona[] = await response.json();
             setPersonas(
-              personasData.reduce(
-                (acc, persona) => {
-                  acc[persona.id] = persona;
-                  return acc;
-                },
-                {} as Record<number, Persona>
-              )
+              personasData.reduce((acc, persona) => {
+                acc[persona.id] = persona;
+                return acc;
+              }, {} as Record<number, Persona>)
             );
           } catch (err) {
             console.error("Failed to fetch personas:", err);

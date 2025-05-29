@@ -300,10 +300,10 @@ const AdvancedEmbeddingFormPage = forwardRef<
                     costError
                       ? "Error loading LLM models. Please try again later."
                       : !contextualCosts
-                        ? "Loading available LLM models..."
-                        : values.enable_contextual_rag
-                          ? "Select the LLM model to use for contextual RAG processing."
-                          : "Enable Contextual RAG above to select an LLM model."
+                      ? "Loading available LLM models..."
+                      : values.enable_contextual_rag
+                      ? "Select the LLM model to use for contextual RAG processing."
+                      : "Enable Contextual RAG above to select an LLM model."
                   }
                   options={llmOptions}
                   disabled={

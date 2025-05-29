@@ -45,7 +45,7 @@ const RowTemplate = ({
     Displayable,
     Displayable,
     Displayable,
-    Displayable,
+    Displayable
   ];
 }) => {
   return (

@@ -29,7 +29,7 @@ async function EditslackChannelConfigPage(props: {
   ] = (await Promise.all(tasks)) as [
     Response,
     Response,
-    FetchAssistantsResponse,
+    FetchAssistantsResponse
   ];
 
   const eeStandardAnswerCategoryResponse =

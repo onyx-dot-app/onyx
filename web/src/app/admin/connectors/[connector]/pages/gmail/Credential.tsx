@@ -190,8 +190,8 @@ const GmailCredentialUpload = ({
               isUploading
                 ? "opacity-70 cursor-not-allowed border-background-400 bg-background-50/30"
                 : isDragging
-                  ? "bg-background-50/50 border-primary dark:border-primary"
-                  : "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
+                ? "bg-background-50/50 border-primary dark:border-primary"
+                : "cursor-pointer hover:bg-background-50/30 hover:border-primary dark:hover:border-primary border-background-300 dark:border-background-600"
             )}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
@@ -208,11 +208,11 @@ const GmailCredentialUpload = ({
                 {isUploading
                   ? `Uploading ${truncateString(fileName || "file", 50)}...`
                   : isDragging
-                    ? "Drop JSON file here"
-                    : truncateString(
-                        fileName || "Select or drag JSON credentials file...",
-                        50
-                      )}
+                  ? "Drop JSON file here"
+                  : truncateString(
+                      fileName || "Select or drag JSON credentials file...",
+                      50
+                    )}
               </span>
             </div>
             <input

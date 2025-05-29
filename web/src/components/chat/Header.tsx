@@ -111,8 +111,8 @@ export default function FunctionalHeader({
               documentSidebarVisible && !sidebarToggled
                 ? "left-[calc(50%-175px)]"
                 : !documentSidebarVisible && sidebarToggled
-                  ? "left-[calc(50%+100px)]"
-                  : "left-1/2"
+                ? "left-[calc(50%+100px)]"
+                : "left-1/2"
             }
             ${
               documentSidebarVisible || sidebarToggled

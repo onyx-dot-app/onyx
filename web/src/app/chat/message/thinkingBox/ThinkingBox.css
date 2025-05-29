@@ -2,9 +2,7 @@
 
 /* Apply transition to dark mode as well to ensure smooth color changes */
 html {
-  transition:
-    background-color 0.2s ease-in-out,
-    color 0.2s ease-in-out;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 :root {

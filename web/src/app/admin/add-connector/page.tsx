@@ -67,18 +67,15 @@ export default function Page() {
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);
-    return Object.values(SourceCategory).reduce(
-      (acc, category) => {
-        acc[category] = sources.filter(
-          (source) =>
-            source.category === category &&
-            (filtered.includes(source) ||
-              category.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-        return acc;
-      },
-      {} as Record<SourceCategory, SourceMetadata[]>
-    );
+    return Object.values(SourceCategory).reduce((acc, category) => {
+      acc[category] = sources.filter(
+        (source) =>
+          source.category === category &&
+          (filtered.includes(source) ||
+            category.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      return acc;
+    }, {} as Record<SourceCategory, SourceMetadata[]>);
   }, [sources, filterSources, searchTerm]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {

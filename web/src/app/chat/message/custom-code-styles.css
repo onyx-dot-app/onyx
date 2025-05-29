@@ -21,9 +21,7 @@ pre[class*="language-"] {
   ::-webkit-scrollbar-thumb {
     background: #4b5563; /* Dark handle color */
     border-radius: 10px;
-    transition:
-      background 0.3s ease,
-      box-shadow 0.3s ease; /* Smooth transition for hover effect */
+    transition: background 0.3s ease, box-shadow 0.3s ease; /* Smooth transition for hover effect */
   }
 
   ::-webkit-scrollbar-thumb:hover {

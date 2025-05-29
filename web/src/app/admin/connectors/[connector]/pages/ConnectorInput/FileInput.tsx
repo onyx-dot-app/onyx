@@ -40,8 +40,8 @@ export default function FileInput({
           Array.isArray(field.value)
             ? field.value
             : field.value
-              ? [field.value]
-              : []
+            ? [field.value]
+            : []
         }
         setSelectedFiles={(files: File[]) => {
           if (isZip || !multiple) {

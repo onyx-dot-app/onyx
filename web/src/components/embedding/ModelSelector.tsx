@@ -105,24 +105,21 @@ export function ModelSelector({
   modelOptions: HostedEmbeddingModel[];
   setSelectedModel: (model: HostedEmbeddingModel) => void;
 }) {
-  const groupedModelOptions = modelOptions.reduce(
-    (acc, model) => {
-      const [type] = model.model_name.split("/");
-      if (type !== undefined) {
-        if (!acc[type]) {
-          acc[type] = [];
-        }
-
-        const acc_by_type = acc[type];
-        if (acc_by_type !== undefined) {
-          acc_by_type.push(model);
-        }
+  const groupedModelOptions = modelOptions.reduce((acc, model) => {
+    const [type] = model.model_name.split("/");
+    if (type !== undefined) {
+      if (!acc[type]) {
+        acc[type] = [];
       }
 
-      return acc;
-    },
-    {} as Record<string, HostedEmbeddingModel[]>
-  );
+      const acc_by_type = acc[type];
+      if (acc_by_type !== undefined) {
+        acc_by_type.push(model);
+      }
+    }
+
+    return acc;
+  }, {} as Record<string, HostedEmbeddingModel[]>);
 
   return (
     <div>

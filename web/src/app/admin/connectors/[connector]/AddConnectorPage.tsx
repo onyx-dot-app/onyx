@@ -301,30 +301,27 @@ export default function AddConnector({
         // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
           connector_specific_config
-        ).reduce(
-          (acc, [key, value]) => {
-            // Filter out empty strings from arrays
-            if (Array.isArray(value)) {
-              value = (value as any[]).filter(
-                (item) => typeof item !== "string" || item.trim() !== ""
-              );
-            }
-            const matchingConfigValue = configuration.values.find(
-              (configValue) => configValue.name === key
+        ).reduce((acc, [key, value]) => {
+          // Filter out empty strings from arrays
+          if (Array.isArray(value)) {
+            value = (value as any[]).filter(
+              (item) => typeof item !== "string" || item.trim() !== ""
             );
-            if (
-              matchingConfigValue &&
-              "transform" in matchingConfigValue &&
-              matchingConfigValue.transform
-            ) {
-              acc[key] = matchingConfigValue.transform(value as string[]);
-            } else {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, any>
-        );
+          }
+          const matchingConfigValue = configuration.values.find(
+            (configValue) => configValue.name === key
+          );
+          if (
+            matchingConfigValue &&
+            "transform" in matchingConfigValue &&
+            matchingConfigValue.transform
+          ) {
+            acc[key] = matchingConfigValue.transform(value as string[]);
+          } else {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as Record<string, any>);
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
@@ -337,8 +334,8 @@ export default function AddConnector({
         const selectedFiles = Array.isArray(values.file_locations)
           ? values.file_locations
           : values.file_locations
-            ? [values.file_locations]
-            : [];
+          ? [values.file_locations]
+          : [];
 
         // Google sites-specific handling
         if (connector == "google_sites") {

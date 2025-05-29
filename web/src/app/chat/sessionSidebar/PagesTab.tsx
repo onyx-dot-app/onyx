@@ -301,15 +301,12 @@ export function PagesTab({
 
         if (oldIndex !== -1 && newIndex !== -1) {
           const newOrder = arrayMove(folders, oldIndex, newIndex);
-          const displayPriorityMap = newOrder.reduce(
-            (acc, folder, index) => {
-              if (folder.folder_id !== undefined) {
-                acc[folder.folder_id] = index;
-              }
-              return acc;
-            },
-            {} as Record<number, number>
-          );
+          const displayPriorityMap = newOrder.reduce((acc, folder, index) => {
+            if (folder.folder_id !== undefined) {
+              acc[folder.folder_id] = index;
+            }
+            return acc;
+          }, {} as Record<number, number>);
 
           updateFolderDisplayPriorities(displayPriorityMap);
           reorderFolders(displayPriorityMap);

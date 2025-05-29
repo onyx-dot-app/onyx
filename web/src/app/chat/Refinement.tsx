@@ -104,14 +104,14 @@ export function RefinemenetBadge({
         ? StreamingPhase.COMPLETE
         : StreamingPhase.ANSWER
       : secondLevelSubquestions?.[0]
-        ? secondLevelSubquestions.every((q) => q.answer && q.answer.length > 0)
-          ? StreamingPhase.EVALUATE
-          : secondLevelSubquestions?.[0].context_docs
-            ? StreamingPhase.CONTEXT_DOCS
-            : secondLevelSubquestions?.[0].sub_queries
-              ? StreamingPhase.SUB_QUERIES
-              : StreamingPhase.WAITING
-        : StreamingPhase.WAITING;
+      ? secondLevelSubquestions.every((q) => q.answer && q.answer.length > 0)
+        ? StreamingPhase.EVALUATE
+        : secondLevelSubquestions?.[0].context_docs
+        ? StreamingPhase.CONTEXT_DOCS
+        : secondLevelSubquestions?.[0].sub_queries
+        ? StreamingPhase.SUB_QUERIES
+        : StreamingPhase.WAITING
+      : StreamingPhase.WAITING;
 
   // Get the array of displayed phases
   const displayedPhases = useOrderedPhases(currentState);

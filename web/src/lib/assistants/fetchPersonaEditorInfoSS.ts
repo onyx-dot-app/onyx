@@ -18,7 +18,7 @@ export async function fetchAssistantEditorInfoSS(
         existingPersona: FullPersona | null;
         tools: ToolSnapshot[];
       },
-      null,
+      null
     ]
   | [null, string]
 > {
@@ -50,7 +50,7 @@ export async function fetchAssistantEditorInfoSS(
     Response,
     User | null,
     ToolSnapshot[] | null,
-    Response | null,
+    Response | null
   ];
 
   if (!ccPairsInfoResponse.ok) {

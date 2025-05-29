@@ -84,8 +84,8 @@ export function ContextLimitPanel({
                       tokenPercentage > 100
                         ? "bg-red-500 dark:bg-red-600"
                         : tokenPercentage > 80
-                          ? "bg-amber-500 dark:bg-amber-600"
-                          : "bg-emerald-500 dark:bg-emerald-600"
+                        ? "bg-amber-500 dark:bg-amber-600"
+                        : "bg-emerald-500 dark:bg-emerald-600"
                     }`}
                     style={{ width: `${Math.min(tokenPercentage, 100)}%` }}
                   ></div>

@@ -78,8 +78,8 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
           {currentLlmName
             ? getDisplayNameForModel(currentLlmName)
             : userSettings
-              ? "System Default"
-              : "User Default"}
+            ? "System Default"
+            : "User Default"}
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="z-[99999]">

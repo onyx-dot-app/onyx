@@ -163,7 +163,7 @@ export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
 
 export interface ConnectorIndexingStatus<
   ConnectorConfigType,
-  ConnectorCredentialType,
+  ConnectorCredentialType
 > extends ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   // Inlcude data only necessary for indexing statuses in admin page
   last_success: string | null;
@@ -392,6 +392,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  DrupalWiki = "drupal_wiki",
 }
 
 export const validAutoSyncSources = [

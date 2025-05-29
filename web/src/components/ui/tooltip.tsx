@@ -62,10 +62,10 @@ const TooltipContent = React.forwardRef<
             tickSide === "top"
               ? "-top-1 left-1/2 -translate-x-1/2"
               : tickSide === "bottom"
-                ? "-bottom-1 left-1/2 -translate-x-1/2"
-                : tickSide === "left"
-                  ? "-left-1 top-1/2 -translate-y-1/2"
-                  : "-right-1 top-1/2 -translate-y-1/2"
+              ? "-bottom-1 left-1/2 -translate-x-1/2"
+              : tickSide === "left"
+              ? "-left-1 top-1/2 -translate-y-1/2"
+              : "-right-1 top-1/2 -translate-y-1/2"
           }`}
         />
       )}

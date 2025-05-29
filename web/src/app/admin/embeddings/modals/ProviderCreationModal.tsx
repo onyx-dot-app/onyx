@@ -57,8 +57,8 @@ export function ProviderCreationModal({
       isProxy || isAzure
         ? Yup.string()
         : useFileUpload
-          ? Yup.string()
-          : Yup.string().required("API Key is required"),
+        ? Yup.string()
+        : Yup.string().required("API Key is required"),
     model_name: isProxy
       ? Yup.string().required("Model name is required")
       : Yup.string().nullable(),

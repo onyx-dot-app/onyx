@@ -655,6 +655,79 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
     ],
     advanced_values: [],
   },
+  drupal_wiki: {
+    description: "Configure Drupal Wiki connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base URL of the Drupal Wiki instance:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+        description:
+          "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com)",
+      },
+      {
+        type: "tab",
+        name: "drupal_wiki_scope",
+        label: "What should we index from Drupal Wiki?",
+        optional: true,
+        tabs: [
+          {
+            value: "all_spaces",
+            label: "All Spaces",
+            fields: [
+              {
+                type: "string_tab",
+                label: "All Spaces",
+                name: "all_spaces_description",
+                description:
+                  "This connector will index all spaces the provided credentials have access to!",
+              },
+            ],
+          },
+          {
+            value: "specific_spaces",
+            label: "Specific Spaces and/or Pages",
+            fields: [
+              {
+                type: "list",
+                query: "Enter space IDs to include:",
+                label: "Space IDs",
+                name: "spaces",
+                description:
+                  "Specify one or more space IDs to index. You can include spaces even if you also specify page IDs below. Only numeric values are allowed.",
+                optional: true,
+                transform: (values) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+              {
+                type: "list",
+                query: "Enter page IDs to include:",
+                label: "Page IDs",
+                name: "pages",
+                description:
+                  "Specify one or more page IDs to index. You can include specific pages even if you also specify spaces above. Only numeric values are allowed.",
+                optional: true,
+                transform: (values) =>
+                  values.filter((value) => /^\d+$/.test(value.trim())),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "checkbox",
+        query: "Include attachments?",
+        label: "Include Attachments",
+        name: "include_attachments",
+        description:
+          "Enable processing of page attachments including images and documents",
+        default: false,
+      },
+    ],
+    advanced_values: [],
+  },
   axero: {
     description: "Configure Axero connector",
     values: [
@@ -1318,30 +1391,32 @@ export function createConnectorInitialValues(
     name: "",
     groups: [],
     access_type: "public",
-    ...configuration.values.reduce(
-      (acc, field) => {
-        if (field.type === "select") {
-          acc[field.name] = null;
-        } else if (field.type === "list") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "checkbox") {
-          // Special case for include_files_shared_with_me when using service account
-          if (
-            field.name === "include_files_shared_with_me" &&
-            currentCredential &&
-            !currentCredential.credential_json?.google_tokens
-          ) {
-            acc[field.name] = true;
-          } else {
-            acc[field.name] = field.default || false;
-          }
-        } else if (field.default !== undefined) {
-          acc[field.name] = field.default;
+    ...configuration.values.reduce((acc, field) => {
+      if (field.type === "select") {
+        acc[field.name] = null;
+      } else if (field.type === "list") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "checkbox") {
+        // Special case for include_files_shared_with_me when using service account
+        if (
+          field.name === "include_files_shared_with_me" &&
+          currentCredential &&
+          !currentCredential.credential_json?.google_tokens
+        ) {
+          acc[field.name] = true;
+        } else {
+          acc[field.name] = field.default || false;
         }
-        return acc;
-      },
-      {} as { [record: string]: any }
-    ),
+      } else if (field.type === "tab") {
+        // For tab fields, set the initial value to the first tab's value
+        acc[field.name] =
+          field.defaultTab ||
+          (field.tabs.length > 0 ? field.tabs[0]?.value : undefined);
+      } else if (field.default !== undefined) {
+        acc[field.name] = field.default;
+      }
+      return acc;
+    }, {} as { [record: string]: any }),
   };
 }
 
@@ -1359,12 +1434,12 @@ export function createConnectorValidationSchema(
           field.type === "select"
             ? Yup.string()
             : field.type === "list"
-              ? Yup.array().of(Yup.string())
-              : field.type === "checkbox"
-                ? Yup.boolean()
-                : field.type === "file"
-                  ? Yup.mixed()
-                  : Yup.string();
+            ? Yup.array().of(Yup.string())
+            : field.type === "checkbox"
+            ? Yup.boolean()
+            : field.type === "file"
+            ? Yup.mixed()
+            : Yup.string();
 
         if (!field.optional) {
           schema = schema.required(`${field.label} is required`);
@@ -1488,6 +1563,15 @@ export interface DiscourseConfig {
 
 export interface AxeroConfig {
   spaces?: string[];
+}
+
+export interface DrupalWikiConfig {
+  base_url: string;
+  spaces?: string[];
+  pages?: string[];
+  include_all_spaces?: boolean;
+  drupal_wiki_scope?: string;
+  include_attachments?: boolean;
 }
 
 export interface TeamsConfig {

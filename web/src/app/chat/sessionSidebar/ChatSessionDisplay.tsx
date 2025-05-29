@@ -275,8 +275,8 @@ export function ChatSessionDisplay({
                         isSelected
                           ? "to-background-chat-selected"
                           : isHovered
-                            ? "to-background-chat-hover"
-                            : "to-background-sidebar"
+                          ? "to-background-chat-hover"
+                          : "to-background-sidebar"
                       } `}
                     />
                   </p>

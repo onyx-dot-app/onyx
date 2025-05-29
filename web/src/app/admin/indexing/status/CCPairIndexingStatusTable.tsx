@@ -458,13 +458,10 @@ export function CCPairIndexingStatusTable({
     );
   };
   const toggleSources = () => {
-    const connectors = sortedSources.reduce(
-      (acc, source) => {
-        acc[source] = shouldExpand;
-        return acc;
-      },
-      {} as Record<ValidSources, boolean>
-    );
+    const connectors = sortedSources.reduce((acc, source) => {
+      acc[source] = shouldExpand;
+      return acc;
+    }, {} as Record<ValidSources, boolean>);
 
     setConnectorsToggled(connectors);
     Cookies.set(TOGGLED_CONNECTORS_COOKIE_NAME, JSON.stringify(connectors));

@@ -79,7 +79,7 @@ export const checkCredentialsFetched = (
 };
 
 export const filterUploadedCredentials = <
-  T extends { authentication_method?: string },
+  T extends { authentication_method?: string }
 >(
   credentials: Credential<T>[] | undefined
 ): { credential_id: number | null; uploadedCredentials: Credential<T>[] } => {

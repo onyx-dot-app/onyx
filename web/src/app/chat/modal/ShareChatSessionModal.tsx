@@ -168,8 +168,9 @@ export function ShareChatSessionModal({
                       // NOTE: for "insecure" non-https setup, the `navigator.clipboard.writeText` may fail
                       // as the browser may not allow the clipboard to be accessed.
                       try {
-                        const shareLink =
-                          await generateShareLink(chatSessionId);
+                        const shareLink = await generateShareLink(
+                          chatSessionId
+                        );
                         if (!shareLink) {
                           alert("Failed to generate share link");
                         } else {

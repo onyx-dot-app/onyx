@@ -86,8 +86,8 @@ export function AssistantTools({
                     hovered
                       ? "bg-background-300"
                       : list
-                        ? "bg-background-125"
-                        : "bg-background-100"
+                      ? "bg-background-125"
+                      : "bg-background-100"
                   }`}
                 >
                   <div className="flex gap-x-1">{tool.name}</div>

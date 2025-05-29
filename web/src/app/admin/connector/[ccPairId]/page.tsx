@@ -489,11 +489,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     ccPair.indexing
                       ? "Cannot re-index while indexing is already in progress"
                       : ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                        ? "Resume the connector before re-indexing"
-                        : ccPair.status ===
-                            ConnectorCredentialPairStatus.INVALID
-                          ? "Fix the connector configuration before re-indexing"
-                          : undefined
+                      ? "Resume the connector before re-indexing"
+                      : ccPair.status === ConnectorCredentialPairStatus.INVALID
+                      ? "Fix the connector configuration before re-indexing"
+                      : undefined
                   }
                 >
                   <RefreshCwIcon className="h-4 w-4" />

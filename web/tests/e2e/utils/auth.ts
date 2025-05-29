@@ -15,8 +15,8 @@ export async function loginAs(
     userType === "admin"
       ? TEST_ADMIN_CREDENTIALS
       : userType === "admin2"
-        ? TEST_ADMIN2_CREDENTIALS
-        : TEST_USER_CREDENTIALS;
+      ? TEST_ADMIN2_CREDENTIALS
+      : TEST_USER_CREDENTIALS;
 
   await page.goto("http://localhost:3000/auth/login");
 

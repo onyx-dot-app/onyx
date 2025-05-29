@@ -120,8 +120,8 @@ export const SlackChannelConfigCreationForm = ({
               ? "assistant"
               : "non_search_assistant"
             : existingSlackChannelConfig?.persona
-              ? "document_sets"
-              : "all_public",
+            ? "document_sets"
+            : "all_public",
           disabled:
             existingSlackChannelConfig?.channel_config?.disabled ?? false,
         }}

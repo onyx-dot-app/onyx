@@ -25,7 +25,7 @@ export function useDocumentSelection(): [
   OnyxDocument[],
   (document: OnyxDocument) => void,
   () => void,
-  number,
+  number
 ] {
   const [selectedFiles, setSelectedFiles] = useState<FileResponse[]>([]);
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(

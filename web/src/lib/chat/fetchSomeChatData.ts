@@ -129,7 +129,7 @@ export async function fetchSomeChatData(
       case "assistants":
         const [rawAssistantsList, assistantsFetchError] = result as [
           Persona[],
-          string | null,
+          string | null
         ];
         result.assistants = rawAssistantsList
           .filter((assistant) => assistant.is_visible)
