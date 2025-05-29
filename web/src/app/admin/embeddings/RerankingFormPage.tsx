@@ -22,7 +22,7 @@ import {
 } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 interface RerankingDetailsFormProps {
