@@ -62,7 +62,9 @@ def _clean_name(entity_name: str) -> str:
     )
 
 
-def _normalize_one_entity(entity: str) -> str | None:
+def _normalize_one_entity(
+    entity: str, allowed_docs_temp_view_name: str | None = None
+) -> str | None:
     """
     Matches a single entity to the best matching entity of the same type.
     """
