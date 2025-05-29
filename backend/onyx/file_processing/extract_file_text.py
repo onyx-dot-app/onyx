@@ -301,7 +301,7 @@ def read_pdf_file(
 
 
 def docx_to_text_and_images(
-    file: IO[Any],
+    file: IO[Any], file_name: str = ""
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx. If embed_images=True, also extract inline images.
@@ -310,7 +310,12 @@ def docx_to_text_and_images(
     paragraphs = []
     embedded_images: list[tuple[bytes, str]] = []
 
-    doc = docx.Document(file)
+    try:
+        doc = docx.Document(file)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'docx file'}: {e}"
+        logger.warning(error_str)
+        return "", []
 
     # Grab text from paragraphs
     for paragraph in doc.paragraphs:
