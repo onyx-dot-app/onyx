@@ -800,7 +800,12 @@ class SlackConnector(
                         yield failure
 
             num_threads_processed = len(seen_thread_ts) - num_threads_start
-            logger.info(f"Processed {num_threads_processed} threads.")
+            logger.info(
+                f"Message processing stats: "
+                f"batch_len={len(message_batch)} "
+                f"batch_yielded={num_threads_processed} "
+                f"total_threads_seen={len(seen_thread_ts)}"
+            )
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)
             checkpoint.channel_completion_map[channel["id"]] = new_latest
