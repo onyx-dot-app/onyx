@@ -1,4 +1,5 @@
 "use client";
+
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -8,7 +9,7 @@ import {
   useFormikContext,
 } from "formik";
 import * as Yup from "yup";
-import { FormBodyBuilder } from "./types";
+import { FormBodyBuilder } from "./admin/connectors/types";
 import { StringOrNumberOption } from "@/components/Dropdown";
 import {
   Select,
