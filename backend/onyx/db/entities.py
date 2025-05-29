@@ -107,7 +107,7 @@ def transfer_entity(
         KGEntity: The transferred entity
     """
     # Create the transferred entity
-    entity = KGEntity(
+    new_entity = KGEntity(
         id_name=f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}",
         name=entity.name,
         alternative_names=entity.alternative_names or [],
@@ -117,7 +117,7 @@ def transfer_entity(
         attributes=entity.attributes or {},
         event_time=entity.event_time,
     )
-    db_session.add(entity)
+    db_session.add(new_entity)
 
     # Update the document's kg_stage if document_id is provided
     if entity.document_id is not None:
@@ -128,7 +128,7 @@ def transfer_entity(
         )
     db_session.flush()
 
-    return entity
+    return new_entity
 
 
 def merge_entities(
@@ -169,7 +169,7 @@ def merge_entities(
         .values(
             document_id=document_id,
             alternative_names=list(alternative_names),
-            occurrences=parent.occurrences + (child.occurrences or 1),
+            occurrences=(parent.occurrences or 1) + (child.occurrences or 1),
         )
         .returning(KGEntity)
     )
@@ -180,6 +180,7 @@ def merge_entities(
 
     # Update the document's kg_stage if document_id is set
     if setting_doc:
+        assert child.document_id is not None  # for mypy
         dbdocument.update_document_kg_info(
             db_session,
             document_id=child.document_id,

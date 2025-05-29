@@ -118,7 +118,7 @@ def transfer_relationship(
     relationship_id_name = f"{source_node}__{relationship.type}__{target_node}"
 
     # Create the transferred relationship
-    relationship = KGRelationship(
+    new_relationship = KGRelationship(
         id_name=relationship_id_name,
         source_node=source_node,
         target_node=target_node,
@@ -129,7 +129,7 @@ def transfer_relationship(
         source_document=relationship.source_document,
         occurrences=relationship.occurrences or 1,
     )
-    db_session.add(relationship)
+    db_session.add(new_relationship)
 
     # Update the document's kg_stage if source_document is provided
     if relationship.source_document is not None:
@@ -140,7 +140,7 @@ def transfer_relationship(
         )
     db_session.flush()
 
-    return relationship
+    return new_relationship
 
 
 def add_relationship_type(
@@ -237,26 +237,6 @@ def get_all_relationship_types(
         return db_session.query(KGRelationshipTypeExtractionStaging).all()
     elif kg_stage == KGStage.NORMALIZED:
         return db_session.query(KGRelationshipType).all()
-    else:
-        raise ValueError(f"Invalid kg_stage: {kg_stage}")
-
-
-def get_all_relationships(
-    db_session: Session, kg_stage: KGStage
-) -> list["KGRelationship"] | list["KGRelationshipExtractionStaging"]:
-    """
-    Retrieve all relationships from the database.
-
-    Args:
-        db_session: SQLAlchemy database session
-
-    Returns:
-        List of KGRelationship objects
-    """
-    if kg_stage == KGStage.EXTRACTED:
-        return db_session.query(KGRelationshipExtractionStaging).all()
-    elif kg_stage == KGStage.NORMALIZED:
-        return db_session.query(KGRelationship).all()
     else:
         raise ValueError(f"Invalid kg_stage: {kg_stage}")
 

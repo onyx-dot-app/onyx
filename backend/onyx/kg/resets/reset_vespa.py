@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Document
@@ -27,7 +28,7 @@ def reset_vespa_kg_index(tenant_id: str, index_name: str) -> None:
     )
 
     # Prepare the update request to remove fields
-    reset_update_dict = {
+    reset_update_dict: dict[str, Any] = {
         "fields": {
             "kg_entities": {"assign": {}},
             "kg_relationships": {"assign": {}},

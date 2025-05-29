@@ -1,5 +1,4 @@
 from typing import cast
-from uuid import UUID
 
 from rapidfuzz.fuzz import ratio
 from sqlalchemy import text
@@ -14,11 +13,11 @@ from onyx.db.entities import merge_entities
 from onyx.db.entities import transfer_entity
 from onyx.db.models import Document
 from onyx.db.models import KGEntityType
+from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_relationship_types_by_id_names
 from onyx.db.relationships import delete_relationships_by_id_names
 from onyx.db.relationships import get_all_relationship_types
-from onyx.db.relationships import get_all_relationships
 from onyx.db.relationships import transfer_relationship
 from onyx.document_index.vespa.kg_interactions import (
     update_kg_chunks_vespa_info_for_entity,
@@ -93,21 +92,21 @@ def _cluster_one_grounded_entity(
             update_vespa = (
                 best_entity.document_id is None and entity.document_id is not None
             )
-            entity = merge_entities(
+            transferred_entity = merge_entities(
                 db_session=db_session, parent=best_entity, child=entity
             )
         else:
             update_vespa = entity.document_id is not None
-            entity = transfer_entity(db_session=db_session, entity=entity)
+            transferred_entity = transfer_entity(db_session=db_session, entity=entity)
         db_session.commit()
 
     # update vespa
     if update_vespa:
         update_kg_chunks_vespa_info_for_entity(
-            entity=entity, index_name=index_name, tenant_id=tenant_id
+            entity=transferred_entity, index_name=index_name, tenant_id=tenant_id
         )
 
-    return entity
+    return transferred_entity
 
 
 def kg_clustering(
@@ -134,7 +133,7 @@ def kg_clustering(
             db_session, kg_stage=KGStage.EXTRACTED
         )
 
-        relationships = get_all_relationships(db_session, kg_stage=KGStage.EXTRACTED)
+        relationships = db_session.query(KGRelationshipExtractionStaging).all()
         grounded_entities = (
             db_session.query(KGEntityExtractionStaging)
             .join(
@@ -152,7 +151,7 @@ def kg_clustering(
     # This will be reimplemented when deep extraction is enabled.
 
     transferred_entities: list[str] = []
-    entity_translations: dict[str, UUID] = {}
+    entity_translations: dict[str, str] = {}
 
     for entity in grounded_entities:
         added_entity = _cluster_one_grounded_entity(entity, tenant_id, index_name)
