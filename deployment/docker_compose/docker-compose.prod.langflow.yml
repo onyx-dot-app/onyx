@@ -286,7 +286,7 @@ services:
     container_name: Langflow
     user: root
     ports:
-      - 8080:7860
+      - 8082:7860
     healthcheck:
       test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/7860' || exit 1
       interval: 10s
