@@ -88,10 +88,7 @@ class BasicExpertInfo(BaseModel):
         return "Unknown"
 
     def get_email(self) -> str | None:
-        if self.email:
-            return self.email
-
-        return None
+        return self.email or None
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BasicExpertInfo):
