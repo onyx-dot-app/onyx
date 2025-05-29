@@ -50,10 +50,6 @@ class OnyxSlackWebClient(WebClient):
             timeout=ONYX_SLACK_LOCK_TTL,
         )
 
-        # logger.info(
-        #     f"OnyxSlackWebClient._perform_urllib_http_request: Acquiring lock"
-        # )
-
         # try to acquire the lock
         start = time.monotonic()
         while True:

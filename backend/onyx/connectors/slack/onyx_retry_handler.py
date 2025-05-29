@@ -17,6 +17,9 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
     """
     This class uses Redis to share a rate limit among multiple threads.
 
+    As currently implemented, this code is already surrounded by a lock in Redis
+    via an override of _perform_urllib_http_request in OnyxSlackWebClient.
+
     This just sets the desired retry delay with TTL in redis. In conjunction with
     a custom subclass of the client, the value is read and obeyed prior to an API call
     and also serialized.
