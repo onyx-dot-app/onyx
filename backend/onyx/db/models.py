@@ -842,6 +842,18 @@ class KGEntity(Base):
         nullable=True,
     )
 
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
+
+    document_id: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
     alternative_names: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
     )
@@ -856,10 +868,6 @@ class KGEntity(Base):
 
     # Relationship to KGEntityType
     entity_type: Mapped["KGEntityType"] = relationship("KGEntityType", backref="entity")
-
-    document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
 
     description: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -876,14 +884,6 @@ class KGEntity(Base):
 
     # Boosts - using JSON for flexibility
     boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
-
-    attributes: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Attributes for this entity",
-    )
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -922,12 +922,20 @@ class KGEntityExtractionStaging(Base):
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
 
-    alternative_names: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), nullable=False, default=list
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
     )
 
     document_id: Mapped[str | None] = mapped_column(
         NullFilteredString, nullable=True, index=True
+    )
+
+    alternative_names: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
     )
 
     # Reference to KGEntityType
@@ -958,14 +966,6 @@ class KGEntityExtractionStaging(Base):
 
     # Boosts - using JSON for flexibility
     boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
-
-    attributes: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Attributes for this entity",
-    )
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),

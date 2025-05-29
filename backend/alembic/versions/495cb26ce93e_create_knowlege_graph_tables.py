@@ -211,6 +211,7 @@ def upgrade() -> None:
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
         sa.Column("name_trigrams", postgresql.ARRAY(sa.String(3)), nullable=True),
+        sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column(
             "alternative_names",
             postgresql.ARRAY(sa.String()),
@@ -218,7 +219,6 @@ def upgrade() -> None:
             server_default="{}",
         ),
         sa.Column("entity_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column("description", sa.String(), nullable=True),
         sa.Column(
             "keywords",
@@ -255,6 +255,7 @@ def upgrade() -> None:
         "kg_entity_extraction_staging",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
+        sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column(
             "alternative_names",
             postgresql.ARRAY(sa.String()),
@@ -262,7 +263,6 @@ def upgrade() -> None:
             server_default="{}",
         ),
         sa.Column("entity_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column("description", sa.String(), nullable=True),
         sa.Column(
             "keywords",
