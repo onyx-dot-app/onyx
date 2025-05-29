@@ -686,6 +686,8 @@ class SlackConnector(
             Step 2.4: If there are no more messages in the channel, switch the current
                       channel to the next channel.
         """
+        num_channels_remaining = 0
+
         if self.client is None or self.text_cleaner is None:
             raise ConnectorMissingCredentialError("Slack")
 
@@ -699,7 +701,9 @@ class SlackConnector(
                 raw_channels, self.channels, self.channel_regex_enabled
             )
             logger.info(
-                f"Channels: all={len(raw_channels)} post_filtering={len(filtered_channels)}"
+                f"Channels - initial checkpoint: "
+                f"all={len(raw_channels)} "
+                f"post_filtering={len(filtered_channels)}"
             )
 
             checkpoint.channel_ids = [c["id"] for c in filtered_channels]
@@ -712,6 +716,17 @@ class SlackConnector(
             return checkpoint
 
         final_channel_ids = checkpoint.channel_ids
+        for channel_id in final_channel_ids:
+            if channel_id not in checkpoint.channel_completion_map:
+                num_channels_remaining += 1
+
+        logger.info(
+            f"Channels - current status: "
+            f"processed={len(final_channel_ids) - num_channels_remaining} "
+            f"remaining={num_channels_remaining=} "
+            f"total={len(final_channel_ids)}"
+        )
+
         channel = checkpoint.current_channel
         if channel is None:
             raise ValueError("current_channel key not set in checkpoint")
@@ -723,13 +738,24 @@ class SlackConnector(
         oldest = str(start) if start else None
         latest = checkpoint.channel_completion_map.get(channel_id, str(end))
         seen_thread_ts = set(checkpoint.seen_thread_ts)
+
+        logger.debug(
+            f"Getting messages for channel {channel} within range {oldest} - {latest}"
+        )
+
         try:
-            logger.debug(
-                f"Getting messages for channel {channel} within range {oldest} - {latest}"
-            )
             message_batch, has_more_in_channel = _get_messages(
                 channel, self.client, oldest, latest
             )
+
+            logger.info(
+                f"Retrieved messages: "
+                f"{len(message_batch)=} "
+                f"{channel=} "
+                f"{oldest=} "
+                f"{latest=}"
+            )
+
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
             num_threads_start = len(seen_thread_ts)
@@ -789,6 +815,7 @@ class SlackConnector(
                     ),
                     None,
                 )
+
                 if new_channel_id:
                     new_channel = _get_channel_by_id(self.client, new_channel_id)
                     checkpoint.current_channel = new_channel
@@ -796,8 +823,6 @@ class SlackConnector(
                     checkpoint.current_channel = None
 
             checkpoint.has_more = checkpoint.current_channel is not None
-            return checkpoint
-
         except Exception as e:
             logger.exception(f"Error processing channel {channel['name']}")
             yield ConnectorFailure(
@@ -811,7 +836,8 @@ class SlackConnector(
                 failure_message=str(e),
                 exception=e,
             )
-            return checkpoint
+
+        return checkpoint
 
     def validate_connector_settings(self) -> None:
         """

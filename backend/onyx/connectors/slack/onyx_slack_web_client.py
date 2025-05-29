@@ -1,3 +1,4 @@
+import threading
 import time
 from typing import Any
 from typing import cast
@@ -34,6 +35,8 @@ class OnyxSlackWebClient(WebClient):
         self._delay_key = delay_key
         self._delay_lock = delay_lock
         self._redis: Redis = r
+        self.num_requests: int = 0
+        self._lock = threading.Lock()
 
     def _perform_urllib_http_request(
         self, *, url: str, args: Dict[str, Dict[str, Any]]
@@ -95,19 +98,23 @@ class OnyxSlackWebClient(WebClient):
         urllib/urlopen ... so this is a good place to perform our delay."""
 
         # read and execute the delay
-        ttl_ms = cast(int, self._redis.pttl(self._delay_key))
-        if ttl_ms < 0:  # negative values are error status codes ... see docs
-            ttl_ms = 0
+        delay_ms = cast(int, self._redis.pttl(self._delay_key))
+        if delay_ms < 0:  # negative values are error status codes ... see docs
+            delay_ms = 0
 
-        if ttl_ms > 0:
+        if delay_ms > 0:
             logger.warning(
                 f"OnyxSlackWebClient._perform_urllib_http_request_internal delay: "
-                f"{ttl_ms=}"
+                f"{delay_ms=} "
+                f"{self.num_requests=}"
             )
 
-            time.sleep(ttl_ms / 1000.0)
+            time.sleep(delay_ms / 1000.0)
 
         result = super()._perform_urllib_http_request_internal(url, req)
+
+        with self._lock:
+            self.num_requests += 1
 
         # the delay key should have naturally expired by this point
         return result
