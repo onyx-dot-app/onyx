@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
 
 import { FaNewspaper, FaTrash } from "react-icons/fa";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {

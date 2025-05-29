@@ -14,11 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
 
-import {
-  BooleanFormField,
-  Label,
-  TextFormField,
-} from "@/components/admin/connectors/Field";
+import { BooleanFormField, Label, TextFormField } from "@/components/Field";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getDisplayNameForModel, useLabels } from "@/lib/hooks";

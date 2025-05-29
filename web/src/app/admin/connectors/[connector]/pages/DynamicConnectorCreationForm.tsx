@@ -1,7 +1,7 @@
 import React, { FC, useEffect, useState } from "react";
 import CredentialSubText from "@/components/credentials/CredentialFields";
 import { ConnectionConfiguration } from "@/lib/connectors/connectors";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
 import { AccessTypeGroupSelector } from "@/components/admin/connectors/AccessTypeGroupSelector";

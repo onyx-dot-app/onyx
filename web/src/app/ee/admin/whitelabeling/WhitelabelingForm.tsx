@@ -11,7 +11,7 @@ import {
   Label,
   SubLabel,
   TextFormField,
-} from "@/components/admin/connectors/Field";
+} from "@/components/Field";
 import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
 import { ImageUpload } from "./ImageUpload";

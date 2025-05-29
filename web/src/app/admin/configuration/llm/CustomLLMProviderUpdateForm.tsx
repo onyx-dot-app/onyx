@@ -13,11 +13,7 @@ import {
 } from "formik";
 import { FiPlus, FiTrash, FiX } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
-import {
-  Label,
-  SubLabel,
-  TextFormField,
-} from "@/components/admin/connectors/Field";
+import { Label, SubLabel, TextFormField } from "@/components/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { LLMProviderView } from "./interfaces";

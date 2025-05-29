@@ -1,6 +1,6 @@
 "use client";
 
-import { Label, SubLabel } from "@/components/admin/connectors/Field";
+import { Label, SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { Button } from "@/components/ui/button";

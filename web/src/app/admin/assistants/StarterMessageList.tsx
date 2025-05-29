@@ -12,7 +12,7 @@ import { FiTrash2, FiRefreshCw } from "react-icons/fi";
 import { StarterMessage } from "./interfaces";
 import { Button } from "@/components/ui/button";
 import { SwapIcon } from "@/components/icons/icons";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 
 export default function StarterMessagesList({
   values,
