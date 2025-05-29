@@ -19,27 +19,78 @@ pipeline {
           buildingTag()
         }
       }
-      steps{
-        node(label: 'docker-big-jobs') {
-          script {
-            checkout scm
-            if (env.BRANCH_NAME == 'master') {
-              tagName = 'latest'
-            } else {
-              tagName = "$BRANCH_NAME"
-            }
-            try {
-              dockerImage = docker.build("$registry:web-$tagName", "--no-cache web")
-              docker.withRegistry( '', 'eeajenkins' ) {
-                dockerImage.push()
+      steps {
+        parallel(
+
+          "WEB": {
+            node(label: 'docker-big-jobs') {
+            script {
+              checkout scm
+              if (env.BRANCH_NAME == 'eea') {
+                tagName = 'web'
+              } else {
+                tagName = "web-$BRANCH_NAME"
               }
-            } finally {
-              sh "docker rmi $registry:web-$tagName"
+              try {
+                cd web
+                dockerImage = docker.build("$registry:$tagName", "--no-cache web")
+                docker.withRegistry( '', 'eeajenkins' ) {
+                dockerImage.push()
+                  }
+              } finally {
+                sh "docker rmi $registry:$tagName"
+              }
             }
           }
-        }
+          },
+
+          "BACKEND": {
+            node(label: 'docker-big-jobs') {
+            script {
+              checkout scm
+              if (env.BRANCH_NAME == 'eea') {
+                tagName = 'backend'
+              } else {
+                tagName = "backend-$BRANCH_NAME"
+              }
+              try {
+                cd backend
+                dockerImage = docker.build("$registry:$tagName", "--no-cache web")
+                docker.withRegistry( '', 'eeajenkins' ) {
+                dockerImage.push()
+                  }
+              } finally {
+                sh "docker rmi $registry:$tagName"
+              }
+            }
+          }
+          },
+          
+          "MODEL_SERVER": {
+            node(label: 'docker-big-jobs') {
+            script {
+              checkout scm
+              if (env.BRANCH_NAME == 'eea') {
+                tagName = 'model_server'
+              } else {
+                tagName = "model_server-$BRANCH_NAME"
+              }
+              try {
+                cd web
+                dockerImage = docker.build("$registry:$tagName", "-f Dockerfile.model_server --no-cache web")
+                docker.withRegistry( '', 'eeajenkins' ) {
+                dockerImage.push()
+                  }
+              } finally {
+                sh "docker rmi $registry:$tagName"
+              }
+            }
+          }
+          },
+        )
       }
     }
+
 
     stage('Release catalog ( on tag )') {
       when {
@@ -48,7 +99,7 @@ pipeline {
       steps{
         node(label: 'docker') {
           withCredentials([string(credentialsId: 'eea-jenkins-token', variable: 'GITHUB_TOKEN'),  usernamePassword(credentialsId: 'jekinsdockerhub', usernameVariable: 'DOCKERHUB_USER', passwordVariable: 'DOCKERHUB_PASS')]) {
-            sh '''docker pull eeacms/gitflow; docker run -i --rm --name="$BUILD_TAG-release"  -e GIT_BRANCH="$BRANCH_NAME" -e GIT_NAME="$GIT_NAME" -e DOCKERHUB_REPO="$registry" -e GIT_TOKEN="$GITHUB_TOKEN" -e DOCKERHUB_USER="$DOCKERHUB_USER" -e DOCKERHUB_PASS="$DOCKERHUB_PASS"  -e DEPENDENT_DOCKERFILE_URL="$DEPENDENT_DOCKERFILE_URL" -e RANCHER_CATALOG_PATHS="$template" -e GITFLOW_BEHAVIOR="RUN_ON_TAG" eeacms/gitflow'''
+            sh '''docker pull eeacms/gitflow; docker run -i --rm --name="$BUILD_TAG-release"  -e GIT_BRANCH="$BRANCH_NAME" -e GIT_NAME="$GIT_NAME" -e DOCKERHUB_REPO="$registry" -e GIT_TOKEN="$GITHUB_TOKEN" -e DOCKERHUB_USER="$DOCKERHUB_USER" -e DOCKERHUB_PASS="$DOCKERHUB_PASS"  -e DEPENDENT_DOCKERFILE_URL="$DEPENDENT_DOCKERFILE_URL" -e RANCHER_CATALOG_PATHS="$template" -e DOCKERHUB_REPO_PREFIX="web\-\|backend\-\|model_server\-" -e GITFLOW_BEHAVIOR="RUN_ON_TAG" eeacms/gitflow'''
          }
         }
       }
