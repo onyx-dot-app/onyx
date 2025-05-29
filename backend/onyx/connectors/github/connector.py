@@ -226,7 +226,7 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             TextSection(link=pull_request.html_url, text=pull_request.body or "")
         ],
         source=DocumentSource.GITHUB,
-        semantic_identifier=pull_request.title,
+        semantic_identifier=f"{pull_request.number}: {pull_request.title}",
         # updated_at is UTC time but is timezone unaware, explicitly add UTC
         # as there is logic in indexing to prevent wrong timestamped docs
         # due to local time discrepancies with UTC
@@ -240,9 +240,20 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             for k, v in {
                 "merged": pull_request.merged,
                 "state": pull_request.state,
-                "assignee": (
-                    pull_request.assignee.login if pull_request.assignee else None
+                "user": (
+                    pull_request.user.email or pull_request.user.login
+                    if pull_request.user
+                    else None
                 ),
+                "assignees": [
+                    assignee.email or assignee.login
+                    for assignee in pull_request.assignees
+                ],
+                "repo": (
+                    pull_request.base.repo.full_name if pull_request.base else None
+                ),
+                "num_commits": pull_request.commits,
+                "labels": [label.name for label in pull_request.labels],
                 "created_at": (
                     pull_request.created_at.replace(tzinfo=timezone.utc)
                     if pull_request.created_at
@@ -253,15 +264,22 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
                     if pull_request.updated_at
                     else None
                 ),
+                "closed_at": (
+                    pull_request.closed_at.replace(tzinfo=timezone.utc)
+                    if pull_request.closed_at
+                    else None
+                ),
                 "merged_at": (
                     pull_request.merged_at.replace(tzinfo=timezone.utc)
                     if pull_request.merged_at
                     else None
                 ),
                 "merged_by": (
-                    pull_request.merged_by.login if pull_request.merged_by else None
+                    pull_request.merged_by.email or pull_request.merged_by.login
+                    if pull_request.merged_by
+                    else None
                 ),
-                "url": pull_request.url,
+                "url": pull_request.html_url,
             }.items()
             if v is not None
         },
@@ -278,14 +296,19 @@ def _convert_issue_to_document(issue: Issue) -> Document:
         id=issue.html_url,
         sections=[TextSection(link=issue.html_url, text=issue.body or "")],
         source=DocumentSource.GITHUB,
-        semantic_identifier=issue.title,
+        semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
         metadata={
             k: str(v)
             for k, v in {
                 "state": issue.state,
-                "assignee": issue.assignee.login if issue.assignee else None,
+                "user": (issue.user.email or issue.user.login if issue.user else None),
+                "assignees": [
+                    assignee.email or assignee.login for assignee in issue.assignees
+                ],
+                "repo": issue.repository.full_name if issue.repository else None,
+                "labels": [label.name for label in issue.labels],
                 "created_at": (
                     issue.created_at.replace(tzinfo=timezone.utc)
                     if issue.created_at
@@ -301,11 +324,12 @@ def _convert_issue_to_document(issue: Issue) -> Document:
                     if issue.closed_at
                     else None
                 ),
-                "closed_by": issue.closed_by.login if issue.closed_by else None,
-                "labels": (
-                    [label.name for label in issue.labels] if issue.labels else []
+                "closed_by": (
+                    issue.closed_by.email or issue.closed_by.login
+                    if issue.closed_by
+                    else None
                 ),
-                "url": issue.url,
+                "url": issue.html_url,
             }.items()
             if v is not None
         },
