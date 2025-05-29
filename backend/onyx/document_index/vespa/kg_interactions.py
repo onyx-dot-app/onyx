@@ -161,15 +161,20 @@ def update_kg_chunks_vespa_info_for_relationship(
         f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node_type}::*",
     }
 
-    for entity_id_name in [relationship.source_node, relationship.target_node]:
-        with get_session_with_current_tenant() as db_session:
-            source_document_id: str | None = (
-                db_session.query(KGEntity.document_id)
-                .filter(KGEntity.id_name == entity_id_name)
-                .scalar()
+    with get_session_with_current_tenant() as db_session:
+        entity_documents = (
+            db_session.query(KGEntity.id_name, KGEntity.document_id)
+            .filter(
+                KGEntity.id_name.in_(
+                    [relationship.source_node, relationship.target_node]
+                )
             )
-            if source_document_id is None:
-                continue
+            .all()
+        )
+
+    for entity_id_name, source_document_id in entity_documents:
+        if source_document_id is None:
+            continue
 
         # get chunks in the entity document
         chunks = _get_chunks_via_visit_api(

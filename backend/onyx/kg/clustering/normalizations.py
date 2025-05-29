@@ -54,6 +54,7 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
 def _clean_name(entity_name: str) -> str:
     """
     Clean an entity string by removing non-alphanumeric characters and email addresses.
+    If the name after cleaning is empty, return the original name in lowercase.
     """
     cleaned_entity = entity_name.casefold()
     return (

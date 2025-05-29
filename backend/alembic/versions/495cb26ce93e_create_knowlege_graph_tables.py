@@ -488,14 +488,14 @@ def upgrade() -> None:
             CREATE OR REPLACE FUNCTION {function}()
             RETURNS TRIGGER AS $$
             DECLARE
-                name text;
+                doc_name text;
                 cleaned_name text;
             BEGIN
-                name = lower(NEW.semantic_id);
+                doc_name = lower(NEW.semantic_id);
 
                 -- Clean name and truncate if too long
                 cleaned_name = regexp_replace(
-                    name,
+                    doc_name,
                     '{alphanum_pattern}', '', 'g'
                 );
                 IF length(cleaned_name) > {truncate_length} THEN
@@ -505,7 +505,7 @@ def upgrade() -> None:
                 -- Set name and name trigrams for all entities referencing this document
                 UPDATE kg_entity
                 SET
-                    name = name,
+                    name = doc_name,
                     name_trigrams = show_trgm(cleaned_name)
                 WHERE document_id = NEW.id;
                 RETURN NEW;
@@ -532,6 +532,21 @@ def downgrade() -> None:
     if not MULTI_TENANT:
         # Drop temporary views
         conn = op.get_bind()
+        kg_temp_views = [
+            row[0]
+            for row in conn.execute(
+                text(
+                    """
+                SELECT table_name
+                FROM INFORMATION_SCHEMA.views
+                WHERE table_name like 'kg_relationships%';
+                """
+                )
+            ).fetchall()
+        ]
+        for view in kg_temp_views:
+            op.execute(f"DROP VIEW IF EXISTS {view}")
+
         kg_temp_views = [
             row[0]
             for row in conn.execute(
