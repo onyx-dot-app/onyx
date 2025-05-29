@@ -62,6 +62,10 @@ GOOGLE_MIME_TYPES = {
 }
 
 
+def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
+    return file[WEB_VIEW_LINK_KEY]
+
+
 def _summarize_drive_image(
     image_data: bytes, image_name: str, image_analysis_llm: LLM | None
 ) -> str:
