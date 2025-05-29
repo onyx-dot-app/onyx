@@ -379,6 +379,9 @@ def _message_to_doc(
     filtered_thread: ThreadType | None = None
     thread_ts = message.get("thread_ts")
     if thread_ts:
+        # NOTE: if thread_ts is present, there's a thread we need to process
+        # ... otherwise, we can skip it
+
         # skip threads we've already seen, since we've already processed all
         # messages in that thread
         if thread_ts in seen_thread_ts:
