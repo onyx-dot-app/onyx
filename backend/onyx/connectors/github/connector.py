@@ -14,6 +14,7 @@ from github import RateLimitExceededException
 from github import Repository
 from github.GithubException import GithubException
 from github.Issue import Issue
+from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
 from github.Requester import Requester
@@ -219,6 +220,18 @@ def _get_batch_rate_limited(
         )
 
 
+def _get_userinfo(user: NamedUser) -> dict[str, str]:
+    return {
+        k: v
+        for k, v in {
+            "login": user.login,
+            "name": user.name,
+            "email": user.email,
+        }.items()
+        if v is not None
+    }
+
+
 def _convert_pr_to_document(pull_request: PullRequest) -> Document:
     return Document(
         id=pull_request.html_url,
@@ -236,50 +249,46 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             else None
         ),
         metadata={
-            k: str(v)
+            k: v
             for k, v in {
-                "merged": pull_request.merged,
+                "merged": str(pull_request.merged),
                 "state": pull_request.state,
                 "user": (
-                    pull_request.user.email or pull_request.user.login
-                    if pull_request.user
-                    else None
+                    str(_get_userinfo(pull_request.user)) if pull_request.user else None
                 ),
                 "assignees": [
-                    assignee.email or assignee.login
-                    for assignee in pull_request.assignees
+                    str(_get_userinfo(assignee)) for assignee in pull_request.assignees
                 ],
                 "repo": (
                     pull_request.base.repo.full_name if pull_request.base else None
                 ),
-                "num_commits": pull_request.commits,
+                "num_commits": str(pull_request.commits),
                 "labels": [label.name for label in pull_request.labels],
                 "created_at": (
-                    pull_request.created_at.replace(tzinfo=timezone.utc)
+                    str(pull_request.created_at.replace(tzinfo=timezone.utc))
                     if pull_request.created_at
                     else None
                 ),
                 "updated_at": (
-                    pull_request.updated_at.replace(tzinfo=timezone.utc)
+                    str(pull_request.updated_at.replace(tzinfo=timezone.utc))
                     if pull_request.updated_at
                     else None
                 ),
                 "closed_at": (
-                    pull_request.closed_at.replace(tzinfo=timezone.utc)
+                    str(pull_request.closed_at.replace(tzinfo=timezone.utc))
                     if pull_request.closed_at
                     else None
                 ),
                 "merged_at": (
-                    pull_request.merged_at.replace(tzinfo=timezone.utc)
+                    str(pull_request.merged_at.replace(tzinfo=timezone.utc))
                     if pull_request.merged_at
                     else None
                 ),
                 "merged_by": (
-                    pull_request.merged_by.email or pull_request.merged_by.login
+                    str(_get_userinfo(pull_request.merged_by))
                     if pull_request.merged_by
                     else None
                 ),
-                "url": pull_request.html_url,
             }.items()
             if v is not None
         },
@@ -303,9 +312,9 @@ def _convert_issue_to_document(issue: Issue) -> Document:
             k: str(v)
             for k, v in {
                 "state": issue.state,
-                "user": (issue.user.email or issue.user.login if issue.user else None),
+                "user": str(_get_userinfo(issue.user)) if issue.user else None,
                 "assignees": [
-                    assignee.email or assignee.login for assignee in issue.assignees
+                    str(_get_userinfo(assignee)) for assignee in issue.assignees
                 ],
                 "repo": issue.repository.full_name if issue.repository else None,
                 "labels": [label.name for label in issue.labels],
@@ -325,11 +334,8 @@ def _convert_issue_to_document(issue: Issue) -> Document:
                     else None
                 ),
                 "closed_by": (
-                    issue.closed_by.email or issue.closed_by.login
-                    if issue.closed_by
-                    else None
+                    str(_get_userinfo(issue.closed_by)) if issue.closed_by else None
                 ),
-                "url": issue.html_url,
             }.items()
             if v is not None
         },
