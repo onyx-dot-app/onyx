@@ -158,6 +158,7 @@ def kg_clustering(
         added_entity = _cluster_one_grounded_entity(entity, tenant_id, index_name)
         transferred_entities.append(entity.id_name)
         entity_translations[entity.id_name] = added_entity.id_name
+    logger.info(f"Transferred {len(transferred_entities)} entities")
 
     ## Database operations
 
@@ -174,6 +175,7 @@ def kg_clustering(
             )
             db_session.commit()
             transferred_relationship_types.append(added_relationship_type_id_name)
+    logger.info(f"Transferred {len(transferred_relationship_types)} relationship types")
 
     transferred_relationships: list[str] = []
     for relationship in relationships:
@@ -192,12 +194,9 @@ def kg_clustering(
                 index_name=index_name,
                 tenant_id=tenant_id,
             )
+    logger.info(f"Transferred {len(transferred_relationships)} relationships")
 
     # delete the added objects from the staging tables
-    logger.info(f"Transferred {len(transferred_entities)} entities")
-    logger.info(f"Transferred {len(transferred_relationships)} relationships")
-    logger.info(f"Transferred {len(transferred_relationship_types)} relationship types")
-
     try:
         with get_session_with_current_tenant() as db_session:
             delete_relationships_by_id_names(

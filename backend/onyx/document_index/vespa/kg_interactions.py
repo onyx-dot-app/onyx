@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from retry import retry
+from sqlalchemy import or_
 
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import KGEntity
@@ -95,6 +96,30 @@ def update_kg_chunks_vespa_info_for_entity(
     # Add entity, and the generalized entity
     kg_entities = {entity.id_name, f"{entity.entity_type_id_name}::*"}
 
+    # Add relationship and the generalized relationships in case
+    # an entity referenced already by a relationship gains a document_id
+    kg_relationships: set[str] = set()
+    with get_session_with_current_tenant() as db_session:
+        relationships = (
+            db_session.query(KGRelationship)
+            .filter(
+                or_(
+                    KGRelationship.source_node == entity.id_name,
+                    KGRelationship.target_node == entity.id_name,
+                )
+            )
+            .all()
+        )
+        for relationship in relationships:
+            kg_relationships.update(
+                {
+                    relationship.id_name,
+                    f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node}",
+                    f"{relationship.source_node}__{relationship.type}__{relationship.target_node_type}::*",
+                    f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node_type}::*",
+                }
+            )
+
     # get chunks in the entity document
     chunks = _get_chunks_via_visit_api(
         chunk_request=VespaChunkRequest(document_id=entity.document_id),
@@ -111,6 +136,7 @@ def update_kg_chunks_vespa_info_for_entity(
             chunk_id=chunk["fields"]["chunk_id"],
             core_entity=entity.id_name,
             entities=kg_entities,
+            relationships=kg_relationships or None,
         )
         for chunk in chunks
     ]
