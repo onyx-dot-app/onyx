@@ -12,6 +12,12 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         grounded_source_name="linear",
     )
 
+    GITHUB_PR: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+        description="The Engineering PRs of Onyx describing what was actually implemented.",
+        grounding=KGGroundingType.GROUNDED,
+        grounded_source_name="github",
+    )
+
     FIREFLIES: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
         description="A phone call transcript between us (---vendor_name---) \
 and another account or individuals, or an internal meeting.",
@@ -24,18 +30,6 @@ and another account or individuals, or an internal meeting.",
 and another account or individuals, or an internal meeting.",
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name="gong",
-    )
-
-    SLACK: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
-        description="A Slack conversation.",
-        grounding=KGGroundingType.GROUNDED,
-        grounded_source_name="slack",
-    )
-
-    WEB: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
-        description="A web page.",
-        grounding=KGGroundingType.GROUNDED,
-        grounded_source_name="web",
     )
 
     GOOGLE_DRIVE: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
@@ -54,6 +48,28 @@ and another account or individuals, or an internal meeting.",
         description="A formal JIRA ticket about a product issue or improvement request.",
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name="jira",
+    )
+
+    ACCOUNT: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+        description="A company that was, is, or potentially could be a customer of the vendor \
+('us, ---vendor_name---'). Note that ---vendor_name--- can never be an ACCOUNT.",
+        attributes={
+            "metadata_attributes": {},
+            "entity_filter_attributes": {"object_type": "Account"},
+            "classification_attributes": {},
+        },
+        grounding=KGGroundingType.GROUNDED,
+        grounded_source_name="salesforce",
+    )
+    OPPORTUNITY: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+        description="A sales opportunity.",
+        attributes={
+            "metadata_attributes": {},
+            "entity_filter_attributes": {"object_type": "Opportunity"},
+            "classification_attributes": {},
+        },
+        grounding=KGGroundingType.GROUNDED,
+        grounded_source_name="salesforce",
     )
 
 
