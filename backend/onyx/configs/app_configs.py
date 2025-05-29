@@ -638,6 +638,11 @@ except json.JSONDecodeError:
 # LLM Model Update API endpoint
 LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 
+# Kroki service URL for diagram rendering
+# If KROKI_URL is not set, it defaults to None, and KROKI_ENABLED will be False.
+KROKI_URL = os.environ.get("KROKI_URL")
+KROKI_ENABLED = KROKI_URL is not None  # True if KROKI_URL is set, False otherwise
+
 #####
 # Enterprise Edition Configs
 #####
