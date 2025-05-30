@@ -33,11 +33,12 @@ pipeline {
                 tagName = "web-$BRANCH_NAME"
               }
               try {
-                cd web
-                dockerImage = docker.build("$registry:$tagName", "--no-cache web")
-                docker.withRegistry( '', 'eeajenkins' ) {
-                dockerImage.push()
-                  }
+                dir('web') {
+                  dockerImage = docker.build("$registry:$tagName", "--no-cache web")
+                  docker.withRegistry( '', 'eeajenkins' ) {
+                  dockerImage.push()
+                  }    
+                }
               } finally {
                 sh "docker rmi $registry:$tagName"
               }
@@ -55,11 +56,12 @@ pipeline {
                 tagName = "backend-$BRANCH_NAME"
               }
               try {
-                cd backend
-                dockerImage = docker.build("$registry:$tagName", "--no-cache web")
-                docker.withRegistry( '', 'eeajenkins' ) {
-                dockerImage.push()
+                dir('backend') {
+                  dockerImage = docker.build("$registry:$tagName", "--no-cache web")
+                  docker.withRegistry( '', 'eeajenkins' ) {
+                  dockerImage.push()
                   }
+                }
               } finally {
                 sh "docker rmi $registry:$tagName"
               }
@@ -77,11 +79,12 @@ pipeline {
                 tagName = "model_server-$BRANCH_NAME"
               }
               try {
-                cd web
-                dockerImage = docker.build("$registry:$tagName", "-f Dockerfile.model_server --no-cache web")
-                docker.withRegistry( '', 'eeajenkins' ) {
-                dockerImage.push()
+                dir('backend') {
+                  dockerImage = docker.build("$registry:$tagName", "-f Dockerfile.model_server --no-cache web")
+                  docker.withRegistry( '', 'eeajenkins' ) {
+                  dockerImage.push()
                   }
+                }
               } finally {
                 sh "docker rmi $registry:$tagName"
               }
