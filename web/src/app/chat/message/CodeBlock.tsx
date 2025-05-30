@@ -1,18 +1,9 @@
 import React, { useState, ReactNode, useCallback, useMemo, memo, useEffect } from "react"; // Added useEffect
 import { FiCheck, FiCopy } from "react-icons/fi";
 import KrokiDiagram from "@/components/chat/KrokiDiagram";
+import { KROKI_SUPPORTED_LANGUAGES } from "@/lib/kroki_constants";
 
 const CODE_BLOCK_PADDING = { padding: "1rem" };
-
-// Added: List of supported diagram types by Kroki
-// This should ideally be kept in sync with the backend or a shared constants file
-const SUPPORTED_KROKI_LANGUAGES = new Set([
-  "blockdiag", "seqdiag", "actdiag", "nwdiag", "packetdiag", "rackdiag",
-  "graphviz", "pikchr", "erd", "excalidraw", "vega", "vegalite",
-  "ditaa", "mermaid", "nomnoml", "plantuml", "bpmn", "bytefield",
-  "wavedrom", "svgbob", "c4plantuml", "structurizr", "umlet",
-  "wireviz", "symbolator"
-]);
 
 // Module-level flag to track if Kroki feature is confirmed disabled for the session
 let isKrokiFeatureConfirmedDisabled = false;
@@ -113,7 +104,7 @@ export const CodeBlock = memo(function CodeBlock({
     !isFallback && // Check if this CodeBlock instance is NOT a fallback
     !isKrokiFeatureConfirmedDisabled &&
     language &&
-    SUPPORTED_KROKI_LANGUAGES.has(language) &&
+    KROKI_SUPPORTED_LANGUAGES.has(language) &&
     typeof children !== "string" && 
     codeText.trim() !== ""
   ) {

@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogClose,
 } from "@/components/ui/dialog"; // For fullscreen modal
+import { KROKI_SUPPORTED_LANGUAGES } from "@/lib/kroki_constants";
 
 
 interface KrokiDiagramProps {
@@ -18,14 +19,6 @@ interface KrokiDiagramProps {
   codeText: string;
   onFeatureDisabled: () => void; // Added callback prop
 }
-
-const SUPPORTED_DIAGRAM_TYPES = [
-  "blockdiag", "seqdiag", "actdiag", "nwdiag", "packetdiag", "rackdiag",
-  "graphviz", "pikchr", "erd", "excalidraw", "vega", "vegalite",
-  "ditaa", "mermaid", "nomnoml", "plantuml", "bpmn", "bytefield",
-  "wavedrom", "svgbob", "c4plantuml", "structurizr", "umlet",
-  "wireviz", "symbolator"
-];
 
 const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFeatureDisabled }) => {
   const [svgContent, setSvgContent] = useState<string | null>(null);
@@ -140,7 +133,7 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
 
 
   useEffect(() => {
-    if (!SUPPORTED_DIAGRAM_TYPES.includes(diagramType)) {
+    if (!KROKI_SUPPORTED_LANGUAGES.has(diagramType)) {
       setError(`Unsupported diagram type: ${diagramType}`);
       setIsLoading(false);
       return;
