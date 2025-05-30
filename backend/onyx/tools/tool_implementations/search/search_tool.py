@@ -326,8 +326,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         retrieval_options = self.retrieval_options or RetrievalDetails()
         if document_sources or time_cutoff:
-            # Get retrieval_options and filters, or create if they don't exist
-            retrieval_options.filters = retrieval_options.filters or BaseFilters()
+            # if empty, just start with an empty filters object
+            if not retrieval_options.filters:
+                retrieval_options.filters = BaseFilters()
 
             # Handle document sources
             if document_sources:
@@ -348,7 +349,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     LLMEvaluationType.SKIP if force_no_rerank else self.evaluation_type
                 ),
                 human_selected_filters=(
-                    retrieval_options.filters if self.retrieval_options else None
+                    retrieval_options.filters if retrieval_options else None
                 ),
                 user_file_filters=UserFileFilters(
                     user_file_ids=user_file_ids, user_folder_ids=user_folder_ids

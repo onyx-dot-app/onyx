@@ -165,12 +165,14 @@ def retrieval_preprocessing(
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
     user_file_filters = search_request.user_file_filters
-    user_file_ids = user_file_filters.user_file_ids if user_file_filters else []
-    user_folder_ids = user_file_filters.user_folder_ids if user_file_filters else []
+    user_file_ids = (user_file_filters.user_file_ids or []) if user_file_filters else []
+    user_folder_ids = (
+        (user_file_filters.user_folder_ids or []) if user_file_filters else []
+    )
     if persona and persona.user_files:
-        user_file_ids = user_file_ids + [
-            file.id for file in persona.user_files if file.id not in user_file_ids
-        ]
+        user_file_ids = list(
+            set(user_file_ids) | set([file.id for file in persona.user_files])
+        )
 
     final_filters = IndexFilters(
         user_file_ids=user_file_ids,
