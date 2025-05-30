@@ -130,14 +130,6 @@ def transfer_relationship(
         occurrences=relationship.occurrences or 1,
     )
     db_session.add(new_relationship)
-
-    # Update the document's kg_stage if source_document is provided
-    if relationship.source_document is not None:
-        dbdocument.update_document_kg_info(
-            db_session,
-            document_id=relationship.source_document,
-            kg_stage=KGStage.NORMALIZED,
-        )
     db_session.flush()
 
     return new_relationship
