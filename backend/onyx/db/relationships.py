@@ -2,6 +2,7 @@ from typing import List
 
 from sqlalchemy import or_
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument
@@ -70,18 +71,9 @@ def add_or_update_staging_relationship(
         )
         .on_conflict_do_update(
             index_elements=["id_name", "source_document"],
-            set_={
-                "id_name": relationship_id_name,
-                "source_node": source_entity_id_name,
-                "target_node": target_entity_id_name,
-                "source_node_type": source_entity_type,
-                "target_node_type": target_entity_type,
-                "type": relationship_string.lower(),
-                "relationship_type_id_name": relationship_type,
-                "source_document": source_document_id,
-                "occurrences": KGRelationshipExtractionStaging.occurrences
-                + occurrences,
-            },
+            set_=dict(
+                occurrences=KGRelationshipExtractionStaging.occurrences + occurrences,
+            ),
         )
         .returning(KGRelationshipExtractionStaging)
     )
@@ -89,7 +81,7 @@ def add_or_update_staging_relationship(
     result = db_session.execute(stmt).scalar()
     if result is None:
         raise RuntimeError(
-            f"Failed to create or increment relationship with id_name: {relationship_id_name}"
+            f"Failed to create or increment staging relationship with id_name: {relationship_id_name}"
         )
 
     # Update the document's kg_stage if source_document is provided
@@ -118,18 +110,33 @@ def transfer_relationship(
     relationship_id_name = f"{source_node}__{relationship.type}__{target_node}"
 
     # Create the transferred relationship
-    new_relationship = KGRelationship(
-        id_name=relationship_id_name,
-        source_node=source_node,
-        target_node=target_node,
-        source_node_type=relationship.source_node_type,
-        target_node_type=relationship.target_node_type,
-        type=relationship.type,
-        relationship_type_id_name=relationship.relationship_type_id_name,
-        source_document=relationship.source_document,
-        occurrences=relationship.occurrences,
+    stmt = (
+        pg_insert(KGRelationship)
+        .values(
+            id_name=relationship_id_name,
+            source_node=source_node,
+            target_node=target_node,
+            source_node_type=relationship.source_node_type,
+            target_node_type=relationship.target_node_type,
+            type=relationship.type,
+            relationship_type_id_name=relationship.relationship_type_id_name,
+            source_document=relationship.source_document,
+            occurrences=relationship.occurrences,
+        )
+        .on_conflict_do_update(
+            index_elements=["id_name", "source_document"],
+            set_=dict(
+                occurrences=KGRelationship.occurrences + relationship.occurrences,
+            ),
+        )
+        .returning(KGRelationship)
     )
-    db_session.add(new_relationship)
+
+    new_relationship = db_session.execute(stmt).scalar()
+    if new_relationship is None:
+        raise RuntimeError(
+            f"Failed to transfer relationship with id_name: {relationship.id_name}"
+        )
 
     # Update transferred
     db_session.query(KGRelationshipExtractionStaging).filter(
@@ -148,7 +155,7 @@ def add_or_update_staging_relationship_type(
     target_entity_type: str,
     definition: bool = False,
     extraction_count: int = 1,
-) -> str:
+) -> KGRelationshipTypeExtractionStaging:
     """
     Add a new relationship type to the database.
 
@@ -166,7 +173,6 @@ def add_or_update_staging_relationship_type(
     id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
 
     # Create new relationship type
-    # Use on_conflict_do_update to handle conflicts
     stmt = (
         postgresql.insert(KGRelationshipTypeExtractionStaging)
         .values(
@@ -183,23 +189,22 @@ def add_or_update_staging_relationship_type(
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
-            set_={
-                "name": relationship_type,
-                "source_entity_type_id_name": source_entity_type.upper(),
-                "target_entity_type_id_name": target_entity_type.upper(),
-                "definition": definition,
-                "occurrences": KGRelationshipTypeExtractionStaging.occurrences
+            set_=dict(
+                occurrences=KGRelationshipTypeExtractionStaging.occurrences
                 + extraction_count,
-                "type": relationship_type,
-                "active": True,
-            },
+            ),
         )
+        .returning(KGRelationshipTypeExtractionStaging)
     )
 
-    db_session.execute(stmt)
+    result = db_session.execute(stmt).scalar()
+    if result is None:
+        raise RuntimeError(
+            f"Failed to create or increment staging relationship type with id_name: {id_name}"
+        )
     db_session.flush()  # Flush to get any DB errors early
 
-    return id_name
+    return result
 
 
 def transfer_relationship_type(
@@ -209,17 +214,33 @@ def transfer_relationship_type(
     """
     Transfer a relationship type from the staging table to the normalized table.
     """
-    new_relationship_type = KGRelationshipType(
-        id_name=relationship_type.id_name,
-        name=relationship_type.name,
-        source_entity_type_id_name=relationship_type.source_entity_type_id_name,
-        target_entity_type_id_name=relationship_type.target_entity_type_id_name,
-        definition=relationship_type.definition,
-        occurrences=relationship_type.occurrences,
-        type=relationship_type.type,
-        active=relationship_type.active,
+    stmt = (
+        pg_insert(KGRelationshipType)
+        .values(
+            id_name=relationship_type.id_name,
+            name=relationship_type.name,
+            source_entity_type_id_name=relationship_type.source_entity_type_id_name,
+            target_entity_type_id_name=relationship_type.target_entity_type_id_name,
+            definition=relationship_type.definition,
+            occurrences=relationship_type.occurrences,
+            type=relationship_type.type,
+            active=relationship_type.active,
+        )
+        .on_conflict_do_update(
+            index_elements=["id_name"],
+            set_=dict(
+                occurrences=KGRelationshipType.occurrences
+                + relationship_type.occurrences,
+            ),
+        )
+        .returning(KGRelationshipType)
     )
-    db_session.add(new_relationship_type)
+
+    new_relationship_type = db_session.execute(stmt).scalar()
+    if new_relationship_type is None:
+        raise RuntimeError(
+            f"Failed to transfer relationship type with id_name: {relationship_type.id_name}"
+        )
 
     # Update transferred
     db_session.query(KGRelationshipTypeExtractionStaging).filter(

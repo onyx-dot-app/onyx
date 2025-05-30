@@ -61,14 +61,7 @@ def add_or_update_staging_entity(
         .on_conflict_do_update(
             index_elements=["id_name"],
             set_=dict(
-                # Direct numeric addition without text()
                 occurrences=KGEntityExtractionStaging.occurrences + occurrences,
-                # Keep other fields updated as before
-                name=name,
-                entity_type_id_name=entity_type,
-                document_id=document_id,
-                attributes=attributes or {},
-                event_time=event_time,
             ),
         )
         .returning(KGEntityExtractionStaging)
@@ -77,7 +70,7 @@ def add_or_update_staging_entity(
     result = db_session.execute(stmt).scalar()
     if result is None:
         raise RuntimeError(
-            f"Failed to create or increment entity with id_name: {id_name}"
+            f"Failed to create or increment staging entity with id_name: {id_name}"
         )
 
     # Update the document's kg_stage if document_id is provided
@@ -107,17 +100,29 @@ def transfer_entity(
         KGEntity: The transferred entity
     """
     # Create the transferred entity
-    new_entity = KGEntity(
-        id_name=f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}",
-        name=entity.name,
-        alternative_names=entity.alternative_names or [],
-        entity_type_id_name=entity.entity_type_id_name,
-        document_id=entity.document_id,
-        occurrences=entity.occurrences,
-        attributes=entity.attributes or {},
-        event_time=entity.event_time,
+    stmt = (
+        pg_insert(KGEntity)
+        .values(
+            id_name=f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}",
+            name=entity.name,
+            alternative_names=entity.alternative_names or [],
+            entity_type_id_name=entity.entity_type_id_name,
+            document_id=entity.document_id,
+            occurrences=entity.occurrences,
+            attributes=entity.attributes or {},
+            event_time=entity.event_time,
+        )
+        .on_conflict_do_update(
+            index_elements=["name", "entity_type_id_name", "document_id"],
+            set_=dict(
+                occurrences=KGEntity.occurrences + entity.occurrences,
+            ),
+        )
+        .returning(KGEntity)
     )
-    db_session.add(new_entity)
+    new_entity = db_session.execute(stmt).scalar()
+    if new_entity is None:
+        raise RuntimeError(f"Failed to transfer entity with id_name: {entity.id_name}")
 
     # Update the document's kg_stage if document_id is provided
     if entity.document_id is not None:

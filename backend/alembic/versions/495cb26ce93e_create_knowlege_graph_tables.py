@@ -245,6 +245,12 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
+        sa.UniqueConstraint(
+            "name",
+            "entity_type_id_name",
+            "document_id",
+            name="uq_kg_entity_name_type_doc",
+        ),
     )
     op.create_index("ix_entity_type_acl", "kg_entity", ["entity_type_id_name", "acl"])
     op.create_index(
