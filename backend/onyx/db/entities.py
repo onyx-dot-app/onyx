@@ -1,14 +1,16 @@
+import uuid
 from datetime import datetime
 from datetime import timezone
-from typing import cast
 from typing import List
 from typing import Type
 
 from sqlalchemy import func
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+import onyx.db.document as dbdocument
 from onyx.db.models import Document
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
@@ -17,80 +19,188 @@ from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
 
 
-def add_entity(
+def add_or_update_staging_entity(
     db_session: Session,
-    kg_stage: KGStage,
-    entity_type: str,
     name: str,
+    entity_type: str,
     document_id: str | None = None,
-    occurrences: int = 0,
-    event_time: datetime | None = None,
+    occurrences: int = 1,
     attributes: dict[str, str] | None = None,
-    alternative_names: list[str] | None = None,
-) -> "KGEntity | KGEntityExtractionStaging | None":
-    """Add a new entity to the database.
+    event_time: datetime | None = None,
+) -> KGEntityExtractionStaging:
+    """Add or update a new staging entity to the database.
 
     Args:
         db_session: SQLAlchemy session
-        kg_stage: KGStage of the entity
-        entity_type: Type of the entity (must match an existing KGEntityType)
         name: Name of the entity
-        occurrences: Number of clusters this entity has been found
+        entity_type: Type of the entity (must match an existing KGEntityType)
+        document_id: ID of the document the entity belongs to
+        occurrences: Number of times this entity has been found
+        attributes: Attributes of the entity
+        event_time: Time the entity was added to the database
 
     Returns:
-        KGEntity: The created entity
+        KGEntityExtractionStaging: The created entity
     """
     entity_type = entity_type.upper()
     name = name.title()
     id_name = f"{entity_type}::{name}"
-    alternative_names = alternative_names or []
-
-    _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
-    if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject = KGEntityExtractionStaging
-    elif kg_stage == KGStage.NORMALIZED:
-        _KGEntityObject = KGEntity
-    else:
-        raise ValueError(f"Invalid KGStage: {kg_stage}")
 
     # Create new entity
     stmt = (
-        pg_insert(_KGEntityObject)
+        pg_insert(KGEntityExtractionStaging)
         .values(
             id_name=id_name,
+            name=name,
             entity_type_id_name=entity_type,
             document_id=document_id,
-            name=name,
             occurrences=occurrences,
+            attributes=attributes or {},
             event_time=event_time,
-            attributes=attributes,
-            alternative_names=alternative_names,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
             set_=dict(
-                # Direct numeric addition without text()
-                occurrences=_KGEntityObject.occurrences + occurrences,
-                # Keep other fields updated as before
-                entity_type_id_name=entity_type,
-                document_id=document_id,
-                name=name,
-                event_time=event_time,
-                attributes=attributes,
-                alternative_names=alternative_names,
+                occurrences=KGEntityExtractionStaging.occurrences + occurrences,
             ),
         )
-        .returning(_KGEntityObject)
+        .returning(KGEntityExtractionStaging)
     )
 
     result = db_session.execute(stmt).scalar()
+    if result is None:
+        raise RuntimeError(
+            f"Failed to create or increment staging entity with id_name: {id_name}"
+        )
 
     # Update the document's kg_stage if document_id is provided
     if document_id is not None:
-
         db_session.query(Document).filter(Document.id == document_id).update(
-            {"kg_stage": kg_stage, "kg_processing_time": datetime.now(timezone.utc)}
+            {
+                "kg_stage": KGStage.EXTRACTED,
+                "kg_processing_time": datetime.now(timezone.utc),
+            }
         )
+    db_session.flush()
+
+    return result
+
+
+def transfer_entity(
+    db_session: Session,
+    entity: KGEntityExtractionStaging,
+) -> KGEntity:
+    """Transfer an entity from the extraction staging table to the normalized table.
+
+    Args:
+        db_session: SQLAlchemy session
+        entity: Entity to transfer
+
+    Returns:
+        KGEntity: The transferred entity
+    """
+    # Create the transferred entity
+    stmt = (
+        pg_insert(KGEntity)
+        .values(
+            id_name=f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}",
+            name=entity.name,
+            alternative_names=entity.alternative_names or [],
+            entity_type_id_name=entity.entity_type_id_name,
+            document_id=entity.document_id,
+            occurrences=entity.occurrences,
+            attributes=entity.attributes or {},
+            event_time=entity.event_time,
+        )
+        .on_conflict_do_update(
+            index_elements=["name", "entity_type_id_name", "document_id"],
+            set_=dict(
+                occurrences=KGEntity.occurrences + entity.occurrences,
+            ),
+        )
+        .returning(KGEntity)
+    )
+    new_entity = db_session.execute(stmt).scalar()
+    if new_entity is None:
+        raise RuntimeError(f"Failed to transfer entity with id_name: {entity.id_name}")
+
+    # Update the document's kg_stage if document_id is provided
+    if entity.document_id is not None:
+        dbdocument.update_document_kg_info(
+            db_session,
+            document_id=entity.document_id,
+            kg_stage=KGStage.NORMALIZED,
+        )
+
+    # Update transferred
+    db_session.query(KGEntityExtractionStaging).filter(
+        KGEntityExtractionStaging.id_name == entity.id_name
+    ).update({"transferred_id_name": new_entity.id_name})
+    db_session.flush()
+
+    return new_entity
+
+
+def merge_entities(
+    db_session: Session, parent: KGEntity, child: KGEntityExtractionStaging
+) -> KGEntity:
+    """Merge an entity from the extraction staging table into
+    an existing entity in the normalized table.
+
+    Args:
+        db_session: SQLAlchemy session
+        parent: Parent entity to merge into
+        child: Child staging entity to merge
+
+    Returns:
+        KGEntity: The merged entity
+    """
+    # check we're not merging two entities with different document_ids
+    if (
+        parent.document_id is not None
+        and child.document_id is not None
+        and parent.document_id != child.document_id
+    ):
+        raise ValueError(
+            "Overwriting the document_id of an entity with a document_id already is not allowed"
+        )
+
+    # update the parent entity (only document_id, alternative_names, occurrences)
+    setting_doc = parent.document_id is None and child.document_id is not None
+    document_id = child.document_id if setting_doc else parent.document_id
+    alternative_names = set(parent.alternative_names or [])
+    alternative_names.update(child.alternative_names or [])
+    alternative_names.add(child.name.lower())
+    alternative_names.discard(parent.name)
+
+    stmt = (
+        update(KGEntity)
+        .where(KGEntity.id_name == parent.id_name)
+        .values(
+            document_id=document_id,
+            alternative_names=list(alternative_names),
+            occurrences=parent.occurrences + child.occurrences,
+        )
+        .returning(KGEntity)
+    )
+
+    result = db_session.execute(stmt).scalar()
+    if result is None:
+        raise RuntimeError(f"Failed to merge entities with id_name: {parent.id_name}")
+
+    # Update the document's kg_stage if document_id is set
+    if setting_doc:
+        assert child.document_id is not None  # for mypy
+        dbdocument.update_document_kg_info(
+            db_session,
+            document_id=child.document_id,
+            kg_stage=KGStage.NORMALIZED,
+        )
+
+    # Update transferred
+    db_session.query(KGEntityExtractionStaging).filter(
+        KGEntityExtractionStaging.id_name == child.id_name
+    ).update({"transferred_id_name": parent.id_name})
     db_session.flush()
 
     return result
@@ -110,44 +220,6 @@ def get_kg_entity_by_document(db: Session, document_id: str) -> KGEntity | None:
     query = select(KGEntity).where(KGEntity.document_id == document_id)
     result = db.execute(query).scalar()
     return result
-
-
-def get_entities_by_grounding(
-    db_session: Session, kg_stage: KGStage, grounding: KGGroundingType
-) -> List[KGEntity] | List[KGEntityExtractionStaging]:
-    """Get all entities by grounding type.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntity objects for a given grounding type
-    """
-
-    _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
-
-    if kg_stage not in [KGStage.EXTRACTED, KGStage.NORMALIZED]:
-        raise ValueError(f"Invalid KGStage: {kg_stage}")
-
-    if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject = KGEntityExtractionStaging
-    elif kg_stage == KGStage.NORMALIZED:
-        _KGEntityObject = KGEntity
-
-    result = list(
-        db_session.query(_KGEntityObject)
-        .join(
-            KGEntityType,
-            _KGEntityObject.entity_type_id_name == KGEntityType.id_name,
-        )
-        .filter(KGEntityType.grounding == grounding)
-        .all()
-    )
-
-    if kg_stage == KGStage.EXTRACTED:
-        return cast(List[KGEntityExtractionStaging], result)
-    else:
-        return cast(List[KGEntity], result)
 
 
 def get_grounded_entities_by_types(
@@ -231,37 +303,20 @@ def get_entities_by_document_ids(
     return list(result)
 
 
-def get_document_id_for_entity(
-    db_session: Session, entity: str, kg_stage: KGStage = KGStage.NORMALIZED
-) -> str | None:
+def get_document_id_for_entity(db_session: Session, entity_id_name: str) -> str | None:
     """Get the document ID associated with an entity.
 
     Args:
         db_session: SQLAlchemy database session
-        entity: The entity id_name to look up
-        kg_stage: The knowledge graph stage to search in (defaults to NORMALIZED)
+        entity_id_name: The entity id_name to look up
 
     Returns:
         The document ID if found, None otherwise
     """
-
-    entity = entity.replace(": ", ":")
-
-    if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging] = (
-            KGEntityExtractionStaging
-        )
-    elif kg_stage == KGStage.NORMALIZED:
-        _KGEntityObject = KGEntity
-    else:
-        raise ValueError(f"Invalid KGStage: {kg_stage}")
-
-    stmt = select(_KGEntityObject.document_id).where(
-        func.lower(_KGEntityObject.id_name) == func.lower(entity)
+    entity = (
+        db_session.query(KGEntity).filter(KGEntity.id_name == entity_id_name).first()
     )
-
-    result = db_session.execute(stmt).scalars().first()
-    return result
+    return entity.document_id if entity else None
 
 
 def delete_from_kg_entities_extraction_staging__no_commit(
@@ -280,27 +335,3 @@ def delete_from_kg_entities__no_commit(
     db_session.query(KGEntity).filter(KGEntity.document_id.in_(document_ids)).delete(
         synchronize_session=False
     )
-
-
-def get_semantic_ids_for_entities(
-    db_session: Session, entity_ids: list[str]
-) -> dict[str, str]:
-    """Get the semantic IDs for a list of entities.
-
-    Args:
-        db_session: SQLAlchemy database session
-        entities: List of entity id_names to look up
-
-    Returns:
-        Dictionary mapping entity id_names to their corresponding document semantic IDs
-    """
-    stmt = (
-        select(KGEntity.id_name, Document.semantic_id)
-        .join(Document, KGEntity.document_id == Document.id)
-        .where(KGEntity.id_name.in_(entity_ids))
-    )
-    results = db_session.execute(stmt).all()
-
-    forward_map = {entity_id: semantic_id for entity_id, semantic_id in results}
-
-    return forward_map

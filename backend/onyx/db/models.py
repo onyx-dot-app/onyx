@@ -654,7 +654,7 @@ class KGEntityType(Base):
         comment="Filtering based on document attribute",
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -735,7 +735,7 @@ class KGRelationshipType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -806,14 +806,15 @@ class KGRelationshipTypeExtractionStaging(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    transferred: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
 
     # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -842,6 +843,11 @@ class KGEntity(Base):
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
 
+    name_trigrams: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String(3)),
+        nullable=True,
+    )
+
     attributes: Mapped[dict] = mapped_column(
         postgresql.JSONB,
         nullable=False,
@@ -852,16 +858,6 @@ class KGEntity(Base):
 
     document_id: Mapped[str | None] = mapped_column(
         NullFilteredString, nullable=True, index=True
-    )
-
-    # Data for normalization and clustering
-    clustering_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-
-    clustering_trigrams: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String(3)),
-        nullable=True,
     )
 
     alternative_names: Mapped[list[str]] = mapped_column(
@@ -885,7 +881,7 @@ class KGEntity(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -923,7 +919,10 @@ class KGEntityExtractionStaging(Base):
 
     # Primary identifier
     id_name: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, index=True
+        NullFilteredString,
+        primary_key=True,
+        nullable=False,
+        index=True,
     )
 
     # Basic entity information
@@ -938,11 +937,6 @@ class KGEntityExtractionStaging(Base):
     )
 
     document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-
-    # Data for normalization and clustering
-    clustering_name: Mapped[str] = mapped_column(
         NullFilteredString, nullable=True, index=True
     )
 
@@ -969,7 +963,7 @@ class KGEntityExtractionStaging(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -979,6 +973,11 @@ class KGEntityExtractionStaging(Base):
     # Boosts - using JSON for flexibility
     boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
 
+    transferred_id_name: Mapped[str | None] = mapped_column(
+        NullFilteredString,
+        nullable=True,
+    )
+
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -986,11 +985,6 @@ class KGEntityExtractionStaging(Base):
     )
 
     # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -1006,7 +1000,11 @@ class KGRelationship(Base):
     __tablename__ = "kg_relationship"
 
     # Primary identifier - now part of composite key
-    id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
+    )
 
     source_document: Mapped[str | None] = mapped_column(
         NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
@@ -1051,7 +1049,7 @@ class KGRelationship(Base):
         "KGRelationshipType", backref="relationship"
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -1091,7 +1089,11 @@ class KGRelationshipExtractionStaging(Base):
     __tablename__ = "kg_relationship_extraction_staging"
 
     # Primary identifier - now part of composite key
-    id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
+    )
 
     source_document: Mapped[str | None] = mapped_column(
         NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
@@ -1142,14 +1144,15 @@ class KGRelationshipExtractionStaging(Base):
         "KGRelationshipTypeExtractionStaging", backref="relationship_staging"
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    transferred: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
 
     # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

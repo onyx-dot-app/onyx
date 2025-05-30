@@ -51,6 +51,18 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
     return entity_type, entity_name
 
 
+def _clean_name(entity_name: str) -> str:
+    """
+    Clean an entity string by removing non-alphanumeric characters and email addresses.
+    If the name after cleaning is empty, return the original name in lowercase.
+    """
+    cleaned_entity = entity_name.casefold()
+    return (
+        alphanum_regex.sub("", rem_email_regex.sub("", cleaned_entity))
+        or cleaned_entity
+    )
+
+
 def _normalize_one_entity(
     entity: str, allowed_docs_temp_view_name: str | None = None
 ) -> str | None:
@@ -61,11 +73,7 @@ def _normalize_one_entity(
     if entity_name == "*":
         return entity
 
-    cleaned_entity = entity_name.casefold()  # lower() but better language support
-    cleaned_entity = (
-        alphanum_regex.sub("", rem_email_regex.sub("", cleaned_entity))
-        or cleaned_entity
-    )
+    cleaned_entity = _clean_name(entity_name)
 
     # step 1: find entities containing the entity_name or something similar
     with get_session_with_current_tenant() as db_session:
@@ -91,12 +99,12 @@ def _normalize_one_entity(
             list[tuple[str, str, float]],
             db_session.query(
                 KGEntity.id_name,
-                KGEntity.clustering_name,
+                KGEntity.name,
                 (
                     # for each entity E, compute score = | Q ∩ E | / min(|Q|, |E|)
                     func.cardinality(
                         func.array(
-                            select(func.unnest(KGEntity.clustering_trigrams))
+                            select(func.unnest(KGEntity.name_trigrams))
                             .correlate(KGEntity)
                             .intersect(
                                 select(
@@ -108,7 +116,7 @@ def _normalize_one_entity(
                     ).cast(Float)
                     / func.least(
                         func.cardinality(query_trigrams.c.trigrams),
-                        func.cardinality(KGEntity.clustering_trigrams),
+                        func.cardinality(KGEntity.name_trigrams),
                     )
                 ).label("score"),
             )
@@ -119,7 +127,7 @@ def _normalize_one_entity(
             )
             .filter(
                 KGEntity.entity_type_id_name == entity_type,
-                KGEntity.clustering_trigrams.overlap(query_trigrams.c.trigrams),
+                KGEntity.name_trigrams.overlap(query_trigrams.c.trigrams),
                 # Add filter for allowed docs - either document_id is NULL or it's in allowed_docs
                 (
                     KGEntity.document_id.is_(None)
@@ -139,14 +147,16 @@ def _normalize_one_entity(
         set(ngrams(cleaned_entity, 2)),
         set(ngrams(cleaned_entity, 3)),
     )
-    for i, (id_name, semantic_id, score_n3) in enumerate(candidates):
+    for i, (candidate_id_name, candidate_name, _) in enumerate(candidates):
+        cleaned_candidate = _clean_name(candidate_name)
         h_n1, h_n2, h_n3 = (
-            set(ngrams(semantic_id, 1)),
-            set(ngrams(semantic_id, 2)),
-            set(ngrams(semantic_id, 3)),
+            set(ngrams(cleaned_candidate, 1)),
+            set(ngrams(cleaned_candidate, 2)),
+            set(ngrams(cleaned_candidate, 3)),
         )
-        # renormalize scores if the names are too short for larger ngrams
-        grams_used = min(2, len(cleaned_entity) - 1, len(semantic_id) - 1)
+
+        # compute ngram overlap, renormalize scores if the names are too short for larger ngrams
+        grams_used = min(2, len(cleaned_entity) - 1, len(cleaned_candidate) - 1)
         W_n1, W_n2, W_n3 = KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS
         ngram_score = (
             # compute | Q ∩ E | / min(|Q|, |E|) for unigrams and bigrams (trigrams already computed)
@@ -154,11 +164,14 @@ def _normalize_one_entity(
             + W_n2 * len(n2 & h_n2) / max(1, min(len(n2), len(h_n2)))
             + W_n3 * len(n3 & h_n3) / max(1, min(len(n3), len(h_n3)))
         ) / (W_n1, W_n1 + W_n2, 1.0)[grams_used]
+
         # compute damerau levenshtein distance to fuzzy match against typos
         W_leven = KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
-        leven_score = normalized_similarity(cleaned_entity, semantic_id)
+        leven_score = normalized_similarity(cleaned_entity, cleaned_candidate)
+
+        # combine scores
         score = (1.0 - W_leven) * ngram_score + W_leven * leven_score
-        candidates[i] = (id_name, semantic_id, score)
+        candidates[i] = (candidate_id_name, candidate_name, score)
     candidates = list(
         sorted(
             filter(lambda x: x[2] > KG_NORMALIZATION_RERANK_THRESHOLD, candidates),

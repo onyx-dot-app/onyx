@@ -924,10 +924,8 @@ def get_unprocessed_kg_document_batch_for_connector(
                 DbDocument.doc_updated_at
                 >= datetime.now() - timedelta(days=kg_max_coverage_days),
                 or_(
-                    or_(
-                        DbDocument.kg_stage.is_(None),
-                        DbDocument.kg_stage == KGStage.NOT_STARTED,
-                    ),
+                    DbDocument.kg_stage.is_(None),
+                    DbDocument.kg_stage == KGStage.NOT_STARTED,
                     DbDocument.doc_updated_at > DbDocument.kg_processing_time,
                 ),
             )
@@ -972,6 +970,7 @@ def update_document_kg_info(
         .where(DbDocument.id == document_id)
         .values(
             kg_stage=kg_stage,
+            kg_processing_time=datetime.now(timezone.utc),
         )
     )
     db_session.execute(stmt)

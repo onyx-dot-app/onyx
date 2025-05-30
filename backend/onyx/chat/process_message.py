@@ -97,16 +97,15 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
-from onyx.kg.clustering.incremental_cluster_updates import (
-    kg_incremental_cluster_updates,
-)
-from onyx.kg.clustering.initial_clustering import kg_clustering
+from onyx.kg.clustering.clustering import kg_clustering
 from onyx.kg.configuration import populate_default_account_employee_definitions
 from onyx.kg.configuration import populate_default_grounded_entity_types
 from onyx.kg.extractions.extraction_processing import kg_extraction
+from onyx.kg.resets.reset_entity_type import reset_entity_type_kg_index
 from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
 from onyx.kg.resets.reset_index import reset_full_kg_index
 from onyx.kg.resets.reset_normalizations import reset_normalization_kg_index
+from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -665,16 +664,11 @@ def stream_chat_message_objects(
 
         if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)
-
             raise Exception("Extractions done")
 
         elif new_msg_req.message == "kg_c":
             kg_clustering(tenant_id, index_str)
             raise Exception("Clustering done")
-
-        elif new_msg_req.message == "kg_i":
-            kg_incremental_cluster_updates(tenant_id, index_str)
-            raise Exception("Incremental clustering done")
 
         elif new_msg_req.message == "kg_rs_full":
             reset_full_kg_index()
@@ -687,6 +681,15 @@ def stream_chat_message_objects(
         elif new_msg_req.message == "kg_rs_normalization":
             reset_normalization_kg_index()
             raise Exception("Normalization KG index reset done")
+
+        elif new_msg_req.message.startswith("kg_rs_entity_type:"):
+            entity_type_id_name = new_msg_req.message.split(":")[1].strip()
+            reset_entity_type_kg_index(entity_type_id_name)
+            raise Exception("Entity type KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_vespa":
+            reset_vespa_kg_index(tenant_id, index_str)
+            raise Exception("Vespa KG index reset done")
 
         elif new_msg_req.message == "kg_setup":
             populate_default_grounded_entity_types()

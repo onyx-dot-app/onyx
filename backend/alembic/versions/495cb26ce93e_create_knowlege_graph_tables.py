@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 from onyx.configs.app_configs import DB_READONLY_USER
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from shared_configs.configs import MULTI_TENANT
-from onyx.db.models import NullFilteredString
 
 
 # revision identifiers, used by Alembic.
@@ -28,7 +27,7 @@ depends_on = None
 def upgrade() -> None:
 
     # Create a new permission-less user to be later used for knowledge graph queries.
-    # The user will later get temporary read priviledges for a specific view that will be
+    # The user will later get temporary read privileges for a specific view that will be
     # ad hoc generated specific to a knowledge graph query.
     #
     # Note: in order for the migration to run, the DB_READONLY_USER and DB_READONLY_PASSWORD
@@ -114,7 +113,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False, default=False),
         sa.Column("deep_extraction", sa.Boolean(), nullable=False, default=False),
         sa.Column(
@@ -148,7 +147,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -186,15 +185,9 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
-        sa.Column(
-            "time_updated",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            onupdate=sa.text("now()"),
-        ),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
@@ -204,6 +197,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
+        sa.Column("transferred", sa.Boolean(), nullable=False, server_default="false"),
         sa.ForeignKeyConstraint(
             ["source_entity_type_id_name"], ["kg_entity_type.id_name"]
         ),
@@ -217,7 +211,7 @@ def upgrade() -> None:
         "kg_entity",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
-        sa.Column("sub_type", sa.String(), nullable=True, index=True),
+        sa.Column("name_trigrams", postgresql.ARRAY(sa.String(3)), nullable=True),
         sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column(
             "alternative_names",
@@ -233,7 +227,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
@@ -249,11 +243,14 @@ def upgrade() -> None:
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        # Add clustering columns
-        sa.Column("clustering_name", NullFilteredString, nullable=True),
-        sa.Column("clustering_trigrams", postgresql.ARRAY(sa.String(3)), nullable=True),
         sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
+        sa.UniqueConstraint(
+            "name",
+            "entity_type_id_name",
+            "document_id",
+            name="uq_kg_entity_name_type_doc",
+        ),
     )
     op.create_index("ix_entity_type_acl", "kg_entity", ["entity_type_id_name", "acl"])
     op.create_index(
@@ -265,7 +262,6 @@ def upgrade() -> None:
         "kg_entity_extraction_staging",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
-        sa.Column("sub_type", sa.String(), nullable=True, index=True),
         sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column(
             "alternative_names",
@@ -281,23 +277,17 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
         sa.Column("boosts", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("attributes", postgresql.JSONB, nullable=False, server_default="{}"),
+        sa.Column("transferred_id_name", sa.String(), nullable=True, default=None),
         sa.Column("event_time", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "time_updated",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            onupdate=sa.text("now()"),
-        ),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        sa.Column("clustering_name", NullFilteredString, nullable=True),
         sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
     )
@@ -323,7 +313,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -364,13 +354,8 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
-        sa.Column(
-            "time_updated",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            onupdate=sa.text("now()"),
-        ),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("transferred", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
@@ -442,130 +427,95 @@ def upgrade() -> None:
         ),
     )
 
-    # Create GIN index on clustering columns
+    # Create GIN index for clustering and normalization
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
-        "ON kg_entity USING GIN (clustering_trigrams)"
+        "ON kg_entity USING GIN (name gin_trgm_ops)"
     )
     op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_extraction_clustering_trigrams "
-        "ON kg_entity_extraction_staging USING GIN (clustering_name gin_trgm_ops)"
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_normalization_trigrams "
+        "ON kg_entity USING GIN (name_trigrams)"
     )
 
-    # Create trigger to update clustering columns if entity w/ doc_id is created
+    # Create kg_entity trigger to update kg_entity.name and its trigrams
     alphanum_pattern = r"[^a-z0-9]+"
+    truncate_length = 1000
+    function = "update_kg_entity_name"
     op.execute(
         text(
             f"""
-            CREATE OR REPLACE FUNCTION update_kg_entity_clustering()
+            CREATE OR REPLACE FUNCTION {function}()
             RETURNS TRIGGER AS $$
             DECLARE
-                doc_semantic_id text;
-                cleaned_semantic_id text;
-                max_length integer := 1000; -- Limit length for performance
+                name text;
+                cleaned_name text;
             BEGIN
-                -- Get semantic_id from document
-                SELECT semantic_id INTO doc_semantic_id
-                FROM document
-                WHERE id = NEW.document_id;
-
-                -- Clean the semantic_id with regex patterns and handle NULLs
-                cleaned_semantic_id = regexp_replace(
-                    lower(COALESCE(doc_semantic_id, NEW.name, '')),
-                    '{alphanum_pattern}', '', 'g'
-                );
-
-                -- Truncate if too long for performance
-                IF length(cleaned_semantic_id) > max_length THEN
-                    cleaned_semantic_id = left(cleaned_semantic_id, max_length);
+                -- Set name to semantic_id if document_id is not NULL
+                IF NEW.document_id IS NOT NULL THEN
+                    SELECT lower(semantic_id) INTO name
+                    FROM document
+                    WHERE id = NEW.document_id;
+                ELSE
+                    name = lower(NEW.name);
                 END IF;
 
-                -- Set clustering_name to cleaned version and generate trigrams
-                NEW.clustering_name = cleaned_semantic_id;
-                NEW.clustering_trigrams = show_trgm(cleaned_semantic_id);
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-            """
-        )
-    )
-    op.execute(
-        text(
-            """
-            CREATE OR REPLACE FUNCTION update_kg_entity_extraction_clustering()
-            RETURNS TRIGGER AS $$
-            DECLARE
-                doc_semantic_id text;
-            BEGIN
-                -- Get semantic_id from document
-                -- If no document is found, doc_semantic_id will be NULL and COALESCE will use NEW.name
-                SELECT semantic_id INTO doc_semantic_id
-                FROM document
-                WHERE id = NEW.document_id;
-
-                -- Set clustering_name to semantic_id
-                NEW.clustering_name = lower(COALESCE(doc_semantic_id, NEW.name, ''));
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-            """
-        )
-    )
-    for table, function in (
-        ("kg_entity", "update_kg_entity_clustering"),
-        ("kg_entity_extraction_staging", "update_kg_entity_extraction_clustering"),
-    ):
-        trigger = f"{function}_trigger"
-        op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON {table}")
-        op.execute(
-            f"""
-            CREATE TRIGGER {trigger}
-                BEFORE INSERT
-                ON {table}
-                FOR EACH ROW
-                EXECUTE FUNCTION {function}();
-            """
-        )
-
-    # Create trigger to update kg_entity clustering_name and its trigrams when document.clustering_name changes
-    op.execute(
-        text(
-            f"""
-            CREATE OR REPLACE FUNCTION update_kg_entity_clustering_from_doc()
-            RETURNS TRIGGER AS $$
-            DECLARE
-                cleaned_semantic_id text;
-            BEGIN
-                -- Clean the semantic_id with regex patterns
-                -- If semantic_id is NULL, COALESCE will use empty string
-                cleaned_semantic_id = regexp_replace(
-                    lower(COALESCE(NEW.semantic_id, '')),
+                -- Clean name and truncate if too long
+                cleaned_name = regexp_replace(
+                    name,
                     '{alphanum_pattern}', '', 'g'
                 );
+                IF length(cleaned_name) > {truncate_length} THEN
+                    cleaned_name = left(cleaned_name, {truncate_length});
+                END IF;
 
-                -- Update clustering name and trigrams for all entities referencing this document
-                UPDATE kg_entity
-                SET
-                    clustering_name = cleaned_semantic_id,
-                    clustering_trigrams = show_trgm(cleaned_semantic_id)
-                WHERE document_id = NEW.id;
+                -- Set name and name trigrams
+                NEW.name = name;
+                NEW.name_trigrams = show_trgm(cleaned_name);
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
             """
         )
     )
+    trigger = f"{function}_trigger"
+    op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON kg_entity")
+    op.execute(
+        f"""
+        CREATE TRIGGER {trigger}
+            BEFORE INSERT OR UPDATE OF name
+            ON kg_entity
+            FOR EACH ROW
+            EXECUTE FUNCTION {function}();
+        """
+    )
+
+    # Create kg_entity trigger to update kg_entity.name and its trigrams
+    function = "update_kg_entity_name_from_doc"
     op.execute(
         text(
-            """
-            CREATE OR REPLACE FUNCTION update_kg_entity_extraction_clustering_from_doc()
+            f"""
+            CREATE OR REPLACE FUNCTION {function}()
             RETURNS TRIGGER AS $$
+            DECLARE
+                doc_name text;
+                cleaned_name text;
             BEGIN
-                -- Update clustering name for all entities in staging referencing this document
-                -- If semantic_id is NULL, COALESCE will use empty string
-                UPDATE kg_entity_extraction_staging
+                doc_name = lower(NEW.semantic_id);
+
+                -- Clean name and truncate if too long
+                cleaned_name = regexp_replace(
+                    doc_name,
+                    '{alphanum_pattern}', '', 'g'
+                );
+                IF length(cleaned_name) > {truncate_length} THEN
+                    cleaned_name = left(cleaned_name, {truncate_length});
+                END IF;
+
+                -- Set name and name trigrams for all entities referencing this document
+                UPDATE kg_entity
                 SET
-                    clustering_name = lower(COALESCE(NEW.semantic_id, ''))
+                    name = doc_name,
+                    name_trigrams = show_trgm(cleaned_name)
                 WHERE document_id = NEW.id;
                 RETURN NEW;
             END;
@@ -573,61 +523,73 @@ def upgrade() -> None:
             """
         )
     )
-    for function in (
-        "update_kg_entity_clustering_from_doc",
-        "update_kg_entity_extraction_clustering_from_doc",
-    ):
-        trigger = f"{function}_trigger"
-        op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON document")
-        op.execute(
-            f"""
-            CREATE TRIGGER {trigger}
-                AFTER UPDATE OF semantic_id
-                ON document
-                FOR EACH ROW
-                EXECUTE FUNCTION {function}();
-            """
-        )
+    trigger = f"{function}_trigger"
+    op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON document")
+    op.execute(
+        f"""
+        CREATE TRIGGER {trigger}
+            AFTER UPDATE OF semantic_id
+            ON document
+            FOR EACH ROW
+            EXECUTE FUNCTION {function}();
+        """
+    )
 
 
 def downgrade() -> None:
 
-    if not MULTI_TENANT:
-        # Drop temporary views
-        conn = op.get_bind()
-        kg_temp_views = [
-            row[0]
-            for row in conn.execute(
-                text(
-                    """
-                SELECT table_name
-                FROM INFORMATION_SCHEMA.views
-                WHERE table_name like 'allowed_docs%';
-                """
-                )
-            ).fetchall()
-        ]
-        for view in kg_temp_views:
-            op.execute(f"DROP VIEW IF EXISTS {view}")
+    #  Drop all views that start with 'kg_'
+    op.execute(
+        """
+                DO $$
+                DECLARE
+                    view_name text;
+                BEGIN
+                    FOR view_name IN
+                        SELECT c.relname
+                        FROM pg_catalog.pg_class c
+                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                        WHERE c.relkind = 'v'
+                        AND n.nspname = current_schema()
+                        AND c.relname LIKE 'kg_relationships_with_access%'
+                    LOOP
+                        EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
+                    END LOOP;
+                END $$;
+            """
+    )
 
-        # Drop triggers and functions
-        for table, function in (
-            ("kg_entity", "update_kg_entity_clustering"),
-            ("kg_entity_extraction_staging", "update_kg_entity_extraction_clustering"),
-            ("document", "update_kg_entity_clustering_from_doc"),
-            ("document", "update_kg_entity_extraction_clustering_from_doc"),
-        ):
-            op.execute(f"DROP TRIGGER IF EXISTS {function}_trigger ON {table}")
-            op.execute(f"DROP FUNCTION IF EXISTS {function}()")
+    op.execute(
+        """
+                DO $$
+                DECLARE
+                    view_name text;
+                BEGIN
+                    FOR view_name IN
+                        SELECT c.relname
+                        FROM pg_catalog.pg_class c
+                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                        WHERE c.relkind = 'v'
+                        AND n.nspname = current_schema()
+                        AND c.relname LIKE 'allowed_docs%'
+                    LOOP
+                        EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
+                    END LOOP;
+                END $$;
+            """
+    )
+
+    for table, function in (
+        ("kg_entity", "update_kg_entity_name"),
+        ("document", "update_kg_entity_name_from_doc"),
+    ):
+        op.execute(f"DROP TRIGGER IF EXISTS {function}_trigger ON {table}")
+        op.execute(f"DROP FUNCTION IF EXISTS {function}()")
 
     # Drop index
     op.execute("COMMIT")  # Commit to allow CONCURRENTLY
-
-    # Drop index
     op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_clustering_trigrams")
-    op.execute(
-        "DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_extraction_clustering_trigrams"
-    )
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_normalization_trigrams")
 
     # Drop tables in reverse order of creation to handle dependencies
     op.drop_table("kg_term")
