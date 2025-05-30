@@ -55,6 +55,7 @@ def test_github_connector_basic(github_connector: GithubConnector) -> None:
     assert "assignees" in pr_doc.metadata
     assert pr_doc.metadata.get("repo") == "onyx-dot-app/documentation"
     assert "num_commits" in pr_doc.metadata
+    assert "num_files_changed" in pr_doc.metadata
     assert "labels" in pr_doc.metadata
     assert "created_at" in pr_doc.metadata
 

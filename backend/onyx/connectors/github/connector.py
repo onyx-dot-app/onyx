@@ -265,6 +265,7 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
                     pull_request.base.repo.full_name if pull_request.base else None
                 ),
                 "num_commits": str(pull_request.commits),
+                "num_files_changed": str(pull_request.changed_files),
                 "labels": [label.name for label in pull_request.labels],
                 "created_at": (
                     str(pull_request.created_at.replace(tzinfo=timezone.utc))
