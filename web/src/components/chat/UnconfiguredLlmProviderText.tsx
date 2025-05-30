@@ -1,6 +1,6 @@
 import { useProviderStatus } from "./ProviderContext";
 
-export default function CredentialNotConfigured({
+export function UnconfiguredLlmProviderText({
   showConfigureAPIKey,
   noSources,
 }: {
