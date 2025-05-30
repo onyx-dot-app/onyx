@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import TypeVar
+from urllib.parse import quote
 
 from dateutil.parser import parse
 
@@ -81,8 +82,10 @@ def get_metadata_keys_to_ignore() -> list[str]:
     return [IGNORE_FOR_QA]
 
 
-def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:
+def get_oauth_callback_uri(base_domain: str, connector_id: str, url_encode: bool = True) -> str:
     if CONNECTOR_LOCALHOST_OVERRIDE:
         # Used for development
         base_domain = CONNECTOR_LOCALHOST_OVERRIDE
-    return f"{base_domain.strip('/')}/connector/oauth/callback/{connector_id}"
+
+    uri = f"{base_domain.strip('/')}/connector/oauth/callback/{connector_id}"
+    return quote(uri) if url_encode else uri
