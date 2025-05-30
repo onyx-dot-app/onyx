@@ -551,13 +551,14 @@ def downgrade() -> None:
                         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                         WHERE c.relkind = 'v'
                         AND n.nspname = current_schema()
-                        AND c.relname LIKE 'allowed_docs%'
+                        AND c.relname LIKE 'kg_relationships_with_access%'
                     LOOP
                         EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
                     END LOOP;
                 END $$;
             """
     )
+
     op.execute(
         """
                 DO $$
@@ -570,7 +571,7 @@ def downgrade() -> None:
                         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
                         WHERE c.relkind = 'v'
                         AND n.nspname = current_schema()
-                        AND c.relname LIKE 'kg_relationships_with_access%'
+                        AND c.relname LIKE 'allowed_docs%'
                     LOOP
                         EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
                     END LOOP;
