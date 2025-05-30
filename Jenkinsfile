@@ -17,6 +17,7 @@ pipeline {
       when {
         anyOf {
           buildingTag()
+          branch 'eea'
         }
       }
       steps {
