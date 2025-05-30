@@ -24,7 +24,7 @@ from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
 from onyx.db.relationships import add_or_update_staging_relationship
-from onyx.db.relationships import add_relationship_type
+from onyx.db.relationships import add_or_update_staging_relationship_type
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.kg.configuration import execute_kg_setting_tests
@@ -193,10 +193,8 @@ def get_relationship_types_str(active: bool | None = None) -> str:
     Returns:
         A string with all relationship types formatted as "source_type__relationship_type__target_type"
     """
-    from onyx.db.relationships import get_all_relationship_types
-
     with get_session_with_current_tenant() as db_session:
-        relationship_types = get_all_relationship_types(db_session, KGStage.NORMALIZED)
+        relationship_types = db_session.query(KGRelationshipType).all()
 
         # Filter by active status if specified
 
@@ -981,14 +979,13 @@ def kg_extraction(
 
                 with get_session_with_current_tenant() as db_session:
                     try:
-                        add_relationship_type(
+                        add_or_update_staging_relationship_type(
                             db_session=db_session,
                             source_entity_type=source_entity_type.upper(),
                             relationship_type=relationship_type,
                             target_entity_type=target_entity_type.upper(),
                             definition=False,
                             extraction_count=extraction_count,
-                            kg_stage=KGStage.EXTRACTED,
                         )
                         db_session.commit()
                     except Exception as e:

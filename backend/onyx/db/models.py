@@ -654,7 +654,7 @@ class KGEntityType(Base):
         comment="Filtering based on document attribute",
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -735,7 +735,7 @@ class KGRelationshipType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -806,7 +806,13 @@ class KGRelationshipTypeExtractionStaging(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    transferred: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
 
     # Tracking fields
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -875,7 +881,7 @@ class KGEntity(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -957,7 +963,7 @@ class KGEntityExtractionStaging(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -966,6 +972,11 @@ class KGEntityExtractionStaging(Base):
 
     # Boosts - using JSON for flexibility
     boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
+
+    transferred_id_name: Mapped[str | None] = mapped_column(
+        NullFilteredString,
+        nullable=True,
+    )
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -1038,7 +1049,7 @@ class KGRelationship(Base):
         "KGRelationshipType", backref="relationship"
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -1133,7 +1144,13 @@ class KGRelationshipExtractionStaging(Base):
         "KGRelationshipTypeExtractionStaging", backref="relationship_staging"
     )
 
-    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    transferred: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
 
     # Tracking fields
     time_created: Mapped[datetime.datetime] = mapped_column(

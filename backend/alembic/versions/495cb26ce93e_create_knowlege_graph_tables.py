@@ -113,7 +113,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column("active", sa.Boolean(), nullable=False, default=False),
         sa.Column("deep_extraction", sa.Boolean(), nullable=False, default=False),
         sa.Column(
@@ -147,7 +147,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -185,7 +185,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -197,6 +197,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
+        sa.Column("transferred", sa.Boolean(), nullable=False, server_default="false"),
         sa.ForeignKeyConstraint(
             ["source_entity_type_id_name"], ["kg_entity_type.id_name"]
         ),
@@ -226,7 +227,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
@@ -270,12 +271,13 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
         sa.Column("boosts", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("attributes", postgresql.JSONB, nullable=False, server_default="{}"),
+        sa.Column("transferred_id_name", sa.String(), nullable=True, default=None),
         sa.Column("event_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
@@ -305,7 +307,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -346,7 +348,8 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurrences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("transferred", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),

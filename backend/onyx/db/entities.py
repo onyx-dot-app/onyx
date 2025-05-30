@@ -113,7 +113,7 @@ def transfer_entity(
         alternative_names=entity.alternative_names or [],
         entity_type_id_name=entity.entity_type_id_name,
         document_id=entity.document_id,
-        occurrences=entity.occurrences or 1,
+        occurrences=entity.occurrences,
         attributes=entity.attributes or {},
         event_time=entity.event_time,
     )
@@ -126,6 +126,11 @@ def transfer_entity(
             document_id=entity.document_id,
             kg_stage=KGStage.NORMALIZED,
         )
+
+    # Update transferred
+    db_session.query(KGEntityExtractionStaging).filter(
+        KGEntityExtractionStaging.id_name == entity.id_name
+    ).update({"transferred_id_name": new_entity.id_name})
     db_session.flush()
 
     return new_entity
@@ -169,7 +174,7 @@ def merge_entities(
         .values(
             document_id=document_id,
             alternative_names=list(alternative_names),
-            occurrences=(parent.occurrences or 1) + (child.occurrences or 1),
+            occurrences=parent.occurrences + child.occurrences,
         )
         .returning(KGEntity)
     )
@@ -186,6 +191,11 @@ def merge_entities(
             document_id=child.document_id,
             kg_stage=KGStage.NORMALIZED,
         )
+
+    # Update transferred
+    db_session.query(KGEntityExtractionStaging).filter(
+        KGEntityExtractionStaging.id_name == child.id_name
+    ).update({"transferred_id_name": parent.id_name})
     db_session.flush()
 
     return result

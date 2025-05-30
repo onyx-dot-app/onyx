@@ -127,22 +127,27 @@ def transfer_relationship(
         type=relationship.type,
         relationship_type_id_name=relationship.relationship_type_id_name,
         source_document=relationship.source_document,
-        occurrences=relationship.occurrences or 1,
+        occurrences=relationship.occurrences,
     )
     db_session.add(new_relationship)
+
+    # Update transferred
+    db_session.query(KGRelationshipExtractionStaging).filter(
+        KGRelationshipExtractionStaging.id_name == relationship.id_name,
+        KGRelationshipExtractionStaging.source_document == relationship.source_document,
+    ).update({"transferred": True})
     db_session.flush()
 
     return new_relationship
 
 
-def add_relationship_type(
+def add_or_update_staging_relationship_type(
     db_session: Session,
-    kg_stage: KGStage,
     source_entity_type: str,
     relationship_type: str,
     target_entity_type: str,
     definition: bool = False,
-    extraction_count: int = 0,
+    extraction_count: int = 1,
 ) -> str:
     """
     Add a new relationship type to the database.
@@ -155,54 +160,38 @@ def add_relationship_type(
         definition: Whether this relationship type represents a definition (default False)
 
     Returns:
-        The created KGRelationshipType object
-
-    Raises:
-        sqlalchemy.exc.IntegrityError: If the relationship type already exists
+        The created KGRelationshipTypeExtractionStaging object
     """
 
     id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
+
     # Create new relationship type
-
-    relationship_data = {
-        "id_name": id_name,
-        "name": relationship_type,
-        "source_entity_type_id_name": source_entity_type.upper(),
-        "target_entity_type_id_name": target_entity_type.upper(),
-        "definition": definition,
-        "occurrences": extraction_count,
-        "type": relationship_type,  # Using the relationship_type as the type
-        "active": True,  # Setting as active by default
-    }
-
-    rel_type: KGRelationshipType | KGRelationshipTypeExtractionStaging
-
-    if kg_stage == KGStage.EXTRACTED:
-        rel_type = KGRelationshipTypeExtractionStaging(**relationship_data)
-    elif kg_stage == KGStage.NORMALIZED:
-        rel_type = KGRelationshipType(**relationship_data)
-    else:
-        raise ValueError(f"Invalid kg_stage: {kg_stage}")
-
     # Use on_conflict_do_update to handle conflicts
     stmt = (
-        postgresql.insert(type(rel_type))
-        .values(**relationship_data)
+        postgresql.insert(KGRelationshipTypeExtractionStaging)
+        .values(
+            {
+                "id_name": id_name,
+                "name": relationship_type,
+                "source_entity_type_id_name": source_entity_type.upper(),
+                "target_entity_type_id_name": target_entity_type.upper(),
+                "definition": definition,
+                "occurrences": extraction_count,
+                "type": relationship_type,  # Using the relationship_type as the type
+                "active": True,  # Setting as active by default
+            }
+        )
         .on_conflict_do_update(
             index_elements=["id_name"],
             set_={
-                "name": relationship_data["name"],
-                "source_entity_type_id_name": relationship_data[
-                    "source_entity_type_id_name"
-                ],
-                "target_entity_type_id_name": relationship_data[
-                    "target_entity_type_id_name"
-                ],
-                "definition": relationship_data["definition"],
-                "occurrences": int(str(relationship_data["occurrences"] or 0))
+                "name": relationship_type,
+                "source_entity_type_id_name": source_entity_type.upper(),
+                "target_entity_type_id_name": target_entity_type.upper(),
+                "definition": definition,
+                "occurrences": KGRelationshipTypeExtractionStaging.occurrences
                 + extraction_count,
-                "type": relationship_data["type"],
-                "active": relationship_data["active"],
+                "type": relationship_type,
+                "active": True,
             },
         )
     )
@@ -213,24 +202,32 @@ def add_relationship_type(
     return id_name
 
 
-def get_all_relationship_types(
-    db_session: Session, kg_stage: str
-) -> list["KGRelationshipType"] | list["KGRelationshipTypeExtractionStaging"]:
+def transfer_relationship_type(
+    db_session: Session,
+    relationship_type: KGRelationshipTypeExtractionStaging,
+) -> KGRelationshipType:
     """
-    Retrieve all relationship types from the database.
-
-    Args:
-        db_session: SQLAlchemy database session
-
-    Returns:
-        List of KGRelationshipType or KGRelationshipTypeExtractionStaging objects
+    Transfer a relationship type from the staging table to the normalized table.
     """
-    if kg_stage == KGStage.EXTRACTED:
-        return db_session.query(KGRelationshipTypeExtractionStaging).all()
-    elif kg_stage == KGStage.NORMALIZED:
-        return db_session.query(KGRelationshipType).all()
-    else:
-        raise ValueError(f"Invalid kg_stage: {kg_stage}")
+    new_relationship_type = KGRelationshipType(
+        id_name=relationship_type.id_name,
+        name=relationship_type.name,
+        source_entity_type_id_name=relationship_type.source_entity_type_id_name,
+        target_entity_type_id_name=relationship_type.target_entity_type_id_name,
+        definition=relationship_type.definition,
+        occurrences=relationship_type.occurrences,
+        type=relationship_type.type,
+        active=relationship_type.active,
+    )
+    db_session.add(new_relationship_type)
+
+    # Update transferred
+    db_session.query(KGRelationshipTypeExtractionStaging).filter(
+        KGRelationshipTypeExtractionStaging.id_name == relationship_type.id_name
+    ).update({"transferred": True})
+    db_session.flush()
+
+    return new_relationship_type
 
 
 def delete_relationships_by_id_names(
