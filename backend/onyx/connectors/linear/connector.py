@@ -102,7 +102,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         data = {
             "code": code,
             "redirect_uri": get_oauth_callback_uri(
-                base_domain, DocumentSource.LINEAR.value
+                base_domain, DocumentSource.LINEAR.value, url_encode=False
             ),
             "client_id": LINEAR_CLIENT_ID,
             "client_secret": LINEAR_CLIENT_SECRET,
