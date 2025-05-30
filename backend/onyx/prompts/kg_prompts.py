@@ -755,7 +755,7 @@ Identified entities with attributes in query:
 These are the entities that should be used in the SQL statement. However, \
 note that these are the entities (with potential attributes) that were *matches* of Knowledge Graph identified with the \
 entities originally identified in the original question. A such, they may have id names that may not mean much by themselves, \
-eg ACCOUNT::SF_8254Hs. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
+eg ACCOUNT::a74f332. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
 the entities that were matched to them in the Knowledge Graph:
 
 ---entity_explanation_string---
@@ -827,6 +827,10 @@ So please use that format, particularly if you use data comparisons (>, <, ...)
 - Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
 want to sort by. If the sorting is time-based and there is a limit for example, then you do want to have a suitable date \
 variable as the first column to sort by.
+- When doing a SORT on an attribute value of an entity, you MUST also apply a WHERE clause to filter \
+for entities that have the attribute value set. For example, if you want to sort the target entity \
+by the attribute 'created_date', you must also have a WHERE clause that checks whether the target \
+entity attribute contains 'created_date'. This is vital for proper ordering with null values.
 - Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
 have entities involved in the SELECT clause.
 - Try to be as efficient as possible.
@@ -998,13 +1002,13 @@ SQL results in 6 above. Each inner list can have one or more entities, which wil
 rows in the sql results in point 6 above.>,
     "source_document_filters": <a list of strings, derived from the source document filters above. \
 You are essentially only formatting here, so do not change the content of the strings.>,
-    "structure": <Think about the user question. What would the user maybe want to see as a bullet point list? \
+    "structure": <a list of entity ids (entity_type::uuid) that the user maybe want to know more about. \
 More specifically, think about how (and if) the user would naturally want the answer to be divided up in \
-*equivalent and parallel* sub-investigations. For example, if the question were something like 'what was discussed \
+*equivalent and parallel* sub-investigations. For example, if the question was something like 'what was discussed \
 in the last 5 calls', the user probably expects to see a bullet point list, one bullet point for each call that \
-then shows the summary. In that case for this part of the task you would just respond with a list of the calls, which \
-should be entities and part of the sql results in 6 above. (The actual 'what was discussed' will be addressed later).
-In other words, respond with a list of entities that you think the user would like to have independently analyzed
+then shows the summary. In that case for this part of the task, your response for the structure should be the \
+list of call entities from the sql results in 6 above. (The actual 'what was discussed' will be addressed later). \
+In other words, respond with a list of entity ids that you think the user would like to have independently analyzed
 and the results reported for each of those entities.>
 }}
 

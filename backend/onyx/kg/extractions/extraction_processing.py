@@ -14,7 +14,7 @@ from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
 from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import add_entity
+from onyx.db.entities import add_or_update_staging_entity
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
@@ -23,12 +23,10 @@ from onyx.db.models import Document
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
-from onyx.db.relationships import add_or_increment_relationship
-from onyx.db.relationships import add_relationship
-from onyx.db.relationships import add_relationship_type
+from onyx.db.relationships import add_or_update_staging_relationship
+from onyx.db.relationships import add_or_update_staging_relationship_type
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.configuration import execute_kg_setting_tests
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
@@ -195,10 +193,8 @@ def get_relationship_types_str(active: bool | None = None) -> str:
     Returns:
         A string with all relationship types formatted as "source_type__relationship_type__target_type"
     """
-    from onyx.db.relationships import get_all_relationship_types
-
     with get_session_with_current_tenant() as db_session:
-        relationship_types = get_all_relationship_types(db_session, KGStage.NORMALIZED)
+        relationship_types = db_session.query(KGRelationshipType).all()
 
         # Filter by active status if specified
 
@@ -348,7 +344,7 @@ def kg_extraction(
         - For each batch of unprocessed documents:
             - Classify each document to select proper ones
             - Get and extract from chunks
-            - Update chunks inVespa
+            - Update chunks in Vespa
             - Update temporary KG extraction tables
             - Update document table to set kg_extracted = True
     """
@@ -610,6 +606,7 @@ def kg_extraction(
 
                 # 2. perform KG extraction on the chunks that should be processed
 
+                # TODO: kg-id-refactor: just grab first chunk as we update vespa in clustering
                 formatted_chunk_batches = get_document_chunks_for_kg_processing(
                     document_id=unprocessed_document.id,
                     deep_extraction=batch_metadata[
@@ -850,11 +847,10 @@ def kg_extraction(
                             not in aggregated_kg_extractions.grounded_entities_document_ids
                         ):
                             # Ungrounded entities
-                            add_entity(
+                            add_or_update_staging_entity(
                                 db_session=db_session,
-                                kg_stage=KGStage.EXTRACTED,
-                                entity_type=entity_type,
                                 name=entity_name,
+                                entity_type=entity_type,
                                 occurrences=extraction_count,
                             )
                         else:
@@ -909,15 +905,14 @@ def kg_extraction(
                                         }
                                     )
 
-                            add_entity(
+                            add_or_update_staging_entity(
                                 db_session=db_session,
-                                kg_stage=KGStage.EXTRACTED,
-                                entity_type=entity_type,
                                 name=entity_name,
-                                occurrences=extraction_count,
+                                entity_type=entity_type,
                                 document_id=document_id,
-                                event_time=event_time,
+                                occurrences=extraction_count,
                                 attributes=entity_attributes,
+                                event_time=event_time,
                             )
 
                         db_session.commit()
@@ -982,28 +977,21 @@ def kg_extraction(
                 ):
                     continue
 
-                try:
-                    with get_session_with_current_tenant() as db_session:
-                        try:
-                            add_relationship_type(
-                                db_session=db_session,
-                                source_entity_type=source_entity_type.upper(),
-                                relationship_type=relationship_type,
-                                target_entity_type=target_entity_type.upper(),
-                                definition=False,
-                                extraction_count=extraction_count,
-                                kg_stage=KGStage.EXTRACTED,
-                            )
-                            db_session.commit()
-                        except Exception as e:
-                            logger.error(
-                                f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
-                            )
-                except Exception as e:
-                    logger.error(
-                        f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
-                    )
-
+                with get_session_with_current_tenant() as db_session:
+                    try:
+                        add_or_update_staging_relationship_type(
+                            db_session=db_session,
+                            source_entity_type=source_entity_type.upper(),
+                            relationship_type=relationship_type,
+                            target_entity_type=target_entity_type.upper(),
+                            definition=False,
+                            extraction_count=extraction_count,
+                        )
+                        db_session.commit()
+                    except Exception as e:
+                        logger.error(
+                            f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
+                        )
             for (
                 relationship,
                 relationship_data,
@@ -1031,28 +1019,19 @@ def kg_extraction(
                     source_entity_type = source_entity.split("::")[0]
                     target_entity_type = target_entity.split("::")[0]
 
-                    try:
-                        with get_session_with_current_tenant() as db_session:
-                            add_relationship(
-                                db_session,
-                                KGStage.EXTRACTED,
-                                relationship,
-                                source_document_id,
-                                extraction_count,
+                    with get_session_with_current_tenant() as db_session:
+                        try:
+                            add_or_update_staging_relationship(
+                                db_session=db_session,
+                                relationship_id_name=relationship,
+                                source_document_id=source_document_id,
+                                occurrences=extraction_count,
                             )
                             db_session.commit()
-                    except Exception as e:
-                        logger.error(
-                            f"Error adding relationship {relationship} to the database: {e}"
-                        )
-                        with get_session_with_current_tenant() as db_session:
-                            add_or_increment_relationship(
-                                db_session,
-                                KGStage.EXTRACTED,
-                                relationship,
-                                source_document_id,
+                        except Exception as e:
+                            logger.error(
+                                f"Error adding relationship {relationship} to the database: {e}"
                             )
-                            db_session.commit()
 
             # Populate the Documents table with the kg information for the documents
 
@@ -1149,12 +1128,6 @@ def _kg_chunk_batch_extraction(
         chunk_needs_deep_extraction = chunk.deep_extraction
 
         # Get core entity
-
-        chunk.document_id
-        chunk.primary_owners
-        chunk.secondary_owners
-        chunk.content
-        chunk.title.capitalize()
 
         # Get implied entities and relationships from  chunk attributes
 
@@ -1298,8 +1271,6 @@ def _kg_chunk_batch_extraction(
             )
         )
 
-        logger.debug(f"All entities: {all_entities}")
-
         all_relationships = (
             list(implied_attribute_relationships)
             + list(extracted_relationships)
@@ -1319,28 +1290,17 @@ def _kg_chunk_batch_extraction(
                 + kg_document_extractions.kg_core_document_id_name
             )
 
-        kg_updates = [
-            KGUChunkUpdateRequest(
-                document_id=chunk.document_id,
-                chunk_id=chunk.chunk_id,
-                core_entity=kg_document_extractions.kg_core_document_id_name,
-                entities=all_entities,
-                relationships=set(all_relationships),
-                terms=set(extracted_terms),
-                converted_attributes=converted_attributes_to_relationships,
-                attributes=kg_attributes,
-            ),
-        ]
-
-        update_kg_chunks_vespa_info(
-            kg_update_requests=kg_updates,
-            index_name=index_name,
-            tenant_id=tenant_id,
+        logger.info(f"KG extracted: doc {chunk.document_id} chunk {chunk.chunk_id}")
+        return True, KGUChunkUpdateRequest(
+            document_id=chunk.document_id,
+            chunk_id=chunk.chunk_id,
+            core_entity=kg_document_extractions.kg_core_document_id_name,
+            entities=all_entities,
+            relationships=set(all_relationships),
+            terms=set(extracted_terms),
+            converted_attributes=converted_attributes_to_relationships,
+            attributes=kg_attributes,
         )
-
-        logger.info(f"KG updated: {chunk.chunk_id} from doc {chunk.document_id}")
-
-        return True, kg_updates[0]  # only single chunk
 
     # Assume for prototype: use_threads = True. TODO: Make thread safe!
 

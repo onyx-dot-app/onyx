@@ -19,7 +19,7 @@ from onyx.db.kg_config import get_kg_processing_in_progress_status
 from onyx.db.kg_config import KGProcessingType
 from onyx.db.kg_config import set_kg_processing_in_progress_status
 from onyx.db.search_settings import get_current_search_settings
-from onyx.kg.clustering.initial_clustering import kg_clustering
+from onyx.kg.clustering.clustering import kg_clustering
 from onyx.kg.extractions.extraction_processing import kg_extraction
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
