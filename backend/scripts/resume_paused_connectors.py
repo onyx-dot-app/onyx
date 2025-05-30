@@ -8,11 +8,12 @@ HEADERS = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KE
 
 
 def resume_paused_connectors(
+    api_server_url: str,
     specific_connector_sources: list[str] | None = None,
 ) -> None:
     # Get all paused connectors
     response = requests.get(
-        f"{API_SERVER_URL}/api/manage/admin/connector/indexing-status",
+        f"{api_server_url}/api/manage/admin/connector/indexing-status",
         headers=HEADERS,
     )
     response.raise_for_status()
@@ -32,7 +33,7 @@ def resume_paused_connectors(
         if connector["cc_pair_status"] == "PAUSED":
             print(f"Resuming connector: {connector['name']}")
             response = requests.put(
-                f"{API_SERVER_URL}/api/manage/admin/cc-pair/{connector['cc_pair_id']}/status",
+                f"{api_server_url}/api/manage/admin/cc-pair/{connector['cc_pair_id']}/status",
                 json={"status": "ACTIVE"},
                 headers=HEADERS,
             )
@@ -46,6 +47,12 @@ def resume_paused_connectors(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Resume paused connectors")
     parser.add_argument(
+        "--api_server_url",
+        type=str,
+        default=API_SERVER_URL,
+        help="The URL of the API server to use. If not provided, will use the default.",
+    )
+    parser.add_argument(
         "--connector_sources",
         type=str.lower,
         nargs="+",
@@ -53,7 +60,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    resume_paused_connectors(args.connector_sources)
+    resume_paused_connectors(args.api_server_url, args.connector_sources)
 
 
 if __name__ == "__main__":
