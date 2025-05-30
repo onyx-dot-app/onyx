@@ -143,7 +143,7 @@ class SlackbotHandler:
         self.redis_locks: Dict[str, Lock] = {}
 
         self.running = True
-        self.pod_id = self.get_pod_id()
+        self.pod_id = os.environ.get("HOSTNAME", "unknown_pod")
         self._shutdown_event = Event()
 
         self._lock = threading.Lock()
@@ -173,11 +173,6 @@ class SlackbotHandler:
         self.heartbeat_thread.start()
 
         logger.info("Background threads started")
-
-    def get_pod_id(self) -> str:
-        pod_id = os.environ.get("HOSTNAME", "unknown_pod")
-        logger.info(f"Retrieved pod ID: {pod_id}")
-        return pod_id
 
     def acquire_tenants_loop(self) -> None:
         while not self._shutdown_event.is_set():
