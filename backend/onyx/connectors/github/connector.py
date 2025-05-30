@@ -251,6 +251,8 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
         metadata={
             k: v
             for k, v in {
+                "object_type": "PullRequest",
+                "id": str(pull_request.number),
                 "merged": str(pull_request.merged),
                 "state": pull_request.state,
                 "user": (
@@ -311,6 +313,8 @@ def _convert_issue_to_document(issue: Issue) -> Document:
         metadata={
             k: str(v)
             for k, v in {
+                "object_type": "Issue",
+                "id": str(issue.number),
                 "state": issue.state,
                 "user": str(_get_userinfo(issue.user)) if issue.user else None,
                 "assignees": [
