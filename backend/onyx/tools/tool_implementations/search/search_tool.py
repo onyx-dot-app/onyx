@@ -1,4 +1,3 @@
-import copy
 import json
 import time
 from collections.abc import Callable
@@ -32,6 +31,7 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import UserFileFilters
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
 from onyx.db.models import Persona
@@ -324,29 +324,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             yield from self._build_response_for_specified_sections(query)
             return
 
-        # Create a copy of the retrieval options with user_file_ids if provided
-        retrieval_options = copy.deepcopy(self.retrieval_options)
-        if (user_file_ids or user_folder_ids) and retrieval_options:
-            # Create a copy to avoid modifying the original
-            filters = (
-                retrieval_options.filters.model_copy()
-                if retrieval_options.filters
-                else BaseFilters()
-            )
-            filters.user_file_ids = user_file_ids
-            retrieval_options = retrieval_options.model_copy(
-                update={"filters": filters}
-            )
-        elif user_file_ids or user_folder_ids:
-            # Create new retrieval options with user_file_ids
-            filters = BaseFilters(
-                user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
-            )
-            retrieval_options = RetrievalDetails(filters=filters)
-
+        retrieval_options = self.retrieval_options or RetrievalDetails()
         if document_sources or time_cutoff:
             # Get retrieval_options and filters, or create if they don't exist
-            retrieval_options = retrieval_options or RetrievalDetails()
             retrieval_options.filters = retrieval_options.filters or BaseFilters()
 
             # Handle document sources
@@ -368,7 +348,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     LLMEvaluationType.SKIP if force_no_rerank else self.evaluation_type
                 ),
                 human_selected_filters=(
-                    retrieval_options.filters if retrieval_options else None
+                    retrieval_options.filters if self.retrieval_options else None
+                ),
+                user_file_filters=UserFileFilters(
+                    user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
                 ),
                 persona=self.persona,
                 offset=(retrieval_options.offset if retrieval_options else None),

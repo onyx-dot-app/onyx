@@ -111,11 +111,14 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
+
+
+class UserFileFilters(BaseModel):
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
 
 
-class IndexFilters(BaseFilters):
+class IndexFilters(BaseFilters, UserFileFilters):
     access_control_list: list[str] | None
     tenant_id: str | None = None
 
@@ -150,6 +153,7 @@ class SearchRequest(ChunkContext):
     search_type: SearchType = SearchType.SEMANTIC
 
     human_selected_filters: BaseFilters | None = None
+    user_file_filters: UserFileFilters | None = None
     enable_auto_detect_filters: bool | None = None
     persona: Persona | None = None
 

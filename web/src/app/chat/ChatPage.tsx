@@ -1451,9 +1451,7 @@ export function ChatPage({
           filterManager.selectedSources,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
-          filterManager.selectedTags,
-          selectedFiles.map((file) => file.id)
-          // selectedFolders.map((folder) => folder.id)
+          filterManager.selectedTags
         ),
         selectedDocumentIds: selectedDocuments
           .filter(
