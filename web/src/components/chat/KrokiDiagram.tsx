@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, Loader2, Download, Copy, Maximize2, Code as CodeIcon } from 'lucide-react';
+import { AlertTriangle, Loader2, Download, Copy, Maximize2, Code as CodeIcon, ClipboardCopy } from 'lucide-react'; // Added ClipboardCopy
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/app/chat/message/CodeBlock"; // Import CodeBlock
 import {
@@ -28,6 +28,7 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
   const [showRawCode, setShowRawCode] = useState(false);
   const [showFullscreenModal, setShowFullscreenModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [copyCodeStatus, setCopyCodeStatus] = useState<string | null>(null); // New state for copy code status
   const [currentAppTheme, setCurrentAppTheme] = useState<'light' | 'dark'>(() => 
     typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light'
   );
@@ -130,6 +131,21 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
       setTimeout(() => setCopyStatus(null), 2000);
     }
   }, [svgContent]);
+
+  const handleCopyCode = useCallback(() => {
+    if (!codeText) return;
+    setCopyCodeStatus("Copying...");
+    navigator.clipboard.writeText(codeText)
+      .then(() => {
+        setCopyCodeStatus("Copied!");
+        setTimeout(() => setCopyCodeStatus(null), 2000);
+      })
+      .catch(err => {
+        console.error("Failed to copy code: ", err);
+        setCopyCodeStatus("Failed!");
+        setTimeout(() => setCopyCodeStatus(null), 2000);
+      });
+  }, [codeText]);
 
 
   useEffect(() => {
@@ -315,6 +331,13 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
                   {copyStatus === "Copy failed." && <AlertTriangle className="h-4 w-4 mr-2 text-red-600 dark:text-red-400" />}
                   {!copyStatus && <Copy className="h-4 w-4 mr-2 text-slate-700 dark:text-slate-200" />}
                   <span className="text-slate-700 dark:text-slate-200">{copyStatus ? copyStatus : "Copy as Image"}</span>
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleCopyCode} disabled={!!copyCodeStatus}>
+                  {copyCodeStatus === "Copying..." && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {copyCodeStatus === "Copied!" && <ClipboardCopy className="h-4 w-4 mr-2 text-green-600 dark:text-green-400" />}
+                  {copyCodeStatus === "Failed!" && <AlertTriangle className="h-4 w-4 mr-2 text-red-600 dark:text-red-400" />}
+                  {!copyCodeStatus && <ClipboardCopy className="h-4 w-4 mr-2" />}
+                  <span className="text-slate-700 dark:text-slate-200">{copyCodeStatus ? copyCodeStatus : "Copy as Code"}</span>
                 </Button>
               </div>
             </DialogContent>
