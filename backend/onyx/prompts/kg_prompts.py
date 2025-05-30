@@ -755,7 +755,7 @@ Identified entities with attributes in query:
 These are the entities that should be used in the SQL statement. However, \
 note that these are the entities (with potential attributes) that were *matches* of Knowledge Graph identified with the \
 entities originally identified in the original question. A such, they may have id names that may not mean much by themselves, \
-eg ACCOUNT::SF_8254Hs. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
+eg ACCOUNT::a74f332. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
 the entities that were matched to them in the Knowledge Graph:
 
 ---entity_explanation_string---
@@ -827,6 +827,10 @@ So please use that format, particularly if you use data comparisons (>, <, ...)
 - Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
 want to sort by. If the sorting is time-based and there is a limit for example, then you do want to have a suitable date \
 variable as the first column to sort by.
+- When doing a SORT on an attribute value of an entity, you MUST also apply a WHERE clause to filter \
+for entities that have the attribute value set. For example, if you want to sort the target entity \
+by the attribute 'created_date', you must also have a WHERE clause that checks whether the target \
+entity attribute contains 'created_date'. This is vital for proper ordering with null values.
 - Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
 have entities involved in the SELECT clause.
 - Try to be as efficient as possible.
