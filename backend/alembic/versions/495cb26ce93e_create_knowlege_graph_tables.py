@@ -529,46 +529,52 @@ def upgrade() -> None:
 
 def downgrade() -> None:
 
-    if not MULTI_TENANT:
-        # Drop temporary views
-        conn = op.get_bind()
-        kg_temp_views = [
-            row[0]
-            for row in conn.execute(
-                text(
-                    """
-                SELECT table_name
-                FROM INFORMATION_SCHEMA.views
-                WHERE table_name like 'kg_relationships%';
-                """
-                )
-            ).fetchall()
-        ]
-        for view in kg_temp_views:
-            op.execute(f"DROP VIEW IF EXISTS {view}")
+    #  Drop all views that start with 'kg_'
+    op.execute(
+        """
+                DO $$
+                DECLARE
+                    view_name text;
+                BEGIN
+                    FOR view_name IN
+                        SELECT c.relname
+                        FROM pg_catalog.pg_class c
+                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                        WHERE c.relkind = 'v'
+                        AND n.nspname = current_schema()
+                        AND c.relname LIKE 'allowed_docs%'
+                    LOOP
+                        EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
+                    END LOOP;
+                END $$;
+            """
+    )
+    op.execute(
+        """
+                DO $$
+                DECLARE
+                    view_name text;
+                BEGIN
+                    FOR view_name IN
+                        SELECT c.relname
+                        FROM pg_catalog.pg_class c
+                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                        WHERE c.relkind = 'v'
+                        AND n.nspname = current_schema()
+                        AND c.relname LIKE 'kg_relationships_with_access%'
+                    LOOP
+                        EXECUTE 'DROP VIEW IF EXISTS ' || quote_ident(view_name);
+                    END LOOP;
+                END $$;
+            """
+    )
 
-        kg_temp_views = [
-            row[0]
-            for row in conn.execute(
-                text(
-                    """
-                SELECT table_name
-                FROM INFORMATION_SCHEMA.views
-                WHERE table_name like 'allowed_docs%';
-                """
-                )
-            ).fetchall()
-        ]
-        for view in kg_temp_views:
-            op.execute(f"DROP VIEW IF EXISTS {view}")
-
-        # Drop triggers and functions
-        for table, function in (
-            ("kg_entity", "update_kg_entity_name"),
-            ("document", "update_kg_entity_name_from_doc"),
-        ):
-            op.execute(f"DROP TRIGGER IF EXISTS {function}_trigger ON {table}")
-            op.execute(f"DROP FUNCTION IF EXISTS {function}()")
+    for table, function in (
+        ("kg_entity", "update_kg_entity_name"),
+        ("document", "update_kg_entity_name_from_doc"),
+    ):
+        op.execute(f"DROP TRIGGER IF EXISTS {function}_trigger ON {table}")
+        op.execute(f"DROP FUNCTION IF EXISTS {function}()")
 
     # Drop index
     op.execute("COMMIT")  # Commit to allow CONCURRENTLY
