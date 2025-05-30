@@ -63,6 +63,15 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
 
             kg_config_settings.KG_MAX_COVERAGE_DAYS = int(kg_max_coverage_days_str)
 
+        elif result.kg_variable_name == KGConfigVars.KG_EXTRACTION_IN_PROGRESS:
+            kg_config_settings.KG_EXTRACTION_IN_PROGRESS = (
+                result.kg_variable_values[0] == "true"
+            )
+        elif result.kg_variable_name == KGConfigVars.KG_CLUSTERING_IN_PROGRESS:
+            kg_config_settings.KG_CLUSTERING_IN_PROGRESS = (
+                result.kg_variable_values[0] == "true"
+            )
+
     return kg_config_settings
 
 
