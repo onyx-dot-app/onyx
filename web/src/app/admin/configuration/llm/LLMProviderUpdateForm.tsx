@@ -11,7 +11,7 @@ import {
   TextFormField,
   MultiSelectField,
   FileUploadFormField,
-} from "@/components/admin/connectors/Field";
+} from "@/components/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {

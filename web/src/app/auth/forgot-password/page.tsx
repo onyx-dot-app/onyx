@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Spinner } from "@/components/Spinner";
 import { redirect } from "next/navigation";

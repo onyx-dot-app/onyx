@@ -5,7 +5,7 @@ import Text from "@/components/ui/text";
 import { FiUsers } from "react-icons/fi";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
-import { BooleanFormField } from "@/components/admin/connectors/Field";
+import { BooleanFormField } from "@/components/Field";
 import { useUser } from "./user/UserProvider";
 
 export type IsPublicGroupSelectorFormType = {

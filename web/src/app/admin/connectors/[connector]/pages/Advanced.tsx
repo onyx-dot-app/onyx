@@ -1,6 +1,6 @@
 import React from "react";
 import NumberInput from "./ConnectorInput/NumberInput";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { TrashIcon } from "@/components/icons/icons";
 
 const AdvancedFormPage = () => {
