@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, Loader2, Download, Copy, Maximize2, Code as CodeIcon, ClipboardCopy } from 'lucide-react'; // Added ClipboardCopy
+import { AlertTriangle, Loader2, Download, Copy, Maximize2, Code as CodeIcon, ClipboardCopy, AlertCircle, RefreshCw } from 'lucide-react'; // Added AlertCircle, RefreshCw
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/app/chat/message/CodeBlock"; // Import CodeBlock
 import {
@@ -223,8 +223,7 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
   if (isLoading) {
     return (
       <div className="kroki-diagram-loading-container flex items-center justify-center p-4 bg-white">
-        <Loader2 className="h-6 w-6 animate-spin mr-2" />
-        Rendering diagram...
+        <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
   }
