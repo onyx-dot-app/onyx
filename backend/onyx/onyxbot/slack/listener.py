@@ -1,4 +1,3 @@
-import asyncio
 import os
 import signal
 import sys
@@ -224,7 +223,7 @@ class SlackbotHandler:
                 f"No Slack bot tokens found for tenant={tenant_id}, bot {bot.id}"
             )
             if tenant_bot_pair in self.socket_clients:
-                asyncio.run(self.socket_clients[tenant_bot_pair].close())
+                self.socket_clients[tenant_bot_pair].close()
                 del self.socket_clients[tenant_bot_pair]
                 del self.slack_bot_tokens[tenant_bot_pair]
             return
@@ -252,7 +251,7 @@ class SlackbotHandler:
 
             # Close any existing connection first
             if tenant_bot_pair in self.socket_clients:
-                asyncio.run(self.socket_clients[tenant_bot_pair].close())
+                self.socket_clients[tenant_bot_pair].close()
 
             self.start_socket_client(bot.id, tenant_id, slack_bot_tokens)
 
@@ -412,7 +411,7 @@ class SlackbotHandler:
         # Close all socket clients for this tenant
         for (t_id, slack_bot_id), client in list(self.socket_clients.items()):
             if t_id == tenant_id:
-                asyncio.run(client.close())
+                client.close()
                 del self.socket_clients[(t_id, slack_bot_id)]
                 del self.slack_bot_tokens[(t_id, slack_bot_id)]
                 logger.info(
@@ -492,7 +491,7 @@ class SlackbotHandler:
     def stop_socket_clients(self) -> None:
         logger.info(f"Stopping {len(self.socket_clients)} socket clients")
         for (tenant_id, slack_bot_id), client in list(self.socket_clients.items()):
-            asyncio.run(client.close())
+            client.close()
             logger.info(
                 f"Stopped SocketModeClient for tenant: {tenant_id}, app: {slack_bot_id}"
             )
