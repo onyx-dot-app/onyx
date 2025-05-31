@@ -159,6 +159,35 @@ def run_dc_graph(
     return run_graph(compiled_graph, config, input)
 
 
+def run_document_chat_graph(
+    config: GraphConfig,
+    query: str,
+    document_ids: list[str] = [],
+) -> AnswerStream:
+    from onyx.agents.agent_search.document_chat.graph_builder import document_chat_graph_builder
+    from onyx.agents.agent_search.document_chat.states import DocumentChatInput
+    from onyx.tools.models import SearchToolOverrideKwargs
+    
+    user_file_ids = [int(doc_id) for doc_id in document_ids if doc_id.isdigit()] if document_ids else None
+    
+    if config.tooling.search_tool and user_file_ids:
+        config.tooling.force_use_tool.force_use = True
+        config.tooling.force_use_tool.tool_name = config.tooling.search_tool.name
+        config.tooling.force_use_tool.tool_args = {"query": query}
+        
+        config.tooling.search_tool_override_kwargs = SearchToolOverrideKwargs(user_file_ids=user_file_ids)
+    
+    graph = document_chat_graph_builder()
+    compiled_graph = graph.compile()
+    input = DocumentChatInput(query=query, document_ids=document_ids)
+    
+    yield ToolCallKickoff(
+        tool_name="document_chat",
+        tool_args={"query": query, "document_ids": document_ids},
+    )
+    yield from run_graph(compiled_graph, config, input)
+
+
 if __name__ == "__main__":
     for _ in range(1):
         query_start_time = datetime.now()

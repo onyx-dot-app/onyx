@@ -28,7 +28,7 @@ export function DocumentLayout({ children }: DocumentLayoutProps) {
           {/* Logo at top of sidebar */}
           <div className="p-4 flex items-center">
             <Logo height={24} width={24} />
-            <span className="ml-2 font-semibold text-lg">onyx</span>
+            <span className="ml-2 font-semibold text-lg">Valkai</span>
           </div>
           
           {/* Sidebar content */}

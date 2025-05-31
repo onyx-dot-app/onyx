@@ -258,16 +258,6 @@ export function UserDropdown({
                       icon={<UserIcon size={16} className="my-auto" />}
                       label="Documents"
                     />
-                    <DropdownOption
-                      href="/documents/regular"
-                      icon={<UserIcon size={16} className="my-auto" />}
-                      label="Regular Editor"
-                    />
-                    <DropdownOption
-                      href="/documents/constants"
-                      icon={<UserIcon size={16} className="my-auto" />}
-                      label="Constants Editor"
-                    />
                   </>
                 )}
 
