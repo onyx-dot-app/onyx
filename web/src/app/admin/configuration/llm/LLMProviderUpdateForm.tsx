@@ -16,7 +16,7 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
-  ModelConfiguration,
+  NativeOrCustom,
   ModelConfigurationUpsertRequest,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
@@ -173,6 +173,7 @@ export function LLMProviderUpdateForm({
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
               ...finalValues,
+              native_or_custom: "NATIVE" as NativeOrCustom,
             }),
           });
           setIsTesting(false);
@@ -199,6 +200,7 @@ export function LLMProviderUpdateForm({
               fast_default_model_name:
                 finalValues.fast_default_model_name ||
                 finalValues.default_model_name,
+              native_or_custom: "NATIVE" as NativeOrCustom,
             }),
           }
         );
