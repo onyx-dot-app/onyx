@@ -27,6 +27,7 @@ from onyx.connectors.google_drive.doc_conversion import build_slim_document
 from onyx.connectors.google_drive.doc_conversion import (
     convert_drive_item_to_document,
 )
+from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
 from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
 from onyx.connectors.google_drive.file_retrieval import (
@@ -922,8 +923,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 ).timestamp(),
                 current_folder_or_drive_id=file.parent_id,
             )
-            if file.drive_file["id"] not in checkpoint.all_retrieved_file_ids:
-                checkpoint.all_retrieved_file_ids.add(file.drive_file["id"])
+            document_id = onyx_document_id_from_drive_file(file.drive_file)
+            if document_id not in checkpoint.all_retrieved_file_ids:
+                checkpoint.all_retrieved_file_ids.add(document_id)
                 yield file
 
     def _manage_oauth_retrieval(
@@ -1138,6 +1140,10 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+
+        logger.info(
+            f"num drive files retrieved: {len(checkpoint.all_retrieved_file_ids)}"
+        )
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
         return checkpoint
@@ -1186,6 +1192,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     end=end,
                     callback=callback,
                 )
+            logger.info("Drive perm sync: Slim doc retrieval complete")
 
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):

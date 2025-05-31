@@ -7,6 +7,9 @@ postgresql:
     persistence:
       storageClass: ""
       size: 5Gi
+    shmVolume:
+      enabled: true
+      sizeLimit: 1Gi
   enabled: true
   auth:
     existingSecret: onyx-secrets
