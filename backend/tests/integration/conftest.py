@@ -16,6 +16,8 @@ from tests.integration.common_utils.reset import reset_all_multitenant
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
+BASIC_USER_NAME = "basic_user"
+
 
 def load_env_vars(env_file: str = ".env") -> None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -113,6 +115,32 @@ def admin_user() -> DATestUser:
         print(f"Failed to create or login as admin user: {e}")
 
     raise RuntimeError("Failed to create or login as admin user")
+
+
+@pytest.fixture
+def basic_user(
+    # make sure the admin user exists first to ensure this new user
+    # gets the BASIC role
+    admin_user: DATestUser,
+) -> DATestUser:
+    try:
+        user = UserManager.create(name=BASIC_USER_NAME, is_first_user=False)
+        return user
+    except Exception as e:
+        print(f"Failed to create basic user, trying to login as existing user: {e}")
+
+        # Try to login as existing basic user
+        user = UserManager.login_as_user(
+            DATestUser(
+                id="",
+                email=build_email(BASIC_USER_NAME),
+                password=DEFAULT_PASSWORD,
+                headers=GENERAL_HEADERS,
+                role=UserRole.BASIC,
+                is_active=True,
+            )
+        )
+        return user
 
 
 @pytest.fixture
