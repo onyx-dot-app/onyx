@@ -1,9 +1,28 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { SendIcon } from '@/components/icons/icons';
 import { FiMessageSquare } from 'react-icons/fi';
 import { v4 as uuidv4 } from 'uuid';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypePrism from 'rehype-prism-plus';
+import rehypeKatex from 'rehype-katex';
+import { MemoizedAnchor, MemoizedParagraph } from '@/app/chat/message/MemoizedTextComponents';
+import { extractCodeText, preprocessLaTeX } from '@/app/chat/message/codeUtils';
+import { CodeBlock } from '@/app/chat/message/CodeBlock';
+import { transformLinkUri } from '@/lib/utils';
+import { handleSSEStream } from '@/lib/search/streamingUtils';
+import { PacketType } from '@/app/chat/lib';
+import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket } from '@/lib/search/interfaces';
+
+interface CitationInfo {
+  citation_num: number;
+  document_id: string;
+  level?: number | null;
+  level_question_num?: number | null;
+}
 
 interface DocumentChatSidebarProps {
   initialWidth: number;
@@ -15,7 +34,89 @@ export function DocumentChatSidebar({ initialWidth, documentIds = [] }: Document
   const [messages, setMessages] = useState<Array<{id: number, text: string, isUser: boolean, isIntermediateOutput?: boolean, debugLog?: Array<any>}>>([]);
   const [sessionId, setSessionId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [presentingDocument, setPresentingDocument] = useState<any>(null);
+  const [documents, setDocuments] = useState<OnyxDocument[]>([]);
+  const [citationMap, setCitationMap] = useState<Map<number, string>>(new Map());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  const orderedDocuments = useMemo(() => {
+    if (citationMap.size === 0 || documents.length === 0) {
+      return documents;
+    }
+    
+    const docMap = new Map(documents.map(doc => [doc.document_id, doc]));
+    
+    const maxCitationNum = Math.max(...Array.from(citationMap.keys()));
+    const orderedDocs: OnyxDocument[] = new Array(maxCitationNum);
+    
+    Array.from(citationMap.entries()).forEach(([citationNum, documentId]) => {
+      const doc = docMap.get(documentId);
+      if (doc) {
+        orderedDocs[citationNum - 1] = doc;
+      }
+    });
+    
+    let fillIndex = 0;
+    for (let i = 0; i < orderedDocs.length; i++) {
+      if (!orderedDocs[i]) {
+        while (fillIndex < documents.length && orderedDocs.includes(documents[fillIndex])) {
+          fillIndex++;
+        }
+        if (fillIndex < documents.length) {
+          orderedDocs[i] = documents[fillIndex++];
+        }
+      }
+    }
+    
+    return orderedDocs.filter(Boolean);
+  }, [citationMap, documents]);
+
+  const anchorCallback = useCallback(
+    (props: any) => (
+      <MemoizedAnchor
+        updatePresentingDocument={setPresentingDocument}
+        docs={orderedDocuments}
+        userFiles={[]}
+        href={props.href}
+      >
+        {props.children}
+      </MemoizedAnchor>
+    ),
+    [orderedDocuments]
+  );
+
+  const paragraphCallback = useCallback(
+    (props: any) => (
+      <MemoizedParagraph fontSize="sm">
+        {props.children}
+      </MemoizedParagraph>
+    ),
+    []
+  );
+
+  const markdownComponents = useMemo(
+    () => ({
+      a: anchorCallback,
+      p: paragraphCallback,
+      b: ({ node, className, children }: any) => {
+        return <span className={className}>{children}</span>;
+      },
+      code: ({ node, className, children }: any) => {
+        const codeText = extractCodeText(
+          node,
+          children?.toString() || '',
+          children
+        );
+
+        return (
+          <CodeBlock className={className} codeText={codeText}>
+            {children}
+          </CodeBlock>
+        );
+      },
+    }),
+    [anchorCallback, paragraphCallback]
+  );
 
   // Generate a session ID once when the component mounts
   useEffect(() => {
@@ -34,6 +135,9 @@ export function DocumentChatSidebar({ initialWidth, documentIds = [] }: Document
     
     setMessages(prev => [...prev, newMessage]);
     setMessage('');
+    
+    setDocuments([]);
+    setCitationMap(new Map());
     
     try {
       const response = await fetch('/api/chat/document-chat', {
@@ -72,128 +176,92 @@ export function DocumentChatSidebar({ initialWidth, documentIds = [] }: Document
         }
       ]);
       
-      const reader = response.body?.getReader();
-      
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+      try {
+        for await (const packet of handleSSEStream<PacketType>(response)) {
+          console.log('DocumentChatSidebar packet:', packet);
           
-          const chunk = new TextDecoder().decode(value);
-          const lines = chunk.split('\n').filter(line => line.trim());
-          
-          for (const line of lines) {
-            try {
-              const data = JSON.parse(line);
-              if (data.type === 'stream' && data.data) {
-                // Extract answer_piece from the string format "answer_piece='...'" 
-                const answerPieceMatch = data.data.match(/answer_piece='(.*)'/); 
+          if ('answer_piece' in packet) {
+            const agentAnswerPiece = packet as AgentAnswerPiece;
+            const answerPiece = agentAnswerPiece.answer_piece;
+            
+            if (answerPiece && answerPiece.trim()) {
+              setMessages(prev => {
+                const updatedMessages = [...prev];
                 
-                // Extract tool call information for visual debugging
-                const toolCallMatch = data.data.match(/tool_name='([^']+)'(.*)/); 
+                const responseIndex = updatedMessages.findIndex(
+                  msg => msg.id === aiResponseId && !msg.isIntermediateOutput
+                );
                 
-                // Handle answer pieces by appending them to the existing text
-                if (answerPieceMatch && answerPieceMatch[1]) {
-                  const answerPiece = answerPieceMatch[1];
-                  // Only update if answer piece has content
-                  if (answerPiece.trim()) {
-                    setMessages(prev => {
-                      const updatedMessages = [...prev];
-                      
-                      // Find the dedicated response message
-                      const responseIndex = updatedMessages.findIndex(
-                        msg => msg.id === aiResponseId && !msg.isIntermediateOutput
-                      );
-                      
-                      if (responseIndex !== -1) {
-                        // Append this piece to the existing response text
-                        updatedMessages[responseIndex] = {
-                          ...updatedMessages[responseIndex],
-                          text: updatedMessages[responseIndex].text + answerPiece
-                        };
-                      }
-                      
-                      return updatedMessages;
-                    });
-                  }
+                if (responseIndex !== -1) {
+                  const newText = updatedMessages[responseIndex].text + answerPiece;
+                  updatedMessages[responseIndex] = {
+                    ...updatedMessages[responseIndex],
+                    text: newText
+                  };
                 }
-                // Display tool calls as intermediate output for visualization
-                else if (toolCallMatch) {
-                  const toolName = toolCallMatch[1];
-                  // We don't need to use toolArgs, just extract the tool name
-                  
-                  setMessages(prev => {
-                    const updatedMessages = [...prev];
-                    
-                    // Find the debug log message
-                    const debugLogIndex = updatedMessages.findIndex(msg => msg.id === debugLogId);
-                    
-                    if (debugLogIndex !== -1) {
-                      // Convert tool names to more friendly messages
-                      let friendlyToolName = "🔍 Searching";
-                      if (toolName === 'document_chat') friendlyToolName = "💬 Finding relevant documents";
-                      else if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
-                      else if (toolName.includes('section_relevance')) friendlyToolName = "📊 Analyzing relevance";
-                      else if (toolName.includes('context')) friendlyToolName = "📚 Gathering context";
-                      
-                      const intermediateInfo = friendlyToolName;
-                      
-                      // Append to existing log instead of replacing
-                      const currentText = updatedMessages[debugLogIndex].text || '';
-                      updatedMessages[debugLogIndex] = {
-                        ...updatedMessages[debugLogIndex],
-                        text: currentText ? `${currentText}\n${intermediateInfo}` : intermediateInfo,
-                        isIntermediateOutput: true,
-                        debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'tool', name: toolName }]
-                      };
-                    }
-                    
-                    return updatedMessages;
-                  });
-                }
-                // Handle other interesting streams like search responses
-                else if (data.data.includes('id=\'search_response_summary\'') || 
-                         data.data.includes('id=\'section_relevance_list\'') ||
-                         data.data.includes('id=\'final_context_documents\'')) {
-                  const idMatch = data.data.match(/id='([^']+)'/);
-                  const id = idMatch ? idMatch[1] : 'unknown';
-                  
-                  setMessages(prev => {
-                    const updatedMessages = [...prev];
-                    
-                    // Find the debug log message
-                    const debugLogIndex = updatedMessages.findIndex(msg => msg.id === debugLogId);
-                    
-                    if (debugLogIndex !== -1) {
-                      // Convert processing steps to more friendly messages
-                      let friendlyProcessing = "📊 Analyzing results";
-                      if (id === 'search_response_summary') friendlyProcessing = "🔍 Reviewing search results";
-                      else if (id === 'section_relevance_list') friendlyProcessing = "📋 Identifying relevant sections";
-                      else if (id === 'final_context_documents') friendlyProcessing = "📚 Reading documents";
-                      else friendlyProcessing = `📊 Processing: ${id}`;
-                      
-                      const processingInfo = friendlyProcessing;
-                      
-                      // Append to existing log instead of replacing
-                      const currentText = updatedMessages[debugLogIndex].text || '';
-                      updatedMessages[debugLogIndex] = {
-                        ...updatedMessages[debugLogIndex],
-                        text: currentText ? `${currentText}\n${processingInfo}` : processingInfo,
-                        isIntermediateOutput: true,
-                        debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'processing', id }]
-                      };
-                    }
-                    
-                    return updatedMessages;
-                  });
-                }
+                
+                return updatedMessages;
+              });
+            }
+          } else if ('citation_num' in packet && 'document_id' in packet) {
+            const citationInfo = packet as CitationInfo;
+            console.log('Citation packet:', {
+              citation_num: citationInfo.citation_num,
+              document_id: citationInfo.document_id
+            });
+            
+            setCitationMap(prev => {
+              const newMap = new Map(prev);
+              newMap.set(citationInfo.citation_num, citationInfo.document_id);
+              return newMap;
+            });
+          } else if ('tool_name' in packet) {
+            // Handle tool call packets for debugging display
+            const toolName = (packet as any).tool_name;
+            
+            setMessages(prev => {
+              const updatedMessages = [...prev];
+              
+              // Find the debug log message
+              const debugLogIndex = updatedMessages.findIndex(msg => msg.id === debugLogId);
+              
+              if (debugLogIndex !== -1) {
+                // Convert tool names to more friendly messages
+                let friendlyToolName = "🔍 Searching";
+                if (toolName === 'document_chat') friendlyToolName = "💬 Finding relevant documents";
+                else if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
+                else if (toolName.includes('section_relevance')) friendlyToolName = "📊 Analyzing relevance";
+                else if (toolName.includes('context')) friendlyToolName = "📚 Gathering context";
+                
+                const intermediateInfo = friendlyToolName;
+                
+                const currentText = updatedMessages[debugLogIndex].text || '';
+                updatedMessages[debugLogIndex] = {
+                  ...updatedMessages[debugLogIndex],
+                  text: currentText ? `${currentText}\n${intermediateInfo}` : intermediateInfo,
+                  isIntermediateOutput: true,
+                  debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'tool', name: toolName }]
+                };
               }
-            } catch (error) {
-              console.debug('Error parsing stream data:', error);
-              // Continue processing other lines
+              
+              return updatedMessages;
+            });
+          } else if ('top_documents' in packet) {
+            const documentPacket = packet as DocumentInfoPacket;
+            if (documentPacket.top_documents && documentPacket.top_documents.length > 0) {
+              console.log('DocumentInfoPacket received:', documentPacket.top_documents);
+              setDocuments(prev => {
+                const existingIds = new Set(prev.map(doc => doc.document_id));
+                const newDocs = documentPacket.top_documents.filter(doc => !existingIds.has(doc.document_id));
+                const updatedDocs = [...prev, ...newDocs];
+                console.log('Updated documents array:', updatedDocs);
+                return updatedDocs;
+              });
             }
           }
         }
+      } catch (error) {
+        console.error('Error processing stream:', error);
       }
       
       // When all streams are done, ensure we have a proper response if none was generated
@@ -262,9 +330,19 @@ export function DocumentChatSidebar({ initialWidth, documentIds = [] }: Document
                             : 'bg-background-chat-hover'}`}
                         style={msg.isIntermediateOutput ? { maxHeight: '300px', overflowY: 'auto' } : {}}
                       >
-                        {msg.isIntermediateOutput
-                          ? <pre className="whitespace-pre-wrap">{msg.text}</pre>
-                          : msg.text}
+                        {msg.isIntermediateOutput ? (
+                          <pre className="whitespace-pre-wrap">{msg.text}</pre>
+                        ) : (
+                          <ReactMarkdown
+                            className="prose dark:prose-invert max-w-full text-sm"
+                            components={markdownComponents}
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+                            urlTransform={transformLinkUri}
+                          >
+                            {preprocessLaTeX(msg.text)}
+                          </ReactMarkdown>
+                        )}
                       </div>
                     </div>
                   )

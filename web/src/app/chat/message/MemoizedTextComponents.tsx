@@ -42,19 +42,19 @@ export const MemoizedAnchor = memo(
           );
           const associatedUserFile = userFiles?.[index];
           if (!associatedUserFile) {
-            return <a href={children as string}>{children}</a>;
+            return <a href={href || (children as string)} target="_blank" rel="noopener noreferrer">{children}</a>;
           }
         } else if (!isUserFileCitation) {
           const index = parseInt(match[2], 10) - 1;
           const associatedDoc = docs?.[index];
           if (!associatedDoc) {
-            return <a href={children as string}>{children}</a>;
+            return <a href={href || (children as string)} target="_blank" rel="noopener noreferrer">{children}</a>;
           }
         } else {
           const index = parseInt(match[2], 10) - 1;
           const associatedSubQuestion = subQuestions?.[index];
           if (!associatedSubQuestion) {
-            return <a href={href || (children as string)}>{children}</a>;
+            return <a href={href || (children as string)} target="_blank" rel="noopener noreferrer">{children}</a>;
           }
         }
       }

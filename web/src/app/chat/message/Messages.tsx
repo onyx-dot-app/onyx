@@ -17,6 +17,7 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
+import { formatCitations } from "./citationUtils";
 import {
   OnyxDocument,
   FilteredOnyxDocument,
@@ -340,7 +341,7 @@ export const AIMessage = ({
         return preprocessLaTeX(content);
       }
     }
-    const processed = preprocessLaTeX(content);
+    const processed = formatCitations(preprocessLaTeX(content));
 
     return processed + (!isComplete && !toolCallGenerating ? " [*]() " : "");
   };

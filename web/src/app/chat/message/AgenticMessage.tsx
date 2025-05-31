@@ -14,6 +14,7 @@ import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
+import { formatCitations } from "./citationUtils";
 import {
   BaseQuestionIdentifier,
   FileDescriptor,
@@ -168,17 +169,7 @@ export const AgenticMessage = ({
       }
     }
 
-    processed = processed.replace(/\[([QD])(\d+)\]/g, (match, type, number) => {
-      const citationNumber = parseInt(number, 10);
-      return `[[${type}${citationNumber}]]()`;
-    });
-
-    processed = processed.replace(/\{\{(\d+)\}\}/g, (match, p1) => {
-      const citationNumber = parseInt(p1, 10);
-      return `[[${citationNumber}]]()`;
-    });
-
-    processed = processed.replace(/\]\](?!\()/g, "]]()");
+    processed = formatCitations(processed);
 
     return preprocessLaTeX(processed);
   };

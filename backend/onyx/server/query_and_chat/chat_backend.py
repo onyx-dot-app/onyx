@@ -932,7 +932,7 @@ def handle_document_chat_message(
                     query=request.message,
                     document_ids=request.document_ids,
                 ):
-                    yield json.dumps({"type": "stream", "data": str(packet)}) + "\n"
+                    yield json.dumps(packet.model_dump()) + "\n"
 
         except Exception as e:
             logger.exception("Error in document chat streaming")
