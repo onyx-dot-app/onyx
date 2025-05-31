@@ -226,7 +226,7 @@ def test_hard_delete_with_agentic_search(
     ), "Hard deleted chat session should not be accessible"
 
 
-def test_multiple_soft_deletions_with_agent_data(
+def test_multiple_soft_deletions(
     basic_user: DATestUser, llm_provider: DATestLLMProvider
 ) -> None:
     """
