@@ -554,7 +554,7 @@ outside of filters, and there is no ordering, no limiting their number, etc. So 
 tries to get information *across* documents which may be filtered by their related relationships and entities, but without \
 other constraints.
 
-2. 'SQL': Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
+2. SQL: Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
 if the query refers to specific entities that first need to be identified and then those entities are analyzed/searched/listed. \
 Examples here are 'what did I say about pricing in my call with Nike last week?' (the specific call needs to \
 be identified first and then analyzed),  \
@@ -567,10 +567,17 @@ Note:
  - here, you should look at the extracted entities and relationships and judge whether using them as filters \
 (using an *and*) would be appropriate to identify the range of underlying sources, or whether more \
 calculations would be needed to find the underlying sources ('last 2...', etc.) .
+ - It is also *critical* to look at the attributes of the entities! You only can use the given attributes (and their
+ values, if given) as where conditions etc in a SQL statement. So if you think you would 'want
+ to' have a where condition but there is not appropriate attribute, then you should not use the SQL strategy
+ but the SEARCH strategy. (A Search can always look through data and see what is the best fit, SQL needs to
+ be more specific.). On the other hand, if the question maps well to the entities and attributes, then
+ SQL may be a good choice.
  - Likely, if there are questions 'about something', then this only is used in a SQL statement or a filter \
  if it shows up as an entity or relationship in the extracted entities and relationships. Otherwise, it will \
  be part of the analysis/search. not the document identification.
- - note that we can only FILTER (SEARCH) or COMPUTE (SQL) using the extracted entities and relationships. \
+ - again, note that we can only FILTER (SEARCH) or COMPUTE (SQL) using the extracted entities (and their attributes)
+ and relationships. \
  So do not think that if there is another term in the question, it should be included in the SQL statement. \
  It cannot.
 

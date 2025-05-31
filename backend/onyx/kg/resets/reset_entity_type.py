@@ -75,3 +75,38 @@ def reset_entity_type_kg_index(entity_type_id_name: str) -> None:
             {"kg_stage": KGStage.NOT_STARTED}
         )
         db_session.commit()
+
+
+def reset_entity_type_extraction_kg_index(del_entity_type: str) -> None:
+    """
+    Resets the knowledge graph entity type extraction index.
+    """
+    with get_session_with_current_tenant() as db_session:
+        # Update kg_stage for affected documents using a join
+        db_session.query(Document).join(
+            KGEntityExtractionStaging,
+            Document.id == KGEntityExtractionStaging.document_id,
+        ).filter(
+            KGEntityExtractionStaging.entity_type_id_name == del_entity_type
+        ).update(
+            {Document.kg_stage: KGStage.NOT_STARTED}
+        )
+
+        db_session.query(KGRelationshipExtractionStaging).filter(
+            (KGRelationshipExtractionStaging.source_node_type == del_entity_type)
+            | (KGRelationshipExtractionStaging.target_node_type == del_entity_type)
+        ).delete()
+        db_session.query(KGEntityExtractionStaging).filter(
+            KGEntityExtractionStaging.entity_type_id_name == del_entity_type
+        ).delete()
+        db_session.query(KGRelationshipTypeExtractionStaging).filter(
+            (
+                KGRelationshipTypeExtractionStaging.source_entity_type_id_name
+                == del_entity_type
+            )
+            | (
+                KGRelationshipTypeExtractionStaging.target_entity_type_id_name
+                == del_entity_type
+            )
+        ).delete()
+        db_session.commit()

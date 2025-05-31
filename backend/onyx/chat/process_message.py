@@ -678,6 +678,11 @@ def stream_chat_message_objects(
             reset_extraction_kg_index()
             raise Exception("Extraction KG index reset done")
 
+        elif new_msg_req.message.startswith("kg_rs_et_ext:"):
+            del_entity_type = new_msg_req.message.split(":")[1]
+            reset_entity_type_kg_index(del_entity_type)
+            raise Exception("Extraction KG index reset done")
+
         elif new_msg_req.message == "kg_rs_normalization":
             reset_normalization_kg_index()
             raise Exception("Normalization KG index reset done")
