@@ -442,18 +442,16 @@ def _convert_drive_item_to_document(
             return None
 
         doc_id = file[WEB_VIEW_LINK_KEY]
-
+        owners = file.get("owners", [])
         # Create the document
         return Document(
             id=doc_id,
             sections=sections,
             source=DocumentSource.GOOGLE_DRIVE,
             semantic_identifier=file.get("name", ""),
-            metadata={
-                "owner_names": ", ".join(
-                    owner.get("displayName", "") for owner in file.get("owners", [])
-                ),
-            },
+            primary_owners=[owner.get("emailAddress", "") for owner in owners],
+            secondary_owners=[],
+            metadata={},
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
