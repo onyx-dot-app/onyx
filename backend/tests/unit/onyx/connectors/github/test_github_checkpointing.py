@@ -842,7 +842,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     assert all(isinstance(item, Document) for item in outputs[1].items)
     assert {
         item.semantic_identifier for item in cast(list[Document], outputs[1].items)
-    } == {"PR 3 Repo 2", "PR 4 Repo 2"}
+    } == {"3: PR 3 Repo 2", "4: PR 4 Repo 2"}
     cp1 = outputs[1].next_checkpoint
     assert (
         cp1.has_more
@@ -869,7 +869,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     assert all(isinstance(item, Document) for item in outputs[3].items)
     assert {
         item.semantic_identifier for item in cast(list[Document], outputs[3].items)
-    } == {"PR 1 Repo 1", "PR 2 Repo 1"}
+    } == {"1: PR 1 Repo 1", "2: PR 2 Repo 1"}
     cp3 = outputs[3].next_checkpoint
     # This checkpoint is returned early because offset had items. has_more reflects state then.
     assert cp3.has_more  # still need to do issues
