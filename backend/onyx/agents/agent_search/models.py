@@ -18,6 +18,7 @@ class GraphInputs(BaseModel):
 
     search_request: SearchRequest
     prompt_builder: AnswerPromptBuilder
+    document_content: str | None = None
     files: list[InMemoryChatFile] | None = None
     structured_response_format: dict | None = None
 

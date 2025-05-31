@@ -9,9 +9,19 @@ import { defaultSidebarFiles } from '@/lib/documents/types';
 
 interface DocumentLayoutProps {
   children: React.ReactNode;
+  documentContent?: string;
+  documentType?: 'document' | 'spreadsheet';
+  documentTitle?: string;
+  setContent?: (content: string) => void;
 }
 
-export function DocumentLayout({ children }: DocumentLayoutProps) {
+export function DocumentLayout({ 
+  children,
+  documentContent = '',
+  documentType = 'document',
+  documentTitle = '',
+  setContent
+}: DocumentLayoutProps) {
   const chatSidebarWidth = 350;
 
   return (
@@ -54,6 +64,10 @@ export function DocumentLayout({ children }: DocumentLayoutProps) {
         >
           <DocumentChatSidebar
             initialWidth={chatSidebarWidth}
+            documentContent={documentContent}
+            documentType={documentType}
+            documentTitle={documentTitle}
+            setContent={setContent}
           />
         </div>
       </div>

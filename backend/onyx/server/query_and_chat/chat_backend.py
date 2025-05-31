@@ -97,7 +97,9 @@ from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.models import DocumentChatRequest
+
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.tools.tool_implementations.document.document_editor_tool import DocumentEditorTool
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -876,6 +878,10 @@ def handle_document_chat_message(
             from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
             
             search_request = SearchRequest(query=request.message)
+
+            original_message = "User message: " + request.message
+            if request.document_content:
+                original_message += "\nDocument content: " + request.document_content
             
             tenant_id = get_current_tenant_id()
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
@@ -897,12 +903,26 @@ def handle_document_chat_message(
                     answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
                     evaluation_type=LLMEvaluationType.BASIC,
                 )
+
+                tools = [search_tool]
+                if request.document_content:
+                    document_editor_tool = DocumentEditorTool(
+                        db_session=db_session,
+                        user=user,
+                        persona=persona,
+                        llm=llm,
+                        fast_llm=fast_llm,
+                        prompt_config=PromptConfig.from_model(persona.prompts[0]),
+                        answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                    )
+                    tools.append(document_editor_tool)
+                    
                 
                 config = GraphConfig(
                     inputs=GraphInputs(
                         search_request=search_request,
                         prompt_builder=AnswerPromptBuilder(
-                            user_message=HumanMessage(content=request.message),
+                            user_message=HumanMessage(content=original_message),
                             message_history=[],
                             llm_config=llm.config,
                             raw_user_query=request.message,
@@ -913,8 +933,8 @@ def handle_document_chat_message(
                         primary_llm=llm, 
                         fast_llm=fast_llm, 
                         search_tool=search_tool,
-                        tools=[search_tool],
-                        force_use_tool=ForceUseTool(force_use=True, tool_name=search_tool.name),
+                        tools=tools,
+                        force_use_tool=ForceUseTool(force_use=False, tool_name=search_tool.name),
                         using_tool_calling_llm=True
                     ),
                     persistence=GraphPersistence(
@@ -931,6 +951,7 @@ def handle_document_chat_message(
                     config=config,
                     query=request.message,
                     document_ids=request.document_ids,
+                    document_content=request.document_content,
                 ):
                     yield json.dumps(packet.model_dump()) + "\n"
 

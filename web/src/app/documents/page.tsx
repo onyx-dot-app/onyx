@@ -103,7 +103,12 @@ export default function DocumentsPage() {
   };
 
   return (
-    <DocumentLayout>
+    <DocumentLayout
+      documentContent={content}
+      documentType={isSpreadsheet ? 'spreadsheet' : 'document'}
+      documentTitle={fileInfo?.name || (docId ? 'Document' : 'Documents')}
+      setContent={setContent}
+    >
       <div className="container mx-auto p-6 max-w-6xl">
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">

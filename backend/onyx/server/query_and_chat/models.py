@@ -327,3 +327,6 @@ class DocumentChatRequest(BaseModel):
     message: str
     document_ids: list[str] = []
     session_id: str | None = None
+    document_content: str | None = None
+    document_type: str | None = None
+    document_title: str | None = None

@@ -15,7 +15,7 @@ import { CodeBlock } from '@/app/chat/message/CodeBlock';
 import { transformLinkUri } from '@/lib/utils';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
 import { PacketType } from '@/app/chat/lib';
-import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket } from '@/lib/search/interfaces';
+import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket, DocumentEditorResponse } from '@/lib/search/interfaces';
 
 interface CitationInfo {
   citation_num: number;
@@ -27,9 +27,20 @@ interface CitationInfo {
 interface DocumentChatSidebarProps {
   initialWidth: number;
   documentIds?: string[]; // Accept document IDs from parent component
+  documentContent?: string; // The actual text content of the document
+  documentType?: 'document' | 'spreadsheet'; // Type of document being viewed
+  documentTitle?: string; // Title of the document
+  setContent?: (content: string) => void; // Function to update the document content
 }
 
-export function DocumentChatSidebar({ initialWidth, documentIds = [] }: DocumentChatSidebarProps) {
+export function DocumentChatSidebar({ 
+  initialWidth, 
+  documentIds = [], 
+  documentContent = '',
+  documentType = 'document',
+  documentTitle = '',
+  setContent
+}: DocumentChatSidebarProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Array<{id: number, text: string, isUser: boolean, isIntermediateOutput?: boolean, debugLog?: Array<any>}>>([]);
   const [sessionId, setSessionId] = useState<string>('');
@@ -149,6 +160,9 @@ export function DocumentChatSidebar({ initialWidth, documentIds = [] }: Document
           message: message,
           document_ids: documentIds, // Use passed document IDs
           session_id: sessionId,
+          document_content: documentContent, // Add document content
+          document_type: documentType, // Add document type
+          document_title: documentTitle // Add document title
         }),
       });
 
@@ -215,7 +229,15 @@ export function DocumentChatSidebar({ initialWidth, documentIds = [] }: Document
               newMap.set(citationInfo.citation_num, citationInfo.document_id);
               return newMap;
             });
-          } else if ('tool_name' in packet) {
+          } else if ('id' in packet && packet.id == "document_editor_response") {
+            // Extract the document_editor_response property from the packet
+            const documentEditorResponse = packet.response as DocumentEditorResponse;
+            const editedText = documentEditorResponse.edited_text;
+
+            if (setContent && editedText) {
+              setContent(editedText);
+            }
+          }else if ('tool_name' in packet) {
             // Handle tool call packets for debugging display
             const toolName = (packet as any).tool_name;
             
