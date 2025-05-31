@@ -35,6 +35,28 @@ logger = setup_logger()
 
 _DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
 
+_DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
+    "Opportunity": {
+        "Account": "account",
+        "FiscalQuarter": "fiscal_quarter",
+        "FiscalYear": "fiscal_year",
+        "IsClosed": "is_closed",
+        "Name": "name",
+        "StageName": "stage_name",
+        "Type": "type",
+        "Amount": "amount",
+        "CloseDate": "close_date",
+        "Probability": "probability",
+        "CreatedDate": "created_date",
+        "LastModifiedDate": "last_modified_date",
+    },
+    "Contact": {
+        "Account": "account",
+        "CreatedDate": "created_date",
+        "LastModifiedDate": "last_modified_date",
+    },
+}
+
 
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     """Approach outline
@@ -170,6 +192,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         # Always want to make sure user is grabbed for permissioning purposes
         all_types.add("User")
+        # Always want to make sure account is grabbed for reference purposes
+        all_types.add("Account")
 
         logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
@@ -282,7 +306,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     f"remaining={len(updated_ids) - docs_processed}"
                 )
                 for parent_id in parent_id_batch:
-                    parent_object = sf_db.get_record(parent_id, parent_type)
+                    parent_object = sf_db.get_record(
+                        parent_id, parent_type, isChild=False
+                    )
                     if not parent_object:
                         logger.warning(
                             f"Failed to get parent object {parent_id} for {parent_type}"
@@ -294,6 +320,18 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                         sf_object=parent_object,
                         sf_instance=self.sf_client.sf_instance,
                     )
+                    doc.metadata["object_type"] = parent_type
+
+                    # Add default attributes to the metadata
+                    for (
+                        sf_attribute,
+                        canonical_attribute,
+                    ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(parent_type, {}).items():
+                        if sf_attribute in parent_object.data:
+                            doc.metadata[canonical_attribute] = parent_object.data[
+                                sf_attribute
+                            ]
+
                     doc_sizeof = sys.getsizeof(doc)
                     docs_to_yield_bytes += doc_sizeof
                     docs_to_yield.append(doc)

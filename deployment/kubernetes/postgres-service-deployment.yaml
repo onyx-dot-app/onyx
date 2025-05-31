@@ -40,6 +40,16 @@ spec:
                 secretKeyRef:
                   name: onyx-secrets
                   key: postgres_password
+            - name: DB_READONLY_USER
+              valueFrom:
+                secretKeyRef:
+                  name: onyx-secrets
+                  key: DB_READONLY_user
+            - name: DB_READONLY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onyx-secrets
+                  key: DB_READONLY_password
           args: ["-c", "max_connections=250"]
           ports:
             - containerPort: 5432

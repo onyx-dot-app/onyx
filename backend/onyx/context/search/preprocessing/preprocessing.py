@@ -183,6 +183,11 @@ def retrieval_preprocessing(
         tags=preset_filters.tags,  # Tags are never auto-extracted
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
+        kg_entities=preset_filters.kg_entities,
+        kg_relationships=preset_filters.kg_relationships,
+        kg_terms=preset_filters.kg_terms,
+        kg_sources=preset_filters.kg_sources,
+        kg_chunk_id_zero_only=preset_filters.kg_chunk_id_zero_only,
     )
 
     llm_evaluation_type = LLMEvaluationType.BASIC

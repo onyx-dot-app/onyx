@@ -41,6 +41,8 @@ from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE
 from onyx.configs.app_configs import SYSTEM_RECURSION_LIMIT
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -222,6 +224,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
     )
     SqlEngine.get_engine()
+
+    SqlEngine.init_readonly_engine(
+        pool_size=POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
+    )
 
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"

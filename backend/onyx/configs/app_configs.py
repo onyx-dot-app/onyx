@@ -184,6 +184,13 @@ POSTGRES_API_SERVER_POOL_OVERFLOW = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
 )
 
+POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 10
+)
+POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 5
+)
+
 # defaults to False
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
@@ -308,6 +315,11 @@ try:
     CELERY_WORKER_INDEXING_CONCURRENCY = int(env_value)
 except ValueError:
     CELERY_WORKER_INDEXING_CONCURRENCY = CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT
+
+
+CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
+)
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 1024
@@ -745,4 +757,10 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
+)
+
+# Knowledge Graph Read Only User Configuration
+DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
+DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
+    os.environ.get("DB_READONLY_PASSWORD") or "password"
 )

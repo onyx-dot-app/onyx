@@ -91,6 +91,25 @@ schema {{ schema_name }} {
             indexing: attribute
         }
 
+                # Separate array fields for knowledge graph data
+        field kg_entities type weightedset<string> {
+            rank: filter
+            indexing: summary | attribute
+            attribute: fast-search
+        }
+
+        field kg_relationships type weightedset<string> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+
+        field kg_terms type weightedset<string> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+
         # Needs to have a separate Attribute list for efficient filtering
         field metadata_list type array<string> {
             indexing: summary | attribute
