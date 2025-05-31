@@ -28,7 +28,7 @@ Your input is vital to making sure that Onyx moves in the right direction.
 Before starting on implementation, please raise a GitHub issue.
 
 Also, always feel free to message the founders (Chris Weaver / Yuhong Sun) on
-[Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA) /
+[Slack](https://join.slack.com/t/onyx-dot-app/shared_invite/zt-34lu4m7xg-TsKGO6h8PDvR5W27zTdyhA) /
 [Discord](https://discord.gg/TDJ59cGV2X) directly about anything at all.
 
 ### Contributing Code
