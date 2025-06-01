@@ -200,6 +200,7 @@ def gdrive_doc_sync(
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 
+    total_processed = 0
     for slim_doc_batch in slim_doc_generator:
         logger.info(f"Drive perm sync: Processing {len(slim_doc_batch)} documents")
         for slim_doc in slim_doc_batch:
@@ -217,3 +218,5 @@ def gdrive_doc_sync(
                 external_access=ext_access,
                 doc_id=slim_doc.id,
             )
+        total_processed += len(slim_doc_batch)
+        logger.info(f"Drive perm sync: Processed {total_processed} total documents")
