@@ -392,6 +392,7 @@ def _convert_drive_item_to_document(
     docs_service = lazy_eval(
         lambda: get_google_docs_service(creds, user_email=retriever_email)
     )
+    doc_id = "unknown"
 
     try:
         # skip shortcuts or folders
