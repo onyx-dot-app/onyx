@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -8,8 +8,10 @@ import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import Link from '@tiptap/extension-link';
+
 import { HighlightWithLink } from '@/lib/tiptap/HighlightWithLink';
 import { DeletionMark, AdditionMark } from '@/lib/tiptap/DiffMarks';
+import { FormattingToolbar } from './FormattingToolbar';
 
 interface TiptapTableEditorProps {
   content?: string;
@@ -102,6 +104,7 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
           padding: 0 2px;
         }
       `}</style>
+      {editor && <FormattingToolbar editor={editor} />}
       <EditorContent 
         editor={editor} 
         className="prose prose-sm max-w-none focus:outline-none min-h-[300px] [&_table]:border-collapse [&_table]:border-2 [&_table]:border-border [&_th]:border-2 [&_th]:border-border [&_th]:bg-accent [&_th]:p-2 [&_td]:border-2 [&_td]:border-border [&_td]:p-2 [&_td]:bg-background [&_a]:text-blue-500 [&_a]:underline [&_a:hover]:text-blue-700"
