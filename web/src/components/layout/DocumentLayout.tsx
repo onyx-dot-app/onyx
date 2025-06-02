@@ -5,7 +5,7 @@ import { Logo } from '@/components/logo/Logo';
 import { UserDropdown } from '@/components/UserDropdown';
 import { DocumentSidebar } from '@/components/documents/DocumentSidebar';
 import { DocumentChatSidebar } from '@/components/documents/DocumentChatSidebar';
-import { defaultSidebarFiles } from '@/lib/documents/types';
+import { getSidebarFiles, DocumentConfig } from '@/lib/documents/types';
 
 interface DocumentLayoutProps {
   children: React.ReactNode;
@@ -13,6 +13,7 @@ interface DocumentLayoutProps {
   documentType?: 'document' | 'spreadsheet';
   documentTitle?: string;
   setContent?: (content: string) => void;
+  documentConfig?: DocumentConfig;
 }
 
 export function DocumentLayout({ 
@@ -20,7 +21,8 @@ export function DocumentLayout({
   documentContent = '',
   documentType = 'document',
   documentTitle = '',
-  setContent
+  setContent,
+  documentConfig
 }: DocumentLayoutProps) {
   const chatSidebarWidth = 350;
 
@@ -43,7 +45,7 @@ export function DocumentLayout({
           
           {/* Sidebar content */}
           <div className="flex-grow overflow-y-auto">
-            <DocumentSidebar files={defaultSidebarFiles} />
+            <DocumentSidebar files={getSidebarFiles(documentConfig)} />
           </div>
         </div>
         

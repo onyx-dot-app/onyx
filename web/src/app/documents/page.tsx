@@ -6,7 +6,7 @@ import { TiptapEditor } from '../../components/editors/TiptapEditor';
 import { TiptapTableEditor } from '../../components/editors/TiptapTableEditor';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
 import { useGoogleDoc, useGoogleSheet, convertSectionsToHtml, DocumentBase } from '@/lib/hooks/useGoogleDocs';
-import { defaultSidebarFiles } from '@/lib/documents/types';
+import { getSidebarFiles } from '@/lib/documents/types';
 import { FiExternalLink } from 'react-icons/fi';
 import { ThreeDotsLoader } from '@/components/Loading';
 
@@ -17,7 +17,12 @@ export default function DocumentsPage() {
   const [documentData, setDocumentData] = useState<DocumentBase | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   
-  const fileInfo = defaultSidebarFiles.find(file => file.docId === docId);
+  // TODO: We should move this to the backend and manage this using the groups instead
+  // set to correct DocumentConfig. As an intermediate step, this could also use an
+  // env var instead too. 
+  const documentConfig = 'PRECISION';
+
+  const fileInfo = getSidebarFiles(documentConfig).find(file => file.docId === docId);
   const isSpreadsheet = fileInfo?.fileType === 'spreadsheet';
   
   const { doc, isLoading: docLoading, error: docError } = useGoogleDoc(isSpreadsheet ? null : docId);
@@ -108,6 +113,7 @@ export default function DocumentsPage() {
       documentType={isSpreadsheet ? 'spreadsheet' : 'document'}
       documentTitle={fileInfo?.name || (docId ? 'Document' : 'Documents')}
       setContent={setContent}
+      documentConfig={documentConfig}
     >
       <div className="container mx-auto p-6 max-w-6xl">
         <div className="mb-6">
