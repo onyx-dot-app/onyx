@@ -72,10 +72,12 @@ ThreadType = list[MessageType]
 
 
 class SlackCheckpoint(ConnectorCheckpoint):
-    channel_ids: list[str] | None
-    channel_completion_map: dict[str, str]
+    channel_ids: list[str] | None  # e.g. C8E6WHE2X
+    channel_completion_map: dict[str, str]  # channel id to latest timestamp
     current_channel: ChannelType | None
-    seen_thread_ts: list[str]
+    seen_thread_ts: list[
+        str
+    ]  # apparently we identify threads/messages uniquely by timestamp?
 
 
 def _collect_paginated_channels(
@@ -726,7 +728,7 @@ class SlackConnector(
         logger.info(
             f"Channels - current status: "
             f"processed={len(final_channel_ids) - num_channels_remaining} "
-            f"remaining={num_channels_remaining=} "
+            f"remaining={num_channels_remaining} "
             f"total={len(final_channel_ids)}"
         )
 
@@ -738,8 +740,11 @@ class SlackConnector(
         if channel_id not in final_channel_ids:
             raise ValueError(f"Channel {channel_id} not found in checkpoint")
 
+        channel_created = channel["created"]
+
         oldest = str(start) if start else None
         latest = checkpoint.channel_completion_map.get(channel_id, str(end))
+
         seen_thread_ts = set(checkpoint.seen_thread_ts)
 
         logger.debug(
@@ -803,11 +808,27 @@ class SlackConnector(
                         yield failure
 
             num_threads_processed = len(seen_thread_ts) - num_threads_start
+
+            range_start = max(0, channel_created)
+            range_diff = end - range_start
+            if range_diff <= 0:
+                range_diff = 1
+            range_percent_complete = (
+                (end - SecondsSinceUnixEpoch(new_latest)) / (range_diff) * 100.0
+            )
+
             logger.info(
                 f"Message processing stats: "
                 f"batch_len={len(message_batch)} "
                 f"batch_yielded={num_threads_processed} "
-                f"total_threads_seen={len(seen_thread_ts)}"
+                f"total_threads_seen={len(seen_thread_ts)} "
+            )
+
+            logger.info(
+                f"Current channel processing stats: "
+                f"{range_start=} "
+                f"range_end={end} "
+                f"percent_complete={range_percent_complete=:.2f}"
             )
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)
@@ -815,6 +836,8 @@ class SlackConnector(
             if has_more_in_channel:
                 checkpoint.current_channel = channel
             else:
+                num_channels_remaining -= 1
+
                 new_channel_id = next(
                     (
                         channel_id
@@ -831,6 +854,18 @@ class SlackConnector(
                     checkpoint.current_channel = None
 
             checkpoint.has_more = checkpoint.current_channel is not None
+
+            channels_processed = len(final_channel_ids) - num_channels_remaining
+            channels_percent_complete = (
+                channels_processed / len(final_channel_ids) * 100.0
+            )
+            logger.info(
+                f"All channels processing stats: "
+                f"processed={len(final_channel_ids) - num_channels_remaining} "
+                f"remaining={num_channels_remaining} "
+                f"total={len(final_channel_ids)} "
+                f"percent_complete={channels_percent_complete:.2f} "
+            )
         except Exception as e:
             logger.exception(f"Error processing channel {channel['name']}")
             yield ConnectorFailure(
