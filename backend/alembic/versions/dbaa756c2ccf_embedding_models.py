@@ -10,18 +10,66 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import table, column, String, Integer, Boolean
 
-from onyx.db.search_settings import (
-    get_new_default_embedding_model,
-    get_old_default_embedding_model,
-    user_has_overridden_embedding_model,
-)
+from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX
+from onyx.configs.model_configs import ASYM_QUERY_PREFIX
+from onyx.configs.model_configs import DOC_EMBEDDING_DIM
+from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import NORMALIZE_EMBEDDINGS
+from onyx.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
+from onyx.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
+from onyx.db.enums import EmbeddingPrecision
 from onyx.db.models import IndexModelStatus
+from onyx.db.search_settings import user_has_overridden_embedding_model
+from onyx.indexing.models import IndexingSetting
+from onyx.natural_language_processing.search_nlp_models import clean_model_name
 
 # revision identifiers, used by Alembic.
 revision = "dbaa756c2ccf"
 down_revision = "7f726bad5367"
 branch_labels: None = None
 depends_on: None = None
+
+
+def _get_old_default_embedding_model() -> IndexingSetting:
+    is_overridden = user_has_overridden_embedding_model()
+    return IndexingSetting(
+        model_name=(
+            DOCUMENT_ENCODER_MODEL
+            if is_overridden
+            else OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
+        ),
+        model_dim=(
+            DOC_EMBEDDING_DIM if is_overridden else OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
+        ),
+        embedding_precision=(EmbeddingPrecision.FLOAT),
+        normalize=(
+            NORMALIZE_EMBEDDINGS
+            if is_overridden
+            else OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
+        ),
+        query_prefix=(ASYM_QUERY_PREFIX if is_overridden else ""),
+        passage_prefix=(ASYM_PASSAGE_PREFIX if is_overridden else ""),
+        index_name="danswer_chunk",
+        multipass_indexing=False,
+        enable_contextual_rag=False,
+        api_url=None,
+    )
+
+
+def _get_new_default_embedding_model() -> IndexingSetting:
+    return IndexingSetting(
+        model_name=DOCUMENT_ENCODER_MODEL,
+        model_dim=DOC_EMBEDDING_DIM,
+        embedding_precision=(EmbeddingPrecision.BFLOAT16),
+        normalize=NORMALIZE_EMBEDDINGS,
+        query_prefix=ASYM_QUERY_PREFIX,
+        passage_prefix=ASYM_PASSAGE_PREFIX,
+        index_name=f"danswer_chunk_{clean_model_name(DOCUMENT_ENCODER_MODEL)}",
+        multipass_indexing=False,
+        enable_contextual_rag=False,
+        api_url=None,
+    )
 
 
 def upgrade() -> None:
@@ -61,7 +109,7 @@ def upgrade() -> None:
     # the user selected via env variables before this change. This is needed since
     # all index_attempts must be associated with an embedding model, so without this
     # we will run into violations of non-null contraints
-    old_embedding_model = get_old_default_embedding_model()
+    old_embedding_model = _get_old_default_embedding_model()
     op.bulk_insert(
         EmbeddingModel,
         [
@@ -79,7 +127,7 @@ def upgrade() -> None:
     # if the user has not overridden the default embedding model via env variables,
     # insert the new default model into the database to auto-upgrade them
     if not user_has_overridden_embedding_model():
-        new_embedding_model = get_new_default_embedding_model()
+        new_embedding_model = _get_new_default_embedding_model()
         op.bulk_insert(
             EmbeddingModel,
             [
