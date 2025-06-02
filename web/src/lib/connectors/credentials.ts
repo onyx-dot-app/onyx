@@ -234,6 +234,7 @@ export interface HighspotCredentialJson {
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
+  oxos_master_file: {},
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
     gitlab_url: "",
