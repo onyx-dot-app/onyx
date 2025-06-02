@@ -588,17 +588,18 @@ def stream_chat_message_objects(
             kg_clustering(tenant_id, index_str)
             raise Exception("Clustering done")
 
+        elif new_msg_req.message == "kg":
+            reset_full_kg_index()
+            kg_extraction(tenant_id, index_str)
+            kg_clustering(tenant_id, index_str)
+            raise Exception("Full KG index reset done")
+
         elif new_msg_req.message == "kg_rs_full":
             reset_full_kg_index()
             raise Exception("Full KG index reset done")
 
         elif new_msg_req.message == "kg_rs_extraction":
             reset_extraction_kg_index()
-            raise Exception("Extraction KG index reset done")
-
-        elif new_msg_req.message.startswith("kg_rs_et_ext:"):
-            del_entity_type = new_msg_req.message.split(":")[1]
-            reset_entity_type_kg_index(del_entity_type)
             raise Exception("Extraction KG index reset done")
 
         elif new_msg_req.message == "kg_rs_normalization":

@@ -157,6 +157,7 @@ def process_jira_issue(
         # Author should exist but if not, doesn't matter
         pass
 
+    metadata_dict[_FIELD_KEY] = issue.key
     if priority := best_effort_get_field_from_issue(issue, _FIELD_PRIORITY):
         metadata_dict[_FIELD_PRIORITY] = priority.name
     if status := best_effort_get_field_from_issue(issue, _FIELD_STATUS):

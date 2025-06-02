@@ -8,7 +8,7 @@ from onyx.kg.models import KGPerson
 def format_entity(entity: str) -> str:
     if len(entity.split("::")) == 2:
         entity_type, entity_name = entity.split("::")
-        return f"{entity_type.upper()}::{entity_name.title()}"
+        return f"{entity_type.upper()}::{entity_name.lower()}"
     else:
         return entity
 

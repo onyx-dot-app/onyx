@@ -96,6 +96,84 @@ def add_or_update_staging_relationship(
     return result
 
 
+def add_or_update_relationship(
+    db_session: Session,
+    relationship_id_name: str,
+    source_document_id: str,
+    occurrences: int = 1,
+) -> KGRelationship:
+    """
+    Add or update a new relationship to the database.
+
+    Args:
+        db_session: SQLAlchemy database session
+        relationship_id_name: The ID name of the relationship in format "source__relationship__target"
+        source_document_id: ID of the source document
+        occurrences: Number of times this relationship has been found
+    Returns:
+        The created or updated KGRelationshipExtractionStaging object
+
+    Raises:
+        sqlalchemy.exc.IntegrityError: If there's an error with the database operation
+    """
+    # Generate a unique ID for the relationship
+
+    (
+        source_entity_id_name,
+        relationship_string,
+        target_entity_id_name,
+    ) = relationship_id_name.split("__")
+
+    source_entity_id_name = format_entity(source_entity_id_name)
+    source_entity_type = source_entity_id_name.split("::")[0]
+    target_entity_id_name = format_entity(target_entity_id_name)
+    target_entity_type = target_entity_id_name.split("::")[0]
+    relationship_id_name = format_relationship(relationship_id_name)
+    relationship_type = generate_relationship_type(relationship_id_name)
+
+    # Insert the new relationship
+    stmt = (
+        postgresql.insert(KGRelationship)
+        .values(
+            {
+                "id_name": relationship_id_name,
+                "source_node": source_entity_id_name,
+                "target_node": target_entity_id_name,
+                "source_node_type": source_entity_type,
+                "target_node_type": target_entity_type,
+                "type": relationship_string.lower(),
+                "relationship_type_id_name": relationship_type,
+                "source_document": source_document_id,
+                "occurrences": occurrences,
+            }
+        )
+        .on_conflict_do_update(
+            index_elements=["id_name", "source_document"],
+            set_=dict(
+                occurrences=KGRelationship.occurrences + occurrences,
+            ),
+        )
+        .returning(KGRelationship)
+    )
+
+    result = db_session.execute(stmt).scalar()
+    if result is None:
+        raise RuntimeError(
+            f"Failed to create or increment staging relationship with id_name: {relationship_id_name}"
+        )
+
+    # Update the document's kg_stage if source_document is provided
+    if source_document_id is not None:
+        dbdocument.update_document_kg_info(
+            db_session,
+            document_id=source_document_id,
+            kg_stage=KGStage.NORMALIZED,
+        )
+    db_session.flush()  # Flush to get any DB errors early
+
+    return result
+
+
 def transfer_relationship(
     db_session: Session,
     relationship: KGRelationshipExtractionStaging,
@@ -195,6 +273,64 @@ def add_or_update_staging_relationship_type(
             ),
         )
         .returning(KGRelationshipTypeExtractionStaging)
+    )
+
+    result = db_session.execute(stmt).scalar()
+    if result is None:
+        raise RuntimeError(
+            f"Failed to create or increment staging relationship type with id_name: {id_name}"
+        )
+    db_session.flush()  # Flush to get any DB errors early
+
+    return result
+
+
+def add_or_update_relationship_type(
+    db_session: Session,
+    source_entity_type: str,
+    relationship_type: str,
+    target_entity_type: str,
+    definition: bool = False,
+    extraction_count: int = 1,
+) -> KGRelationshipType:
+    """
+    Add a new relationship type to the database.
+
+    Args:
+        db_session: SQLAlchemy session
+        source_entity_type: Type of the source entity
+        relationship_type: Type of relationship
+        target_entity_type: Type of the target entity
+        definition: Whether this relationship type represents a definition (default False)
+
+    Returns:
+        The created KGRelationshipTypeExtractionStaging object
+    """
+
+    id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
+
+    # Create new relationship type
+    stmt = (
+        postgresql.insert(KGRelationshipType)
+        .values(
+            {
+                "id_name": id_name,
+                "name": relationship_type,
+                "source_entity_type_id_name": source_entity_type.upper(),
+                "target_entity_type_id_name": target_entity_type.upper(),
+                "definition": definition,
+                "occurrences": extraction_count,
+                "type": relationship_type,  # Using the relationship_type as the type
+                "active": True,  # Setting as active by default
+            }
+        )
+        .on_conflict_do_update(
+            index_elements=["id_name"],
+            set_=dict(
+                occurrences=KGRelationshipType.occurrences + extraction_count,
+            ),
+        )
+        .returning(KGRelationshipType)
     )
 
     result = db_session.execute(stmt).scalar()
