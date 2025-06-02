@@ -8,10 +8,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
 def document_chat_graph_builder() -> StateGraph:
     graph = StateGraph(
         state_schema=DocumentChatState,
-        input=DocumentChatInput, 
+        input=DocumentChatInput,
         output=DocumentChatOutput,
     )
 
@@ -24,9 +25,19 @@ def document_chat_graph_builder() -> StateGraph:
     graph.add_edge(start_key="prepare_tool_input", end_key="choose_tool")
     graph.add_conditional_edges("choose_tool", should_continue, ["call_tool", END])
     graph.add_edge(start_key="call_tool", end_key="basic_use_tool_response")
-    graph.add_edge(start_key="basic_use_tool_response", end_key="prepare_tool_input")
-
+    graph.add_conditional_edges(
+        "basic_use_tool_response",
+        should_repeat,
+        ["prepare_tool_input", END],
+    )
     return graph
+
 
 def should_continue(state: DocumentChatState) -> str:
     return END if state.tool_choice is None else "call_tool"
+
+
+def should_repeat(state: DocumentChatState) -> str:
+    if state.tool_choice is None or state.tool_choice.tool.name == "document_editor":
+        return END
+    return "prepare_tool_input"
