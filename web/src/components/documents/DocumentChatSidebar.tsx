@@ -183,26 +183,6 @@ export function DocumentChatSidebar({
         throw new Error('Failed to send message');
       }
 
-      // Create placeholders for both the debug log and the AI response
-      const debugLogId = Date.now() + 1;
-      const aiResponseId = Date.now() + 2;
-      
-      setMessages(prev => [...prev, 
-        {
-          id: debugLogId,
-          text: "",
-          isUser: false,
-          isIntermediateOutput: true,
-          debugLog: []
-        },
-        {
-          id: aiResponseId,
-          text: "",
-          isUser: false,
-          isIntermediateOutput: false
-        }
-      ]);
-      
       try {
         for await (const packet of handleSSEStream<PacketType>(response)) {
           console.log('DocumentChatSidebar packet:', packet);
@@ -214,17 +194,22 @@ export function DocumentChatSidebar({
             if (answerPiece) {
               setMessages(prev => {
                 const updatedMessages = [...prev];
+                const lastMessage = updatedMessages[updatedMessages.length - 1];
                 
-                const responseIndex = updatedMessages.findIndex(
-                  msg => msg.id === aiResponseId && !msg.isIntermediateOutput
-                );
-                
-                if (responseIndex !== -1) {
-                  const newText = updatedMessages[responseIndex].text + answerPiece;
-                  updatedMessages[responseIndex] = {
-                    ...updatedMessages[responseIndex],
-                    text: newText
+                // If the last message is from the AI and not an intermediate output, append to it
+                if (lastMessage && !lastMessage.isUser && !lastMessage.isIntermediateOutput) {
+                  updatedMessages[updatedMessages.length - 1] = {
+                    ...lastMessage,
+                    text: lastMessage.text + answerPiece
                   };
+                } else {
+                  // Create a new AI response message
+                  updatedMessages.push({
+                    id: Date.now() + Math.random(),
+                    text: answerPiece,
+                    isUser: false,
+                    isIntermediateOutput: false
+                  });
                 }
                 
                 return updatedMessages;
@@ -256,36 +241,41 @@ export function DocumentChatSidebar({
             // Handle tool call packets for debugging display
             const toolName = (packet as any).tool_name;
             
-            setMessages(prev => {
-              const updatedMessages = [...prev];
-              
-              // Find the debug log message
-              const debugLogIndex = updatedMessages.findIndex(msg => msg.id === debugLogId);
-              
-              if (debugLogIndex !== -1) {
-                // Convert tool names to more friendly messages
-                let friendlyToolName = "";
-                if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
-                // TODO: The id for intermediate tool results is "id" not "tool_name"
-                // else if (toolName === 'section_relevance') friendlyToolName = "📊 Analyzing relevance";
-                // else if (toolName === 'context') friendlyToolName = "📚 Gathering context";
-                else if (toolName === 'document_editor') friendlyToolName = "📝 Editing document";
+            // Convert tool names to more friendly messages
+            let friendlyToolName = "";
+            if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
+            // TODO: The id for intermediate tool results is "id" not "tool_name"
+            // else if (toolName === 'section_relevance') friendlyToolName = "📊 Analyzing relevance";
+            // else if (toolName === 'context') friendlyToolName = "📚 Gathering context";
+            else if (toolName === 'document_editor') friendlyToolName = "📝 Editing document";
+            
+            if (friendlyToolName) {
+              setMessages(prev => {
+                const updatedMessages = [...prev];
+                const lastMessage = updatedMessages[updatedMessages.length - 1];
                 
-                const intermediateInfo = friendlyToolName;
-                
-                if (intermediateInfo) {
-                  const currentText = updatedMessages[debugLogIndex].text || '';
-                  updatedMessages[debugLogIndex] = {
-                    ...updatedMessages[debugLogIndex],
-                    text: currentText ? `${currentText}\n${intermediateInfo}` : intermediateInfo,
-                    isIntermediateOutput: true,
-                    debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'tool', name: toolName }]
+                // If the last message is an intermediate output (tool use), append to it
+                if (lastMessage && !lastMessage.isUser && lastMessage.isIntermediateOutput) {
+                  const currentText = lastMessage.text || '';
+                  updatedMessages[updatedMessages.length - 1] = {
+                    ...lastMessage,
+                    text: currentText ? `${currentText}\n${friendlyToolName}` : friendlyToolName,
+                    debugLog: [...(lastMessage.debugLog || []), { type: 'tool', name: toolName }]
                   };
+                } else {
+                  // Create a new intermediate output message
+                  updatedMessages.push({
+                    id: Date.now() + Math.random(),
+                    text: friendlyToolName,
+                    isUser: false,
+                    isIntermediateOutput: true,
+                    debugLog: [{ type: 'tool', name: toolName }]
+                  });
                 }
-              }
-              
-              return updatedMessages;
-            });
+                
+                return updatedMessages;
+              });
+            }
           } else if ('top_documents' in packet) {
             const documentPacket = packet as DocumentInfoPacket;
             if (documentPacket.top_documents && documentPacket.top_documents.length > 0) {
@@ -303,24 +293,6 @@ export function DocumentChatSidebar({
       } catch (error) {
         console.error('Error processing stream:', error);
       }
-      
-      // When all streams are done, ensure we have a proper response if none was generated
-      setMessages(prev => {
-        const updatedMessages = [...prev];
-        
-        // Find the AI response message
-        const responseIndex = updatedMessages.findIndex(msg => msg.id === aiResponseId);
-        
-        // If response exists but is empty, add a default message
-        if (responseIndex !== -1 && !updatedMessages[responseIndex].text.trim()) {
-          updatedMessages[responseIndex] = {
-            ...updatedMessages[responseIndex],
-            text: "I've analyzed the documents. How can I help you further?"
-          };
-        }
-        
-        return updatedMessages;
-      });
       
       setIsLoading(false);
       
