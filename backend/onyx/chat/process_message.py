@@ -101,10 +101,10 @@ from onyx.kg.clustering.clustering import kg_clustering
 from onyx.kg.configuration import populate_default_account_employee_definitions
 from onyx.kg.configuration import populate_default_grounded_entity_types
 from onyx.kg.extractions.extraction_processing import kg_extraction
-from onyx.kg.resets.reset_entity_type import reset_entity_type_kg_index
 from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
 from onyx.kg.resets.reset_index import reset_full_kg_index
 from onyx.kg.resets.reset_normalizations import reset_normalization_kg_index
+from onyx.kg.resets.reset_source import reset_source_kg_index
 from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -688,10 +688,10 @@ def stream_chat_message_objects(
             reset_normalization_kg_index()
             raise Exception("Normalization KG index reset done")
 
-        elif new_msg_req.message.startswith("kg_rs_entity_type:"):
-            entity_type_id_name = new_msg_req.message.split(":")[1].strip()
-            reset_entity_type_kg_index(entity_type_id_name)
-            raise Exception("Entity type KG index reset done")
+        elif new_msg_req.message.startswith("kg_rs_source:"):
+            source_name = new_msg_req.message.split(":")[1].strip()
+            reset_source_kg_index(source_name, tenant_id, index_str)
+            raise Exception(f"KG index reset for source {source_name} done")
 
         elif new_msg_req.message == "kg_rs_vespa":
             reset_vespa_kg_index(tenant_id, index_str)
