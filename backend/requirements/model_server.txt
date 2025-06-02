@@ -10,7 +10,7 @@ retry==0.9.2
 safetensors==0.5.3
 sentence-transformers==4.0.2
 setfit==1.1.1
-torch==2.6.0
+torch==2.2.2
 transformers==4.49.0
 uvicorn==0.21.1
 voyageai==0.2.3
