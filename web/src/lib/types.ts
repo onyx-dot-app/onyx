@@ -393,6 +393,7 @@ export enum ValidSources {
   Gitbook = "gitbook",
   Highspot = "highspot",
   OxosGoogleDrive = "oxos_google_drive",
+  OxosMasterFile = "oxos_master_file",
 }
 
 export const validAutoSyncSources = [

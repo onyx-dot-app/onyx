@@ -184,6 +184,7 @@ class DocumentSource(str, Enum):
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
     OXOS_GOOGLE_DRIVE = "oxos_google_drive"
+    OXOS_MASTER_FILE = "oxos_master_file"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"

@@ -58,6 +58,7 @@ from onyx.connectors.xenforo.connector import XenforoConnector
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
 from onyx.connectors.oxos_google_drive.connector import OxosGoogleDriveConnector
+from onyx.connectors.oxos_master_file.connector import OxosMasterFileConnector
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
@@ -122,6 +123,7 @@ def identify_connector_class(
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
         DocumentSource.OXOS_GOOGLE_DRIVE: OxosGoogleDriveConnector,
+    DocumentSource.OXOS_MASTER_FILE: OxosMasterFileConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }
