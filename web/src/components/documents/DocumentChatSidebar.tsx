@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { SendIcon } from '@/components/icons/icons';
-import { FiMessageSquare } from 'react-icons/fi';
+import { FiMessageSquare, FiPlus } from 'react-icons/fi';
+import { Button } from '@/components/ui/button';
 import { v4 as uuidv4 } from 'uuid';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -49,6 +50,14 @@ export function DocumentChatSidebar({
   const [documents, setDocuments] = useState<OnyxDocument[]>([]);
   const [citationMap, setCitationMap] = useState<Map<number, string>>(new Map());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Effect to handle textarea auto-resize when it mounts or message changes
+  useEffect(() => {
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = 'auto';
+      textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
+    }
+  }, [message]);
 
   const orderedDocuments = useMemo(() => {
     if (citationMap.size === 0 || documents.length === 0) {
@@ -135,6 +144,10 @@ export function DocumentChatSidebar({
   }, []);
 
   const handleSendMessage = async () => {
+    // Reset textarea height after sending message
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = 'auto';
+    }
     if (!message.trim()) return;
     setIsLoading(true);
     
@@ -330,12 +343,27 @@ export function DocumentChatSidebar({
       <div className="h-full">
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-4 flex items-center gap-x-2">
-            <div className="flex items-center gap-x-2">
+          <div className="p-4">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold text-text-900">Chat</h2>
+              <Button
+                variant="create"
+                size="xs"
+                onClick={() => {
+                  setMessages([]);
+                  setDocuments([]);
+                  setCitationMap(new Map());
+                  setSessionId(uuidv4());
+                }}
+                className="mr-8"
+                tooltip="Start a new chat"
+                icon={FiPlus}
+              >
+                New Chat
+              </Button>
             </div>
+            <div className="border-b border-divider-history-sidebar-bar" />
           </div>
-          <div className="border-b border-divider-history-sidebar-bar mx-3" />
 
           {/* Messages */}
           <div className="flex-grow overflow-y-auto p-4 space-y-3">
@@ -395,10 +423,16 @@ export function DocumentChatSidebar({
               <textarea
                 ref={textAreaRef}
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                  // Auto-resize the textarea
+                  if (textAreaRef.current) {
+                    textAreaRef.current.style.height = 'auto';
+                    textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
+                  }
+                }}
                 placeholder="Ask anything"
-                className="flex-grow resize-none border border-border rounded-md p-2 text-sm max-h-20"
-                rows={2}
+                className="flex-grow resize-none border border-border rounded-md p-2 text-sm min-h-[38px] overflow-hidden"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
