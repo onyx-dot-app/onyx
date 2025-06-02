@@ -880,9 +880,6 @@ def handle_document_chat_message(
             search_request = SearchRequest(query=request.message)
 
             original_message = "User message: " + request.message
-            # THIS IS A HACK, we should just be passing this down as constant through the graph
-            if request.document_content:
-                original_message += "\nDocument content: " + request.document_content
             
             tenant_id = get_current_tenant_id()
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
@@ -915,6 +912,7 @@ def handle_document_chat_message(
                         fast_llm=fast_llm,
                         prompt_config=PromptConfig.from_model(persona.prompts[0]),
                         answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                        document_content=request.document_content,
                     )
                     tools.append(document_editor_tool)
                     

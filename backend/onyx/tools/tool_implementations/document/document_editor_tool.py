@@ -18,7 +18,7 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 DOCUMENT_EDITOR_RESPONSE_ID = "document_editor_response"
-TEXT_FIELD = "text"
+SEARCH_RESULTS_FIELD = "search_results"
 INSTRUCTIONS_FIELD = "instructions"
 
 DOCUMENT_EDITOR_DESCRIPTION = """
@@ -33,16 +33,16 @@ class DocumentEditorTool(Tool):
     _DISPLAY_NAME = "Document Editor Tool"
     _DESCRIPTION = DOCUMENT_EDITOR_DESCRIPTION
     _PARAMETERS = {
-        TEXT_FIELD: {
+        SEARCH_RESULTS_FIELD: {
             "type": "string",
-            "description": "The original text content to edit",
+            "description": "Results from our Agentic Search tool to provide context (use "" if none)",
         },
         INSTRUCTIONS_FIELD: {
             "type": "string",
             "description": "Detailed instructions on what changes to make to the text",
         },
     }
-    _REQUIRED_PARAMETERS = [TEXT_FIELD, INSTRUCTIONS_FIELD]
+    _REQUIRED_PARAMETERS = [SEARCH_RESULTS_FIELD, INSTRUCTIONS_FIELD]
 
     def __init__(
         self,
@@ -53,6 +53,7 @@ class DocumentEditorTool(Tool):
         llm: LLM | None = None,
         fast_llm: LLM | None = None,
         answer_style_config: AnswerStyleConfig | None = None,
+        document_content: str | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -61,6 +62,7 @@ class DocumentEditorTool(Tool):
         self.fast_llm = fast_llm
         self.db_session = db_session
         self.answer_style_config = answer_style_config
+        self.document_content = document_content
 
     @property
     def name(self) -> str:
@@ -85,16 +87,16 @@ class DocumentEditorTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        TEXT_FIELD: {
+                        SEARCH_RESULTS_FIELD: {
                             "type": "string",
-                            "description": "The original text content to edit",
+                            "description": "Results from our Agentic Search tool to provide context (provide empty string if none)",
                         },
                         INSTRUCTIONS_FIELD: {
                             "type": "string",
-                            "description": "Detailed instructions on what changes to make to the text",
+                            "description": "Detailed instructions on what changes to make to the document content",
                         },
                     },
-                    "required": [TEXT_FIELD, INSTRUCTIONS_FIELD],
+                    "required": [SEARCH_RESULTS_FIELD, INSTRUCTIONS_FIELD],
                 },
             },
         }
@@ -123,7 +125,7 @@ class DocumentEditorTool(Tool):
 
     def _run(
         self,
-        text: str,
+        search_results: str | None,
         instructions: str,
         **kwargs: Any,
     ) -> Dict[str, Any]:
@@ -161,9 +163,13 @@ class DocumentEditorTool(Tool):
         
         INSTRUCTIONS:
         {instructions}
+
+        Here are the results of our Agentic Search tool to provide context (possibly null):
+        SEARCH RESULTS:
+        {search_results}
         
-        ORIGINAL TEXT:
-        {text}
+        TEXT TO EDIT:
+        {self.document_content}
         """
         
         # Use the LLM to edit the text
@@ -183,7 +189,7 @@ class DocumentEditorTool(Tool):
                         "properties": {
                             "edited_text": {
                                 "type": "string",
-                                "description": "The edited version of the original text. This MUST be compilable HTML just like the input."
+                                "description": "The edited version of the original HTML text document content with diff markup. Deleted text should be wrapped in <deletion-mark> tags and added text in <addition-mark> tags. This MUST be compilable HTML."
                             },
                             "summary": {
                                 "type": "string",
@@ -217,18 +223,18 @@ class DocumentEditorTool(Tool):
             # Return the result with required fields
             return {
                 "success": True,
-                "original_text": text,
+                "original_text": self.document_content,
                 "edited_text": edit_result.get("edited_text", ""),
                 "message": edit_result.get("summary", ""),
-                "edited": text != edit_result.get("edited_text", ""),
+                "edited": self.document_content != edit_result.get("edited_text", ""),
             }
             
         except Exception as e:
             logger.error(f"Error in document editing: {e}")
             return {
                 "success": False,
-                "original_text": text,
-                "edited_text": text,
+                "original_text": self.document_content,
+                "edited_text": self.document_content,
                 "message": f"Failed to edit text: {str(e)}",
                 "edited": False,
             }
@@ -236,13 +242,13 @@ class DocumentEditorTool(Tool):
     def run(
         self, override_kwargs: Optional[Dict[str, Any]] = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
-        text = cast(str, llm_kwargs[TEXT_FIELD])
         instructions = cast(str, llm_kwargs[INSTRUCTIONS_FIELD])
+        search_results = cast(str, llm_kwargs.get(SEARCH_RESULTS_FIELD, ""))
 
         logger.info(f"Running document editor with instructions: {instructions}")
         
         # Execute the document editing logic
-        edit_result = self._run(text=text, instructions=instructions)
+        edit_result = self._run(search_results=search_results, instructions=instructions)
         
         # Yield the response
         yield ToolResponse(

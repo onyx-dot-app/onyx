@@ -24,7 +24,7 @@ def document_chat_graph_builder() -> StateGraph:
     graph.add_edge(start_key="prepare_tool_input", end_key="choose_tool")
     graph.add_conditional_edges("choose_tool", should_continue, ["call_tool", END])
     graph.add_edge(start_key="call_tool", end_key="basic_use_tool_response")
-    graph.add_edge(start_key="basic_use_tool_response", end_key=END)
+    graph.add_edge(start_key="basic_use_tool_response", end_key="prepare_tool_input")
 
     return graph
 
