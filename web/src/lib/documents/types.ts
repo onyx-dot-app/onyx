@@ -14,12 +14,20 @@ const oxosFiles: FileEntry[] = [{ "id": "1c1CyJwC0T68Ou0WRyGFHx6t5sIFrvrQWX9VTyO
 
 const precisionFiles: FileEntry[] = [
   {
-    "id": "1QpwJtEG2HMAXh1kz_jPuYokMGBYvlO4kt9ItV5p_U74",
-    "name": "Precision Neuro BCI System, Version 2.0 Device Description",
+    "id": "1_SnAiJU5R9yW5-3hycSmfO2F7Q61yMru0je_B24Z2VY",
+    "name": "Investigational Device Exemption (IDE) Application: Informed Consent Key Elements - Precision Neuro BCI System 2.0",
     "type": "file",
     "fileType": "document",
-    "url": "https://docs.google.com/document/d/1QpwJtEG2HMAXh1kz_jPuYokMGBYvlO4kt9ItV5p_U74/edit?usp=drivesdk",
-    "docId": "1QpwJtEG2HMAXh1kz_jPuYokMGBYvlO4kt9ItV5p_U74"
+    "url": "https://docs.google.com/document/d/1_SnAiJU5R9yW5-3hycSmfO2F7Q61yMru0je_B24Z2VY/edit?usp=drivesdk",
+    "docId": "1_SnAiJU5R9yW5-3hycSmfO2F7Q61yMru0je_B24Z2VY"
+  },
+  {
+    "id": "1pI1JZak3zYiaMBNV_rOvW-ZbtDdgcTE417Ff3cZOc1Y",
+    "name": "Risk Analysis: Precision Neuro BCI System, Version 2.0 - Clinical Study",
+    "type": "file",
+    "fileType": "document",
+    "url": "https://docs.google.com/document/d/1pI1JZak3zYiaMBNV_rOvW-ZbtDdgcTE417Ff3cZOc1Y/edit?usp=drivesdk",
+    "docId": "1pI1JZak3zYiaMBNV_rOvW-ZbtDdgcTE417Ff3cZOc1Y"
   },
   {
     "id": "1BDcEYBXfwHEJC2rj5armNTI89AXVIfPoghISMorsDTU",
@@ -38,8 +46,16 @@ const precisionFiles: FileEntry[] = [
     "docId": "1vPUnUtC_gCnRBt_2HBvhP4xiOYs-sw9u2sXt59CxbTk"
   },
   {
+    "id": "1QpwJtEG2HMAXh1kz_jPuYokMGBYvlO4kt9ItV5p_U74",
+    "name": "Precision Neuro BCI System, Version 2.0 Device Description",
+    "type": "file",
+    "fileType": "document",
+    "url": "https://docs.google.com/document/d/1QpwJtEG2HMAXh1kz_jPuYokMGBYvlO4kt9ItV5p_U74/edit?usp=drivesdk",
+    "docId": "1QpwJtEG2HMAXh1kz_jPuYokMGBYvlO4kt9ItV5p_U74"
+  },
+  {
     "id": "1UlFGMXmG3d7Owqq2q_SZsPIrfxgFHxle8VbUlJ6eEKQ",
-    "name": "Biological Evaluation Report (BER) – V0 Biocompatibility of Precision Neuro BCI System, Version 1",
+    "name": "Biological Evaluation Report (BER) \u2013 V0 Biocompatibility of Precision Neuro BCI System, Version 1",
     "type": "file",
     "fileType": "document",
     "url": "https://docs.google.com/document/d/1UlFGMXmG3d7Owqq2q_SZsPIrfxgFHxle8VbUlJ6eEKQ/edit?usp=drivesdk",
