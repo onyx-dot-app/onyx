@@ -198,7 +198,7 @@ export function DocumentChatSidebar({
             const agentAnswerPiece = packet as AgentAnswerPiece;
             const answerPiece = agentAnswerPiece.answer_piece;
             
-            if (answerPiece && answerPiece.trim()) {
+            if (answerPiece) {
               setMessages(prev => {
                 const updatedMessages = [...prev];
                 
@@ -237,7 +237,9 @@ export function DocumentChatSidebar({
             if (setContent && editedText) {
               setContent(editedText);
             }
-          }else if ('tool_name' in packet) {
+          // Only display tool on receiving ToolCallKickoff packets, not ToolCallResult packets 
+          // TODO: Add a symbol for tool completion
+          } else if ('tool_name' in packet && !('tool_result' in packet)) {
             // Handle tool call packets for debugging display
             const toolName = (packet as any).tool_name;
             
@@ -249,21 +251,24 @@ export function DocumentChatSidebar({
               
               if (debugLogIndex !== -1) {
                 // Convert tool names to more friendly messages
-                let friendlyToolName = "🔍 Searching";
-                if (toolName === 'document_chat') friendlyToolName = "💬 Finding relevant documents";
-                else if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
-                else if (toolName.includes('section_relevance')) friendlyToolName = "📊 Analyzing relevance";
-                else if (toolName.includes('context')) friendlyToolName = "📚 Gathering context";
+                let friendlyToolName = "";
+                if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
+                // TODO: The id for intermediate tool results is "id" not "tool_name"
+                // else if (toolName === 'section_relevance') friendlyToolName = "📊 Analyzing relevance";
+                // else if (toolName === 'context') friendlyToolName = "📚 Gathering context";
+                else if (toolName === 'document_editor') friendlyToolName = "📝 Editing document";
                 
                 const intermediateInfo = friendlyToolName;
                 
-                const currentText = updatedMessages[debugLogIndex].text || '';
-                updatedMessages[debugLogIndex] = {
-                  ...updatedMessages[debugLogIndex],
-                  text: currentText ? `${currentText}\n${intermediateInfo}` : intermediateInfo,
-                  isIntermediateOutput: true,
-                  debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'tool', name: toolName }]
-                };
+                if (intermediateInfo) {
+                  const currentText = updatedMessages[debugLogIndex].text || '';
+                  updatedMessages[debugLogIndex] = {
+                    ...updatedMessages[debugLogIndex],
+                    text: currentText ? `${currentText}\n${intermediateInfo}` : intermediateInfo,
+                    isIntermediateOutput: true,
+                    debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'tool', name: toolName }]
+                  };
+                }
               }
               
               return updatedMessages;
