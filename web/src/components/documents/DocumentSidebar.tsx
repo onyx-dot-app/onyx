@@ -13,17 +13,23 @@ import { FiFileText, FiGrid, FiExternalLink } from 'react-icons/fi';
 
 interface DocumentSidebarProps {
   files: FileEntry[];
+  collapsed?: boolean;
 }
 
-export function DocumentSidebar({ files }: DocumentSidebarProps) {
+export function DocumentSidebar({ files, collapsed = false }: DocumentSidebarProps) {
   const pathname = usePathname();
   
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-4 pt-0">
+      <div className={`p-4 pt-0 ${collapsed ? 'px-2' : ''}`}>
         <div className="space-y-1">
           {files.map((file) => (
-            <FileEntryItem key={file.id} file={file} level={0} />
+            <FileEntryItem 
+              key={file.id} 
+              file={file} 
+              level={0} 
+              collapsed={collapsed}
+            />
           ))}
         </div>
       </div>
@@ -34,9 +40,10 @@ export function DocumentSidebar({ files }: DocumentSidebarProps) {
 interface FileEntryItemProps {
   file: FileEntry;
   level: number;
+  collapsed?: boolean;
 }
 
-function FileEntryItem({ file, level }: FileEntryItemProps) {
+function FileEntryItem({ file, level, collapsed = false }: FileEntryItemProps) {
   const [expanded, setExpanded] = useState(true);
   const [showExternalLink, setShowExternalLink] = useState(false);
   const pathname = usePathname();
@@ -65,6 +72,10 @@ function FileEntryItem({ file, level }: FileEntryItemProps) {
   };
   
   const getFileIcon = () => {
+    if (collapsed) {
+      return null;
+    }
+    
     if (file.type === 'folder') {
       return expanded ? (
         <ChevronDownIcon size={16} className="text-text-history-sidebar-button" />
@@ -81,17 +92,18 @@ function FileEntryItem({ file, level }: FileEntryItemProps) {
   return (
     <div>
       <div 
-        className={`flex items-center py-1 px-2 rounded-md cursor-pointer ${
+        className={`flex items-center py-1 rounded-md cursor-pointer transition-all duration-300 ${
           isActive 
             ? 'bg-accent-background-selected text-primary border-l-2 border-primary font-medium' 
             : 'hover:bg-background-chat-hover'
-        }`}
-        style={{ paddingLeft: `${level * 12 + 8}px` }}
+        } ${collapsed ? 'px-0 invisible' : 'px-2'}`}
+        style={{ paddingLeft: collapsed ? '4px' : `${level * 12 + 8}px` }}
         onClick={handleFileClick}
         onMouseEnter={() => setShowExternalLink(true)}
         onMouseLeave={() => setShowExternalLink(false)}
+        title={file.name}
       >
-        {file.type === 'folder' ? (
+        {!collapsed && file.type === 'folder' ? (
           <button 
             onClick={toggleExpanded}
             className="mr-1 flex-none"
@@ -102,9 +114,11 @@ function FileEntryItem({ file, level }: FileEntryItemProps) {
           getFileIcon()
         )}
         
-        <span className="truncate text-sm flex-grow">
-          {file.name}
-        </span>
+        {!collapsed ? (
+          <span className="truncate text-sm flex-grow">
+            {file.name}
+          </span>
+        ) : null}
         
         {file.type === 'file' && file.url && showExternalLink && (
           <a 
@@ -122,7 +136,12 @@ function FileEntryItem({ file, level }: FileEntryItemProps) {
       {file.type === 'folder' && expanded && file.children && (
         <div className="mt-1">
           {file.children.map((child) => (
-            <FileEntryItem key={child.id} file={child} level={level + 1} />
+            <FileEntryItem 
+              key={child.id} 
+              file={child} 
+              level={level + 1} 
+              collapsed={collapsed}
+            />
           ))}
         </div>
       )}
