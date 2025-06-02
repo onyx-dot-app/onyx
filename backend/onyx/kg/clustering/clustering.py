@@ -6,6 +6,7 @@ from sqlalchemy import text
 from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
 from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entities import get_parent_child_relationships_from_extractions
 from onyx.db.entities import KGEntity
 from onyx.db.entities import KGEntityExtractionStaging
 from onyx.db.entities import merge_entities
@@ -15,6 +16,8 @@ from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationship
 from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipTypeExtractionStaging
+from onyx.db.relationships import add_or_update_relationship
+from onyx.db.relationships import add_or_update_relationship_type
 from onyx.db.relationships import transfer_relationship
 from onyx.db.relationships import transfer_relationship_type
 from onyx.document_index.vespa.kg_interactions import (
@@ -96,6 +99,7 @@ def _cluster_one_grounded_entity(
         else:
             update_vespa = entity.document_id is not None
             transferred_entity = transfer_entity(db_session=db_session, entity=entity)
+
         db_session.commit()
 
     # update vespa
@@ -190,9 +194,27 @@ def kg_clustering(
     }
 
     for entity in untransferred_grounded_entities:
+        entity.attributes.get("parent")
         added_entity = _cluster_one_grounded_entity(entity, tenant_id, index_name)
         entity_translations[entity.id_name] = added_entity.id_name
+
     logger.info(f"Transferred {len(untransferred_grounded_entities)} entities")
+
+    # get parent-child relationships from extractions and add to db
+    with get_session_with_current_tenant() as db_session:
+        parent_child_relationships, parent_child_relationship_types = (
+            get_parent_child_relationships_from_extractions(db_session)
+        )
+
+        for parent_relationship_type in parent_child_relationship_types:
+            add_or_update_relationship_type(db_session, **parent_relationship_type)
+
+        db_session.commit()
+
+        for parent_relationship in parent_child_relationships:
+            add_or_update_relationship(db_session, **parent_relationship)
+            # TODO: Update vespa for the relationship
+        db_session.commit()
 
     ## Transfer the relationship types
     for relationship_type in relationship_types:

@@ -684,8 +684,8 @@ contains the relationship of the table row. Make sure that you do not return mor
 is a limit on source documents in the original SQL statement, the new SQL statement needs to have \
 the same limit.
 
-CRITICAL NOTE:
-- If you want to include a 'order-by' clause, YOU MUST include the the columns in the order-by clause \
+CRITICAL NOTES:
+ - If you want to include a 'order-by' clause, YOU MUST include the the columns in the order-by clause \
 also in the 'distinct' clause!
 
 Your task is then to create a new SQL statement that returns the source documents that are relevant to what the \
