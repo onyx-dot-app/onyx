@@ -71,6 +71,34 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
     }
   }, [editor, content, documentData])
 
+  // Handle citation link clicks
+  React.useEffect(() => {
+    if (!editor) return;
+
+    const handleCitationClick = (event: Event) => {
+      const target = event.target as HTMLElement;
+      if (target.classList.contains('citation-link') || target.closest('.citation-link')) {
+        event.preventDefault();
+        const citationLink = target.classList.contains('citation-link') ? target : target.closest('.citation-link');
+        const documentId = citationLink?.getAttribute('data-document-id');
+        
+        if (documentId) {
+          // You can implement document preview logic here
+          console.log('Citation clicked for document:', documentId);
+          // Example: Show document preview modal or navigate to document
+          // showDocumentPreview(documentId);
+        }
+      }
+    };
+
+    const editorElement = editor.view.dom;
+    editorElement.addEventListener('click', handleCitationClick);
+
+    return () => {
+      editorElement.removeEventListener('click', handleCitationClick);
+    };
+  }, [editor]);
+
   if (!editor) {
     return null;
   }
@@ -171,6 +199,29 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
           color: #3b82f6;
           text-decoration: underline;
           cursor: pointer;
+        }
+
+        /* Citation link styles */
+        .editor-content a.citation-link {
+          background-color: #fef3c7;
+          border: 1px solid #f59e0b;
+          border-radius: 0.25rem;
+          padding: 0.125rem 0.25rem;
+          color: #92400e;
+          text-decoration: none;
+          font-weight: 500;
+          position: relative;
+        }
+
+        .editor-content a.citation-link:hover {
+          background-color: #fde68a;
+          border-color: #d97706;
+        }
+
+        .editor-content a.citation-link::after {
+          content: "📄";
+          margin-left: 0.25rem;
+          font-size: 0.75em;
         }
 
         /* Text alignment */

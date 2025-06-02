@@ -16,13 +16,23 @@ import { CodeBlock } from '@/app/chat/message/CodeBlock';
 import { transformLinkUri } from '@/lib/utils';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
 import { PacketType } from '@/app/chat/lib';
-import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket, DocumentEditorResponse } from '@/lib/search/interfaces';
+import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket } from '@/lib/search/interfaces';
 
 interface CitationInfo {
   citation_num: number;
   document_id: string;
   level?: number | null;
   level_question_num?: number | null;
+}
+
+interface DocumentEditorResponse {
+  edited_text: string;
+  citations?: Array<{
+    citation_num: number;
+    document_id: string;
+    start_pos?: number;
+    end_pos?: number;
+  }>;
 }
 
 interface DocumentChatSidebarProps {
@@ -143,6 +153,73 @@ export function DocumentChatSidebar({
     setSessionId(uuidv4());
   }, []);
 
+  // Helper function to wrap text with specific citations
+  const wrapTextWithCitations = (
+    text: string, 
+    citations: Array<{citation_num: number; document_id: string; start_pos?: number; end_pos?: number}>,
+    docs: OnyxDocument[],
+    citeMap: Map<number, string>
+  ): string => {
+    // Target addition-mark tags specifically
+    const firstCitation = citations[0];
+    if (firstCitation) {
+      const doc = docs.find(d => d.document_id === firstCitation.document_id);
+      if (doc) {
+        // Replace addition-mark content with citation-wrapped content
+        return text.replace(
+          /<addition-mark>(.*?)<\/addition-mark>/g,
+          `<addition-mark><a href="#citation-${firstCitation.citation_num}" data-document-id="${firstCitation.document_id}" class="citation-link">$1</a></addition-mark>`
+        );
+      }
+    }
+    return text;
+  };
+
+  // Helper function to wrap entire text with all available citations  
+  const wrapEntireTextWithCitations = (
+    text: string,
+    docs: OnyxDocument[],
+    citeMap: Map<number, string>
+  ): string => {
+    // Target addition-mark tags specifically
+    let citationNum = 1;
+    let documentId = '';
+    
+    // Try to get citation info from documents and citationMap
+    if (docs.length > 0) {
+      const firstDoc = docs[0];
+      documentId = firstDoc.document_id;
+      const foundCitationNum = Array.from(citeMap.entries()).find(([_, docId]) => docId === firstDoc.document_id)?.[0];
+      if (foundCitationNum) {
+        citationNum = foundCitationNum;
+      }
+    } 
+    // Fallback: use documentIds prop if available
+    else if (documentIds.length > 0) {
+      documentId = documentIds[0];
+      citationNum = 1;
+    } else {
+      console.log('No citations available, returning plain text');
+      return text;
+    }
+
+    // Replace addition-mark content with citation-wrapped content
+    const result = text.replace(
+      /<addition-mark>(.*?)<\/addition-mark>/g,
+      `<addition-mark><a href="#citation-${citationNum}" data-document-id="${documentId}" class="citation-link">$1</a></addition-mark>`
+    );
+    
+    console.log('Citation wrapping result:', {
+      originalHasAdditionMarks: /<addition-mark>/.test(text),
+      resultHasAdditionMarks: /<addition-mark>/.test(result),
+      resultHasCitationLinks: /citation-link/.test(result),
+      citationNum,
+      documentId
+    });
+    
+    return result;
+  };
+
   const handleSendMessage = async () => {
     // Reset textarea height after sending message
     if (textAreaRef.current) {
@@ -160,8 +237,11 @@ export function DocumentChatSidebar({
     setMessages(prev => [...prev, newMessage]);
     setMessage('');
     
-    setDocuments([]);
-    setCitationMap(new Map());
+    // Only clear citations if this is the first message in a new conversation
+    if (messages.length === 0) {
+      setDocuments([]);
+      setCitationMap(new Map());
+    }
     
     try {
       const response = await fetch('/api/chat/document-chat', {
@@ -192,6 +272,13 @@ export function DocumentChatSidebar({
             const answerPiece = agentAnswerPiece.answer_piece;
             
             if (answerPiece) {
+              console.log('Processing answer piece:', {
+                answerPiece: answerPiece.substring(0, 100) + '...',
+                currentCitationMapSize: citationMap.size,
+                currentDocumentsLength: documents.length,
+                citationMapEntries: Array.from(citationMap.entries())
+              });
+              
               setMessages(prev => {
                 const updatedMessages = [...prev];
                 const lastMessage = updatedMessages[updatedMessages.length - 1];
@@ -225,15 +312,45 @@ export function DocumentChatSidebar({
             setCitationMap(prev => {
               const newMap = new Map(prev);
               newMap.set(citationInfo.citation_num, citationInfo.document_id);
+              console.log('Updated citation map:', Array.from(newMap.entries()));
               return newMap;
             });
           } else if ('id' in packet && packet.id == "document_editor_response") {
             // Extract the document_editor_response property from the packet
             const documentEditorResponse = packet.response as DocumentEditorResponse;
             const editedText = documentEditorResponse.edited_text;
-
+            
+            console.log('Document editor response received:', {
+              editedText,
+              citations: documentEditorResponse.citations,
+              availableDocuments: documents.length,
+              citationMapSize: citationMap.size,
+              documentsArray: documents,
+              citationMapEntries: Array.from(citationMap.entries())
+            });
+            
             if (setContent && editedText) {
-              setContent(editedText);
+              // If citations are provided, wrap the text with citation links
+              if (documentEditorResponse.citations && documents.length > 0) {
+                console.log('Using provided citations');
+                const textWithCitations = wrapTextWithCitations(
+                  editedText, 
+                  documentEditorResponse.citations, 
+                  documents,
+                  citationMap
+                );
+                setContent(textWithCitations);
+              } else {
+                console.log('Using fallback citation wrapping');
+                // Fallback: wrap entire text with citations from current session
+                const textWithCitations = wrapEntireTextWithCitations(
+                  editedText,
+                  documents,
+                  citationMap
+                );
+                console.log('Generated text with citations:', textWithCitations);
+                setContent(textWithCitations);
+              }
             }
           // Only display tool on receiving ToolCallKickoff packets, not ToolCallResult packets 
           // TODO: Add a symbol for tool completion
@@ -284,7 +401,12 @@ export function DocumentChatSidebar({
                 const existingIds = new Set(prev.map(doc => doc.document_id));
                 const newDocs = documentPacket.top_documents.filter(doc => !existingIds.has(doc.document_id));
                 const updatedDocs = [...prev, ...newDocs];
-                console.log('Updated documents array:', updatedDocs);
+                console.log('Updated documents array:', {
+                  previousLength: prev.length,
+                  newDocsAdded: newDocs.length,
+                  totalLength: updatedDocs.length,
+                  documentIds: updatedDocs.map(d => d.document_id)
+                });
                 return updatedDocs;
               });
             }
