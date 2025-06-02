@@ -809,13 +809,18 @@ class SlackConnector(
 
             num_threads_processed = len(seen_thread_ts) - num_threads_start
 
+            new_latest_seconds_epoch = SecondsSinceUnixEpoch(new_latest)
+            if new_latest_seconds_epoch > end:
+                range_complete = 0.0
+            else:
+                range_complete = end - new_latest_seconds_epoch
+
             range_start = max(0, channel_created)
-            range_diff = end - range_start
-            if range_diff <= 0:
-                range_diff = 1
-            range_percent_complete = (
-                (end - SecondsSinceUnixEpoch(new_latest)) / (range_diff) * 100.0
-            )
+            end - range_start
+            range_total = end - range_start
+            if range_total <= 0:
+                range_total = 1
+            range_percent_complete = range_complete / range_total * 100.0
 
             logger.info(
                 f"Message processing stats: "
