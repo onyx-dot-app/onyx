@@ -83,7 +83,7 @@ def new_admin_user(reset: None) -> DATestUser | None:
 @pytest.fixture
 def admin_user() -> DATestUser:
     try:
-        user = UserManager.create(name=ADMIN_USER_NAME, is_first_user=True)
+        user = UserManager.create(name=ADMIN_USER_NAME)
 
         # if there are other users for some reason, reset and try again
         if not UserManager.is_role(user, UserRole.ADMIN):
@@ -124,7 +124,14 @@ def basic_user(
     admin_user: DATestUser,
 ) -> DATestUser:
     try:
-        user = UserManager.create(name=BASIC_USER_NAME, is_first_user=False)
+        user = UserManager.create(name=BASIC_USER_NAME)
+
+        # Validate that the user has the BASIC role
+        if user.role != UserRole.BASIC:
+            raise RuntimeError(
+                f"Created user {BASIC_USER_NAME} does not have BASIC role"
+            )
+
         return user
     except Exception as e:
         print(f"Failed to create basic user, trying to login as existing user: {e}")
@@ -140,6 +147,11 @@ def basic_user(
                 is_active=True,
             )
         )
+
+        # Validate that the logged-in user has the BASIC role
+        if not UserManager.is_role(user, UserRole.BASIC):
+            raise RuntimeError(f"User {BASIC_USER_NAME} does not have BASIC role")
+
         return user
 
 
