@@ -4,6 +4,7 @@ import React from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { HighlightWithLink } from '@/lib/tiptap/HighlightWithLink';
+import { DeletionMark, AdditionMark } from '@/lib/tiptap/DiffMarks';
 import { DocumentBase } from '@/lib/hooks/useGoogleDocs';
 
 interface TiptapEditorProps {
@@ -21,6 +22,8 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
     extensions: [
       StarterKit,
       HighlightWithLink,
+      DeletionMark,
+      AdditionMark,
     ],
     content, // Initialize with provided content
     editable,
@@ -47,6 +50,20 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
 
   return (
     <div className="border border-border rounded-lg p-6 bg-background shadow-sm">
+      <style jsx global>{`
+        deletion-mark {
+          background-color: rgba(255, 0, 0, 0.15);
+          text-decoration: line-through;
+          color: #b91c1c;
+          padding: 0 2px;
+        }
+        addition-mark {
+          background-color: rgba(0, 128, 0, 0.15);
+          color: #15803d;
+          font-weight: 500;
+          padding: 0 2px;
+        }
+      `}</style>
       <EditorContent 
         editor={editor} 
         className="prose prose-sm max-w-none focus:outline-none min-h-[200px] [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-3 [&_p]:mb-2 [&_ul]:ml-4"

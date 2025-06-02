@@ -9,6 +9,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import Link from '@tiptap/extension-link';
 import { HighlightWithLink } from '@/lib/tiptap/HighlightWithLink';
+import { DeletionMark, AdditionMark } from '@/lib/tiptap/DiffMarks';
 
 interface TiptapTableEditorProps {
   content?: string;
@@ -50,6 +51,8 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
       TableRow,
       TableHeader,
       TableCell,
+      DeletionMark,
+      AdditionMark,
       Link.configure({
         openOnClick: true,
         // Make links clickable
@@ -85,6 +88,20 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
 
   return (
     <div className="">
+      <style jsx global>{`
+        deletion-mark {
+          background-color: rgba(255, 0, 0, 0.15);
+          text-decoration: line-through;
+          color: #b91c1c;
+          padding: 0 2px;
+        }
+        addition-mark {
+          background-color: rgba(0, 128, 0, 0.15);
+          color: #15803d;
+          font-weight: 500;
+          padding: 0 2px;
+        }
+      `}</style>
       <EditorContent 
         editor={editor} 
         className="prose prose-sm max-w-none focus:outline-none min-h-[300px] [&_table]:border-collapse [&_table]:border-2 [&_table]:border-border [&_th]:border-2 [&_th]:border-border [&_th]:bg-accent [&_th]:p-2 [&_td]:border-2 [&_td]:border-border [&_td]:p-2 [&_td]:bg-background [&_a]:text-blue-500 [&_a]:underline [&_a:hover]:text-blue-700"

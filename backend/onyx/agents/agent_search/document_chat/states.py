@@ -13,7 +13,6 @@ class DocumentChatInput(BaseModel):
 
 class DocumentChatOutput(TypedDict):
     response_chunk: AIMessageChunk
-    answer: Optional[str]
     edited_document: Optional[str]
     search_results: Optional[str]
 
@@ -22,10 +21,6 @@ class SearchResultUpdate(BaseModel):
     search_results: Optional[str] = None
     search_performed: bool = False
     search_error: Optional[AgentErrorLog] = None
-
-class DirectAnswerUpdate(BaseModel):
-    """Update containing a direct answer."""
-    direct_answer: Optional[str] = None
 
 class DocumentEditUpdate(BaseModel):
     """Update containing document edit information."""
@@ -41,7 +36,6 @@ class DocumentChatState(
     ToolCallUpdate, 
     ToolChoiceUpdate,
     SearchResultUpdate,
-    DirectAnswerUpdate,
     DocumentEditUpdate,
 ):
     pass

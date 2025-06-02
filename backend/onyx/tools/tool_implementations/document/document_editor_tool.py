@@ -144,6 +144,21 @@ class DocumentEditorTool(Tool):
         You are a document editor assistant. Your task is to edit the provided HTML text according to the instructions.
         Do not add any newlines in the HTML edited_text output. The edited_text should be a valid HTML string.
         
+        IMPORTANT: You must return a diff representation of the changes made to the text with the following format:
+        - Text that is being deleted should be wrapped in <deletion-mark> tags
+        - Text that is being added should be wrapped in <addition-mark> tags
+        - For edited text, use <deletion-mark> immediately followed by <addition-mark>
+        - Do not modify text that remains unchanged
+        - Maintain the original structure of the HTML document
+        - You must add <deletion-mark> tags around sections that are no longer included
+        - You must add <addition-mark> tags around text / sections that are newly included
+        
+        YOU MUST RETURN ALL OF THE ORIGINAL HTML IN THE OUTPUT, NOT JUST THE CHANGES.
+
+        Example of a diff representation:
+        Original: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a sample text.</p> </div>"
+        Edited with diff: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a <deletion-mark>sample</deletion-mark><addition-mark>modified</addition-mark> text.</p> </div>"
+        
         INSTRUCTIONS:
         {instructions}
         

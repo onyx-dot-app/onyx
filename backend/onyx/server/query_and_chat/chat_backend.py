@@ -880,6 +880,7 @@ def handle_document_chat_message(
             search_request = SearchRequest(query=request.message)
 
             original_message = "User message: " + request.message
+            # THIS IS A HACK, we should just be passing this down as constant through the graph
             if request.document_content:
                 original_message += "\nDocument content: " + request.document_content
             
