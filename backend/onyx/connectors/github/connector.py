@@ -249,17 +249,15 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             else None
         ),
         metadata={
-            k: v
+            k: str(v)
             for k, v in {
                 "object_type": "PullRequest",
-                "id": str(pull_request.number),
-                "merged": str(pull_request.merged),
+                "id": pull_request.number,
+                "merged": pull_request.merged,
                 "state": pull_request.state,
-                "user": (
-                    str(_get_userinfo(pull_request.user)) if pull_request.user else None
-                ),
+                "user": _get_userinfo(pull_request.user) if pull_request.user else None,
                 "assignees": [
-                    str(_get_userinfo(assignee)) for assignee in pull_request.assignees
+                    _get_userinfo(assignee) for assignee in pull_request.assignees
                 ],
                 "repo": (
                     pull_request.base.repo.full_name if pull_request.base else None
@@ -268,27 +266,27 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
                 "num_files_changed": str(pull_request.changed_files),
                 "labels": [label.name for label in pull_request.labels],
                 "created_at": (
-                    str(pull_request.created_at.replace(tzinfo=timezone.utc))
+                    pull_request.created_at.replace(tzinfo=timezone.utc)
                     if pull_request.created_at
                     else None
                 ),
                 "updated_at": (
-                    str(pull_request.updated_at.replace(tzinfo=timezone.utc))
+                    pull_request.updated_at.replace(tzinfo=timezone.utc)
                     if pull_request.updated_at
                     else None
                 ),
                 "closed_at": (
-                    str(pull_request.closed_at.replace(tzinfo=timezone.utc))
+                    pull_request.closed_at.replace(tzinfo=timezone.utc)
                     if pull_request.closed_at
                     else None
                 ),
                 "merged_at": (
-                    str(pull_request.merged_at.replace(tzinfo=timezone.utc))
+                    pull_request.merged_at.replace(tzinfo=timezone.utc)
                     if pull_request.merged_at
                     else None
                 ),
                 "merged_by": (
-                    str(_get_userinfo(pull_request.merged_by))
+                    _get_userinfo(pull_request.merged_by)
                     if pull_request.merged_by
                     else None
                 ),
@@ -315,12 +313,10 @@ def _convert_issue_to_document(issue: Issue) -> Document:
             k: str(v)
             for k, v in {
                 "object_type": "Issue",
-                "id": str(issue.number),
+                "id": issue.number,
                 "state": issue.state,
-                "user": str(_get_userinfo(issue.user)) if issue.user else None,
-                "assignees": [
-                    str(_get_userinfo(assignee)) for assignee in issue.assignees
-                ],
+                "user": _get_userinfo(issue.user) if issue.user else None,
+                "assignees": [_get_userinfo(assignee) for assignee in issue.assignees],
                 "repo": issue.repository.full_name if issue.repository else None,
                 "labels": [label.name for label in issue.labels],
                 "created_at": (
@@ -339,7 +335,7 @@ def _convert_issue_to_document(issue: Issue) -> Document:
                     else None
                 ),
                 "closed_by": (
-                    str(_get_userinfo(issue.closed_by)) if issue.closed_by else None
+                    _get_userinfo(issue.closed_by) if issue.closed_by else None
                 ),
             }.items()
             if v is not None
