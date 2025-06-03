@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { TiptapEditor } from '../../components/editors/TiptapEditor';
 import { TiptapTableEditor } from '../../components/editors/TiptapTableEditor';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
-import { useGoogleDoc, useGoogleSheet, convertSectionsToHtml, DocumentBase } from '@/lib/hooks/useGoogleDocs';
+import { useGoogleDoc, useGoogleSheet, useGoogleDocFormatted, convertSectionsToHtml, convertFormattedSectionsToStructuredHtml, DocumentBase, FormattedDocumentBase } from '@/lib/hooks/useGoogleDocs';
 import { getSidebarFiles } from '@/lib/documents/types';
 import { FiExternalLink } from 'react-icons/fi';
 import { ThreeDotsLoader } from '@/components/Loading';
@@ -15,6 +15,7 @@ export default function DocumentsPage() {
   const docId = searchParams?.get('docId');
   const [content, setContent] = useState('');
   const [documentData, setDocumentData] = useState<DocumentBase | null>(null);
+  const [formattedDocumentData, setFormattedDocumentData] = useState<FormattedDocumentBase | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   
   // TODO: We should move this to the backend and manage this using the groups instead
@@ -26,10 +27,11 @@ export default function DocumentsPage() {
   const isSpreadsheet = fileInfo?.fileType === 'spreadsheet';
   
   const { doc, isLoading: docLoading, error: docError } = useGoogleDoc(isSpreadsheet ? null : docId);
+  const { doc: formattedDoc, isLoading: formattedDocLoading, error: formattedDocError } = useGoogleDocFormatted(isSpreadsheet ? null : docId);
   const { sheet, isLoading: sheetLoading, error: sheetError } = useGoogleSheet(isSpreadsheet ? docId : null);
   
-  const isLoading = docLoading || sheetLoading;
-  const error = docError || sheetError;
+  const isLoading = docLoading || formattedDocLoading || sheetLoading;
+  const error = docError || formattedDocError || sheetError;
   
   // Always set the first sheet as the default when sheet data is loaded
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function DocumentsPage() {
       if (prevDocIdRef.current !== null) {
         setContent('');
         setDocumentData(null);
+        setFormattedDocumentData(null);
         
         // Only reset selected sheet for non-spreadsheets
         // For spreadsheets, we'll let the sheet data effect handle setting the first sheet
@@ -64,11 +67,18 @@ export default function DocumentsPage() {
     }
   }, [docId, isSpreadsheet]);
 
-  // Update content whenever doc, sheet, or selectedSheet changes
+  // Update content whenever doc, formattedDoc, sheet, or selectedSheet changes
   useEffect(() => {
-    if (doc) {
-      // Store the complete document data
+    if (formattedDoc) {
+      setFormattedDocumentData(formattedDoc);
+      setDocumentData(null);
+      // Convert formatted sections to structured HTML for TipTap
+      const htmlContent = convertFormattedSectionsToStructuredHtml(formattedDoc.sections);
+      setContent(htmlContent);
+    } else if (doc) {
+      // Fallback to regular document data
       setDocumentData(doc);
+      setFormattedDocumentData(null);
       // Convert sections to HTML for display
       const htmlContent = convertSectionsToHtml(doc.sections);
       setContent(htmlContent);
@@ -81,8 +91,9 @@ export default function DocumentsPage() {
       setContent(tableHtml);
       // Reset document data since we're viewing a sheet
       setDocumentData(null);
+      setFormattedDocumentData(null);
     }
-  }, [doc, sheet, selectedSheet]);
+  }, [doc, formattedDoc, sheet, selectedSheet]);
 
   const convertSheetDataToTableHtml = (data: any[][]) => {
     if (!data || data.length === 0) return '';
@@ -174,7 +185,7 @@ export default function DocumentsPage() {
               <TiptapEditor 
                 key={`doc-${docId}`}
                 content={content}
-                documentData={documentData}
+                documentData={formattedDocumentData || documentData}
                 onChange={setContent}
                 editable={true}
               />
