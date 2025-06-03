@@ -84,6 +84,33 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
     }
   }, [editor]);
 
+  // Handle citation link clicks
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleCitationClick = (event: Event) => {
+      const target = event.target as HTMLElement;
+      if (target.classList.contains('citation-link') || target.closest('.citation-link')) {
+        event.preventDefault();
+        const citationLink = target.classList.contains('citation-link') ? target : target.closest('.citation-link');
+        const documentId = citationLink?.getAttribute('data-document-id');
+        
+        if (documentId) {
+          console.log('Citation clicked for document:', documentId);
+          // Example: Show document preview modal or navigate to document
+          // showDocumentPreview(documentId);
+        }
+      }
+    };
+
+    const editorElement = editor.view.dom;
+    editorElement.addEventListener('click', handleCitationClick);
+
+    return () => {
+      editorElement.removeEventListener('click', handleCitationClick);
+    };
+  }, [editor]);
+
   if (!editor) {
     return null;
   }
@@ -102,6 +129,29 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
           color: #15803d;
           font-weight: 500;
           padding: 0 2px;
+        }
+        
+        /* Citation link styles for table editor */
+        a.citation-link {
+          background-color: #fef3c7 !important;
+          border: 1px solid #f59e0b !important;
+          border-radius: 0.25rem !important;
+          padding: 0.125rem 0.25rem !important;
+          color: #92400e !important;
+          text-decoration: none !important;
+          font-weight: 500 !important;
+          position: relative !important;
+        }
+
+        a.citation-link:hover {
+          background-color: #fde68a !important;
+          border-color: #d97706 !important;
+        }
+
+        a.citation-link::after {
+          content: "📄" !important;
+          margin-left: 0.25rem !important;
+          font-size: 0.75em !important;
         }
       `}</style>
       {editor && <FormattingToolbar editor={editor} />}

@@ -114,6 +114,7 @@ export default function DocumentsPage() {
       documentTitle={fileInfo?.name || (docId ? 'Document' : 'Documents')}
       setContent={setContent}
       documentConfig={documentConfig}
+      documentIds={docId ? [docId] : []}
     >
       <div className="container mx-auto p-6 max-w-6xl">
         <div className="mb-6">

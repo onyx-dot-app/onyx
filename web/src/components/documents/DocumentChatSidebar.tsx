@@ -16,13 +16,23 @@ import { CodeBlock } from '@/app/chat/message/CodeBlock';
 import { transformLinkUri } from '@/lib/utils';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
 import { PacketType } from '@/app/chat/lib';
-import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket, DocumentEditorResponse } from '@/lib/search/interfaces';
+import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket } from '@/lib/search/interfaces';
 
 interface CitationInfo {
   citation_num: number;
   document_id: string;
   level?: number | null;
   level_question_num?: number | null;
+}
+
+interface DocumentEditorResponse {
+  edited_text: string;
+  citations?: Array<{
+    citation_num: number;
+    document_id: string;
+    start_pos?: number;
+    end_pos?: number;
+  }>;
 }
 
 interface DocumentChatSidebarProps {
@@ -143,6 +153,106 @@ export function DocumentChatSidebar({
     setSessionId(uuidv4());
   }, []);
 
+  // Function to preprocess message text and convert single bracket citations to double bracket format
+  const preprocessCitations = (text: string): string => {
+    if (!text || citationMap.size === 0) return text;
+    
+    // Match single bracket citations like [1], [2], etc. but NOT [[1]] (double brackets)
+    // Negative lookbehind (?<!\[) ensures there's no [ before, negative lookahead (?!\]) ensures no ] after
+    const singleBracketPattern = /(?<!\[)\[(\d+)\](?!\])/g;
+    
+    return text.replace(singleBracketPattern, (match, citationNum) => {
+      const num = parseInt(citationNum, 10);
+      const actualUrl = citationMap.get(num);
+      
+      if (actualUrl) {
+        console.log('Converting single bracket citation:', {
+          original: match,
+          citationNum: num,
+          actualUrl,
+          converted: `[[${citationNum}]](${actualUrl})`
+        });
+        
+        // Convert to double bracket format with actual URL
+        return `[[${citationNum}]](${actualUrl})`;
+      } else {
+        console.log('No citation mapping found for:', match, 'Available mappings:', Array.from(citationMap.entries()));
+      }
+      
+      // If no citation mapping found, leave as is
+      return match;
+    });
+  };
+
+  // Helper function to wrap text with specific citations
+  const wrapTextWithCitations = (
+    text: string, 
+    citations: Array<{citation_num: number; document_id: string; start_pos?: number; end_pos?: number}>,
+    citeMap: Map<number, string>
+  ): string => {
+    // Target addition-mark tags specifically
+    const firstCitation = citations[0];
+    if (firstCitation) {
+      console.log('Document editor wrapTextWithCitations:', {
+        citationNum: firstCitation.citation_num,
+        textHasAdditionMarks: /<addition-mark>/.test(text),
+        textPreview: text.substring(0, 200) + '...'
+      });
+      
+      // Replace addition-mark content with citation-wrapped content using #citation format
+      const result = text.replace(
+        /<addition-mark>(.*?)<\/addition-mark>/g,
+        `<addition-mark><a href="#citation-${firstCitation.citation_num}" data-document-id="${firstCitation.document_id}" class="citation-link">$1</a></addition-mark>`
+      );
+      
+      console.log('wrapTextWithCitations result:', {
+        originalLength: text.length,
+        resultLength: result.length,
+        hasChanges: text !== result,
+        resultPreview: result.substring(0, 200) + '...'
+      });
+      
+      return result;
+    }
+    return text;
+  };
+
+  // Helper function to wrap entire text with all available citations  
+  const wrapEntireTextWithCitations = (
+    text: string,
+    citeMap: Map<number, string>
+  ): string => {
+    // If text has addition-mark tags, always wrap them with citations
+    if (/<addition-mark>/.test(text)) {
+      // Use citation from map if available, otherwise default to citation 1
+      const citationNum = citeMap.size > 0 ? Array.from(citeMap.entries())[0][0] : 1;
+
+      console.log('Document editor wrapEntireTextWithCitations:', {
+        citationNum,
+        hasAdditionMarks: true,
+        citationMapSize: citeMap.size
+      });
+
+      // Replace addition-mark content with citation-wrapped content using #citation format
+      const result = text.replace(
+        /<addition-mark>(.*?)<\/addition-mark>/g,
+        `<addition-mark><a href="#citation-${citationNum}" class="citation-link">$1</a></addition-mark>`
+      );
+      
+      console.log('Citation wrapping result:', {
+        originalHasAdditionMarks: /<addition-mark>/.test(text),
+        resultHasAdditionMarks: /<addition-mark>/.test(result),
+        resultHasCitationLinks: /citation-link/.test(result),
+        citationNum
+      });
+      
+      return result;
+    }
+
+    console.log('No addition-mark tags found, returning plain text');
+    return text;
+  };
+
   const handleSendMessage = async () => {
     // Reset textarea height after sending message
     if (textAreaRef.current) {
@@ -160,8 +270,11 @@ export function DocumentChatSidebar({
     setMessages(prev => [...prev, newMessage]);
     setMessage('');
     
-    setDocuments([]);
-    setCitationMap(new Map());
+    // Only clear citations if this is the first message in a new conversation
+    if (messages.length === 0) {
+      setDocuments([]);
+      setCitationMap(new Map());
+    }
     
     try {
       const response = await fetch('/api/chat/document-chat', {
@@ -183,26 +296,6 @@ export function DocumentChatSidebar({
         throw new Error('Failed to send message');
       }
 
-      // Create placeholders for both the debug log and the AI response
-      const debugLogId = Date.now() + 1;
-      const aiResponseId = Date.now() + 2;
-      
-      setMessages(prev => [...prev, 
-        {
-          id: debugLogId,
-          text: "",
-          isUser: false,
-          isIntermediateOutput: true,
-          debugLog: []
-        },
-        {
-          id: aiResponseId,
-          text: "",
-          isUser: false,
-          isIntermediateOutput: false
-        }
-      ]);
-      
       try {
         for await (const packet of handleSSEStream<PacketType>(response)) {
           console.log('DocumentChatSidebar packet:', packet);
@@ -212,19 +305,31 @@ export function DocumentChatSidebar({
             const answerPiece = agentAnswerPiece.answer_piece;
             
             if (answerPiece) {
+              console.log('Processing answer piece:', {
+                answerPiece: answerPiece.substring(0, 100) + '...',
+                currentCitationMapSize: citationMap.size,
+                currentDocumentsLength: documents.length,
+                citationMapEntries: Array.from(citationMap.entries())
+              });
+              
               setMessages(prev => {
                 const updatedMessages = [...prev];
+                const lastMessage = updatedMessages[updatedMessages.length - 1];
                 
-                const responseIndex = updatedMessages.findIndex(
-                  msg => msg.id === aiResponseId && !msg.isIntermediateOutput
-                );
-                
-                if (responseIndex !== -1) {
-                  const newText = updatedMessages[responseIndex].text + answerPiece;
-                  updatedMessages[responseIndex] = {
-                    ...updatedMessages[responseIndex],
-                    text: newText
+                // If the last message is from the AI and not an intermediate output, append to it
+                if (lastMessage && !lastMessage.isUser && !lastMessage.isIntermediateOutput) {
+                  updatedMessages[updatedMessages.length - 1] = {
+                    ...lastMessage,
+                    text: lastMessage.text + answerPiece
                   };
+                } else {
+                  // Create a new AI response message
+                  updatedMessages.push({
+                    id: Date.now() + Math.random(),
+                    text: answerPiece,
+                    isUser: false,
+                    isIntermediateOutput: false
+                  });
                 }
                 
                 return updatedMessages;
@@ -240,15 +345,57 @@ export function DocumentChatSidebar({
             setCitationMap(prev => {
               const newMap = new Map(prev);
               newMap.set(citationInfo.citation_num, citationInfo.document_id);
+              console.log('Updated citation map:', Array.from(newMap.entries()));
               return newMap;
             });
           } else if ('id' in packet && packet.id == "document_editor_response") {
             // Extract the document_editor_response property from the packet
             const documentEditorResponse = packet.response as DocumentEditorResponse;
             const editedText = documentEditorResponse.edited_text;
-
+            
+            console.log('Document editor response received:', {
+              editedText: editedText.substring(0, 200) + '...',
+              citations: documentEditorResponse.citations,
+              availableDocuments: documents.length,
+              citationMapSize: citationMap.size,
+              documentsArray: documents,
+              citationMapEntries: Array.from(citationMap.entries())
+            });
+            
+            // Log the raw content to see existing citations
+            console.log('Current document content before processing:', {
+              hasExistingCitations: /citation-link/.test(editedText),
+              hasAdditionMarks: /<addition-mark>/.test(editedText),
+              contentPreview: editedText.substring(0, 500) + '...'
+            });
+            
             if (setContent && editedText) {
-              setContent(editedText);
+              // If citations are provided, wrap the text with citation links
+              if (documentEditorResponse.citations && documents.length > 0) {
+                console.log('Using provided citations');
+                const textWithCitations = wrapTextWithCitations(
+                  editedText, 
+                  documentEditorResponse.citations, 
+                  citationMap
+                );
+                console.log('Final result from wrapTextWithCitations:', {
+                  resultPreview: textWithCitations.substring(0, 500) + '...',
+                  hasCitationLinks: /citation-link/.test(textWithCitations)
+                });
+                setContent(textWithCitations);
+              } else {
+                console.log('Using fallback citation wrapping');
+                // Fallback: wrap entire text with citations from current session
+                const textWithCitations = wrapEntireTextWithCitations(
+                  editedText,
+                  citationMap
+                );
+                console.log('Final result from wrapEntireTextWithCitations:', {
+                  resultPreview: textWithCitations.substring(0, 500) + '...',
+                  hasCitationLinks: /citation-link/.test(textWithCitations)
+                });
+                setContent(textWithCitations);
+              }
             }
           // Only display tool on receiving ToolCallKickoff packets, not ToolCallResult packets 
           // TODO: Add a symbol for tool completion
@@ -256,36 +403,41 @@ export function DocumentChatSidebar({
             // Handle tool call packets for debugging display
             const toolName = (packet as any).tool_name;
             
-            setMessages(prev => {
-              const updatedMessages = [...prev];
-              
-              // Find the debug log message
-              const debugLogIndex = updatedMessages.findIndex(msg => msg.id === debugLogId);
-              
-              if (debugLogIndex !== -1) {
-                // Convert tool names to more friendly messages
-                let friendlyToolName = "";
-                if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
-                // TODO: The id for intermediate tool results is "id" not "tool_name"
-                // else if (toolName === 'section_relevance') friendlyToolName = "📊 Analyzing relevance";
-                // else if (toolName === 'context') friendlyToolName = "📚 Gathering context";
-                else if (toolName === 'document_editor') friendlyToolName = "📝 Editing document";
+            // Convert tool names to more friendly messages
+            let friendlyToolName = "";
+            if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
+            // TODO: The id for intermediate tool results is "id" not "tool_name"
+            // else if (toolName === 'section_relevance') friendlyToolName = "📊 Analyzing relevance";
+            // else if (toolName === 'context') friendlyToolName = "📚 Gathering context";
+            else if (toolName === 'document_editor') friendlyToolName = "📝 Editing document";
+            
+            if (friendlyToolName) {
+              setMessages(prev => {
+                const updatedMessages = [...prev];
+                const lastMessage = updatedMessages[updatedMessages.length - 1];
                 
-                const intermediateInfo = friendlyToolName;
-                
-                if (intermediateInfo) {
-                  const currentText = updatedMessages[debugLogIndex].text || '';
-                  updatedMessages[debugLogIndex] = {
-                    ...updatedMessages[debugLogIndex],
-                    text: currentText ? `${currentText}\n${intermediateInfo}` : intermediateInfo,
-                    isIntermediateOutput: true,
-                    debugLog: [...(updatedMessages[debugLogIndex].debugLog || []), { type: 'tool', name: toolName }]
+                // If the last message is an intermediate output (tool use), append to it
+                if (lastMessage && !lastMessage.isUser && lastMessage.isIntermediateOutput) {
+                  const currentText = lastMessage.text || '';
+                  updatedMessages[updatedMessages.length - 1] = {
+                    ...lastMessage,
+                    text: currentText ? `${currentText}\n${friendlyToolName}` : friendlyToolName,
+                    debugLog: [...(lastMessage.debugLog || []), { type: 'tool', name: toolName }]
                   };
+                } else {
+                  // Create a new intermediate output message
+                  updatedMessages.push({
+                    id: Date.now() + Math.random(),
+                    text: friendlyToolName,
+                    isUser: false,
+                    isIntermediateOutput: true,
+                    debugLog: [{ type: 'tool', name: toolName }]
+                  });
                 }
-              }
-              
-              return updatedMessages;
-            });
+                
+                return updatedMessages;
+              });
+            }
           } else if ('top_documents' in packet) {
             const documentPacket = packet as DocumentInfoPacket;
             if (documentPacket.top_documents && documentPacket.top_documents.length > 0) {
@@ -294,7 +446,12 @@ export function DocumentChatSidebar({
                 const existingIds = new Set(prev.map(doc => doc.document_id));
                 const newDocs = documentPacket.top_documents.filter(doc => !existingIds.has(doc.document_id));
                 const updatedDocs = [...prev, ...newDocs];
-                console.log('Updated documents array:', updatedDocs);
+                console.log('Updated documents array:', {
+                  previousLength: prev.length,
+                  newDocsAdded: newDocs.length,
+                  totalLength: updatedDocs.length,
+                  documentIds: updatedDocs.map(d => d.document_id)
+                });
                 return updatedDocs;
               });
             }
@@ -303,24 +460,6 @@ export function DocumentChatSidebar({
       } catch (error) {
         console.error('Error processing stream:', error);
       }
-      
-      // When all streams are done, ensure we have a proper response if none was generated
-      setMessages(prev => {
-        const updatedMessages = [...prev];
-        
-        // Find the AI response message
-        const responseIndex = updatedMessages.findIndex(msg => msg.id === aiResponseId);
-        
-        // If response exists but is empty, add a default message
-        if (responseIndex !== -1 && !updatedMessages[responseIndex].text.trim()) {
-          updatedMessages[responseIndex] = {
-            ...updatedMessages[responseIndex],
-            text: "I've analyzed the documents. How can I help you further?"
-          };
-        }
-        
-        return updatedMessages;
-      });
       
       setIsLoading(false);
       
@@ -395,7 +534,7 @@ export function DocumentChatSidebar({
                             rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
                             urlTransform={transformLinkUri}
                           >
-                            {preprocessLaTeX(msg.text)}
+                            {preprocessLaTeX(preprocessCitations(msg.text))}
                           </ReactMarkdown>
                         )}
                       </div>

@@ -14,6 +14,7 @@ interface DocumentLayoutProps {
   documentTitle?: string;
   setContent?: (content: string) => void;
   documentConfig?: DocumentConfig;
+  documentIds?: string[];
 }
 
 export function DocumentLayout({ 
@@ -22,7 +23,8 @@ export function DocumentLayout({
   documentType = 'document',
   documentTitle = '',
   setContent,
-  documentConfig
+  documentConfig,
+  documentIds = []
 }: DocumentLayoutProps) {
   const chatSidebarWidth = 350;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -102,6 +104,7 @@ export function DocumentLayout({
             documentType={documentType}
             documentTitle={documentTitle}
             setContent={setContent}
+            documentIds={documentIds}
           />
         </div>
       </div>
