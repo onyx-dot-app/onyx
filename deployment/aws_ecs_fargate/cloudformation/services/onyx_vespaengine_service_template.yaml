@@ -165,7 +165,6 @@ Resources:
           Environment:
             - Name: VESPA_SKIP_UPGRADE_CHECK
               Value: "true"
-          Secrets:
           VolumesFrom: []
           SystemControls: []
       Volumes:
