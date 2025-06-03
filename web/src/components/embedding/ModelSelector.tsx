@@ -98,7 +98,7 @@ export function ModelPreview({
                     Query Prefix:
                   </span>
                   <div className="text-text-600 font-mono text-xs bg-background p-2 rounded">
-                    "{model.query_prefix}"
+                    &quot;{model.query_prefix}&quot;
                   </div>
                 </div>
               )}
@@ -109,7 +109,7 @@ export function ModelPreview({
                     Passage Prefix:
                   </span>
                   <div className="text-text-600 font-mono text-xs bg-background p-2 rounded">
-                    "{model.passage_prefix}"
+                    &quot;{model.passage_prefix}&quot;
                   </div>
                 </div>
               )}
