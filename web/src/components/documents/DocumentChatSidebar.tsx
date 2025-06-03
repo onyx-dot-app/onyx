@@ -16,23 +16,13 @@ import { CodeBlock } from '@/app/chat/message/CodeBlock';
 import { transformLinkUri } from '@/lib/utils';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
 import { PacketType } from '@/app/chat/lib';
-import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket } from '@/lib/search/interfaces';
+import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket, DocumentEditorResponse } from '@/lib/search/interfaces';
 
 interface CitationInfo {
   citation_num: number;
   document_id: string;
   level?: number | null;
   level_question_num?: number | null;
-}
-
-interface DocumentEditorResponse {
-  edited_text: string;
-  citations?: Array<{
-    citation_num: number;
-    document_id: string;
-    start_pos?: number;
-    end_pos?: number;
-  }>;
 }
 
 interface DocumentChatSidebarProps {
@@ -59,7 +49,13 @@ export function DocumentChatSidebar({
   const [presentingDocument, setPresentingDocument] = useState<any>(null);
   const [documents, setDocuments] = useState<OnyxDocument[]>([]);
   const [citationMap, setCitationMap] = useState<Map<number, string>>(new Map());
+  const citationMapRef = useRef<Map<number, string>>(new Map());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Keep the ref in sync with the state
+  useEffect(() => {
+    citationMapRef.current = citationMap;
+  }, [citationMap]);
 
   // Effect to handle textarea auto-resize when it mounts or message changes
   useEffect(() => {
@@ -155,7 +151,7 @@ export function DocumentChatSidebar({
 
   // Function to preprocess message text and convert single bracket citations to double bracket format
   const preprocessCitations = (text: string): string => {
-    if (!text || citationMap.size === 0) return text;
+    if (!text || citationMapRef.current.size === 0) return text;
     
     // Match single bracket citations like [1], [2], etc. but NOT [[1]] (double brackets)
     // Negative lookbehind (?<!\[) ensures there's no [ before, negative lookahead (?!\]) ensures no ] after
@@ -163,7 +159,7 @@ export function DocumentChatSidebar({
     
     return text.replace(singleBracketPattern, (match, citationNum) => {
       const num = parseInt(citationNum, 10);
-      const actualUrl = citationMap.get(num);
+      const actualUrl = citationMapRef.current.get(num);
       
       if (actualUrl) {
         console.log('Converting single bracket citation:', {
@@ -176,45 +172,12 @@ export function DocumentChatSidebar({
         // Convert to double bracket format with actual URL
         return `[[${citationNum}]](${actualUrl})`;
       } else {
-        console.log('No citation mapping found for:', match, 'Available mappings:', Array.from(citationMap.entries()));
+        console.log('No citation mapping found for:', match, 'Available mappings:', Array.from(citationMapRef.current.entries()));
       }
       
       // If no citation mapping found, leave as is
       return match;
     });
-  };
-
-  // Helper function to wrap text with specific citations
-  const wrapTextWithCitations = (
-    text: string, 
-    citations: Array<{citation_num: number; document_id: string; start_pos?: number; end_pos?: number}>,
-    citeMap: Map<number, string>
-  ): string => {
-    // Target addition-mark tags specifically
-    const firstCitation = citations[0];
-    if (firstCitation) {
-      console.log('Document editor wrapTextWithCitations:', {
-        citationNum: firstCitation.citation_num,
-        textHasAdditionMarks: /<addition-mark>/.test(text),
-        textPreview: text.substring(0, 200) + '...'
-      });
-      
-      // Replace addition-mark content with citation-wrapped content using #citation format
-      const result = text.replace(
-        /<addition-mark>(.*?)<\/addition-mark>/g,
-        `<addition-mark><a href="#citation-${firstCitation.citation_num}" data-document-id="${firstCitation.document_id}" class="citation-link">$1</a></addition-mark>`
-      );
-      
-      console.log('wrapTextWithCitations result:', {
-        originalLength: text.length,
-        resultLength: result.length,
-        hasChanges: text !== result,
-        resultPreview: result.substring(0, 200) + '...'
-      });
-      
-      return result;
-    }
-    return text;
   };
 
   // Helper function to wrap entire text with all available citations  
@@ -226,24 +189,27 @@ export function DocumentChatSidebar({
     if (/<addition-mark>/.test(text)) {
       // Use citation from map if available, otherwise default to citation 1
       const citationNum = citeMap.size > 0 ? Array.from(citeMap.entries())[0][0] : 1;
+      const actualUrl = citeMap.get(citationNum);
 
       console.log('Document editor wrapEntireTextWithCitations:', {
         citationNum,
+        actualUrl,
         hasAdditionMarks: true,
         citationMapSize: citeMap.size
       });
 
-      // Replace addition-mark content with citation-wrapped content using #citation format
+      // Replace addition-mark content with citation-mark wrapped content using span instead of anchor
       const result = text.replace(
         /<addition-mark>(.*?)<\/addition-mark>/g,
-        `<addition-mark><a href="#citation-${citationNum}" class="citation-link">$1</a></addition-mark>`
+        `<addition-mark><span class="citation-mark" data-url="${actualUrl || `#citation-${citationNum}`}" data-document-id="doc-${citationNum}">$1</span></addition-mark>`
       );
       
       console.log('Citation wrapping result:', {
         originalHasAdditionMarks: /<addition-mark>/.test(text),
         resultHasAdditionMarks: /<addition-mark>/.test(result),
-        resultHasCitationLinks: /citation-link/.test(result),
-        citationNum
+        resultHasCitationMarks: /citation-mark/.test(result),
+        citationNum,
+        actualUrl
       });
       
       return result;
@@ -307,9 +273,9 @@ export function DocumentChatSidebar({
             if (answerPiece) {
               console.log('Processing answer piece:', {
                 answerPiece: answerPiece.substring(0, 100) + '...',
-                currentCitationMapSize: citationMap.size,
+                currentCitationMapSize: citationMapRef.current.size,
                 currentDocumentsLength: documents.length,
-                citationMapEntries: Array.from(citationMap.entries())
+                citationMapEntries: Array.from(citationMapRef.current.entries())
               });
               
               setMessages(prev => {
@@ -345,6 +311,8 @@ export function DocumentChatSidebar({
             setCitationMap(prev => {
               const newMap = new Map(prev);
               newMap.set(citationInfo.citation_num, citationInfo.document_id);
+              // Update the ref immediately
+              citationMapRef.current = newMap;
               console.log('Updated citation map:', Array.from(newMap.entries()));
               return newMap;
             });
@@ -355,47 +323,30 @@ export function DocumentChatSidebar({
             
             console.log('Document editor response received:', {
               editedText: editedText.substring(0, 200) + '...',
-              citations: documentEditorResponse.citations,
               availableDocuments: documents.length,
-              citationMapSize: citationMap.size,
+              citationMapSize: citationMapRef.current.size,
               documentsArray: documents,
-              citationMapEntries: Array.from(citationMap.entries())
+              citationMapEntries: Array.from(citationMapRef.current.entries())
             });
             
             // Log the raw content to see existing citations
             console.log('Current document content before processing:', {
-              hasExistingCitations: /citation-link/.test(editedText),
+              hasExistingCitations: /citation-mark/.test(editedText),
               hasAdditionMarks: /<addition-mark>/.test(editedText),
               contentPreview: editedText.substring(0, 500) + '...'
             });
             
             if (setContent && editedText) {
-              // If citations are provided, wrap the text with citation links
-              if (documentEditorResponse.citations && documents.length > 0) {
-                console.log('Using provided citations');
-                const textWithCitations = wrapTextWithCitations(
-                  editedText, 
-                  documentEditorResponse.citations, 
-                  citationMap
-                );
-                console.log('Final result from wrapTextWithCitations:', {
-                  resultPreview: textWithCitations.substring(0, 500) + '...',
-                  hasCitationLinks: /citation-link/.test(textWithCitations)
-                });
-                setContent(textWithCitations);
-              } else {
-                console.log('Using fallback citation wrapping');
-                // Fallback: wrap entire text with citations from current session
-                const textWithCitations = wrapEntireTextWithCitations(
-                  editedText,
-                  citationMap
-                );
-                console.log('Final result from wrapEntireTextWithCitations:', {
-                  resultPreview: textWithCitations.substring(0, 500) + '...',
-                  hasCitationLinks: /citation-link/.test(textWithCitations)
-                });
-                setContent(textWithCitations);
-              }
+              // Wrap text with citations from current session
+              const textWithCitations = wrapEntireTextWithCitations(
+                editedText,
+                citationMapRef.current
+              );
+              console.log('Final result from wrapEntireTextWithCitations:', {
+                resultPreview: textWithCitations.substring(0, 500) + '...',
+                hasCitationMarks: /citation-mark/.test(textWithCitations)
+              });
+              setContent(textWithCitations);
             }
           // Only display tool on receiving ToolCallKickoff packets, not ToolCallResult packets 
           // TODO: Add a symbol for tool completion
