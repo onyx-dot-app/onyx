@@ -10,6 +10,7 @@ from onyx.db.entities import KGEntity
 from onyx.db.entities import KGEntityExtractionStaging
 from onyx.db.entities import merge_entities
 from onyx.db.entities import transfer_entity
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Document
 from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationship
@@ -32,8 +33,8 @@ logger = setup_logger()
 
 
 def _cluster_one_grounded_entity(
-    entity: KGEntityExtractionStaging, tenant_id: str, index_name: str
-) -> KGEntity:
+    entity: KGEntityExtractionStaging,
+) -> tuple[KGEntity, bool]:
     """
     Cluster a single grounded entity.
     """
@@ -100,13 +101,13 @@ def _cluster_one_grounded_entity(
 
         db_session.commit()
 
-    # update vespa
-    if update_vespa:
-        update_kg_chunks_vespa_info_for_entity(
-            entity=transferred_entity, index_name=index_name, tenant_id=tenant_id
-        )
+    # # update vespa
+    # if update_vespa:
+    #     update_kg_chunks_vespa_info_for_entity(
+    #         entity=transferred_entity, index_name=index_name, tenant_id=tenant_id
+    #     )
 
-    return transferred_entity
+    return transferred_entity, update_vespa
 
 
 def _transfer_batch_relationship(
@@ -154,15 +155,17 @@ def kg_clustering(
 
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 
+    with get_session_with_current_tenant() as db_session:
+        kg_config_settings = get_kg_config_settings(db_session)
+
     # Retrieve staging data
     with get_session_with_current_tenant() as db_session:
-        relationship_types = (
+        untransferred_relationship_types = (
             db_session.query(KGRelationshipTypeExtractionStaging)
             .filter(KGRelationshipTypeExtractionStaging.transferred.is_(False))
             .all()
         )
-
-        relationships = (
+        untransferred_relationships = (
             db_session.query(KGRelationshipExtractionStaging)
             .filter(KGRelationshipExtractionStaging.transferred.is_(False))
             .all()
@@ -186,43 +189,66 @@ def kg_clustering(
         for entity in untransferred_grounded_entities
         if entity.transferred_id_name is not None
     }
+    vespa_update_entities: list[KGEntity] = []
 
     for entity in untransferred_grounded_entities:
-        added_entity = _cluster_one_grounded_entity(entity, tenant_id, index_name)
+        added_entity, update_vespa = _cluster_one_grounded_entity(entity)
         entity_translations[entity.id_name] = added_entity.id_name
+        if update_vespa:
+            vespa_update_entities.append(added_entity)
+
+    # Update vespa for entities in parallel
+    run_functions_tuples_in_parallel(
+        [
+            (
+                update_kg_chunks_vespa_info_for_entity,
+                (entity, index_name, tenant_id),
+            )
+            for entity in vespa_update_entities
+        ]
+    )
     logger.info(f"Transferred {len(untransferred_grounded_entities)} entities")
 
-    # Add parent-child relationships
+    # Add parent-child relationships and relationship types
     with get_session_with_current_tenant() as db_session:
         parent_child_relationships, parent_child_relationship_types = (
-            get_parent_child_relationships_and_types(db_session)
+            get_parent_child_relationships_and_types(
+                db_session, depth=kg_config_settings.KG_MAX_PARENT_RECURSION_DEPTH
+            )
         )
-        relationship_types.extend(parent_child_relationship_types)
-        relationships.extend(parent_child_relationships)
+        untransferred_relationship_types.extend(parent_child_relationship_types)
+        untransferred_relationships.extend(parent_child_relationships)
         db_session.commit()
 
     # Transfer the relationship types
-    for relationship_type in relationship_types:
+    for relationship_type in untransferred_relationship_types:
         with get_session_with_current_tenant() as db_session:
             transfer_relationship_type(db_session, relationship_type=relationship_type)
             db_session.commit()
-    logger.info(f"Transferred {len(relationship_types)} relationship types")
+    logger.info(
+        f"Transferred {len(untransferred_relationship_types)} relationship types"
+    )
 
-    # Transfer the relationships in parallel
-    tasks = [
-        (
-            _transfer_batch_relationship,
+    # Transfer and update vespa for relationships in parallel
+    run_functions_tuples_in_parallel(
+        [
             (
-                relationships[batch_i : batch_i + processing_chunk_batch_size],
-                entity_translations,
-                index_name,
-                tenant_id,
-            ),
-        )
-        for batch_i in range(0, len(relationships), processing_chunk_batch_size)
-    ]
-    results = run_functions_tuples_in_parallel(tasks)
-    logger.info(f"Transferred {len(results)} relationships")
+                _transfer_batch_relationship,
+                (
+                    untransferred_relationships[
+                        batch_i : batch_i + processing_chunk_batch_size
+                    ],
+                    entity_translations,
+                    index_name,
+                    tenant_id,
+                ),
+            )
+            for batch_i in range(
+                0, len(untransferred_relationships), processing_chunk_batch_size
+            )
+        ]
+    )
+    logger.info(f"Transferred {len(untransferred_relationships)} relationships")
 
     # Delete the transferred objects from the staging tables
     try:

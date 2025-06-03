@@ -6,7 +6,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument
-from onyx.configs.kg_configs import KG_MAX_PARENT_RECURSION_DEPTH
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGRelationship
@@ -257,14 +256,15 @@ def transfer_relationship_type(
 
 def get_parent_child_relationships_and_types(
     db_session: Session,
+    depth: int,
 ) -> tuple[
     list[KGRelationshipExtractionStaging], list[KGRelationshipTypeExtractionStaging]
 ]:
     """
-    Create parent-child relationships and relationship types from staging entities with a
-    parent key, if the parent exists in the normalized entities table. Will create relationships
-    up to KG_MAX_PARENT_RECURSION_DEPTH levels deep. E.g., if depth is 2, a relationship will be
-    created between the entity and its parent, and the entity and its grandparents (if any).
+    Create parent-child relationships and relationship types from staging entities with
+    a parent key, if the parent exists in the normalized entities table. Will create
+    relationships up to depth levels. E.g., if depth is 2, a relationship will be created
+    between the entity and its parent, and the entity and its grandparents (if any).
     A relationship will not be created if the parent does not exist.
     """
     relationship_types: dict[str, KGRelationshipTypeExtractionStaging] = {}
@@ -280,7 +280,7 @@ def get_parent_child_relationships_and_types(
     for entity in parented_entities:
         child = entity
 
-        for i in range(KG_MAX_PARENT_RECURSION_DEPTH, 0, -1):
+        for i in range(depth, 0, -1):
             if not child.parent_key:
                 break
 

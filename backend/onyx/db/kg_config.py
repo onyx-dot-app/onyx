@@ -32,7 +32,7 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
 
     kg_config_settings = KGConfigSettings()
     for result in results:
-        if result.kg_variable_name == "KG_ENABLED":
+        if result.kg_variable_name == KGConfigVars.KG_ENABLED:
             kg_config_settings.KG_ENABLED = result.kg_variable_values[0] == "true"
         elif result.kg_variable_name == KGConfigVars.KG_VENDOR:
             if len(result.kg_variable_values) > 0:
@@ -52,16 +52,18 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
 
         elif result.kg_variable_name == KGConfigVars.KG_MAX_COVERAGE_DAYS:
             if not result.kg_variable_values:
-                kg_max_coverage_days_str: str | int = 1000000
+                kg_max_coverage_days_str: str | int = 10000
 
             else:
-                kg_max_coverage_days_str = result.kg_variable_values[0] or "1000000"
+                kg_max_coverage_days_str = result.kg_variable_values[0] or "10000"
                 if not kg_max_coverage_days_str.isdigit():
                     raise ValueError(
                         f"KG_MAX_COVERAGE_DAYS is not a number: {kg_max_coverage_days_str}"
                     )
 
-            kg_config_settings.KG_MAX_COVERAGE_DAYS = int(kg_max_coverage_days_str)
+            kg_config_settings.KG_MAX_COVERAGE_DAYS = max(
+                0, int(kg_max_coverage_days_str)
+            )
 
         elif result.kg_variable_name == KGConfigVars.KG_EXTRACTION_IN_PROGRESS:
             kg_config_settings.KG_EXTRACTION_IN_PROGRESS = (
@@ -70,6 +72,20 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
         elif result.kg_variable_name == KGConfigVars.KG_CLUSTERING_IN_PROGRESS:
             kg_config_settings.KG_CLUSTERING_IN_PROGRESS = (
                 result.kg_variable_values[0] == "true"
+            )
+        elif result.kg_variable_name == KGConfigVars.KG_MAX_PARENT_RECURSION_DEPTH:
+            if not result.kg_variable_values:
+                kg_max_parent_recursion_depth_str: str | int = 2
+
+            else:
+                kg_max_parent_recursion_depth_str = result.kg_variable_values[0] or "2"
+                if not kg_max_coverage_days_str.isdigit():
+                    raise ValueError(
+                        f"KG_MAX_PARENT_RECURSION_DEPTH is not a number: {kg_max_parent_recursion_depth_str}"
+                    )
+
+            kg_config_settings.KG_MAX_PARENT_RECURSION_DEPTH = max(
+                0, int(kg_max_parent_recursion_depth_str)
             )
 
     return kg_config_settings
