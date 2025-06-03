@@ -154,9 +154,9 @@ def generate_answer(
     consolidated_research_object_results_str = (
         state.consolidated_research_object_results_str
     )
-    reference_results_str = (
-        state.reference_results_str
-    )  # will not be part of LLM. Manually added to the answer
+    # reference_results_str = (
+    #     state.reference_results_str
+    # )  # will not be part of LLM. Manually added to the answer
 
     # if simple path was taken:
     introductory_answer = state.query_results_data_str  # from simple answer path only
@@ -251,17 +251,17 @@ def generate_answer(
             stream_answer,
         )
 
-        llm_tokenizer = get_tokenizer(
-            model_name=fast_llm.config.model_name,
-            provider_type=fast_llm.config.model_provider,
-        )
+        # llm_tokenizer = get_tokenizer(
+        #     model_name=fast_llm.config.model_name,
+        #     provider_type=fast_llm.config.model_provider,
+        # )
 
         # TODO: the fake streaming should happen in friont-end. Revisit and then
         # simply stream out here the full text in one.
-        if reference_results_str:
-            # Get the LLM's tokenizer
+        # if reference_results_str:
+        #     # Get the LLM's tokenizer
 
-            _stream_augmentations(llm_tokenizer, reference_results_str, writer)
+        #     _stream_augmentations(llm_tokenizer, reference_results_str, writer)
 
         # if state.remarks:
         #     _stream_augmentations(llm_tokenizer, "Comments: \n " + "\n".join(state.remarks), writer)
