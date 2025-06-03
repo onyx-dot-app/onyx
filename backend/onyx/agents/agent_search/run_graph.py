@@ -37,11 +37,15 @@ from onyx.db.engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
-
+from pydantic import BaseModel
 
 logger = setup_logger()
 
 _COMPILED_GRAPH: CompiledStateGraph | None = None
+
+
+class ChatCompletionPacket(BaseModel):
+    content: str = "chat_complete"
 
 
 def _parse_agent_event(
@@ -158,7 +162,6 @@ def run_dc_graph(
     config.inputs.search_request.query = config.inputs.search_request.query.strip()
     return run_graph(compiled_graph, config, input)
 
-
 def run_document_chat_graph(
     config: GraphConfig,
     query: str,
@@ -190,6 +193,8 @@ def run_document_chat_graph(
         },
     )
     yield from run_graph(compiled_graph, config, input)
+
+    yield ChatCompletionPacket()
 
 
 if __name__ == "__main__":

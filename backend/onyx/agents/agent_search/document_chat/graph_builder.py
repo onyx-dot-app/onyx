@@ -28,7 +28,7 @@ def document_chat_graph_builder() -> StateGraph:
     graph.add_conditional_edges(
         "basic_use_tool_response",
         should_repeat,
-        ["prepare_tool_input", END],
+        ["choose_tool", END],
     )
     return graph
 
@@ -40,4 +40,4 @@ def should_continue(state: DocumentChatState) -> str:
 def should_repeat(state: DocumentChatState) -> str:
     if state.tool_choice is None or state.tool_choice.tool.name == "document_editor":
         return END
-    return "prepare_tool_input"
+    return "choose_tool"
