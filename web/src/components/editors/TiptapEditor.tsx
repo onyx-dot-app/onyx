@@ -13,6 +13,7 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 
 import { DeletionMark, AdditionMark } from '@/lib/tiptap/DiffMarks';
+import { CitationMark, CitationBubbleMenu } from '@/lib/tiptap/CitationMark';
 import { DocumentBase } from '@/lib/hooks/useGoogleDocs';
 import { FormattingToolbar } from './FormattingToolbar';
 
@@ -46,6 +47,7 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
       TableRow,
       TableHeader,
       TableCell,
+      CitationMark,
     ],
     content, // Initialize with provided content
     editable,
@@ -70,34 +72,6 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
       docIdRef.current = currentDocId;
     }
   }, [editor, content, documentData])
-
-  // Handle citation link clicks
-  React.useEffect(() => {
-    if (!editor) return;
-
-    const handleCitationClick = (event: Event) => {
-      const target = event.target as HTMLElement;
-      if (target.classList.contains('citation-link') || target.closest('.citation-link')) {
-        event.preventDefault();
-        const citationLink = target.classList.contains('citation-link') ? target : target.closest('.citation-link');
-        const documentId = citationLink?.getAttribute('data-document-id');
-        
-        if (documentId) {
-          // You can implement document preview logic here
-          console.log('Citation clicked for document:', documentId);
-          // Example: Show document preview modal or navigate to document
-          // showDocumentPreview(documentId);
-        }
-      }
-    };
-
-    const editorElement = editor.view.dom;
-    editorElement.addEventListener('click', handleCitationClick);
-
-    return () => {
-      editorElement.removeEventListener('click', handleCitationClick);
-    };
-  }, [editor]);
 
   if (!editor) {
     return null;
@@ -201,28 +175,16 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
           cursor: pointer;
         }
 
-        /* Citation link styles */
-        .editor-content a.citation-link {
-          background-color: #fef3c7;
-          border: 1px solid #f59e0b;
-          border-radius: 0.25rem;
-          padding: 0.125rem 0.25rem;
-          color: #92400e;
-          text-decoration: none;
-          font-weight: 500;
-          position: relative;
+        /* Ensure citation marks have no background styling */
+        .editor-content span[data-citation] {
+          background: none !important;
+          background-color: transparent !important;
+          padding: 0 !important;
+          border: none !important;
         }
 
-        .editor-content a.citation-link:hover {
-          background-color: #fde68a;
-          border-color: #d97706;
-        }
-
-        .editor-content a.citation-link::after {
-          content: "📄";
-          margin-left: 0.25rem;
-          font-size: 0.75em;
-        }
+        /* Remove old citation link styles - now using bubble menu */
+        /* Citation styling is now handled by the CitationMark extension */
 
         /* Text alignment */
         .editor-content .text-left {
@@ -238,6 +200,7 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
         }
       `}</style>
       {editor && <FormattingToolbar editor={editor} />}
+      {editor && <CitationBubbleMenu editor={editor} />}
       <EditorContent 
         editor={editor} 
         className="editor-content prose prose-sm max-w-none [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-3 [&_p]:mb-2 [&_ul]:ml-4"

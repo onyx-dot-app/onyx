@@ -198,16 +198,16 @@ export function DocumentChatSidebar({
         citationMapSize: citeMap.size
       });
 
-      // Replace addition-mark content with citation-wrapped content using actual URL
+      // Replace addition-mark content with citation-mark wrapped content using span instead of anchor
       const result = text.replace(
         /<addition-mark>(.*?)<\/addition-mark>/g,
-        `<addition-mark><a href="${actualUrl || `#citation-${citationNum}`}" class="citation-link">$1</a></addition-mark>`
+        `<addition-mark><span class="citation-mark" data-url="${actualUrl || `#citation-${citationNum}`}" data-document-id="doc-${citationNum}">$1</span></addition-mark>`
       );
       
       console.log('Citation wrapping result:', {
         originalHasAdditionMarks: /<addition-mark>/.test(text),
         resultHasAdditionMarks: /<addition-mark>/.test(result),
-        resultHasCitationLinks: /citation-link/.test(result),
+        resultHasCitationMarks: /citation-mark/.test(result),
         citationNum,
         actualUrl
       });
@@ -331,7 +331,7 @@ export function DocumentChatSidebar({
             
             // Log the raw content to see existing citations
             console.log('Current document content before processing:', {
-              hasExistingCitations: /citation-link/.test(editedText),
+              hasExistingCitations: /citation-mark/.test(editedText),
               hasAdditionMarks: /<addition-mark>/.test(editedText),
               contentPreview: editedText.substring(0, 500) + '...'
             });
@@ -344,7 +344,7 @@ export function DocumentChatSidebar({
               );
               console.log('Final result from wrapEntireTextWithCitations:', {
                 resultPreview: textWithCitations.substring(0, 500) + '...',
-                hasCitationLinks: /citation-link/.test(textWithCitations)
+                hasCitationMarks: /citation-mark/.test(textWithCitations)
               });
               setContent(textWithCitations);
             }
