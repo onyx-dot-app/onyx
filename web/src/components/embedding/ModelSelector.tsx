@@ -44,18 +44,6 @@ export function ModelPreview({
               </div>
             </div>
 
-            {"reduced_dimension" in model &&
-              (model as any).reduced_dimension && (
-                <div>
-                  <span className="font-semibold text-text-700">
-                    Reduced Dimensions:
-                  </span>
-                  <div className="text-text-600">
-                    {(model as any).reduced_dimension.toLocaleString()}
-                  </div>
-                </div>
-              )}
-
             <div>
               <span className="font-semibold text-text-700">Provider:</span>
               <div className="text-text-600">
