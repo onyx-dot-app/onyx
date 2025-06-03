@@ -9,7 +9,8 @@ chart-repos:
   - vespa=https://onyx-dot-app.github.io/vespa-helm-charts
   - postgresql=https://charts.bitnami.com/bitnami
   
-helm-extra-args: --debug --timeout 600s
+# have seen postgres take 10 min to pull ... so 15 min seems like a good timeout?
+helm-extra-args: --debug --timeout 900s
 
 # nginx appears to not work on kind, likely due to lack of loadbalancer support
 # helm-extra-set-args also only works on the command line, not in this yaml
