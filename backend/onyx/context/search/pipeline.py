@@ -42,6 +42,8 @@ from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -180,7 +182,11 @@ class SearchPipeline:
         filters = IndexFilters(
             user_file_ids=user_file_ids or [],
             user_folder_ids=user_folder_ids or [],
+            # NOTE: this can be None, since it's assumed that the user_file_ids / user_folder_ids
+            # have already been verified as owned by the user running this query
+            # TODO: make this more robust
             access_control_list=None,
+            tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
         )
 
         # Use a simplified query that skips all unnecessary processing

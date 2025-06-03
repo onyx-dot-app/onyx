@@ -830,6 +830,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             persona=persona,
             actual_user_input=message_text,
+            user_id=user_id,
         )
         if not search_tool_override_kwargs_for_user_files:
             latest_query_files.extend(in_memory_user_files)
