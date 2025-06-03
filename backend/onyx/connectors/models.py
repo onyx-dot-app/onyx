@@ -53,6 +53,17 @@ class ImageSection(Section):
         return sys.getsizeof(self.image_file_name) + sys.getsizeof(self.link)
 
 
+class FormattedTextSection(Section):
+    """Section containing text content with formatting metadata for HTML rendering"""
+
+    text: str
+    element_type: str  # 'paragraph', 'heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6', 'list_item', 'table'
+    formatting_metadata: dict[str, Any] | None = None  # Additional formatting info like list type, table structure, etc.
+
+    def __sizeof__(self) -> int:
+        return sys.getsizeof(self.text) + sys.getsizeof(self.link) + sys.getsizeof(self.element_type) + sys.getsizeof(self.formatting_metadata)
+
+
 class BasicExpertInfo(BaseModel):
     """Basic Information for the owner of a document, any of the fields can be left as None
     Display fallback goes as follows:

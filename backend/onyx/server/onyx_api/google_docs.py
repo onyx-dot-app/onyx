@@ -9,6 +9,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.resources import get_google_docs_service, get_drive_service
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
+from onyx.connectors.google_drive.formatted_section_extraction import get_formatted_document_sections
 from onyx.connectors.google_drive.doc_conversion import _download_and_extract_sections_basic
 from onyx.connectors.google_utils.resources import get_sheets_service
 from onyx.connectors.google_drive.google_sheets import get_sheet_metadata
@@ -21,7 +22,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
-from onyx.connectors.models import TextSection, ImageSection
+from onyx.connectors.models import TextSection, ImageSection, FormattedTextSection
 from onyx.connectors.google_utils.google_utils import (
     _execute_single_retrieval,
 )
@@ -149,6 +150,64 @@ def get_google_doc_content(
         raise HTTPException(
             status_code=400, 
             detail=f"Failed to retrieve document: {str(e)}"
+        )
+
+
+@router.get("/docs/{doc_id}/formatted")
+def get_google_doc_formatted_content(
+    doc_id: str,
+    user: User | None = Depends(current_user),
+) -> dict[str, Any]:
+    """
+    Retrieve Google Docs content with formatting preserved for TipTap editor.
+    Limited to users with @getvalkai.com and @oxos.com email domains.
+    """
+    verify_user_domain(user)
+    
+    try:
+        creds, primary_admin_email = get_google_credentials()
+        drive_service = get_drive_service(creds, user_email=primary_admin_email)
+        docs_service = get_google_docs_service(creds, user_email=primary_admin_email)
+        
+        file = _execute_single_retrieval(
+            retrieval_function=drive_service.files().get,
+            fileId=doc_id,
+            fields="id,name,mimeType,owners,modifiedTime,createdTime,webViewLink,size",
+            supportsAllDrives=True
+        )
+
+        formatted_sections = get_formatted_document_sections(
+            docs_service=docs_service,
+            doc_id=doc_id,
+        )
+
+        return {
+            "id": file.get("webViewLink", ""),
+            "sections": [
+                {
+                    "text": section.text,
+                    "element_type": section.element_type,
+                    "link": section.link,
+                    "formatting_metadata": section.formatting_metadata
+                }
+                for section in formatted_sections
+            ],
+            "source": "google_drive",
+            "semantic_identifier": file.get("name", ""),
+            "metadata": {
+                "owner_names": ", ".join(
+                    owner.get("displayName", "") for owner in file.get("owners", [])
+                ),
+            },
+            "doc_updated_at": file.get("modifiedTime"),
+            "title": file.get("name"),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve formatted Google Doc {doc_id}: {e}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Failed to retrieve formatted document: {str(e)}"
         )
 
 
