@@ -9,6 +9,7 @@ from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from datetime import timezone
+from enum import Enum
 from http.client import IncompleteRead
 from http.client import RemoteDisconnected
 from typing import Any
@@ -73,7 +74,11 @@ ThreadType = list[MessageType]
 
 class SlackCheckpoint(ConnectorCheckpoint):
     channel_ids: list[str] | None  # e.g. C8E6WHE2X
-    channel_completion_map: dict[str, str]  # channel id to latest timestamp
+
+    # channel id mapped to the timestamp we want to retrieve messages up to
+    # NOTE: this is usually the earliest timestamp of the messages we have
+    # since we walk backwards
+    channel_completion_map: dict[str, str]
     current_channel: ChannelType | None
     seen_thread_ts: list[
         str
@@ -260,19 +265,28 @@ _DISALLOWED_MSG_SUBTYPES = {
 }
 
 
-def default_msg_filter(message: MessageType) -> bool:
+class SlackMessageFilterReason(str, Enum):
+    BOT = "bot"
+    DISALLOWED = "disallowed"
+
+
+def default_msg_filter(message: MessageType) -> SlackMessageFilterReason | None:
+    """Returns a filter reason if the message should be filtered out.
+    Returns None if the message can be kept.
+    """
+
     # Don't keep messages from bots
     if message.get("bot_id") or message.get("app_id"):
         bot_profile_name = message.get("bot_profile", {}).get("name")
         if bot_profile_name == "DanswerBot Testing":
-            return False
-        return True
+            return None
+        return SlackMessageFilterReason.BOT
 
     # Uninformative
     if message.get("subtype", "") in _DISALLOWED_MSG_SUBTYPES:
-        return True
+        return SlackMessageFilterReason.DISALLOWED
 
-    return False
+    return None
 
 
 def filter_channels(
@@ -378,9 +392,15 @@ def _message_to_doc(
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
     seen_thread_ts: set[str],
-    msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
-) -> Document | None:
+    msg_filter_func: Callable[
+        [MessageType], SlackMessageFilterReason | None
+    ] = default_msg_filter,
+) -> tuple[Document | None, SlackMessageFilterReason | None]:
+    """Returns a doc or None.
+    If None is returned, the second element of the tuple may be a filter reason
+    """
     filtered_thread: ThreadType | None = None
+    filter_reason: SlackMessageFilterReason | None = None
     thread_ts = message.get("thread_ts")
     if thread_ts:
         # NOTE: if thread_ts is present, there's a thread we need to process
@@ -389,34 +409,49 @@ def _message_to_doc(
         # skip threads we've already seen, since we've already processed all
         # messages in that thread
         if thread_ts in seen_thread_ts:
-            return None
+            return None, None
 
         thread = get_thread(
             client=client, channel_id=channel["id"], thread_id=thread_ts
         )
-        filtered_thread = [
-            message for message in thread if not msg_filter_func(message)
-        ]
-    elif not msg_filter_func(message):
+
+        # we'll just set and use the last filter reason if
+        # we bomb out later
+        filtered_thread = []
+        for message in thread:
+            filter_reason = msg_filter_func(message)
+            if filter_reason:
+                continue
+
+            filtered_thread.append(message)
+    else:
+        filter_reason = msg_filter_func(message)
+        if filter_reason:
+            return None, filter_reason
+
         filtered_thread = [message]
 
-    if filtered_thread:
-        return thread_to_doc(
-            channel=channel,
-            thread=filtered_thread,
-            slack_cleaner=slack_cleaner,
-            client=client,
-            user_cache=user_cache,
-        )
+    # we'll just set and use the last filter reason if we get an empty list
+    if not filtered_thread:
+        return None, filter_reason
 
-    return None
+    doc = thread_to_doc(
+        channel=channel,
+        thread=filtered_thread,
+        slack_cleaner=slack_cleaner,
+        client=client,
+        user_cache=user_cache,
+    )
+    return doc, None
 
 
 def _get_all_doc_ids(
     client: WebClient,
     channels: list[str] | None = None,
     channel_name_regex_enabled: bool = False,
-    msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
+    msg_filter_func: Callable[
+        [MessageType], SlackMessageFilterReason | None
+    ] = default_msg_filter,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> GenerateSlimDocumentOutput:
     """
@@ -441,7 +476,8 @@ def _get_all_doc_ids(
         for message_batch in channel_message_batches:
             slim_doc_batch: list[SlimDocument] = []
             for message in message_batch:
-                if msg_filter_func(message):
+                filter_reason = msg_filter_func(message)
+                if filter_reason:
                     continue
 
                 # The document id is the channel id and the ts of the first message in the thread
@@ -467,6 +503,9 @@ class ProcessedSlackMessage(BaseModel):
     # In the future, if the message becomes a thread, then the thread_ts
     # will be set to the message_ts.
     thread_or_message_ts: str
+
+    # if doc is None, filter_reason may be populated
+    filter_reason: SlackMessageFilterReason | None
     failure: ConnectorFailure | None
 
 
@@ -477,7 +516,9 @@ def _process_message(
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
     seen_thread_ts: set[str],
-    msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
+    msg_filter_func: Callable[
+        [MessageType], SlackMessageFilterReason | None
+    ] = default_msg_filter,
 ) -> ProcessedSlackMessage:
     thread_ts = message.get("thread_ts")
     thread_or_message_ts = thread_ts or message["ts"]
@@ -487,7 +528,7 @@ def _process_message(
         # if random.random() > 0.95:
         #     raise RuntimeError("Random failure :P")
 
-        doc = _message_to_doc(
+        doc, filter_reason = _message_to_doc(
             message=message,
             client=client,
             channel=channel,
@@ -497,13 +538,17 @@ def _process_message(
             msg_filter_func=msg_filter_func,
         )
         return ProcessedSlackMessage(
-            doc=doc, thread_or_message_ts=thread_or_message_ts, failure=None
+            doc=doc,
+            thread_or_message_ts=thread_or_message_ts,
+            filter_reason=filter_reason,
+            failure=None,
         )
     except Exception as e:
         logger.exception(f"Error processing message {message['ts']}")
         return ProcessedSlackMessage(
             doc=None,
             thread_or_message_ts=thread_or_message_ts,
+            filter_reason=None,
             failure=ConnectorFailure(
                 failed_document=DocumentFailure(
                     document_id=_build_doc_id(
@@ -742,16 +787,22 @@ class SlackConnector(
 
         channel_created = channel["created"]
 
-        oldest = str(start) if start else None
-        latest = checkpoint.channel_completion_map.get(channel_id, str(end))
-
         seen_thread_ts = set(checkpoint.seen_thread_ts)
 
-        logger.debug(
-            f"Getting messages for channel {channel} within range {oldest} - {latest}"
-        )
-
         try:
+            latest = str(end)
+
+            num_bot_filtered_messages = 0
+
+            oldest = str(start) if start else None
+            channel_message_ts = checkpoint.channel_completion_map.get(channel_id)
+            if channel_message_ts:
+                latest = channel_message_ts
+
+            logger.debug(
+                f"Getting messages for channel {channel} within range {oldest} - {latest}"
+            )
+
             message_batch, has_more_in_channel = _get_messages(
                 channel, self.client, oldest, latest
             )
@@ -767,6 +818,7 @@ class SlackConnector(
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
             num_threads_start = len(seen_thread_ts)
+
             # Process messages in parallel using ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
                 # NOTE(rkuo): this seems to be assuming the slack sdk is thread safe.
@@ -805,11 +857,16 @@ class SlackConnector(
                             yield doc
 
                         seen_thread_ts.add(thread_or_message_ts)
+                    elif processed_slack_message.filter_reason:
+                        num_bot_filtered_messages += 1
                     elif failure:
                         yield failure
 
             num_threads_processed = len(seen_thread_ts) - num_threads_start
 
+            # calculate a percentage progress for the current channel by determining
+            # our viable range start and end, and the latest timestamp we are querying
+            # up to
             new_latest_seconds_epoch = SecondsSinceUnixEpoch(new_latest)
             if new_latest_seconds_epoch > end:
                 range_complete = 0.0
@@ -839,6 +896,16 @@ class SlackConnector(
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)
             checkpoint.channel_completion_map[channel["id"]] = new_latest
+
+            # bypass channels where recent messages over a certain amount
+            # are all bot messages
+            if channel_message_ts is None and len(message_batch) > 256:
+                if num_bot_filtered_messages == len(message_batch):
+                    logger.warning(
+                        "Bypassing this channel since it appears to be mostly bot messages"
+                    )
+                    has_more_in_channel = False
+
             if has_more_in_channel:
                 checkpoint.current_channel = channel
             else:
