@@ -468,7 +468,6 @@ def kg_extraction(
                     )
 
                     if kg_stage == KGStage.EXTRACTING:
-                        # TODO: update vespa
                         delete_from_kg_relationships__no_commit(
                             db_session, [unprocessed_document.id]
                         )
@@ -602,7 +601,7 @@ def kg_extraction(
 
                 # 2. process each chunk in the document
                 # TODO: revisit once deep extraction is implemented, or metadata is different per chunk
-                # for now, just grab the first chunk
+                # for now, just grab a single chunk (could be any chunk, as metadata is the same) per document
                 formatted_chunk_batches = get_document_chunks_for_kg_processing(
                     document_id=unprocessed_document.id,
                     deep_extraction=batch_metadata[
@@ -626,8 +625,6 @@ def kg_extraction(
             # processes remaining chunks
             chunk_processing_batch_results = _kg_chunk_batch_extraction(
                 chunk_doc_extractions=processing_chunk_doc_extractions,
-                index_name=index_name,
-                tenant_id=tenant_id,
                 kg_config_settings=kg_config_settings,
             )
 
@@ -983,8 +980,6 @@ def _kg_chunk_batch_extraction(
     chunk_doc_extractions: list[
         tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
     ],
-    index_name: str,
-    tenant_id: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGBatchExtractionStats:
     _, fast_llm = get_default_llms()

@@ -20,7 +20,7 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-@retry(tries=3, delay=0.1, backoff=2)
+@retry(tries=3, delay=0.1, backoff=3)
 def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> None:
     vespa_index = VespaIndex(
         index_name=index_name,
