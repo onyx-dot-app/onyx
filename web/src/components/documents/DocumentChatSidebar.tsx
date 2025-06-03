@@ -455,6 +455,9 @@ export function DocumentChatSidebar({
                 return updatedDocs;
               });
             }
+          } else if ('chat_complete' in packet) {
+            console.log('Chat complete received');
+            setIsLoading(false);
           }
         }
       } catch (error) {
