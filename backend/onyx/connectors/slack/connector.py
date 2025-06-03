@@ -770,7 +770,8 @@ class SlackConnector(
             # Process messages in parallel using ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
                 # NOTE(rkuo): this seems to be assuming the slack sdk is thread safe.
-                # That's a very bold assumption! Likely not correct.
+                # That's a very bold assumption! Haven't seen a direct issue with this
+                # yet, but likely not correct to rely on.
 
                 futures: list[Future[ProcessedSlackMessage]] = []
                 for message in message_batch:
@@ -826,7 +827,7 @@ class SlackConnector(
                 f"Message processing stats: "
                 f"batch_len={len(message_batch)} "
                 f"batch_yielded={num_threads_processed} "
-                f"total_threads_seen={len(seen_thread_ts)} "
+                f"total_threads_seen={len(seen_thread_ts)}"
             )
 
             logger.info(
@@ -869,7 +870,7 @@ class SlackConnector(
                 f"processed={len(final_channel_ids) - num_channels_remaining} "
                 f"remaining={num_channels_remaining} "
                 f"total={len(final_channel_ids)} "
-                f"percent_complete={channels_percent_complete:.2f} "
+                f"percent_complete={channels_percent_complete:.2f}"
             )
         except Exception as e:
             logger.exception(f"Error processing channel {channel['name']}")
