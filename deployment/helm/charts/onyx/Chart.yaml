@@ -16,14 +16,14 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
     - name: vespa
-      image: vespaengine/vespa:8.277.17
+      image: vespaengine/vespa:8.526.15
 dependencies:
   - name: postgresql
     version: 14.3.1
     repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
   - name: vespa
-    version: 0.2.20
+    version: 0.2.22
     repository: https://onyx-dot-app.github.io/vespa-helm-charts
     condition: vespa.enabled
   - name: nginx
