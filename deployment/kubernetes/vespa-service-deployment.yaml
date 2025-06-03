@@ -53,7 +53,7 @@ spec:
           mountPath: /opt/vespa/var/
         env:
           - name: VESPA_SKIP_UPGRADE_CHECK
-            value: true
+            value: "true"
   volumeClaimTemplates:
   - metadata:
       name: vespa-volume
