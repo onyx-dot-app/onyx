@@ -494,3 +494,11 @@ def get_parent_child_relationships_from_extractions(
                 )
 
     return parent_child_relationships, parent_child_relationship_types
+
+
+def get_entity_name(db_session: Session, entity_id_name: str) -> str | None:
+    """Get the name of an entity."""
+    entity = (
+        db_session.query(KGEntity).filter(KGEntity.id_name == entity_id_name).first()
+    )
+    return entity.name if entity else None

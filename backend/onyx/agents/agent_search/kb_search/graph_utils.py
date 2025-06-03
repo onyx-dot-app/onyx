@@ -21,6 +21,7 @@ from onyx.context.search.models import InferenceSection
 from onyx.db.document import get_kg_doc_info_for_entity_name
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_document_id_for_entity
+from onyx.db.entities import get_entity_name
 from onyx.db.entity_type import get_entity_types
 from onyx.utils.logger import setup_logger
 
@@ -328,12 +329,14 @@ def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
                 db_session, entity_document_id, entity_type
             )
         else:
+            entity_actual_name = get_entity_name(db_session, entity_id_name)
+
             return KGEntityDocInfo(
                 doc_id=None,
                 doc_semantic_id=None,
                 doc_link=None,
-                semantic_entity_name=entity_id_name,
-                semantic_linked_entity_name=entity_id_name,
+                semantic_entity_name=f"{entity_type} {entity_actual_name or entity_id_name}",
+                semantic_linked_entity_name=f"{entity_type} {entity_actual_name or entity_id_name}",
             )
 
 
@@ -350,56 +353,59 @@ def rename_entities_in_answer(answer: str) -> str:
     Returns:
         str: The processed string with entity references replaced
     """
-    # Extract all entity references using regex
-    # Pattern matches both <str>:<str> and <str>: <str> formats
-    answer = re.sub(r"::\s+", "::", answer)
+    logger.debug(f"Input answer: {answer}")
 
-    # Pattern now handles optional quotes and braces around entity references
-    pattern = r"(?:['{])?([^:\s]+::[^:\s]+)(?:['}])?"
-    matches = re.finditer(pattern, answer)
+    # Clean up any spaces around ::
+    answer = re.sub(r"::\s+", "::", answer)
+    logger.debug(f"After cleaning spaces: {answer}")
+
+    # Pattern to match entity_type::entity_name, with optional quotes
+    pattern = r"(?:')?([a-zA-Z0-9-]+)::([a-zA-Z0-9]+)(?:')?"
+    logger.debug(f"Using pattern: {pattern}")
+
+    matches = list(re.finditer(pattern, answer))
+    logger.debug(f"Found {len(matches)} matches")
 
     # get active entity types
     with get_session_with_current_tenant() as db_session:
         active_entity_types = [
             x.id_name for x in get_entity_types(db_session, active=True)
         ]
-
-    # Collect extracted references
-    entity_refs = [match.group(0).strip("::") for match in matches]
+        logger.debug(f"Active entity types: {active_entity_types}")
 
     # Create dictionary for processed references
     processed_refs = {}
 
-    for entity_ref in entity_refs:
-        entity_ref_split = entity_ref.split("::")
-        if len(entity_ref_split) != 2:
-            logger.warning(
-                f"Invalid entity reference - number of colons is not 2 but {len(entity_ref_split)}"
-            )
-            continue
-        entity_type, entity_name = entity_ref.split("::")
-        entity_type = (
-            entity_type.upper().strip().strip("'").strip("{").strip("}").strip("'")
-        )
-        if entity_type not in active_entity_types:
-            continue
-        entity_name = (
-            entity_name.capitalize().strip().strip("'").strip("{").strip("}").strip("'")
-        )
-        potential_entity_id_name = f"{entity_type}::{entity_name}"
+    for match in matches:
+        entity_type = match.group(1).upper().strip()
+        entity_name = match.group(2).strip()
+        logger.debug(f"Processing entity: {entity_type}::{entity_name}")
 
+        if entity_type not in active_entity_types:
+            logger.debug(f"Entity type {entity_type} not in active types")
+            continue
+
+        potential_entity_id_name = f"{entity_type}::{entity_name}"
         replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)
 
         if replacement_candidate.doc_id:
-            processed_refs[entity_ref] = (
+            # Store both the original match and the entity_id_name for replacement
+            processed_refs[match.group(0)] = (
                 replacement_candidate.semantic_linked_entity_name
             )
+            logger.debug(
+                f"Added replacement: {match.group(0)} -> {replacement_candidate.semantic_linked_entity_name}"
+            )
         else:
-            continue
+            processed_refs[match.group(0)] = replacement_candidate.semantic_entity_name
+            logger.debug(
+                f"Added replacement: {match.group(0)} -> {replacement_candidate.semantic_entity_name}"
+            )
 
     # Replace all references in the answer
     for ref, replacement in processed_refs.items():
         answer = answer.replace(ref, replacement)
+        logger.debug(f"Replaced {ref} with {replacement}")
 
     return answer
 

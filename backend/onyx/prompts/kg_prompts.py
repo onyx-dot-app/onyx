@@ -840,6 +840,9 @@ by the attribute 'created_date', you must also have a WHERE clause that checks w
 entity attribute contains 'created_date'. This is vital for proper ordering with null values.
 - Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
 have entities involved in the SELECT clause.
+- If you do joins consider the possibility that the second entity does not exist for all examples.\
+ Therefore consider using LEFT joins (or RIGHT joins) as appropriate.
+- Joins should always be made on entities, not source documents!
 - Try to be as efficient as possible.
 
 APPROACH:
@@ -867,6 +870,9 @@ Guidance:
 SELECT statement as well! And it needs to be in the EXACT FORM! So if a \
 conversion took place, make sure to include the conversion in the SELECT and the ORDER BY clause!
  - never should 'source_document' be in the SELECT clause! Remove if present!
+ - if there are joins, they must be on entities, never sour ce documents
+ - if there are joins, consider the possibility that the second entity does not exist for all examples.\
+ Therefore consider using LEFT joins (or RIGHT joins) as appropriate.
 
 Draft SQL:
 {SEPARATOR_LINE}
