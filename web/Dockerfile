@@ -18,6 +18,10 @@ FROM base AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+ENV NODE_OPTIONS="--max_old_space_size=4096"
+ENV NEXTJS_DISABLE_SOURCEMAPS=1
+ENV NEXTJS_SKIP_LINT=1
+
 # Add NODE_OPTIONS argument
 ARG NODE_OPTIONS
 
@@ -88,6 +92,7 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
 # Use NODE_OPTIONS in the build command
 RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+# RUN npx next build
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner
