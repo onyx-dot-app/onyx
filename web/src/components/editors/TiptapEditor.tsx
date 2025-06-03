@@ -14,12 +14,12 @@ import TableHeader from '@tiptap/extension-table-header';
 
 import { DeletionMark, AdditionMark } from '@/lib/tiptap/DiffMarks';
 import { CitationMark, CitationBubbleMenu } from '@/lib/tiptap/CitationMark';
-import { DocumentBase } from '@/lib/hooks/useGoogleDocs';
+import { DocumentBase, FormattedDocumentBase } from '@/lib/hooks/useGoogleDocs';
 import { FormattingToolbar } from './FormattingToolbar';
 
 interface TiptapEditorProps {
   content?: string;
-  documentData?: DocumentBase | null;
+  documentData?: DocumentBase | FormattedDocumentBase | null;
   onChange?: (content: string) => void;
   editable?: boolean;
 }
@@ -27,7 +27,7 @@ interface TiptapEditorProps {
 export function TiptapEditor({ content = '', documentData, onChange, editable = true }: TiptapEditorProps) {
   // Track document ID to know when to update content
   const docIdRef = React.useRef<string | null>(documentData?.id || null);
-  
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -61,11 +61,11 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
       },
     },
   });
-  
+
   // Update content when switching documents but preserve during typing
   React.useEffect(() => {
     const currentDocId = documentData?.id || null;
-    
+
     // Only update content when document ID changes (switching documents)
     if (editor) {
       editor.commands.setContent(content);
@@ -201,8 +201,8 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
       `}</style>
       {editor && <FormattingToolbar editor={editor} />}
       {editor && <CitationBubbleMenu editor={editor} />}
-      <EditorContent 
-        editor={editor} 
+      <EditorContent
+        editor={editor}
         className="editor-content prose prose-sm max-w-none [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-3 [&_p]:mb-2 [&_ul]:ml-4"
       />
     </div>
