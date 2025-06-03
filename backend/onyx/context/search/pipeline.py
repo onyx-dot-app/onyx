@@ -42,8 +42,6 @@ from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -166,51 +164,6 @@ class SearchPipeline:
         )
 
         return cast(list[InferenceChunk], self._retrieved_chunks)
-
-    def get_ordering_only_chunks(
-        self,
-        query: str,
-        user_file_ids: list[int] | None = None,
-        user_folder_ids: list[int] | None = None,
-    ) -> list[InferenceChunk]:
-        """Optimized method that only retrieves chunks for ordering purposes.
-        Skips all extra processing and uses minimal configuration to speed up retrieval.
-        """
-        logger.info("Fast path: Using optimized chunk retrieval for ordering-only mode")
-
-        # Create minimal filters with just user file/folder IDs
-        filters = IndexFilters(
-            user_file_ids=user_file_ids or [],
-            user_folder_ids=user_folder_ids or [],
-            # NOTE: this can be None, since it's assumed that the user_file_ids / user_folder_ids
-            # have already been verified as owned by the user running this query
-            # TODO: make this more robust
-            access_control_list=None,
-            tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
-        )
-
-        # Use a simplified query that skips all unnecessary processing
-        minimal_query = SearchQuery(
-            query=query,
-            search_type=SearchType.SEMANTIC,
-            filters=filters,
-            # Set minimal options needed for retrieval
-            evaluation_type=LLMEvaluationType.SKIP,
-            recency_bias_multiplier=1.0,
-            chunks_above=0,  # No need for surrounding context
-            chunks_below=0,  # No need for surrounding context
-            processed_keywords=[],  # Empty list instead of None
-            rerank_settings=None,
-            hybrid_alpha=0.0,
-            max_llm_filter_sections=0,
-        )
-
-        # Retrieve chunks using the minimal configuration
-        return retrieve_chunks(
-            query=minimal_query,
-            document_index=self.document_index,
-            db_session=self.db_session,
-        )
 
     @log_function_time(print_only=True)
     def _get_sections(self) -> list[InferenceSection]:
@@ -464,10 +417,6 @@ class SearchPipeline:
             self.search_query.evaluation_type == LLMEvaluationType.SKIP
             or DISABLE_LLM_DOC_RELEVANCE
         ):
-            if self.search_query.evaluation_type == LLMEvaluationType.SKIP:
-                logger.info(
-                    "Fast path: Skipping section relevance evaluation for ordering-only mode"
-                )
             return None
 
         if self.search_query.evaluation_type == LLMEvaluationType.UNSPECIFIED:

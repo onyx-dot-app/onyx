@@ -372,7 +372,6 @@ def filter_sections(
     # Log evaluation type to help with debugging
     logger.info(f"filter_sections called with evaluation_type={query.evaluation_type}")
 
-    # Fast path: immediately return empty list for SKIP evaluation type (ordering-only mode)
     if query.evaluation_type == LLMEvaluationType.SKIP:
         return []
 
@@ -408,16 +407,6 @@ def search_postprocessing(
     llm: LLM,
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> Iterator[list[InferenceSection] | list[SectionRelevancePiece]]:
-    # Fast path for ordering-only: detect it by checking if evaluation_type is SKIP
-    if search_query.evaluation_type == LLMEvaluationType.SKIP:
-        logger.info(
-            "Fast path: Detected ordering-only mode, bypassing all post-processing"
-        )
-        # Immediately yield the sections without any processing and an empty relevance list
-        yield retrieved_sections
-        yield cast(list[SectionRelevancePiece], [])
-        return
-
     post_processing_tasks: list[FunctionCall] = []
 
     if not retrieved_sections:

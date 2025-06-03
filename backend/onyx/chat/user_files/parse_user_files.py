@@ -94,15 +94,13 @@ def parse_user_files(
         return user_files, user_file_models, None
 
     # Token overflow or folders present - need to use search tool
-    search_for_ordering_only = have_enough_tokens
     override_kwargs = SearchToolOverrideKwargs(
-        force_no_rerank=search_for_ordering_only,
+        force_no_rerank=have_enough_tokens,
         alternate_db_session=None,
         retrieved_sections_callback=None,
-        skip_query_analysis=search_for_ordering_only,
+        skip_query_analysis=have_enough_tokens,
         user_file_ids=user_file_ids,
         user_folder_ids=user_folder_ids,
-        ordering_only=search_for_ordering_only,
     )
 
     return user_files, user_file_models, override_kwargs

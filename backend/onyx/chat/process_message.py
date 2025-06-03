@@ -359,55 +359,6 @@ def _get_force_search_settings(
     )
 
 
-def _get_user_knowledge_files(
-    info: AnswerPostInfo,
-    user_files: list[InMemoryChatFile],
-    file_id_to_user_file: dict[str, InMemoryChatFile],
-) -> Generator[UserKnowledgeFilePacket, None, None]:
-    if not info.qa_docs_response:
-        return
-
-    logger.info(
-        f"ORDERING: Processing search results for ordering {len(user_files)} user files"
-    )
-
-    # Extract document order from search results
-    doc_order = []
-    for doc in info.qa_docs_response.top_documents:
-        doc_id = doc.document_id
-        if str(doc_id).startswith("USER_FILE_CONNECTOR__"):
-            file_id = doc_id.replace("USER_FILE_CONNECTOR__", "")
-            if file_id in file_id_to_user_file:
-                doc_order.append(file_id)
-
-    logger.info(f"ORDERING: Found {len(doc_order)} files from search results")
-
-    # Add any files that weren't in search results at the end
-    missing_files = [
-        f_id for f_id in file_id_to_user_file.keys() if f_id not in doc_order
-    ]
-
-    missing_files.extend(doc_order)
-    doc_order = missing_files
-
-    logger.info(f"ORDERING: Added {len(missing_files)} missing files to the end")
-
-    # Reorder user files based on search results
-    ordered_user_files = [
-        file_id_to_user_file[f_id] for f_id in doc_order if f_id in file_id_to_user_file
-    ]
-
-    yield UserKnowledgeFilePacket(
-        user_files=[
-            FileDescriptor(
-                id=str(file.file_id),
-                type=ChatFileType.USER_KNOWLEDGE,
-            )
-            for file in ordered_user_files
-        ]
-    )
-
-
 def _get_persona_for_chat_session(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
@@ -468,7 +419,6 @@ def _process_tool_response(
     retrieval_options: RetrievalDetails | None,
     user_file_files: list[UserFile] | None,
     user_files: list[InMemoryChatFile] | None,
-    search_for_ordering_only: bool,
 ) -> Generator[ChatPacket, None, dict[SubQuestionKey, AnswerPostInfo]]:
     level, level_question_num = (
         (packet.level, packet.level_question_num)
@@ -480,21 +430,8 @@ def _process_tool_response(
     assert level_question_num is not None
     info = info_by_subq[SubQuestionKey(level=level, question_num=level_question_num)]
 
-    # Skip LLM relevance processing entirely for ordering-only mode
-    if search_for_ordering_only and packet.id == SECTION_RELEVANCE_LIST_ID:
-        logger.info(
-            "Fast path: Completely bypassing section relevance processing for ordering-only mode"
-        )
-        # Skip this packet entirely since it would trigger LLM processing
-        return info_by_subq
-
     # TODO: don't need to dedupe here when we do it in agent flow
     if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
-        if search_for_ordering_only:
-            logger.info(
-                "Fast path: Skipping document deduplication for ordering-only mode"
-            )
-
         (
             info.qa_docs_response,
             info.reference_db_search_docs,
@@ -504,33 +441,14 @@ def _process_tool_response(
             db_session=db_session,
             selected_search_docs=selected_db_search_docs,
             # Deduping happens at the last step to avoid harming quality by dropping content early on
-            # Skip deduping completely for ordering-only mode to save time
-            dedupe_docs=bool(
-                not search_for_ordering_only
-                and retrieval_options
-                and retrieval_options.dedupe_docs
-            ),
-            user_files=user_file_files if search_for_ordering_only else [],
-            loaded_user_files=(user_files if search_for_ordering_only else []),
+            dedupe_docs=bool(retrieval_options and retrieval_options.dedupe_docs),
+            user_files=[],
+            loaded_user_files=[],
         )
-
-        # If we're using search just for ordering user files
-        if search_for_ordering_only and user_files:
-            yield from _get_user_knowledge_files(
-                info=info,
-                user_files=user_files,
-                file_id_to_user_file={file.file_id: file for file in user_files},
-            )
 
         yield info.qa_docs_response
     elif packet.id == SECTION_RELEVANCE_LIST_ID:
         relevance_sections = packet.response
-
-        if search_for_ordering_only:
-            logger.info(
-                "Performance: Skipping relevance filtering for ordering-only mode"
-            )
-            return info_by_subq
 
         if info.reference_db_search_docs is None:
             logger.warning("No reference docs found for relevance filtering")
@@ -1105,11 +1023,6 @@ def stream_chat_message_objects(
                     retrieval_options=retrieval_options,
                     user_file_files=user_file_models,
                     user_files=in_memory_user_files,
-                    search_for_ordering_only=(
-                        search_tool_override_kwargs_for_user_files is not None
-                        and search_tool_override_kwargs_for_user_files.ordering_only
-                        is True
-                    ),
                 )
 
             elif isinstance(packet, StreamStopInfo):
