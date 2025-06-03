@@ -1,4 +1,4 @@
-export type Values = {
+export type ConfigurationValues = {
   enabled: boolean;
   vendor: string;
   vendorDomains: string[];
@@ -6,6 +6,8 @@ export type Values = {
   coverageStart: Date | null;
   coverageDays: number | null;
 };
+
+export type EntityTypeValues = { [key: string]: EntityType };
 
 export type EntityType = {
   name: string;

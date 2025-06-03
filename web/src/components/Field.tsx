@@ -36,6 +36,7 @@ import { CheckedState } from "@radix-ui/react-checkbox";
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import { DatePicker, DatePickerProps } from "./ui/datePicker";
+import { Textarea, TextareaProps } from "./ui/textarea";
 
 export function SectionHeader({
   children,
@@ -895,5 +896,23 @@ export function DatePickerField({
         disabled={disabled}
       />
     </div>
+  );
+}
+
+export interface TextAreaFieldProps extends TextareaProps {
+  name: string;
+}
+
+export function TextAreaField(props: TextAreaFieldProps) {
+  const [field, _, helper] = useField<string>(props.name);
+
+  return (
+    <Textarea
+      value={field.value}
+      onChange={(e) => {
+        helper.setValue(e.target.value);
+      }}
+      {...props}
+    />
   );
 }

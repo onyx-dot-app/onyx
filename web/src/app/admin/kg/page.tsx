@@ -5,6 +5,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import {
   DatePickerField,
   FieldLabel,
+  TextAreaField,
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
@@ -12,19 +13,17 @@ import { BrainIcon } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { SwitchField } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Form, Formik, useFormikContext } from "formik";
 import { useState } from "react";
 import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
-import { EntityType, Values } from "./interfaces";
+import {
+  EntityType,
+  ConfigurationValues,
+  EntityTypeValues,
+} from "./interfaces";
+import { ColumnDef } from "@tanstack/react-table";
+import { DataTable } from "@/components/ui/dataTable";
 
 function createDomainField(
   name: string,
@@ -66,7 +65,7 @@ const IgnoreDomains = createDomainField(
 );
 
 function KGConfiguration() {
-  const initialValues: Values = {
+  const initialValues: ConfigurationValues = {
     enabled: false,
     vendor: "",
     vendorDomains: [""],
@@ -74,6 +73,7 @@ function KGConfiguration() {
     coverageStart: null,
     coverageDays: null,
   };
+
   const validationSchema = Yup.object({
     enabled: Yup.boolean().required(),
     vendor: Yup.string().required("Vendor is required."),
@@ -151,61 +151,97 @@ function KGConfiguration() {
   );
 }
 
-function KGEntityType({}: {}) {
-  const tableHeaders = ["Name", "Description", "Active"];
-  const rows: EntityType[] = [
+function KGEntityType() {
+  const columns: ColumnDef<EntityType>[] = [
     {
+      accessorKey: "name",
+      header: "Name",
+    },
+    {
+      accessorKey: "description",
+      header: "Description",
+      cell: ({ row }) => (
+        <div className="h-20 w-[800px]">
+          <TextAreaField
+            name={`${row.original.name.toLowerCase()}.description`}
+            className="resize-none"
+          />
+        </div>
+      ),
+    },
+    {
+      accessorKey: "active",
+      header: "Active",
+      cell: ({ row }) => (
+        <SwitchField name={`${row.original.name.toLowerCase()}.active`} />
+      ),
+    },
+  ];
+
+  const data: EntityTypeValues = {
+    account: {
       name: "ACCOUNT",
       description:
         "A company that could potentially be or is or was a customer of the vendor (Onyx). Note that Onyx can never be an ACCOUNT.",
       active: false,
     },
-    {
+    concern: {
       name: "CONCERN",
       description:
         "A concern that an  ACCOUNT has/had/ with implementing the VENDOR's (Onyx) solution. This is high-level, as shown by the allowed options.",
       active: false,
     },
-    {
+    connector: {
       name: "CONNECTOR",
       description:
         "A connection of Onyx/Danswer to a data source (generally an application or service) that the (potential customer) ACCOUNT uses, that the VENDOR Onyx can then connect to and ingest data from. This CANNOT be tools that Onyx uses directly to deliver its service.",
       active: false,
     },
-    {
+    employee: {
       name: "EMPLOYEE",
       description:
         "A person who speaks on behalf of 'our' company (the VENDOR Onyx or Danswer), NOT of another account. Therefore, employees of other companies are NOT included here. If in doubt, do NOT extract.",
       active: false,
     },
-  ];
+  };
+
+  const validationSchema = Yup.array(
+    Yup.object({
+      active: Yup.boolean().required(),
+    })
+  );
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {tableHeaders.map((tableHeader) => (
-            <TableHead key={tableHeader}>{tableHeader}</TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row, index) => (
-          <TableRow key={index}>
-            <TableCell>{row.name}</TableCell>
-            <TableCell>{row.description}</TableCell>
-            <TableCell>{row.active}</TableCell>
-          </TableRow>
-        ))}
-        {/* <TableRow>{
-          rows.map((row) => (
-            <>
-            </>
-            <TableCell>{}</TableCell>
-          ))
-          }</TableRow> */}
-      </TableBody>
-    </Table>
+    <CardSection className="flex w-min px-10">
+      <Formik
+        initialValues={data}
+        validationSchema={validationSchema}
+        validate={(values) => {
+          validationSchema.validate(Object.values(values));
+        }}
+        onSubmit={async (values) => {
+          console.log({ values });
+        }}
+      >
+        {(props) => (
+          <Form>
+            <DataTable columns={columns} data={Object.values(data)} />
+            <div className="flex flex-row items-center gap-x-4">
+              <Button type="submit" variant="submit" disabled={!props.dirty}>
+                Save
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!props.dirty}
+                onClick={() => props.resetForm()}
+              >
+                Cancel
+              </Button>
+            </div>
+          </Form>
+        )}
+      </Formik>
+    </CardSection>
   );
 }
 
