@@ -1,254 +1,429 @@
 # File: onyx/connectors/github_code/connector.py
 
 import io
+import os
 import hashlib
-from datetime import datetime
-from typing import Any, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, List, Optional, Tuple, Generator
+from fnmatch import fnmatch
 
 import requests
 from pydantic import SecretStr
 
 from onyx.connectors.interfaces import (
-    CheckpointOutput,
-    CheckpointedConnector,
     LoadConnector,
     PollConnector,
     GenerateDocumentsOutput,
     SecondsSinceUnixEpoch,
 )
-from onyx.connectors.github_code.config import GitHubCodeConnectorConfig
 from onyx.connectors.github_code.embedding import CodeEmbeddingPipeline
-from onyx.connectors.models import ConnectorCheckpoint, Document
+from onyx.connectors.models import Document, Section, ConnectorMissingCredentialError
+from onyx.configs.constants import DocumentSource
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
-class GitHubCodeCheckpoint(ConnectorCheckpoint):
-    """Simple checkpoint storing the last processed commit SHA."""
-
-    last_commit: str | None = None
-
-
-class GitHubCodeConnector(
-    LoadConnector, PollConnector, CheckpointedConnector[GitHubCodeCheckpoint]
-):
+class GitHubCodeConnector(LoadConnector, PollConnector):
     """Onyx Connector to index GitHub repository code content using RAG techniques."""
-    def __init__(self, config: GitHubCodeConnectorConfig):
-        self.config = config
+    
+    def __init__(
+        self,
+        repo_owner: str,
+        repositories: str = None,  # Accept 'repositories' parameter from the UI
+        include_file_patterns: list[str] = None,
+        exclude_dir_patterns: list[str] = None,
+        model_name: str = "codebert",
+        openai_model: str = "text-embedding-ada-002",
+        cohere_model: str = "embed-english-v2.0",
+        chunk_size: int = 256,
+        chunk_overlap: int = 50,
+        **kwargs  # Accept any additional parameters
+    ):
+        """
+        Initialize the GitHub Code Connector.
+        
+        Args:
+            repo_owner: GitHub username or organization
+            repositories: Comma-separated list of repository names, or None for all repos
+            include_file_patterns: File patterns to include (default: common code files)
+            exclude_dir_patterns: Directory patterns to exclude (default: node_modules, etc.)
+            model_name: Embedding model to use
+            openai_model: OpenAI model name if using OpenAI
+            cohere_model: Cohere model name if using Cohere
+            chunk_size: Maximum tokens per chunk
+            chunk_overlap: Token overlap between chunks
+        """
+        self.repo_owner = repo_owner
+        self.repositories = repositories  # Can be None (all repos) or comma-separated string
+        self.branch = kwargs.get('branch', 'main')
+        
+        # Default file patterns for code files
+        self.include_file_patterns = include_file_patterns or [
+            "*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.java", "*.cpp", "*.c", "*.h",
+            "*.rb", "*.cs", "*.fs", "*.go", "*.rs", "*.php", "*.swift", "*.kt",
+            "*.scala", "*.r", "*.m", "*.mm", "*.sh", "*.bash", "*.zsh",
+            "*.yml", "*.yaml", "*.json", "*.xml", "*.md", "*.rst"
+        ]
+        
+        self.exclude_dir_patterns = exclude_dir_patterns or [
+            "node_modules/*", "vendor/*", "dist/*", "build/*", "*.min.js",
+            "__pycache__/*", "*.pyc", ".git/*", ".svn/*", "target/*",
+            "bin/*", "obj/*", ".idea/*", ".vscode/*", "*.egg-info/*"
+        ]
+        
         # Prepare embedding pipeline with chosen model
         self.embed_pipeline = CodeEmbeddingPipeline(
-            model_name=config.model_name,
-            openai_model=config.openai_model,
-            cohere_model=config.cohere_model,
-            chunk_size=config.chunk_size,
-            chunk_overlap=config.chunk_overlap,
+            model_name=model_name,
+            openai_model=openai_model,
+            cohere_model=cohere_model,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
         )
-        # Cache for content hashes to avoid reprocessing unchanged files in one run
+        
+        # Cache for content hashes to avoid reprocessing unchanged files
         self._content_hash_cache: dict[str, str] = {}
+        
+        # GitHub client info
+        self.access_token: Optional[str] = None
+        self.github_headers: dict[str, str] = {}
 
-    # ------------------------------------------------------------------
-    # BaseConnector interface implementations
-    # ------------------------------------------------------------------
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load credentials such as a GitHub access token."""
         token = credentials.get("github_access_token") or credentials.get("access_token")
-        if token:
-            self.config.access_token = SecretStr(token)
+        if not token:
+            raise ConnectorMissingCredentialError("GitHub")
+            
+        self.access_token = token
+        self.github_headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Yield all documents in the repository as a single batch."""
-        docs = self.load_from_source()
+        docs = self._load_all_repositories()
         yield docs
 
-    def load_from_checkpoint(
+    def poll_source(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: GitHubCodeCheckpoint,
-    ) -> CheckpointOutput[GitHubCodeCheckpoint]:
-        """Fetch documents since the last commit stored in the checkpoint."""
-        docs, new_sha = self.poll_source(checkpoint.last_commit)
-        for doc in docs:
-            yield doc
-        return GitHubCodeCheckpoint(has_more=False, last_commit=new_sha)
+        end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
+        """Poll for changes in the specified time range."""
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
+        
+        docs = self._poll_repositories(start_datetime, end_datetime)
+        yield docs
 
-    def build_dummy_checkpoint(self) -> GitHubCodeCheckpoint:
-        return GitHubCodeCheckpoint(has_more=True, last_commit=None)
+    def _get_repositories(self) -> List[dict]:
+        """Get list of repositories to index based on configuration."""
+        if not self.access_token:
+            raise ConnectorMissingCredentialError("GitHub")
+            
+        repos = []
+        
+        if self.repositories:
+            # Specific repositories specified
+            repo_names = [name.strip() for name in self.repositories.split(',')]
+            for repo_name in repo_names:
+                if not repo_name:
+                    continue
+                    
+                api_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}"
+                try:
+                    resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                    if resp.status_code == 200:
+                        repos.append(resp.json())
+                    else:
+                        logger.warning(f"Could not access repository {self.repo_owner}/{repo_name}: {resp.status_code}")
+                except Exception as e:
+                    logger.error(f"Error fetching repository {repo_name}: {e}")
+        else:
+            # Get all repositories for the user/org
+            page = 1
+            while True:
+                api_url = f"https://api.github.com/users/{self.repo_owner}/repos?page={page}&per_page=100"
+                try:
+                    resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                    if resp.status_code != 200:
+                        # Try as organization
+                        api_url = f"https://api.github.com/orgs/{self.repo_owner}/repos?page={page}&per_page=100"
+                        resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                    
+                    if resp.status_code == 200:
+                        page_repos = resp.json()
+                        if not page_repos:
+                            break
+                        repos.extend(page_repos)
+                        page += 1
+                    else:
+                        logger.error(f"Could not fetch repositories: {resp.status_code}")
+                        break
+                except Exception as e:
+                    logger.error(f"Error fetching repositories: {e}")
+                    break
+                    
+        return repos
 
-    def validate_checkpoint_json(self, checkpoint_json: str) -> GitHubCodeCheckpoint:
-        return GitHubCodeCheckpoint.model_validate_json(checkpoint_json)
+    def _load_all_repositories(self) -> List[Document]:
+        """Load all configured repositories."""
+        docs = []
+        repos = self._get_repositories()
+        
+        for repo in repos:
+            repo_name = repo['name']
+            logger.info(f"Indexing repository: {self.repo_owner}/{repo_name}")
+            
+            try:
+                repo_docs = self._load_repository(repo)
+                docs.extend(repo_docs)
+            except Exception as e:
+                logger.error(f"Error indexing repository {repo_name}: {e}")
+                continue
+                
+        return docs
 
-    def load_from_source(self) -> List[Document]:
-        """Initial full indexing of the repository (fetch all files and index them)."""
-        repo_owner = self.config.repo_owner
-        repo_name = self.config.repo_name
-        branch = self.config.branch
-        # Use GitHub archive API to download a zip of the repo at specified branch
-        zip_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/zipball/{branch}"
-        headers = {}
-        if self.config.access_token:
-            headers["Authorization"] = f"token {self.config.access_token.get_secret_value()}"
-        resp = requests.get(zip_url, headers=headers, timeout=60)
-        resp.raise_for_status()
+    def _load_repository(self, repo_info: dict) -> List[Document]:
+        """Load all files from a single repository."""
+        repo_name = repo_info['name']
+        default_branch = repo_info.get('default_branch', 'main')
+        branch = self.branch if self.branch != 'main' else default_branch
+        
+        # Use GitHub archive API to download a zip of the repo
+        zip_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/zipball/{branch}"
+        
+        try:
+            resp = requests.get(zip_url, headers=self.github_headers, timeout=60, stream=True)
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if resp.status_code == 404:
+                # Try with main branch if specified branch doesn't exist
+                zip_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/zipball/main"
+                resp = requests.get(zip_url, headers=self.github_headers, timeout=60, stream=True)
+                resp.raise_for_status()
+            else:
+                raise
+                
         zip_content = resp.content
 
         docs: List[Document] = []
         with io.BytesIO(zip_content) as zbuf:
-            with requests.compat.zipfile.ZipFile(zbuf) as zf:
+            import zipfile
+            with zipfile.ZipFile(zbuf) as zf:
                 for file_info in zf.infolist():
                     file_path = file_info.filename
-                    # Skip directories and filter by include/exclude patterns
+                    
+                    # Skip directories
                     if file_info.is_dir():
                         continue
+                        
+                    # Skip files based on include/exclude patterns
                     if not self._include_file(file_path):
                         continue
+                        
                     try:
                         file_bytes = zf.read(file_info)
                         text = file_bytes.decode("utf-8", errors="ignore")
                     except Exception as e:
-                        # Log and skip files that cannot be read/decoded
-                        print(f"[WARN] Skipping {file_path}: {e}")
+                        logger.debug(f"Skipping {file_path}: {e}")
                         continue
-                    docs.extend(self._process_file(file_path, text))
+                        
+                    # Process the file and create documents
+                    file_docs = self._process_file(repo_name, file_path, text)
+                    docs.extend(file_docs)
+                    
         return docs
 
-    def poll_source(self, last_checkpoint: Optional[Any]) -> Tuple[List[Document], Any]:
-        """
-        Poll for new commits since last checkpoint (last commit SHA).
-        Returns a tuple of (new_documents, new_checkpoint).
-        """
-        repo_owner = self.config.repo_owner
-        repo_name = self.config.repo_name
-        branch = self.config.branch
-        headers = {}
-        if self.config.access_token:
-            headers["Authorization"] = f"token {self.config.access_token.get_secret_value()}"
-
-        # If no checkpoint, do a full load
-        if not last_checkpoint:
-            docs = self.load_from_source()
-            latest_commit = self._get_latest_commit_sha(headers)
-            return docs, latest_commit
-
-        # Get list of commits since last_checkpoint
-        commits_url = (
-            f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits"
-            f"?sha={branch}&since={last_checkpoint}"
-        )
-        resp = requests.get(commits_url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        commits = resp.json()
-        if not commits:
-            # No new commits
-            return [], last_checkpoint
-
-        # Determine all changed files in these commits
-        changed_files: set[str] = set()
-        for commit in commits:
-            commit_sha = commit["sha"]
-            commit_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/{commit_sha}"
-            c_resp = requests.get(commit_url, headers=headers, timeout=15)
-            if c_resp.status_code != 200:
-                continue
-            commit_data = c_resp.json()
-            files = commit_data.get("files", [])
-            for f in files:
-                filename = f.get("filename")
-                if filename:
-                    changed_files.add(filename)
-        if not changed_files:
-            return [], commits[0]["sha"]
-
-        new_docs: List[Document] = []
-        for filepath in changed_files:
-            if not self._include_file(filepath):
-                continue
-            file_url = f"https://raw.githubusercontent.com/{repo_owner}/{repo_name}/{branch}/{filepath}"
+    def _poll_repositories(self, start: datetime, end: datetime) -> List[Document]:
+        """Poll repositories for changes in the given time range."""
+        docs = []
+        repos = self._get_repositories()
+        
+        for repo in repos:
+            repo_name = repo['name']
+            
+            # Get commits in the time range
+            commits_url = (
+                f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits"
+                f"?since={start.isoformat()}&until={end.isoformat()}"
+            )
+            
             try:
-                f_resp = requests.get(file_url, headers=headers, timeout=15)
-                if f_resp.status_code != 200:
-                    continue
-                text = f_resp.text
+                resp = requests.get(commits_url, headers=self.github_headers, timeout=30)
+                resp.raise_for_status()
+                commits = resp.json()
             except Exception as e:
-                print(f"[ERROR] Failed to fetch {filepath}: {e}")
+                logger.error(f"Error fetching commits for {repo_name}: {e}")
                 continue
-            new_docs.extend(self._process_file(filepath, text))
-
-        latest_commit = commits[0]["sha"]
-        return new_docs, latest_commit
+                
+            if not commits:
+                continue
+                
+            logger.info(f"Found {len(commits)} commits in {repo_name} since {start}")
+            
+            # Get all changed files
+            changed_files = set()
+            for commit in commits:
+                commit_sha = commit['sha']
+                commit_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits/{commit_sha}"
+                
+                try:
+                    c_resp = requests.get(commit_url, headers=self.github_headers, timeout=30)
+                    c_resp.raise_for_status()
+                    commit_data = c_resp.json()
+                    
+                    for file_info in commit_data.get('files', []):
+                        filename = file_info.get('filename')
+                        if filename and self._include_file(filename):
+                            changed_files.add(filename)
+                except Exception as e:
+                    logger.error(f"Error fetching commit {commit_sha}: {e}")
+                    continue
+                    
+            # Process changed files
+            default_branch = repo.get('default_branch', 'main')
+            branch = self.branch if self.branch != 'main' else default_branch
+            
+            for filepath in changed_files:
+                file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{filepath}"
+                
+                try:
+                    f_resp = requests.get(file_url, headers=self.github_headers, timeout=15)
+                    if f_resp.status_code == 200:
+                        text = f_resp.text
+                        file_docs = self._process_file(repo_name, filepath, text)
+                        docs.extend(file_docs)
+                except Exception as e:
+                    logger.error(f"Error fetching file {filepath}: {e}")
+                    continue
+                    
+        return docs
 
     def _include_file(self, file_path: str) -> bool:
         """Check if file_path matches include patterns and is not excluded."""
-        from fnmatch import fnmatch
-
-        for pattern in self.config.exclude_dir_patterns:
+        # Check exclusions first
+        for pattern in self.exclude_dir_patterns:
             if fnmatch(file_path, pattern):
                 return False
-        for pattern in self.config.include_file_patterns:
+                
+        # Check inclusions
+        for pattern in self.include_file_patterns:
             if fnmatch(file_path, pattern):
                 return True
+                
         return False
 
-    def _process_file(self, file_path: str, text: str) -> List[Document]:
-        """Split a file’s content into chunks, embed them, and wrap in Document objects."""
+    def _process_file(self, repo_name: str, file_path: str, text: str) -> List[Document]:
+        """Split a file's content into chunks and create Document objects."""
         docs: List[Document] = []
-        if not text:
+        if not text or not text.strip():
             return docs
 
-        content_hash = hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
-        prev_hash = self._content_hash_cache.get(file_path)
-        if prev_hash == content_hash:
-            return docs  # skip re-processing if already done this run
-        self._content_hash_cache[file_path] = content_hash
+        # Skip files that are too large (> 1MB)
+        if len(text) > 1024 * 1024:
+            logger.warning(f"Skipping large file {file_path} ({len(text)} bytes)")
+            return docs
 
+        # Create a hash to check if content changed
+        content_hash = hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
+        cache_key = f"{repo_name}/{file_path}"
+        
+        if self._content_hash_cache.get(cache_key) == content_hash:
+            return docs  # Skip if content hasn't changed
+            
+        self._content_hash_cache[cache_key] = content_hash
+
+        # Infer language from file extension
         language = self._infer_language(file_path)
-        chunks, vectors = self.embed_pipeline.chunk_and_embed(text, language)
-        for chunk_text, vec in zip(chunks, vectors):
-            metadata = {
-                "repo": f"{self.config.repo_owner}/{self.config.repo_name}",
-                "path": file_path,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "model": self.config.model_name,
-            }
-            doc = Document(text=chunk_text, embedding=vec, metadata=metadata)
+        
+        # Get chunks and embeddings
+        try:
+            chunks, vectors = self.embed_pipeline.chunk_and_embed(text, language)
+        except Exception as e:
+            logger.error(f"Error processing {file_path}: {e}")
+            return docs
+
+        # Create documents for each chunk
+        for i, (chunk_text, embedding) in enumerate(zip(chunks, vectors)):
+            # Create a unique ID for this chunk
+            doc_id = f"github://{self.repo_owner}/{repo_name}/{file_path}#chunk{i}"
+            
+            # Create the document
+            doc = Document(
+                id=doc_id,
+                sections=[Section(
+                    link=f"https://github.com/{self.repo_owner}/{repo_name}/blob/{self.branch}/{file_path}",
+                    text=chunk_text
+                )],
+                source=DocumentSource.GITHUB,
+                semantic_identifier=f"{repo_name}/{file_path}",
+                doc_updated_at=datetime.now(timezone.utc),
+                primary_owners=[],
+                secondary_owners=[],
+                metadata={
+                    "repo_owner": self.repo_owner,
+                    "repo_name": repo_name,
+                    "file_path": file_path,
+                    "language": language or "unknown",
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "embedding_model": self.embed_pipeline.model_name
+                }
+            )
+            
+            # Add embedding if available
+            if embedding:
+                doc.embeddings = embedding
+                
             docs.append(doc)
+            
+        logger.debug(f"Created {len(docs)} documents for {file_path}")
         return docs
 
     def _infer_language(self, file_path: str) -> Optional[str]:
         """Infer programming language from file extension."""
-        fn = file_path.lower()
-        if fn.endswith((".js", ".jsx", ".ts", ".tsx")):
-            return "javascript"
-        if fn.endswith(".rb"):
-            return "ruby"
-        if fn.endswith((".cs", ".fs", ".sln", ".csproj")):
-            return "csharp"
-        if fn.endswith(".py"):
-            return "python"
+        ext_to_lang = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.jsx': 'javascript',
+            '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.java': 'java',
+            '.cpp': 'cpp',
+            '.cc': 'cpp',
+            '.cxx': 'cpp',
+            '.c': 'c',
+            '.h': 'c',
+            '.hpp': 'cpp',
+            '.cs': 'csharp',
+            '.fs': 'fsharp',
+            '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.php': 'php',
+            '.swift': 'swift',
+            '.kt': 'kotlin',
+            '.scala': 'scala',
+            '.r': 'r',
+            '.m': 'objc',
+            '.mm': 'objcpp',
+            '.sh': 'bash',
+            '.bash': 'bash',
+            '.zsh': 'zsh',
+            '.yml': 'yaml',
+            '.yaml': 'yaml',
+            '.json': 'json',
+            '.xml': 'xml',
+            '.md': 'markdown',
+            '.rst': 'rst'
+        }
+        
+        file_lower = file_path.lower()
+        for ext, lang in ext_to_lang.items():
+            if file_lower.endswith(ext):
+                return lang
+                
         return None
-
-    def _get_latest_commit_sha(self, headers: dict) -> Optional[str]:
-        """Get the latest commit SHA for the repo’s configured branch."""
-        api_url = f"https://api.github.com/repos/{self.config.repo_owner}/{self.config.repo_name}/commits/{self.config.branch}"
-        try:
-            resp = requests.get(api_url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("sha")
-        except Exception as e:
-            print(f"[WARN] Could not fetch latest commit: {e}")
-            return None
-
-
-# # If your code uses a registry-style import, you might also register here:
-# TRY_REGISTER = True
-# if TRY_REGISTER:
-#     from onyx.connectors.registry import register_connector
-
-#     register_connector(
-#         connector_name="github_code",
-#         connector_class=GitHubCodeConnector,
-#         config_class=GitHubCodeConnectorConfig,
-#         friendly_name="GitHub Code Connector",
-#         connects_to="GitHub Repository (Code)",
-#         description="Indexes repository source code (files) with semantic code embeddings",
-#     )
