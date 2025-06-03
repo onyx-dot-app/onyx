@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+from onyx.db.enums import EmbeddingPrecision
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
@@ -82,6 +83,7 @@ class SupportedEmbeddingModel(BaseModel):
     name: str
     dim: int
     index_name: str
+    embedding_precision: EmbeddingPrecision
 
 
 class ContentClassificationPrediction(BaseModel):
