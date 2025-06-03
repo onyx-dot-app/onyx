@@ -280,7 +280,7 @@ def get_parent_child_relationships_and_types(
     for entity in parented_entities:
         child = entity
 
-        for i in range(depth, 0, -1):
+        for i in range(depth):
             if not child.parent_key:
                 break
 
@@ -341,7 +341,7 @@ def get_parent_child_relationships_and_types(
                 relationships[(parent.id_name, entity.document_id)].occurrences += 1
 
             # set parent as the next child
-            if i > 1:
+            if i < depth - 1:
                 parent_staging = (
                     db_session.query(KGEntityExtractionStaging)
                     .filter(
