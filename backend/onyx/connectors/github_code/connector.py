@@ -2,17 +2,34 @@
 
 import io
 import hashlib
-import requests
-from typing import Any, Optional, Tuple, List
 from datetime import datetime
+from typing import Any, List, Optional, Tuple
 
-from onyx.connectors.interfaces import LoadConnector, PollConnector, CheckpointedConnector
+import requests
+from pydantic import SecretStr
+
+from onyx.connectors.interfaces import (
+    CheckpointOutput,
+    CheckpointedConnector,
+    LoadConnector,
+    PollConnector,
+    GenerateDocumentsOutput,
+    SecondsSinceUnixEpoch,
+)
 from onyx.connectors.github_code.config import GitHubCodeConnectorConfig
 from onyx.connectors.github_code.embedding import CodeEmbeddingPipeline
-from onyx.connectors.models import Document
+from onyx.connectors.models import ConnectorCheckpoint, Document
 
 
-class GitHubCodeConnector(LoadConnector, PollConnector, CheckpointedConnector):
+class GitHubCodeCheckpoint(ConnectorCheckpoint):
+    """Simple checkpoint storing the last processed commit SHA."""
+
+    last_commit: str | None = None
+
+
+class GitHubCodeConnector(
+    LoadConnector, PollConnector, CheckpointedConnector[GitHubCodeCheckpoint]
+):
     """Onyx Connector to index GitHub repository code content using RAG techniques."""
     def __init__(self, config: GitHubCodeConnectorConfig):
         self.config = config
@@ -26,6 +43,39 @@ class GitHubCodeConnector(LoadConnector, PollConnector, CheckpointedConnector):
         )
         # Cache for content hashes to avoid reprocessing unchanged files in one run
         self._content_hash_cache: dict[str, str] = {}
+
+    # ------------------------------------------------------------------
+    # BaseConnector interface implementations
+    # ------------------------------------------------------------------
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        """Load credentials such as a GitHub access token."""
+        token = credentials.get("github_access_token") or credentials.get("access_token")
+        if token:
+            self.config.access_token = SecretStr(token)
+        return None
+
+    def load_from_state(self) -> GenerateDocumentsOutput:
+        """Yield all documents in the repository as a single batch."""
+        docs = self.load_from_source()
+        yield docs
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GitHubCodeCheckpoint,
+    ) -> CheckpointOutput[GitHubCodeCheckpoint]:
+        """Fetch documents since the last commit stored in the checkpoint."""
+        docs, new_sha = self.poll_source(checkpoint.last_commit)
+        for doc in docs:
+            yield doc
+        return GitHubCodeCheckpoint(has_more=False, last_commit=new_sha)
+
+    def build_dummy_checkpoint(self) -> GitHubCodeCheckpoint:
+        return GitHubCodeCheckpoint(has_more=True, last_commit=None)
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> GitHubCodeCheckpoint:
+        return GitHubCodeCheckpoint.model_validate_json(checkpoint_json)
 
     def load_from_source(self) -> List[Document]:
         """Initial full indexing of the repository (fetch all files and index them)."""
