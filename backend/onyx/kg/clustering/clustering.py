@@ -6,7 +6,6 @@ from sqlalchemy import text
 from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
 from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import get_parent_child_relationships_from_extractions
 from onyx.db.entities import KGEntity
 from onyx.db.entities import KGEntityExtractionStaging
 from onyx.db.entities import merge_entities
@@ -16,8 +15,7 @@ from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationship
 from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipTypeExtractionStaging
-from onyx.db.relationships import add_or_update_relationship
-from onyx.db.relationships import add_or_update_relationship_type
+from onyx.db.relationships import get_parent_child_relationships_and_types
 from onyx.db.relationships import transfer_relationship
 from onyx.db.relationships import transfer_relationship_type
 from onyx.document_index.vespa.kg_interactions import (
@@ -156,7 +154,7 @@ def kg_clustering(
 
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 
-    ## Retrieval
+    # Retrieve staging data
     with get_session_with_current_tenant() as db_session:
         relationship_types = (
             db_session.query(KGRelationshipTypeExtractionStaging)
@@ -179,11 +177,7 @@ def kg_clustering(
             .all()
         )
 
-    ## Clustering
-
-    # TODO: implement clustering of ungrounded entities
-    # For now we would just dedupe grounded entities that have very similar names
-    # This will be reimplemented when deep extraction is enabled.
+    # Cluster and transfer grounded entities
     untransferred_grounded_entities = [
         entity for entity in grounded_entities if entity.transferred_id_name is None
     ]
@@ -194,36 +188,27 @@ def kg_clustering(
     }
 
     for entity in untransferred_grounded_entities:
-        entity.attributes.get("parent")
         added_entity = _cluster_one_grounded_entity(entity, tenant_id, index_name)
         entity_translations[entity.id_name] = added_entity.id_name
-
     logger.info(f"Transferred {len(untransferred_grounded_entities)} entities")
 
-    # get parent-child relationships from extractions and add to db
+    # Add parent-child relationships
     with get_session_with_current_tenant() as db_session:
         parent_child_relationships, parent_child_relationship_types = (
-            get_parent_child_relationships_from_extractions(db_session)
+            get_parent_child_relationships_and_types(db_session)
         )
-
-        for parent_relationship_type in parent_child_relationship_types:
-            add_or_update_relationship_type(db_session, **parent_relationship_type)
-
+        relationship_types.extend(parent_child_relationship_types)
+        relationships.extend(parent_child_relationships)
         db_session.commit()
 
-        for parent_relationship in parent_child_relationships:
-            add_or_update_relationship(db_session, **parent_relationship)
-            # TODO: Update vespa for the relationship
-        db_session.commit()
-
-    ## Transfer the relationship types
+    # Transfer the relationship types
     for relationship_type in relationship_types:
         with get_session_with_current_tenant() as db_session:
             transfer_relationship_type(db_session, relationship_type=relationship_type)
             db_session.commit()
     logger.info(f"Transferred {len(relationship_types)} relationship types")
 
-    ## Transfer the relationships in parallel
+    # Transfer the relationships in parallel
     tasks = [
         (
             _transfer_batch_relationship,
@@ -239,7 +224,7 @@ def kg_clustering(
     results = run_functions_tuples_in_parallel(tasks)
     logger.info(f"Transferred {len(results)} relationships")
 
-    # delete the added objects from the staging tables
+    # Delete the transferred objects from the staging tables
     try:
         with get_session_with_current_tenant() as db_session:
             db_session.query(KGRelationshipExtractionStaging).filter(

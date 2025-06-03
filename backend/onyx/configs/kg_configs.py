@@ -50,6 +50,10 @@ KG_MAX_DEEP_SEARCH_RESULTS: int = int(
     os.environ.get("KG_MAX_DEEP_SEARCH_RESULTS", "30")
 )
 
+KG_MAX_PARENT_RECURSION_DEPTH: int = int(
+    os.environ.get("KG_MAX_PARENT_RECURSION_DEPTH", "2")
+)
+
 _KG_NORMALIZATION_RERANK_UNIGRAM_WEIGHT: float = max(
     1e-3,
     min(1, float(os.environ.get("KG_NORMALIZATION_RERANK_UNIGRAM_WEIGHT", "0.25"))),
