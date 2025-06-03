@@ -35,6 +35,7 @@ import { CheckedState } from "@radix-ui/react-checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
+import { DatePicker, DatePickerProps } from "./ui/datePicker";
 
 export function SectionHeader({
   children,
@@ -130,7 +131,7 @@ export function ToolTipDetails({
   );
 }
 
-const FieldLabel = ({
+export const FieldLabel = ({
   subtext,
   error,
   name,
@@ -620,6 +621,7 @@ interface TextArrayFieldProps<T extends Yup.AnyObject> {
   tooltip?: string;
   minFields?: number;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 export function TextArrayField<T extends Yup.AnyObject>({
@@ -631,6 +633,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
   tooltip,
   minFields = 0,
   placeholder = "",
+  disabled = false,
 }: TextArrayFieldProps<T>) {
   return (
     <div className="mb-4">
@@ -662,16 +665,22 @@ export function TextArrayField<T extends Yup.AnyObject>({
                       py-2
                       px-3
                       mr-4
+                      disabled:cursor-not-allowed
                       `}
                       // Disable autocomplete since the browser doesn't know how to handle an array of text fields
                       autoComplete="off"
                       placeholder={placeholder}
+                      disabled={disabled}
                     />
                     <div className="my-auto">
                       {index >= minFields ? (
                         <FiX
                           className="my-auto w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
-                          onClick={() => arrayHelpers.remove(index)}
+                          onClick={() => {
+                            if (!disabled) {
+                              arrayHelpers.remove(index);
+                            }
+                          }}
                         />
                       ) : (
                         <div className="w-10 h-10" />
@@ -688,13 +697,16 @@ export function TextArrayField<T extends Yup.AnyObject>({
 
             <Button
               onClick={() => {
-                arrayHelpers.push("");
+                if (!disabled) {
+                  arrayHelpers.push("");
+                }
               }}
-              className="mt-3"
+              className="mt-3 disabled:cursor-not-allowed"
               variant="update"
               size="sm"
               type="button"
               icon={FiPlus}
+              disabled={disabled}
             >
               Add New
             </Button>
@@ -854,6 +866,33 @@ export function SelectorFormField({
         name={name}
         component="div"
         className="text-error text-sm mt-1"
+      />
+    </div>
+  );
+}
+
+export interface DatePickerFieldProps {
+  label: string;
+  name: string;
+  subtext?: string;
+  disabled?: boolean;
+}
+
+export function DatePickerField({
+  label,
+  name,
+  subtext,
+  disabled = false,
+}: DatePickerFieldProps) {
+  const [field, _, helper] = useField<Date | null>(name);
+
+  return (
+    <div>
+      <FieldLabel label={label} name={name} subtext={subtext} />
+      <DatePicker
+        selectedDate={field.value}
+        setSelectedDate={helper.setValue}
+        disabled={disabled}
       />
     </div>
   );
