@@ -349,6 +349,7 @@ def _get_messages(
     client: WebClient,
     oldest: str | None = None,
     latest: str | None = None,
+    limit: int = _SLACK_LIMIT,
 ) -> tuple[list[MessageType], bool]:
     """Slack goes from newest to oldest."""
 
@@ -372,7 +373,7 @@ def _get_messages(
         channel=channel["id"],
         oldest=oldest,
         latest=latest,
-        limit=_SLACK_LIMIT,
+        limit=limit,
     )
     response.validate()
 
@@ -570,6 +571,10 @@ class SlackConnector(
     MAX_RETRIES = 7  # arbitrarily selected
 
     MAX_CHANNELS_TO_LOG = 50
+
+    # when first observing a channel, if the number of messages exceeds this amount
+    # and the messages are all bot messages, just skip the channel
+    MIN_BOT_MESSAGE_THRESHOLD = 256
 
     def __init__(
         self,
@@ -897,9 +902,12 @@ class SlackConnector(
             checkpoint.seen_thread_ts = list(seen_thread_ts)
             checkpoint.channel_completion_map[channel["id"]] = new_latest
 
-            # bypass channels where recent messages over a certain amount
-            # are all bot messages
-            if channel_message_ts is None and len(message_batch) > 256:
+            # bypass channels where the first set of messages seen are all bots
+            # (len must be at least MIN_BOT_MESSAGE_THRESHOLD so that we have a sufficient sampling)
+            if (
+                channel_message_ts is None
+                and len(message_batch) > SlackConnector.MIN_BOT_MESSAGE_THRESHOLD
+            ):
                 if num_bot_filtered_messages == len(message_batch):
                     logger.warning(
                         "Bypassing this channel since it appears to be mostly bot messages"
