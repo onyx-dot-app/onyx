@@ -282,7 +282,7 @@ def get_parent_child_relationships_and_types(
 
         for i in range(KG_MAX_PARENT_RECURSION_DEPTH, 0, -1):
             if not child.parent_key:
-                continue
+                break
 
             parent = (
                 db_session.query(KGEntity)
