@@ -463,6 +463,12 @@ def _convert_drive_item_to_document(
             ),
         )
     except Exception as e:
+        doc_id = "unknown"
+        try:
+            doc_id = onyx_document_id_from_drive_file(file)
+        except Exception as e2:
+            logger.warning(f"Error getting document id from file: {e2}")
+
         file_name = file.get("name")
         error_str = (
             f"Error converting file '{file_name}' to Document as {retriever_email}: {e}"
