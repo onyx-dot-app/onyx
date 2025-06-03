@@ -1,14 +1,13 @@
 # File: onyx/connectors/github_code/connector.py
 
-import io
 import os
+import io
 import hashlib
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Tuple, Generator
+from typing import Any, List, Optional, Generator
 from fnmatch import fnmatch
 
 import requests
-from pydantic import SecretStr
 
 from onyx.connectors.interfaces import (
     LoadConnector,
@@ -16,7 +15,6 @@ from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     SecondsSinceUnixEpoch,
 )
-from onyx.connectors.github_code.embedding import CodeEmbeddingPipeline
 from onyx.connectors.models import Document, Section, ConnectorMissingCredentialError
 from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
@@ -25,20 +23,16 @@ logger = setup_logger()
 
 
 class GitHubCodeConnector(LoadConnector, PollConnector):
-    """Onyx Connector to index GitHub repository code content using RAG techniques."""
+    """Onyx Connector to index GitHub repository code content."""
     
     def __init__(
         self,
         repo_owner: str,
-        repositories: str = None,  # Accept 'repositories' parameter from the UI
+        repositories: str = None,
         include_file_patterns: list[str] = None,
         exclude_dir_patterns: list[str] = None,
-        model_name: str = "codebert",
-        openai_model: str = "text-embedding-ada-002",
-        cohere_model: str = "embed-english-v2.0",
-        chunk_size: int = 256,
-        chunk_overlap: int = 50,
-        **kwargs  # Accept any additional parameters
+        batch_size: int = 10,
+        **kwargs
     ):
         """
         Initialize the GitHub Code Connector.
@@ -46,43 +40,27 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         Args:
             repo_owner: GitHub username or organization
             repositories: Comma-separated list of repository names, or None for all repos
-            include_file_patterns: File patterns to include (default: common code files)
-            exclude_dir_patterns: Directory patterns to exclude (default: node_modules, etc.)
-            model_name: Embedding model to use
-            openai_model: OpenAI model name if using OpenAI
-            cohere_model: Cohere model name if using Cohere
-            chunk_size: Maximum tokens per chunk
-            chunk_overlap: Token overlap between chunks
+            include_file_patterns: File patterns to include
+            exclude_dir_patterns: Directory patterns to exclude
+            batch_size: Number of documents to yield at once
         """
         self.repo_owner = repo_owner
-        self.repositories = repositories  # Can be None (all repos) or comma-separated string
+        self.repositories = repositories
         self.branch = kwargs.get('branch', 'main')
+        self.batch_size = batch_size
         
         # Default file patterns for code files
         self.include_file_patterns = include_file_patterns or [
             "*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.java", "*.cpp", "*.c", "*.h",
-            "*.rb", "*.cs", "*.fs", "*.go", "*.rs", "*.php", "*.swift", "*.kt",
-            "*.scala", "*.r", "*.m", "*.mm", "*.sh", "*.bash", "*.zsh",
-            "*.yml", "*.yaml", "*.json", "*.xml", "*.md", "*.rst"
+            "*.rb", "*.cs", "*.go", "*.rs", "*.php", "*.swift", "*.kt",
+            "*.scala", "*.sh", "*.yml", "*.yaml", "*.json", "*.xml", "*.md"
         ]
         
         self.exclude_dir_patterns = exclude_dir_patterns or [
-            "node_modules/*", "vendor/*", "dist/*", "build/*", "*.min.js",
-            "__pycache__/*", "*.pyc", ".git/*", ".svn/*", "target/*",
-            "bin/*", "obj/*", ".idea/*", ".vscode/*", "*.egg-info/*"
+            "**/node_modules/**", "**/vendor/**", "**/dist/**", "**/build/**", 
+            "**/__pycache__/**", "**/.git/**", "**/target/**", "**/bin/**", 
+            "**/obj/**", "**/.idea/**", "**/.vscode/**", "**/*.min.js"
         ]
-        
-        # Prepare embedding pipeline with chosen model
-        self.embed_pipeline = CodeEmbeddingPipeline(
-            model_name=model_name,
-            openai_model=openai_model,
-            cohere_model=cohere_model,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        
-        # Cache for content hashes to avoid reprocessing unchanged files
-        self._content_hash_cache: dict[str, str] = {}
         
         # GitHub client info
         self.access_token: Optional[str] = None
@@ -99,12 +77,46 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json"
         }
+        
+        logger.info(f"Loaded GitHub credentials for {self.repo_owner}")
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        """Yield all documents in the repository as a single batch."""
-        docs = self._load_all_repositories()
-        yield docs
+        """Yield all documents in the repository."""
+        logger.info(f"Starting full indexing for GitHub user/org: {self.repo_owner}")
+        
+        try:
+            repos = self._get_repositories()
+            logger.info(f"Found {len(repos)} repositories to index")
+            
+            document_batch = []
+            
+            for repo in repos:
+                repo_name = repo['name']
+                logger.info(f"Indexing repository: {self.repo_owner}/{repo_name}")
+                
+                try:
+                    repo_docs = self._load_repository(repo)
+                    logger.info(f"Found {len(repo_docs)} documents in {repo_name}")
+                    
+                    for doc in repo_docs:
+                        document_batch.append(doc)
+                        
+                        if len(document_batch) >= self.batch_size:
+                            yield document_batch
+                            document_batch = []
+                            
+                except Exception as e:
+                    logger.error(f"Error indexing repository {repo_name}: {e}")
+                    continue
+            
+            # Yield remaining documents
+            if document_batch:
+                yield document_batch
+                
+        except Exception as e:
+            logger.error(f"Error during GitHub indexing: {e}")
+            raise
 
     def poll_source(
         self,
@@ -115,8 +127,56 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
         
-        docs = self._poll_repositories(start_datetime, end_datetime)
-        yield docs
+        logger.info(f"Polling GitHub for changes between {start_datetime} and {end_datetime}")
+        
+        try:
+            repos = self._get_repositories()
+            document_batch = []
+            
+            for repo in repos:
+                repo_name = repo['name']
+                
+                # Get commits in the time range
+                commits_url = (
+                    f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits"
+                    f"?since={start_datetime.isoformat()}&until={end_datetime.isoformat()}"
+                )
+                
+                try:
+                    resp = requests.get(commits_url, headers=self.github_headers, timeout=30)
+                    if resp.status_code != 200:
+                        continue
+                        
+                    commits = resp.json()
+                    if not commits:
+                        continue
+                        
+                    logger.info(f"Found {len(commits)} commits in {repo_name}")
+                    
+                    # Get changed files
+                    changed_files = self._get_changed_files(repo_name, commits)
+                    
+                    # Process changed files
+                    for filepath in changed_files:
+                        docs = self._process_changed_file(repo, filepath)
+                        for doc in docs:
+                            document_batch.append(doc)
+                            
+                            if len(document_batch) >= self.batch_size:
+                                yield document_batch
+                                document_batch = []
+                                
+                except Exception as e:
+                    logger.error(f"Error polling repository {repo_name}: {e}")
+                    continue
+            
+            # Yield remaining documents
+            if document_batch:
+                yield document_batch
+                
+        except Exception as e:
+            logger.error(f"Error during GitHub polling: {e}")
+            raise
 
     def _get_repositories(self) -> List[dict]:
         """Get list of repositories to index based on configuration."""
@@ -145,46 +205,31 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
             # Get all repositories for the user/org
             page = 1
             while True:
+                # Try user first
                 api_url = f"https://api.github.com/users/{self.repo_owner}/repos?page={page}&per_page=100"
-                try:
+                resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                
+                if resp.status_code == 404:
+                    # Try as organization
+                    api_url = f"https://api.github.com/orgs/{self.repo_owner}/repos?page={page}&per_page=100"
                     resp = requests.get(api_url, headers=self.github_headers, timeout=30)
-                    if resp.status_code != 200:
-                        # Try as organization
-                        api_url = f"https://api.github.com/orgs/{self.repo_owner}/repos?page={page}&per_page=100"
-                        resp = requests.get(api_url, headers=self.github_headers, timeout=30)
-                    
-                    if resp.status_code == 200:
-                        page_repos = resp.json()
-                        if not page_repos:
-                            break
-                        repos.extend(page_repos)
-                        page += 1
-                    else:
-                        logger.error(f"Could not fetch repositories: {resp.status_code}")
+                
+                if resp.status_code == 200:
+                    page_repos = resp.json()
+                    if not page_repos:
                         break
-                except Exception as e:
-                    logger.error(f"Error fetching repositories: {e}")
+                    repos.extend(page_repos)
+                    page += 1
+                    
+                    # GitHub API has a limit, don't fetch too many
+                    if len(repos) >= 100:
+                        logger.warning(f"Limiting to first 100 repositories for {self.repo_owner}")
+                        break
+                else:
+                    logger.error(f"Could not fetch repositories: {resp.status_code}")
                     break
                     
         return repos
-
-    def _load_all_repositories(self) -> List[Document]:
-        """Load all configured repositories."""
-        docs = []
-        repos = self._get_repositories()
-        
-        for repo in repos:
-            repo_name = repo['name']
-            logger.info(f"Indexing repository: {self.repo_owner}/{repo_name}")
-            
-            try:
-                repo_docs = self._load_repository(repo)
-                docs.extend(repo_docs)
-            except Exception as e:
-                logger.error(f"Error indexing repository {repo_name}: {e}")
-                continue
-                
-        return docs
 
     def _load_repository(self, repo_info: dict) -> List[Document]:
         """Load all files from a single repository."""
@@ -192,118 +237,100 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         default_branch = repo_info.get('default_branch', 'main')
         branch = self.branch if self.branch != 'main' else default_branch
         
-        # Use GitHub archive API to download a zip of the repo
-        zip_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/zipball/{branch}"
+        docs = []
+        
+        # Use the tree API to get all files
+        tree_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/git/trees/{branch}?recursive=1"
         
         try:
-            resp = requests.get(zip_url, headers=self.github_headers, timeout=60, stream=True)
-            resp.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            if resp.status_code == 404:
-                # Try with main branch if specified branch doesn't exist
-                zip_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/zipball/main"
-                resp = requests.get(zip_url, headers=self.github_headers, timeout=60, stream=True)
-                resp.raise_for_status()
-            else:
-                raise
+            resp = requests.get(tree_url, headers=self.github_headers, timeout=60)
+            if resp.status_code != 200:
+                logger.error(f"Could not fetch tree for {repo_name}: {resp.status_code}")
+                return docs
                 
-        zip_content = resp.content
-
-        docs: List[Document] = []
-        with io.BytesIO(zip_content) as zbuf:
-            import zipfile
-            with zipfile.ZipFile(zbuf) as zf:
-                for file_info in zf.infolist():
-                    file_path = file_info.filename
+            tree_data = resp.json()
+            files = [item for item in tree_data.get('tree', []) if item['type'] == 'blob']
+            
+            logger.info(f"Found {len(files)} files in {repo_name}")
+            
+            # Process files in batches
+            for file_info in files:
+                file_path = file_info['path']
+                
+                if not self._include_file(file_path):
+                    continue
                     
-                    # Skip directories
-                    if file_info.is_dir():
-                        continue
-                        
-                    # Skip files based on include/exclude patterns
-                    if not self._include_file(file_path):
-                        continue
-                        
-                    try:
-                        file_bytes = zf.read(file_info)
-                        text = file_bytes.decode("utf-8", errors="ignore")
-                    except Exception as e:
-                        logger.debug(f"Skipping {file_path}: {e}")
-                        continue
-                        
-                    # Process the file and create documents
-                    file_docs = self._process_file(repo_name, file_path, text)
-                    docs.extend(file_docs)
-                    
-        return docs
-
-    def _poll_repositories(self, start: datetime, end: datetime) -> List[Document]:
-        """Poll repositories for changes in the given time range."""
-        docs = []
-        repos = self._get_repositories()
-        
-        for repo in repos:
-            repo_name = repo['name']
-            
-            # Get commits in the time range
-            commits_url = (
-                f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits"
-                f"?since={start.isoformat()}&until={end.isoformat()}"
-            )
-            
-            try:
-                resp = requests.get(commits_url, headers=self.github_headers, timeout=30)
-                resp.raise_for_status()
-                commits = resp.json()
-            except Exception as e:
-                logger.error(f"Error fetching commits for {repo_name}: {e}")
-                continue
-                
-            if not commits:
-                continue
-                
-            logger.info(f"Found {len(commits)} commits in {repo_name} since {start}")
-            
-            # Get all changed files
-            changed_files = set()
-            for commit in commits:
-                commit_sha = commit['sha']
-                commit_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits/{commit_sha}"
+                # Get file content
+                file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{file_path}"
                 
                 try:
-                    c_resp = requests.get(commit_url, headers=self.github_headers, timeout=30)
-                    c_resp.raise_for_status()
-                    commit_data = c_resp.json()
+                    file_resp = requests.get(file_url, headers=self.github_headers, timeout=30)
+                    if file_resp.status_code == 200:
+                        content = file_resp.text
+                        
+                        # Skip empty or very large files
+                        if not content or len(content) > 1024 * 1024:  # 1MB limit
+                            continue
+                            
+                        doc = self._create_document(repo_name, file_path, content, branch)
+                        if doc:
+                            docs.append(doc)
+                            
+                except Exception as e:
+                    logger.debug(f"Error fetching file {file_path}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Error loading repository {repo_name}: {e}")
+            
+        return docs
+
+    def _get_changed_files(self, repo_name: str, commits: List[dict]) -> set:
+        """Get all changed files from a list of commits."""
+        changed_files = set()
+        
+        for commit in commits:
+            commit_sha = commit['sha']
+            commit_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits/{commit_sha}"
+            
+            try:
+                resp = requests.get(commit_url, headers=self.github_headers, timeout=30)
+                if resp.status_code == 200:
+                    commit_data = resp.json()
                     
                     for file_info in commit_data.get('files', []):
                         filename = file_info.get('filename')
                         if filename and self._include_file(filename):
                             changed_files.add(filename)
-                except Exception as e:
-                    logger.error(f"Error fetching commit {commit_sha}: {e}")
-                    continue
-                    
-            # Process changed files
-            default_branch = repo.get('default_branch', 'main')
-            branch = self.branch if self.branch != 'main' else default_branch
-            
-            for filepath in changed_files:
-                file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{filepath}"
+            except Exception as e:
+                logger.error(f"Error fetching commit {commit_sha}: {e}")
                 
-                try:
-                    f_resp = requests.get(file_url, headers=self.github_headers, timeout=15)
-                    if f_resp.status_code == 200:
-                        text = f_resp.text
-                        file_docs = self._process_file(repo_name, filepath, text)
-                        docs.extend(file_docs)
-                except Exception as e:
-                    logger.error(f"Error fetching file {filepath}: {e}")
-                    continue
-                    
-        return docs
+        return changed_files
+
+    def _process_changed_file(self, repo_info: dict, filepath: str) -> List[Document]:
+        """Process a single changed file."""
+        repo_name = repo_info['name']
+        default_branch = repo_info.get('default_branch', 'main')
+        branch = self.branch if self.branch != 'main' else default_branch
+        
+        file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{filepath}"
+        
+        try:
+            resp = requests.get(file_url, headers=self.github_headers, timeout=30)
+            if resp.status_code == 200:
+                content = resp.text
+                doc = self._create_document(repo_name, filepath, content, branch)
+                return [doc] if doc else []
+        except Exception as e:
+            logger.error(f"Error fetching file {filepath}: {e}")
+            
+        return []
 
     def _include_file(self, file_path: str) -> bool:
         """Check if file_path matches include patterns and is not excluded."""
+        # Normalize path separators
+        file_path = file_path.replace('\\', '/')
+        
         # Check exclusions first
         for pattern in self.exclude_dir_patterns:
             if fnmatch(file_path, pattern):
@@ -316,72 +343,42 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                 
         return False
 
-    def _process_file(self, repo_name: str, file_path: str, text: str) -> List[Document]:
-        """Split a file's content into chunks and create Document objects."""
-        docs: List[Document] = []
-        if not text or not text.strip():
-            return docs
-
-        # Skip files that are too large (> 1MB)
-        if len(text) > 1024 * 1024:
-            logger.warning(f"Skipping large file {file_path} ({len(text)} bytes)")
-            return docs
-
-        # Create a hash to check if content changed
-        content_hash = hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
-        cache_key = f"{repo_name}/{file_path}"
+    def _create_document(self, repo_name: str, file_path: str, content: str, branch: str) -> Optional[Document]:
+        """Create a Document object from file content."""
+        if not content or not content.strip():
+            return None
+            
+        # Create a unique document ID
+        doc_id = f"github://{self.repo_owner}/{repo_name}/{file_path}"
         
-        if self._content_hash_cache.get(cache_key) == content_hash:
-            return docs  # Skip if content hasn't changed
-            
-        self._content_hash_cache[cache_key] = content_hash
-
-        # Infer language from file extension
-        language = self._infer_language(file_path)
+        # Create the document URL
+        doc_url = f"https://github.com/{self.repo_owner}/{repo_name}/blob/{branch}/{file_path}"
         
-        # Get chunks and embeddings
-        try:
-            chunks, vectors = self.embed_pipeline.chunk_and_embed(text, language)
-        except Exception as e:
-            logger.error(f"Error processing {file_path}: {e}")
-            return docs
-
-        # Create documents for each chunk
-        for i, (chunk_text, embedding) in enumerate(zip(chunks, vectors)):
-            # Create a unique ID for this chunk
-            doc_id = f"github://{self.repo_owner}/{repo_name}/{file_path}#chunk{i}"
-            
-            # Create the document
-            doc = Document(
-                id=doc_id,
-                sections=[Section(
-                    link=f"https://github.com/{self.repo_owner}/{repo_name}/blob/{self.branch}/{file_path}",
-                    text=chunk_text
-                )],
-                source=DocumentSource.GITHUB,
-                semantic_identifier=f"{repo_name}/{file_path}",
-                doc_updated_at=datetime.now(timezone.utc),
-                primary_owners=[],
-                secondary_owners=[],
-                metadata={
-                    "repo_owner": self.repo_owner,
-                    "repo_name": repo_name,
-                    "file_path": file_path,
-                    "language": language or "unknown",
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "embedding_model": self.embed_pipeline.model_name
-                }
-            )
-            
-            # Add embedding if available
-            if embedding:
-                doc.embeddings = embedding
-                
-            docs.append(doc)
-            
-        logger.debug(f"Created {len(docs)} documents for {file_path}")
-        return docs
+        # Extract just the filename for the title
+        filename = os.path.basename(file_path)
+        
+        # Create the document
+        doc = Document(
+            id=doc_id,
+            sections=[Section(
+                link=doc_url,
+                text=content
+            )],
+            source=DocumentSource.GITHUB,
+            semantic_identifier=f"{repo_name}/{file_path}",
+            doc_updated_at=datetime.now(timezone.utc),
+            primary_owners=[],
+            secondary_owners=[],
+            metadata={
+                "repo_owner": self.repo_owner,
+                "repo_name": repo_name,
+                "file_path": file_path,
+                "filename": filename,
+                "language": self._infer_language(file_path) or "unknown",
+            }
+        )
+        
+        return doc
 
     def _infer_language(self, file_path: str) -> Optional[str]:
         """Infer programming language from file extension."""
@@ -394,12 +391,9 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
             '.java': 'java',
             '.cpp': 'cpp',
             '.cc': 'cpp',
-            '.cxx': 'cpp',
             '.c': 'c',
             '.h': 'c',
-            '.hpp': 'cpp',
             '.cs': 'csharp',
-            '.fs': 'fsharp',
             '.rb': 'ruby',
             '.go': 'go',
             '.rs': 'rust',
@@ -407,18 +401,12 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
             '.swift': 'swift',
             '.kt': 'kotlin',
             '.scala': 'scala',
-            '.r': 'r',
-            '.m': 'objc',
-            '.mm': 'objcpp',
             '.sh': 'bash',
-            '.bash': 'bash',
-            '.zsh': 'zsh',
             '.yml': 'yaml',
             '.yaml': 'yaml',
             '.json': 'json',
             '.xml': 'xml',
-            '.md': 'markdown',
-            '.rst': 'rst'
+            '.md': 'markdown'
         }
         
         file_lower = file_path.lower()
