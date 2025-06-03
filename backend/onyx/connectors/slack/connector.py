@@ -76,7 +76,7 @@ class SlackCheckpoint(ConnectorCheckpoint):
     channel_ids: list[str] | None  # e.g. C8E6WHE2X
 
     # channel id mapped to the timestamp we want to retrieve messages up to
-    # NOTE: this is usually the earliest timestamp of the messages we have
+    # NOTE: this is usually the earliest timestamp of all the messages we have
     # since we walk backwards
     channel_completion_map: dict[str, str]
     current_channel: ChannelType | None

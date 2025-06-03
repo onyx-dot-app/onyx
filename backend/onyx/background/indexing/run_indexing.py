@@ -325,6 +325,7 @@ def _run_indexing(
             ),
             None,
         )
+
         # if the last attempt failed, try and use the same window. This is necessary
         # to ensure correctness with checkpointing. If we don't do this, things like
         # new slack channels could be missed (since existing slack channels are
