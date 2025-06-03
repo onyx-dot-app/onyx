@@ -249,7 +249,7 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             else None
         ),
         metadata={
-            k: str(v)
+            k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
                 "object_type": "PullRequest",
                 "id": pull_request.number,
@@ -310,7 +310,7 @@ def _convert_issue_to_document(issue: Issue) -> Document:
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
         metadata={
-            k: str(v)
+            k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
                 "object_type": "Issue",
                 "id": issue.number,
