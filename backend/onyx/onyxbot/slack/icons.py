@@ -17,6 +17,8 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/GoogleDrive.png"
     if source == DocumentSource.GITHUB.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Github.png"
+    if source == DocumentSource.GITHUB_CODE.value:
+        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Github.png"
     if source == DocumentSource.GITLAB.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Gitlab.png"
     if source == DocumentSource.CONFLUENCE.value:
