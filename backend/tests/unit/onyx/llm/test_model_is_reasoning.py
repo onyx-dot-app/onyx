@@ -1,7 +1,7 @@
 from onyx.llm.utils import model_is_reasoning_model
 
 
-def test_model_is_reasoning_model():
+def test_model_is_reasoning_model() -> None:
     """Test that reasoning models are correctly identified and non-reasoning models are not"""
 
     # Models that should be identified as reasoning models
