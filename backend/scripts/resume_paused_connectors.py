@@ -4,17 +4,21 @@ import requests
 
 API_SERVER_URL = "http://localhost:3000"
 API_KEY = "onyx-api-key"  # API key here, if auth is enabled
-HEADERS = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
 
 
 def resume_paused_connectors(
     api_server_url: str,
+    api_key: str | None,
     specific_connector_sources: list[str] | None = None,
 ) -> None:
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
     # Get all paused connectors
     response = requests.get(
         f"{api_server_url}/api/manage/admin/connector/indexing-status",
-        headers=HEADERS,
+        headers=headers,
     )
     response.raise_for_status()
 
@@ -35,7 +39,7 @@ def resume_paused_connectors(
             response = requests.put(
                 f"{api_server_url}/api/manage/admin/cc-pair/{connector['cc_pair_id']}/status",
                 json={"status": "ACTIVE"},
-                headers=HEADERS,
+                headers=headers,
             )
             response.raise_for_status()
             print(f"Resumed connector: {connector['name']}")
@@ -53,6 +57,12 @@ def main() -> None:
         help="The URL of the API server to use. If not provided, will use the default.",
     )
     parser.add_argument(
+        "--api_key",
+        type=str,
+        default=None,
+        help="The API key to use for authentication. If not provided, no authentication will be used.",
+    )
+    parser.add_argument(
         "--connector_sources",
         type=str.lower,
         nargs="+",
@@ -60,7 +70,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    resume_paused_connectors(args.api_server_url, args.connector_sources)
+    resume_paused_connectors(args.api_server_url, args.api_key, args.connector_sources)
 
 
 if __name__ == "__main__":
