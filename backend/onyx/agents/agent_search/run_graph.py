@@ -163,7 +163,6 @@ def run_document_chat_graph(
     config: GraphConfig,
     query: str,
     document_ids: list[str] = [],
-    document_content: str = None,
 ) -> AnswerStream:
     # Add search_tool and document_editor tool in Config (chat_backend.py)
     from onyx.agents.agent_search.document_chat.graph_builder import document_chat_graph_builder
@@ -181,7 +180,6 @@ def run_document_chat_graph(
     input = DocumentChatInput(
         query=query, 
         document_ids=document_ids, 
-        document_content=document_content
     )
     
     yield ToolCallKickoff(
@@ -189,7 +187,6 @@ def run_document_chat_graph(
         tool_args={
             "query": query, 
             "document_ids": document_ids, 
-            "document_content": document_content
         },
     )
     yield from run_graph(compiled_graph, config, input)
