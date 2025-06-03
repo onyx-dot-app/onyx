@@ -9,7 +9,6 @@ from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
 class DocumentChatInput(BaseModel):
     query: str
     document_ids: list[str] = []  # Document IDs to analyze
-    document_content: Optional[str] = None  # The text content to edit if provided
 
 class DocumentChatOutput(TypedDict):
     response_chunk: AIMessageChunk

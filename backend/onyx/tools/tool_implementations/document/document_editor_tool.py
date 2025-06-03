@@ -22,7 +22,8 @@ SEARCH_RESULTS_FIELD = "search_results"
 INSTRUCTIONS_FIELD = "instructions"
 
 DOCUMENT_EDITOR_DESCRIPTION = """
-Edits text based on user instructions. Use this tool when the user wants to modify text content.
+Edits a document based on user instructions. Use this tool when the user wants to modify text of a document or \
+when the user wants to modify the document in some way.
 """
 
 

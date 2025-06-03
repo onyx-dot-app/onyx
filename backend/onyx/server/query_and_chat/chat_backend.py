@@ -20,6 +20,7 @@ from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from langchain_core.messages import SystemMessage
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
@@ -926,6 +927,7 @@ def handle_document_chat_message(
                             llm_config=llm.config,
                             raw_user_query=request.message,
                             raw_user_uploaded_files=[],
+                            system_message=SystemMessage(content=persona.prompts[0].system_prompt),
                         ),
                     ),
                     tooling=GraphTooling(
@@ -950,7 +952,6 @@ def handle_document_chat_message(
                     config=config,
                     query=request.message,
                     document_ids=request.document_ids,
-                    document_content=request.document_content,
                 ):
                     try:
                         yield packet.model_dump_json() + "\n"
