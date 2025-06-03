@@ -110,7 +110,8 @@ export default function CloudEmbeddingPage({
               {provider.icon({ size: 40 })}
               <h2 className="ml-2  mt-2 text-xl font-bold">
                 {provider.provider_type}{" "}
-                {provider.provider_type == "Cohere" && "(recommended)"}
+                {provider.provider_type == EmbeddingProvider.COHERE &&
+                  "(recommended)"}
               </h2>
               <HoverPopup
                 mainContent={
@@ -173,8 +174,8 @@ export default function CloudEmbeddingPage({
             {LITELLM_CLOUD_PROVIDER.icon({ size: 40 })}
             <h2 className="ml-2  mt-2 text-xl font-bold">
               {LITELLM_CLOUD_PROVIDER.provider_type}{" "}
-              {LITELLM_CLOUD_PROVIDER.provider_type == "Cohere" &&
-                "(recommended)"}
+              {LITELLM_CLOUD_PROVIDER.provider_type ==
+                EmbeddingProvider.COHERE && "(recommended)"}
             </h2>
             <HoverPopup
               mainContent={

@@ -185,9 +185,7 @@ class EmbeddingModel:
     ) -> list[Embedding]:
         text_batches = batch_list(texts, batch_size)
 
-        logger.debug(
-            f"Encoding {len(texts)} texts in {len(text_batches)} batches for local model"
-        )
+        logger.debug(f"Encoding {len(texts)} texts in {len(text_batches)} batches")
 
         embeddings: list[Embedding] = []
 
