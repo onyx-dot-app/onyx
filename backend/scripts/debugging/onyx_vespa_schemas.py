@@ -4,9 +4,9 @@ import argparse
 
 import jinja2
 
+from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
 from onyx.db.enums import EmbeddingPrecision
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import SUPPORTED_EMBEDDING_MODELS
 
 logger = setup_logger()
 
