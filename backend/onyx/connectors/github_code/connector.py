@@ -1,6 +1,7 @@
 	# File: backend/onyx/connectors/github_code/connector.py
 
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Generator
 from fnmatch import fnmatch
@@ -22,6 +23,24 @@ from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_MAX_NUM_RATE_LIMIT_RETRIES = 5
+
+
+def _sleep_after_rate_limit(resp: requests.Response) -> None:
+    """Sleep until GitHub rate limit resets."""
+    reset_time = resp.headers.get("X-RateLimit-Reset")
+    if reset_time is not None:
+        try:
+            reset_ts = int(reset_time)
+            sleep_time = datetime.fromtimestamp(reset_ts, tz=timezone.utc) - datetime.now(timezone.utc)
+            sleep_seconds = max(int(sleep_time.total_seconds()), 0) + 60
+        except Exception:
+            sleep_seconds = 60
+    else:
+        sleep_seconds = 60
+    logger.notice(f"Hit GitHub rate limit. Sleeping {sleep_seconds} seconds.")
+    time.sleep(sleep_seconds)
 
 
 class GitHubCodeConnector(LoadConnector, PollConnector):
@@ -67,6 +86,15 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         # GitHub client info
         self.access_token: Optional[str] = None
         self.github_headers: dict[str, str] = {}
+
+    def _make_request(self, url: str, timeout: int = 30, attempt_num: int = 0) -> requests.Response:
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError("Exceeded GitHub rate limit retry attempts")
+        resp = requests.get(url, headers=self.github_headers, timeout=timeout)
+        if resp.status_code in {403, 429} or resp.headers.get("X-RateLimit-Remaining") == "0":
+            _sleep_after_rate_limit(resp)
+            return self._make_request(url, timeout, attempt_num + 1)
+        return resp
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load credentials such as a GitHub access token."""
@@ -150,7 +178,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                 )
                 
                 try:
-                    resp = requests.get(commits_url, headers=self.github_headers, timeout=30)
+                    resp = self._make_request(commits_url, timeout=30)
                     if resp.status_code != 200:
                         continue
                         
@@ -201,7 +229,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                     
                 api_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}"
                 try:
-                    resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                    resp = self._make_request(api_url, timeout=30)
                     if resp.status_code == 200:
                         repos.append(resp.json())
                     else:
@@ -214,12 +242,12 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
             while True:
                 # Try user first
                 api_url = f"https://api.github.com/users/{self.repo_owner}/repos?page={page}&per_page=100"
-                resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                resp = self._make_request(api_url, timeout=30)
                 
                 if resp.status_code == 404:
                     # Try as organization
                     api_url = f"https://api.github.com/orgs/{self.repo_owner}/repos?page={page}&per_page=100"
-                    resp = requests.get(api_url, headers=self.github_headers, timeout=30)
+                    resp = self._make_request(api_url, timeout=30)
                 
                 if resp.status_code == 200:
                     page_repos = resp.json()
@@ -250,7 +278,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         tree_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/git/trees/{branch}?recursive=1"
         
         try:
-            resp = requests.get(tree_url, headers=self.github_headers, timeout=60)
+            resp = self._make_request(tree_url, timeout=60)
             if resp.status_code != 200:
                 logger.error(f"Could not fetch tree for {repo_name}: {resp.status_code}")
                 return docs
@@ -271,7 +299,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                 file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{file_path}"
                 
                 try:
-                    file_resp = requests.get(file_url, headers=self.github_headers, timeout=30) 
+                    file_resp = self._make_request(file_url, timeout=30)
                     if file_resp.status_code == 200:
                         content = file_resp.text
                         
@@ -301,7 +329,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
             commit_url = f"https://api.github.com/repos/{self.repo_owner}/{repo_name}/commits/{commit_sha}"
             
             try:
-                resp = requests.get(commit_url, headers=self.github_headers, timeout=30)
+                resp = self._make_request(commit_url, timeout=30)
                 if resp.status_code == 200:
                     commit_data = resp.json()
                     
@@ -323,7 +351,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{filepath}"
         
         try:
-            resp = requests.get(file_url, headers=self.github_headers, timeout=30)
+            resp = self._make_request(file_url, timeout=30)
             if resp.status_code == 200:
                 content = resp.text
                 if not content or len(content) > 1024 * 1024:
