@@ -13,7 +13,11 @@ from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     SecondsSinceUnixEpoch,
 )
-from onyx.connectors.models import Document, Section, ConnectorMissingCredentialError
+from onyx.connectors.models import (
+    Document,
+    TextSection,
+    ConnectorMissingCredentialError,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
@@ -365,13 +369,13 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         
         try:
             # Create Section with proper structure - pass link and text as keyword arguments
-            section = Section(link=doc_url, text=content)
+            section = TextSection(link=doc_url, text=content)
             
             # Create the document
             doc = Document(
                 id=doc_id,
                 sections=[section],  # Pass the Section object, not a dict
-                source=DocumentSource.GITHUB,
+                source=DocumentSource.GITHUB_CODE,
                 semantic_identifier=f"{repo_name}/{file_path}",
                 doc_updated_at=datetime.now(timezone.utc),
                 primary_owners=[],
