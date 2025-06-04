@@ -643,6 +643,10 @@ LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 KROKI_URL = os.environ.get("KROKI_URL")
 KROKI_ENABLED = KROKI_URL is not None  # True if KROKI_URL is set, False otherwise
 
+# Kroki LLM correction settings
+KROKI_MAX_LLM_RETRIES = int(os.environ.get("KROKI_MAX_LLM_RETRIES", 3))
+KROKI_CORRECTION_MODEL_NAME = os.environ.get("KROKI_CORRECTION_MODEL_NAME")
+
 #####
 # Enterprise Edition Configs
 #####
