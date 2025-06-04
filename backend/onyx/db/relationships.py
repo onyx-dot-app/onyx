@@ -20,7 +20,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def add_or_update_staging_relationship(
+def upsert_staging_relationship(
     db_session: Session,
     relationship_id_name: str,
     source_document_id: str,
@@ -151,7 +151,7 @@ def transfer_relationship(
     return new_relationship
 
 
-def add_or_update_staging_relationship_type(
+def upsert_staging_relationship_type(
     db_session: Session,
     source_entity_type: str,
     relationship_type: str,
@@ -297,7 +297,7 @@ def get_parent_child_relationships_and_types(
                 break
 
             # create the relationship type
-            relationship_type = add_or_update_staging_relationship_type(
+            relationship_type = upsert_staging_relationship_type(
                 db_session=db_session,
                 source_entity_type=parent.entity_type_id_name,
                 relationship_type="has_subcomponent",

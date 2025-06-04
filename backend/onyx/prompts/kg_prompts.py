@@ -656,8 +656,7 @@ You are an expert in generating, understanding and analyzing SQL statements.
 You are given a SQL statement that returns a list of entities from a table. Your task will be to \
 identify the source documents that are relevant to what the SQL statement is returning.
 
-The table had this structure:
-
+The table has this structure:
  - Table name: kg_relationship
  - Columns:
    - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \

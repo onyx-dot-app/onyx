@@ -14,8 +14,8 @@ from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
 from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import add_or_update_staging_entity
 from onyx.db.entities import delete_from_kg_entities__no_commit
+from onyx.db.entities import upsert_staging_entity
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import KGConfigSettings
@@ -23,11 +23,11 @@ from onyx.db.models import Document
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
-from onyx.db.relationships import add_or_update_staging_relationship
-from onyx.db.relationships import add_or_update_staging_relationship_type
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
+from onyx.db.relationships import upsert_staging_relationship
+from onyx.db.relationships import upsert_staging_relationship_type
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.kg.configuration import execute_kg_setting_tests
+from onyx.kg.configuration import validate_kg_settings
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGBatchExtractionStats
@@ -354,7 +354,7 @@ def kg_extraction(
     with get_session_with_current_tenant() as db_session:
         kg_config_settings = get_kg_config_settings(db_session)
 
-    execute_kg_setting_tests(kg_config_settings)
+    validate_kg_settings(kg_config_settings)
 
     # get connector ids that are enabled for KG extraction
 
@@ -740,7 +740,7 @@ def kg_extraction(
                             not in aggregated_kg_extractions.grounded_entities_document_ids
                         ):
                             # Ungrounded entities
-                            add_or_update_staging_entity(
+                            upsert_staging_entity(
                                 db_session=db_session,
                                 name=entity_name,
                                 entity_type=entity_type,
@@ -798,7 +798,7 @@ def kg_extraction(
                                         }
                                     )
 
-                            add_or_update_staging_entity(
+                            upsert_staging_entity(
                                 db_session=db_session,
                                 name=entity_name,
                                 entity_type=entity_type,
@@ -867,7 +867,7 @@ def kg_extraction(
 
                 with get_session_with_current_tenant() as db_session:
                     try:
-                        add_or_update_staging_relationship_type(
+                        upsert_staging_relationship_type(
                             db_session=db_session,
                             source_entity_type=source_entity_type.upper(),
                             relationship_type=relationship_type,
@@ -909,7 +909,7 @@ def kg_extraction(
 
                     with get_session_with_current_tenant() as db_session:
                         try:
-                            add_or_update_staging_relationship(
+                            upsert_staging_relationship(
                                 db_session=db_session,
                                 relationship_id_name=relationship,
                                 source_document_id=source_document_id,

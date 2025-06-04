@@ -20,7 +20,7 @@ from onyx.kg.models import KGStage
 from onyx.kg.utils.formatting_utils import format_entity
 
 
-def add_or_update_staging_entity(
+def upsert_staging_entity(
     db_session: Session,
     name: str,
     entity_type: str,
@@ -45,7 +45,7 @@ def add_or_update_staging_entity(
     """
     entity_type = entity_type.upper()
     name = name.title()
-    id_name = format_entity(f"{entity_type}::{name.lower()}")
+    id_name = format_entity(f"{entity_type}::{name}")
     attributes = attributes or {}
 
     entity_type_split = entity_type.split("-")
@@ -218,8 +218,7 @@ def merge_entities(
         raise RuntimeError(f"Failed to merge entities with id_name: {parent.id_name}")
 
     # Update the document's kg_stage if document_id is set
-    if setting_doc:
-        assert child.document_id is not None  # for mypy
+    if setting_doc and child.document_id is not None:
         dbdocument.update_document_kg_info(
             db_session,
             document_id=child.document_id,
