@@ -376,6 +376,7 @@ def kg_extraction(
 
     for kg_enabled_connector in kg_enabled_connectors:
         connector_id = kg_enabled_connector.id
+        connector_coverage_days = kg_enabled_connector.kg_coverage_days
         connector_source = kg_enabled_connector.source
         connector_failed_chunk_extractions: list[KGChunkId] = []
         connector_succeeded_chunk_extractions: list[KGChunkId] = []
@@ -403,7 +404,8 @@ def kg_extraction(
                         db_session,
                         connector_id,
                         kg_coverage_start=kg_config_settings.KG_COVERAGE_START,
-                        kg_max_coverage_days=kg_config_settings.KG_MAX_COVERAGE_DAYS,
+                        kg_max_coverage_days=connector_coverage_days
+                        or kg_config_settings.KG_MAX_COVERAGE_DAYS,
                         batch_size=8,
                     )
                 )
