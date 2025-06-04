@@ -39,13 +39,7 @@ from tests.integration.common_utils.managers.user import UserManager
                 coverage_start=datetime(1970, 1, 1, 0, 0),
             ),
             400,
-            KGConfig(
-                enabled=True,
-                vendor="Test",
-                vendor_domains=["test.app", "tester.ai"],
-                ignore_domains=[],
-                coverage_start=datetime(1970, 1, 1, 0, 0),
-            ),
+            None,
         ),
     ],
 )
@@ -53,7 +47,7 @@ def test_kg_enable(
     reset: None,
     req: EnableKGConfigRequest,
     expected_status_code: int,
-    expected_updated_config: KGConfig,
+    expected_updated_config: KGConfig | None,
 ):
     admin_user = UserManager.create(name="admin_user")
 
@@ -69,6 +63,8 @@ def test_kg_enable(
 
     # We only check if the update has indeed been written to the DB iff the prior `PUT` was successful.
     if expected_status_code == 200:
+        assert expected_updated_config
+
         res2 = requests.get(
             f"{API_SERVER_URL}/admin/kg/config",
             headers=admin_user.headers,
