@@ -85,6 +85,26 @@ def sharepoint_credentials() -> dict[str, str]:
     }
 
 
+def test_sharepoint_connector_all_sites(
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    # Initialize connector with the base site URL
+    connector = SharepointConnector()
+
+    # Load credentials
+    connector.load_credentials(sharepoint_credentials)
+
+    # Get all documents
+    document_batches = list(connector.load_from_state())
+    found_documents: list[Document] = [
+        doc for batch in document_batches for doc in batch
+    ]
+    assert (
+        len(found_documents) > 0
+    ), "Should retrieve all sites and find at least one document"
+
+
 def test_sharepoint_connector_specific_folder(
     mock_get_unstructured_api_key: MagicMock,
     sharepoint_credentials: dict[str, str],
