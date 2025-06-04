@@ -10,7 +10,7 @@ class KGConfig(BaseModel):
     enabled: bool
     vendor: str | None
     vendor_domains: list[str] | None
-    ignore_email_domains: list[str] | None
+    ignore_domains: list[str] | None
     coverage_start: datetime | None
 
     @classmethod
@@ -22,7 +22,7 @@ class KGConfig(BaseModel):
             enabled=kg_config_settings.KG_ENABLED,
             vendor=kg_config_settings.KG_VENDOR,
             vendor_domains=kg_config_settings.KG_VENDOR_DOMAINS,
-            ignore_email_domains=kg_config_settings.KG_IGNORE_EMAIL_DOMAINS,
+            ignore_domains=kg_config_settings.KG_IGNORE_EMAIL_DOMAINS,
             coverage_start=kg_config_settings.KG_COVERAGE_START,
         )
 
@@ -31,7 +31,7 @@ class EnableKGConfigRequest(BaseModel):
     enabled: bool
     vendor: str
     vendor_domains: list[str]
-    ignore_domains: list[str]
+    ignore_domains: list[str] = []
     coverage_start: datetime
 
     model_config = ConfigDict(
