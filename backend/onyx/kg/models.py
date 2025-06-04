@@ -9,6 +9,7 @@ from onyx.configs.kg_configs import KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
 
 
 class KGConfigSettings(BaseModel):
+    KG_EXPOSED: bool = False
     KG_ENABLED: bool = False
     KG_VENDOR: str | None = None
     KG_VENDOR_DOMAINS: list[str] | None = None
@@ -21,6 +22,7 @@ class KGConfigSettings(BaseModel):
 
 
 class KGConfigVars(str, Enum):
+    KG_EXPOSED = "KG_EXPOSED"
     KG_ENABLED = "KG_ENABLED"
     KG_VENDOR = "KG_VENDOR"
     KG_VENDOR_DOMAINS = "KG_VENDOR_DOMAINS"

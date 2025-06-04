@@ -181,7 +181,7 @@ def kg_clustering(
     ]
     entity_translations: dict[str, str] = {
         entity.id_name: entity.transferred_id_name
-        for entity in untransferred_grounded_entities
+        for entity in grounded_entities
         if entity.transferred_id_name is not None
     }
     vespa_update_documents: set[str] = set()

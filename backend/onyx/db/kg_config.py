@@ -77,6 +77,8 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
             kg_config_settings.KG_MAX_PARENT_RECURSION_DEPTH = max(
                 0, int(kg_max_parent_recursion_depth_str)
             )
+        elif result.kg_variable_name == KGConfigVars.KG_EXPOSED:
+            kg_config_settings.KG_EXPOSED = result.kg_variable_values[0] == "true"
 
     return kg_config_settings
 
