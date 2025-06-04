@@ -236,6 +236,55 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  github_code: {
+    description: "Configure GitHub Code connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the GitHub username or organization:",
+        label: "Repository Owner",
+        name: "repo_owner",
+        optional: false,
+      },
+      {
+        type: "tab",
+        name: "github_mode",
+        label: "What should we index from GitHub?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repository",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the repository name(s):",
+                label: "Repository Name(s)",
+                name: "repositories",
+                optional: false,
+                description:
+                  "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)",
+              },
+            ],
+          },
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all repositories the provided credentials have access to!",
+              },
+            ],
+          },
+        ],
+      }
+    ],
+    advanced_values: [],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [

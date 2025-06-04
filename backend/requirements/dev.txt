@@ -35,3 +35,7 @@ types-retry==0.9.9.3
 types-setuptools==68.0.0.3
 types-urllib3==1.26.25.11
 voyageai==0.2.3
+
+
+numpy>=1.21.0
+torch>=1.10.0

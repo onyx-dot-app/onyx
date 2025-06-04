@@ -100,3 +100,7 @@ prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 prometheus_fastapi_instrumentator==7.1.0
 sendgrid==6.11.0
+
+# For github_code integration
+numpy>=1.21.0
+torch>=1.10.0
