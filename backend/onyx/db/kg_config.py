@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from onyx.db.models import KGConfig
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
+from onyx.server.kg.models import EnableKGConfigRequest
+from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 
 
 class KGProcessingType(Enum):
@@ -78,79 +80,6 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
     return kg_config_settings
 
 
-def update_kg_config_settings(
-    db_session: Session,
-    kg_config: KGConfigSettings,
-) -> None:
-    _validate_kg_config(kg_config=kg_config)
-
-    def bool_to_string(b: bool) -> str:
-        return "true" if b else "false"
-
-    kg_config_variables = [
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_ENABLED,
-            kg_variable_values=[bool_to_string(kg_config.KG_ENABLED)],
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_VENDOR,
-            kg_variable_values=[kg_config.KG_VENDOR],
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_VENDOR_DOMAINS,
-            kg_variable_values=kg_config.KG_VENDOR_DOMAINS,
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_IGNORE_EMAIL_DOMAINS,
-            kg_variable_values=kg_config.KG_IGNORE_EMAIL_DOMAINS,
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_EXTRACTION_IN_PROGRESS,
-            kg_variable_values=[bool_to_string(kg_config.KG_ENABLED)],
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_CLUSTERING_IN_PROGRESS,
-            kg_variable_values=[bool_to_string(kg_config.KG_CLUSTERING_IN_PROGRESS)],
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_COVERAGE_START,
-            kg_variable_values=[kg_config.KG_COVERAGE_START.strftime("%Y-%m-%d")],
-        ),
-        KGConfig(
-            kg_variable_name=KGConfigVars.KG_MAX_COVERAGE_DAYS,
-            kg_variable_values=[kg_config.KG_MAX_COVERAGE_DAYS],
-        ),
-    ]
-
-    for var in kg_config_variables:
-        existing_var = (
-            db_session.query(KGConfig)
-            .filter(KGConfig.kg_variable_name == var.kg_variable_name)
-            .first()
-        )
-        if existing_var:
-            db_session.query(KGConfig).filter(
-                KGConfig.kg_variable_name == var.kg_variable_name
-            ).update(
-                {"kg_variable_values": var.kg_variable_values},
-                synchronize_session=False,
-            )
-        else:
-            db_session.add(var)
-
-    db_session.commit()
-
-
-def _validate_kg_config(kg_config: KGConfigSettings) -> None:
-    """
-    Raises an exception if the given `kg_config` is invalid; otherwise, returns `None`.
-    """
-
-    # TODO (raunakab):
-    # Figure out what needs to be validated.
-    return None
-
-
 def set_kg_processing_in_progress_status(
     db_session: Session, processing_type: KGProcessingType, in_progress: bool
 ) -> None:
@@ -207,3 +136,101 @@ def get_kg_processing_in_progress_status(
         return False
 
     return config.kg_variable_values[0] == "true"
+
+
+# API helpers
+
+
+def get_kg_config(db_session: Session) -> KGConfigAPIModel:
+    config = get_kg_config_settings(db_session=db_session)
+    return KGConfigAPIModel.from_kg_config_settings(config)
+
+
+def disable_kg(db_session: Session) -> None:
+    var = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED)
+        .first()
+    )
+
+    values = [bool_to_string(False)]
+
+    if var:
+        db_session.query(KGConfig).where(
+            KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED
+        ).update(
+            {"kg_variable_values": values},
+            synchronize_session=False,
+        )
+    else:
+        db_session.add(
+            KGConfig(
+                kg_variable_name=KGConfigVars.KG_ENABLED,
+                kg_variable_values=values,
+            )
+        )
+
+    db_session.commit()
+
+
+def enable_kg(
+    db_session: Session,
+    enable_req: EnableKGConfigRequest,
+) -> None:
+    # cannot be empty string
+    if not enable_req.vendor:
+        raise ValueError(
+            f"KG vendor must be specified; instead got {enable_req.vendor=}"
+        )
+
+    # cannot be empty list
+    if not enable_req.vendor_domains:
+        raise ValueError(
+            f"KG vendor domains must be specified; instead got {enable_req.vendor_domains=}"
+        )
+
+    vars = [
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_ENABLED,
+            kg_variable_values=[bool_to_string(True)],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR,
+            kg_variable_values=[enable_req.vendor],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR_DOMAINS,
+            kg_variable_values=enable_req.vendor_domains,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_IGNORE_EMAIL_DOMAINS,
+            kg_variable_values=enable_req.ignore_domains,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_COVERAGE_START,
+            kg_variable_values=[enable_req.coverage_start.strftime("%Y-%m-%d")],
+        ),
+    ]
+
+    for var in vars:
+        existing_var = (
+            db_session.query(KGConfig)
+            .filter(KGConfig.kg_variable_name == var.kg_variable_name)
+            .first()
+        )
+        if not existing_var:
+            db_session.add(var)
+            continue
+
+        db_session.query(KGConfig).filter(
+            KGConfig.kg_variable_name == var.kg_variable_name
+        ).update(
+            {"kg_variable_values": var.kg_variable_values},
+            synchronize_session=False,
+        )
+
+    db_session.commit()
+
+
+def bool_to_string(b: bool) -> str:
+    return "true" if b else "false"
