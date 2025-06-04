@@ -73,6 +73,7 @@ from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.gpts.api import router as gpts_router
+from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.long_term_logs.long_term_logs_api import (
     router as long_term_logs_router,
 )
@@ -352,6 +353,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)
     include_router_with_global_prefix_prepended(application, llm_admin_router)
+    include_router_with_global_prefix_prepended(application, kg_admin_router)
     include_router_with_global_prefix_prepended(application, llm_router)
     include_router_with_global_prefix_prepended(application, embedding_admin_router)
     include_router_with_global_prefix_prepended(application, embedding_router)

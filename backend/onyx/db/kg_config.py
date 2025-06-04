@@ -28,6 +28,9 @@ def get_kg_enablement(db_session: Session) -> bool:
 
 
 def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
+    # TODO (raunakab):
+    # Cleanup.
+
     results = db_session.query(KGConfig).all()
 
     kg_config_settings = KGConfigSettings()
@@ -73,6 +76,79 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
             )
 
     return kg_config_settings
+
+
+def update_kg_config_settings(
+    db_session: Session,
+    kg_config: KGConfigSettings,
+) -> None:
+    _validate_kg_config(kg_config=kg_config)
+
+    def bool_to_string(b: bool) -> str:
+        return "true" if b else "false"
+
+    kg_config_variables = [
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_ENABLED,
+            kg_variable_values=[bool_to_string(kg_config.KG_ENABLED)],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR,
+            kg_variable_values=[kg_config.KG_VENDOR],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR_DOMAINS,
+            kg_variable_values=kg_config.KG_VENDOR_DOMAINS,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_IGNORE_EMAIL_DOMAINS,
+            kg_variable_values=kg_config.KG_IGNORE_EMAIL_DOMAINS,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_EXTRACTION_IN_PROGRESS,
+            kg_variable_values=[bool_to_string(kg_config.KG_ENABLED)],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_CLUSTERING_IN_PROGRESS,
+            kg_variable_values=[bool_to_string(kg_config.KG_CLUSTERING_IN_PROGRESS)],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_COVERAGE_START,
+            kg_variable_values=[kg_config.KG_COVERAGE_START.strftime("%Y-%m-%d")],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_MAX_COVERAGE_DAYS,
+            kg_variable_values=[kg_config.KG_MAX_COVERAGE_DAYS],
+        ),
+    ]
+
+    for var in kg_config_variables:
+        existing_var = (
+            db_session.query(KGConfig)
+            .filter(KGConfig.kg_variable_name == var.kg_variable_name)
+            .first()
+        )
+        if existing_var:
+            db_session.query(KGConfig).filter(
+                KGConfig.kg_variable_name == var.kg_variable_name
+            ).update(
+                {"kg_variable_values": var.kg_variable_values},
+                synchronize_session=False,
+            )
+        else:
+            db_session.add(var)
+
+    db_session.commit()
+
+
+def _validate_kg_config(kg_config: KGConfigSettings) -> None:
+    """
+    Raises an exception if the given `kg_config` is invalid; otherwise, returns `None`.
+    """
+
+    # TODO (raunakab):
+    # Figure out what needs to be validated.
+    return None
 
 
 def set_kg_processing_in_progress_status(
