@@ -229,13 +229,16 @@ class SharepointConnector(LoadConnector, PollConnector):
 
     def _fetch_sites(self) -> list[SiteDescriptor]:
         sites = self.graph_client.sites.get_all().execute_query()
-        site_descriptors = [
-            SiteDescriptor(
-                url=sites.resource_url,
-                drive_name=None,
-                folder_path=None,
+        site_descriptors = []
+        for site in sites.current_page:
+            site_descriptors.append(
+                SiteDescriptor(
+                    url=site.web_url,
+                    drive_name=None,
+                    folder_path=None,
+                )
             )
-        ]
+
         return site_descriptors
 
     def _fetch_from_sharepoint(
