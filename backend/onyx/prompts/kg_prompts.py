@@ -554,7 +554,7 @@ outside of filters, and there is no ordering, no limiting their number, etc. So 
 tries to get information *across* documents which may be filtered by their related relationships and entities, but without \
 other constraints.
 
-2. 'SQL': Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
+2. SQL: Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
 if the query refers to specific entities that first need to be identified and then those entities are analyzed/searched/listed. \
 Examples here are 'what did I say about pricing in my call with Nike last week?' (the specific call needs to \
 be identified first and then analyzed),  \
@@ -567,10 +567,17 @@ Note:
  - here, you should look at the extracted entities and relationships and judge whether using them as filters \
 (using an *and*) would be appropriate to identify the range of underlying sources, or whether more \
 calculations would be needed to find the underlying sources ('last 2...', etc.) .
+ - It is also *critical* to look at the attributes of the entities! You only can use the given attributes (and their
+ values, if given) as where conditions etc in a SQL statement. So if you think you would 'want
+ to' have a where condition but there is not appropriate attribute, then you should not use the SQL strategy
+ but the SEARCH strategy. (A Search can always look through data and see what is the best fit, SQL needs to
+ be more specific.). On the other hand, if the question maps well to the entities and attributes, then
+ SQL may be a good choice.
  - Likely, if there are questions 'about something', then this only is used in a SQL statement or a filter \
  if it shows up as an entity or relationship in the extracted entities and relationships. Otherwise, it will \
  be part of the analysis/search. not the document identification.
- - note that we can only FILTER (SEARCH) or COMPUTE (SQL) using the extracted entities and relationships. \
+ - again, note that we can only FILTER (SEARCH) or COMPUTE (SQL) using the extracted entities (and their attributes)
+ and relationships. \
  So do not think that if there is another term in the question, it should be included in the SQL statement. \
  It cannot.
 
@@ -677,8 +684,8 @@ contains the relationship of the table row. Make sure that you do not return mor
 is a limit on source documents in the original SQL statement, the new SQL statement needs to have \
 the same limit.
 
-CRITICAL NOTE:
-- If you want to include a 'order-by' clause, YOU MUST include the the columns in the order-by clause \
+CRITICAL NOTES:
+ - If you want to include a 'order-by' clause, YOU MUST include the the columns in the order-by clause \
 also in the 'distinct' clause!
 
 Your task is then to create a new SQL statement that returns the source documents that are relevant to what the \
@@ -692,7 +699,7 @@ Here is the *original* SQL statement:
 
 Please structure your answer using <reasoning>, </reasoning>,<sql>, </sql> start and end tags as in:
 
-<reasoning>[think briefly through the problem step by step</reasoning> \
+<reasoning>[think very briefly through the problem step by step, not more than 2-3 sentences]</reasoning> \
 <sql>[the new SQL statement that returns the source documents involved in the original SQL statement]</sql>
 """.strip()
 
@@ -833,17 +840,25 @@ by the attribute 'created_date', you must also have a WHERE clause that checks w
 entity attribute contains 'created_date'. This is vital for proper ordering with null values.
 - Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
 have entities involved in the SELECT clause.
+- Questions like 'What did Paul work on last week?' should generally be handled by finding all entities \
+that reasonably relate to 'work entities' that are i) related to Paul, and ii) that were created or \
+updated (by him) last week. So this would likely be a UNION of multiple queries.
+- If you do joins consider the possibility that the second entity does not exist for all examples. \
+Therefore joins should generally be LEFT joins (or RIGHT joins) as appropriate. Think about which \
+entities you are interested in, and which ones provides attributes.
+- Joins should always be made on entities, not source documents!
 - Try to be as efficient as possible.
 
 APPROACH:
 Please think through this step by step. Make sure that you include all columns in the ORDER BY clause \
 also in the SELECT DISTINCT clause, \
-if applicable!
+if applicable! And again, joins should generally be LEFT JOINS!
+
 Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
 
 Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
 
-<reasoning>[go through the logic step by step]</reasoning>
+<reasoning>[think through the logic but do so extremely briefly! Not more than 3-4 sentences.]</reasoning>
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
 """.strip()
 
@@ -860,6 +875,9 @@ Guidance:
 SELECT statement as well! And it needs to be in the EXACT FORM! So if a \
 conversion took place, make sure to include the conversion in the SELECT and the ORDER BY clause!
  - never should 'source_document' be in the SELECT clause! Remove if present!
+ - if there are joins, they must be on entities, never sour ce documents
+ - if there are joins, consider the possibility that the second entity does not exist for all examples.\
+ Therefore consider using LEFT joins (or RIGHT joins) as appropriate.
 
 Draft SQL:
 {SEPARATOR_LINE}

@@ -17,6 +17,7 @@ from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
+from onyx.kg.utils.formatting_utils import format_entity
 
 
 def add_or_update_staging_entity(
@@ -44,7 +45,7 @@ def add_or_update_staging_entity(
     """
     entity_type = entity_type.upper()
     name = name.title()
-    id_name = f"{entity_type}::{name}"
+    id_name = format_entity(f"{entity_type}::{name.lower()}")
 
     # Create new entity
     stmt = (
@@ -99,17 +100,45 @@ def transfer_entity(
     Returns:
         KGEntity: The transferred entity
     """
+
+    entity_split = entity.entity_type_id_name.split("-")
+    if len(entity_split) == 2:
+        entity_class, entity_subtype = entity.entity_type_id_name.split("-")
+    else:
+        entity_class = None
+        entity_subtype = None
+
+    entity_key = entity.attributes.get("key")
+    entity_parent = entity.attributes.get("parent")
+
+    transfer_attributes = {}
+
+    for key in entity.attributes:
+        if (
+            (key in ("key", "parent") and entity_class)
+            or (key in ("object_type", "issuetype"))
+            or "_email" in key
+        ):
+            continue
+
+        transfer_attributes[key] = entity.attributes[key]
+
     # Create the transferred entity
     stmt = (
         pg_insert(KGEntity)
         .values(
-            id_name=f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}",
-            name=entity.name,
+            id_name=format_entity(
+                f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}"
+            ),
+            name=entity.name.casefold(),
+            entity_class=entity_class,
+            entity_subtype=entity_subtype,
+            entity_key=entity_key,
             alternative_names=entity.alternative_names or [],
             entity_type_id_name=entity.entity_type_id_name,
             document_id=entity.document_id,
             occurrences=entity.occurrences,
-            attributes=entity.attributes or {},
+            attributes=transfer_attributes,
             event_time=entity.event_time,
         )
         .on_conflict_do_update(
@@ -135,7 +164,14 @@ def transfer_entity(
     # Update transferred
     db_session.query(KGEntityExtractionStaging).filter(
         KGEntityExtractionStaging.id_name == entity.id_name
-    ).update({"transferred_id_name": new_entity.id_name})
+    ).update(
+        {
+            "transferred_id_name": new_entity.id_name,
+            "entity_class": entity_class,
+            "entity_key": entity_key,
+            "parent_key": entity_parent,
+        }
+    )
     db_session.flush()
 
     return new_entity
@@ -335,3 +371,134 @@ def delete_from_kg_entities__no_commit(
     db_session.query(KGEntity).filter(KGEntity.document_id.in_(document_ids)).delete(
         synchronize_session=False
     )
+
+
+def get_parent_child_relationships_from_extractions(
+    db_session: Session,
+) -> tuple[list[dict], list[dict]]:
+    """Get parent-child relationships from the normalized table."""
+    # entity_type not required here, will be same as parent
+    stmt = select(
+        KGEntityExtractionStaging.id_name,
+        KGEntityExtractionStaging.entity_class,
+        KGEntityExtractionStaging.entity_subtype,
+        KGEntityExtractionStaging.entity_key,
+        KGEntityExtractionStaging.parent_key,
+        KGEntityExtractionStaging.document_id,
+        KGEntityExtractionStaging.transferred_id_name,
+    ).where(KGEntityExtractionStaging.parent_key.isnot(None))
+
+    base_result = db_session.execute(stmt).fetchall()
+
+    # Get all unique parent keys
+    parent_keys = [row[4] for row in base_result if row[4] is not None]
+    child_keys = [row[3] for row in base_result if row[3] is not None]
+
+    child_parent_map = {
+        row[3]: row[4]
+        for row in base_result
+        if row[3] is not None and row[4] is not None
+    }
+
+    # Find parents and create mapping of parent_key to id_name
+    parent_id_map = {}
+    if parent_keys:
+        # parents are already transferred at this point
+        parent_stmt_normalized = select(
+            KGEntity.entity_key,
+            KGEntity.entity_class,
+            KGEntity.entity_subtype,
+            KGEntity.id_name,
+            KGEntity.document_id,
+        ).where(
+            KGEntity.entity_key.in_(parent_keys) | KGEntity.document_id.in_(parent_keys)
+        )
+        parent_normalized_result = db_session.execute(parent_stmt_normalized).fetchall()
+        parent_id_map = {
+            parent_key: {
+                "transferred_id_name": transferred_id_name,
+                "parent_subtype": parent_subtype,
+                "parent_class": parent_class,
+                "parent_document_id": parent_document_id,
+            }
+            for (
+                parent_key,
+                parent_class,
+                parent_subtype,
+                transferred_id_name,
+                parent_document_id,
+            ) in parent_normalized_result
+        }
+
+    # Create the relationship dictionary using defaultdict
+    parent_child_relationships: list[dict] = []
+    parent_child_relationship_types: list[dict] = []
+
+    # Build the relationships using the parent_id_map
+    for (
+        child_id_name,
+        child_entity_class,
+        _,
+        child_key,
+        parent_key,
+        document_id,
+        child_transferred_id_name,
+    ) in base_result:
+        if parent_key in parent_id_map:
+
+            relationship_type = "has_subcomponent"
+            parent_id_name = parent_id_map[parent_key]["transferred_id_name"]
+            parent_entity_type = parent_id_name.split("::")[0]
+            child_entity_type = child_transferred_id_name.split("::")[0]
+
+            parent_child_relationships.append(
+                {
+                    "relationship_id_name": f"{parent_id_name}__{relationship_type}__{child_transferred_id_name}",
+                    "source_document_id": document_id,
+                    "occurrences": 1,
+                }
+            )
+
+            parent_child_relationship_types.append(
+                {
+                    "source_entity_type": parent_entity_type,
+                    "relationship_type": "has_subcomponent",
+                    "target_entity_type": child_entity_type,
+                }
+            )
+
+            # add additional level of relationship if parent is also a child
+            if parent_key in child_keys:
+                grandparent_key = child_parent_map[parent_key]
+
+                grandparent_id_name = parent_id_map[grandparent_key][
+                    "transferred_id_name"
+                ]
+                grandparent_entity_type = grandparent_id_name.split("::")[0]
+                parent_document_id = parent_id_map[parent_key]["parent_document_id"]
+
+                parent_child_relationships.append(
+                    {
+                        "relationship_id_name": f"{grandparent_id_name}__{relationship_type}__{child_transferred_id_name}",
+                        "source_document_id": parent_document_id,
+                        "occurrences": 1,
+                    }
+                )
+
+                parent_child_relationship_types.append(
+                    {
+                        "source_entity_type": grandparent_entity_type,
+                        "relationship_type": "has_subcomponent",
+                        "target_entity_type": child_entity_type,
+                    }
+                )
+
+    return parent_child_relationships, parent_child_relationship_types
+
+
+def get_entity_name(db_session: Session, entity_id_name: str) -> str | None:
+    """Get the name of an entity."""
+    entity = (
+        db_session.query(KGEntity).filter(KGEntity.id_name == entity_id_name).first()
+    )
+    return entity.name if entity else None

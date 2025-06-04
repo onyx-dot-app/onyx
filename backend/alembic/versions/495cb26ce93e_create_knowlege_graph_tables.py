@@ -211,6 +211,9 @@ def upgrade() -> None:
         "kg_entity",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
+        sa.Column("entity_class", sa.String(), nullable=True, index=True),
+        sa.Column("entity_subtype", sa.String(), nullable=True, index=True),
+        sa.Column("entity_key", sa.String(), nullable=True, index=True),
         sa.Column("name_trigrams", postgresql.ARRAY(sa.String(3)), nullable=True),
         sa.Column("document_id", sa.String(), nullable=True, index=True),
         sa.Column(
@@ -284,6 +287,10 @@ def upgrade() -> None:
         sa.Column("boosts", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("attributes", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("transferred_id_name", sa.String(), nullable=True, default=None),
+        sa.Column("entity_class", sa.String(), nullable=True, index=True),
+        sa.Column("entity_key", sa.String(), nullable=True, index=True),
+        sa.Column("entity_subtype", sa.String(), nullable=True, index=True),
+        sa.Column("parent_key", sa.String(), nullable=True, index=True),
         sa.Column("event_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")

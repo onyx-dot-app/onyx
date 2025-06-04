@@ -842,6 +842,15 @@ class KGEntity(Base):
 
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    entity_class: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+    entity_key: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+    entity_subtype: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
 
     name_trigrams: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String(3)),
@@ -976,6 +985,25 @@ class KGEntityExtractionStaging(Base):
     transferred_id_name: Mapped[str | None] = mapped_column(
         NullFilteredString,
         nullable=True,
+    )
+
+    # Basic entity information
+    entity_class: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    # Basic entity information
+    entity_key: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    entity_subtype: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    # Basic entity information
+    parent_key: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
     )
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
