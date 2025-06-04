@@ -1,8 +1,6 @@
-# File: onyx/connectors/github_code/connector.py
+	# File: backend/onyx/connectors/github_code/connector.py
 
 import os
-import io
-import hashlib
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Generator
 from fnmatch import fnmatch
@@ -68,7 +66,12 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load credentials such as a GitHub access token."""
-        token = credentials.get("github_access_token") or credentials.get("access_token")
+        # Try multiple possible credential keys
+        token = (credentials.get("github_access_token") or 
+                credentials.get("github_token") or 
+                credentials.get("access_token") or
+                credentials.get("github_code_access_token"))
+                
         if not token:
             raise ConnectorMissingCredentialError("GitHub")
             
@@ -264,7 +267,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                 file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{file_path}"
                 
                 try:
-                    file_resp = requests.get(file_url, headers=self.github_headers, timeout=30)
+                    file_resp = requests.get(file_url, timeout=30)
                     if file_resp.status_code == 200:
                         content = file_resp.text
                         
@@ -277,7 +280,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                             docs.append(doc)
                             
                 except Exception as e:
-                    logger.debug(f"Error fetching file {file_path}: {e}")
+                    logger.error(f"Error fetching file {file_path}: {e}")
                     continue
                     
         except Exception as e:
@@ -316,7 +319,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{filepath}"
         
         try:
-            resp = requests.get(file_url, headers=self.github_headers, timeout=30)
+            resp = requests.get(file_url, timeout=30)
             if resp.status_code == 200:
                 content = resp.text
                 doc = self._create_document(repo_name, filepath, content, branch)
@@ -357,28 +360,33 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         # Extract just the filename for the title
         filename = os.path.basename(file_path)
         
-        # Create the document
-        doc = Document(
-            id=doc_id,
-            sections=[Section(
-                link=doc_url,
-                text=content
-            )],
-            source=DocumentSource.GITHUB,
-            semantic_identifier=f"{repo_name}/{file_path}",
-            doc_updated_at=datetime.now(timezone.utc),
-            primary_owners=[],
-            secondary_owners=[],
-            metadata={
-                "repo_owner": self.repo_owner,
-                "repo_name": repo_name,
-                "file_path": file_path,
-                "filename": filename,
-                "language": self._infer_language(file_path) or "unknown",
-            }
-        )
-        
-        return doc
+        try:
+            # Create Section with proper structure - pass link and text as keyword arguments
+            section = Section(link=doc_url, text=content)
+            
+            # Create the document
+            doc = Document(
+                id=doc_id,
+                sections=[section],  # Pass the Section object, not a dict
+                source=DocumentSource.GITHUB,
+                semantic_identifier=f"{repo_name}/{file_path}",
+                doc_updated_at=datetime.now(timezone.utc),
+                primary_owners=[],
+                secondary_owners=[],
+                metadata={
+                    "repo_owner": self.repo_owner,
+                    "repo_name": repo_name,
+                    "file_path": file_path,
+                    "filename": filename,
+                    "language": self._infer_language(file_path) or "unknown",
+                }
+            )
+            
+            return doc
+            
+        except Exception as e:
+            logger.error(f"Error creating document for {file_path}: {e}")
+            return None
 
     def _infer_language(self, file_path: str) -> Optional[str]:
         """Infer programming language from file extension."""
