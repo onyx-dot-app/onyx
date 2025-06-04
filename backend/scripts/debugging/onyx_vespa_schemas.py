@@ -11,14 +11,19 @@ from shared_configs.configs import SUPPORTED_EMBEDDING_MODELS
 logger = setup_logger()
 
 
-def write_schema(index_name: str, dim: int, template: jinja2.Template) -> None:
+def write_schema(
+    index_name: str,
+    dim: int,
+    embedding_precision: EmbeddingPrecision,
+    template: jinja2.Template,
+) -> None:
     index_filename = index_name + ".sd"
 
     schema = template.render(
         multi_tenant=True,
         schema_name=index_name,
         dim=dim,
-        embedding_precision=EmbeddingPrecision.FLOAT.value,
+        embedding_precision=embedding_precision.value,
     )
 
     with open(index_filename, "w", encoding="utf-8") as f:
@@ -41,8 +46,13 @@ def main() -> None:
 
     num_indexes = 0
     for model in SUPPORTED_EMBEDDING_MODELS:
-        write_schema(model.index_name, model.dim, template)
-        write_schema(model.index_name + "__danswer_alt_index", model.dim, template)
+        write_schema(model.index_name, model.dim, model.embedding_precision, template)
+        write_schema(
+            model.index_name + "__danswer_alt_index",
+            model.dim,
+            model.embedding_precision,
+            template,
+        )
         num_indexes += 2
 
     logger.info(f"Wrote {num_indexes} indexes.")
