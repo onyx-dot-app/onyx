@@ -1339,6 +1339,8 @@ class Connector(Base):
         comment="Whether this connector should extract knowledge graph entities",
     )
 
+    kg_coverage_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     refresh_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prune_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(

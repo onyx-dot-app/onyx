@@ -191,6 +191,7 @@ class KGDocumentClassificationPrompt(BaseModel):
 class KGConnectorData(BaseModel):
     id: int
     source: str
+    kg_coverage_days: int | None
 
 
 class KGStage(str, Enum):
