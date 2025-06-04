@@ -100,6 +100,10 @@ def upgrade() -> None:
                 ],
             },
             {"kg_variable_name": "KG_MAX_COVERAGE_DAYS", "kg_variable_values": ["90"]},
+            {
+                "kg_variable_name": "KG_MAX_PARENT_RECURSION_DEPTH",
+                "kg_variable_values": ["2"],
+            },
         ],
     )
 
