@@ -182,7 +182,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
               <div className="px-2 flex py-4 items-center gap-x-2 flex-wrap">
                 <FilterIcon className="text-text-800" size={16} />
                 <AssistantBadgeSelector
-                  text="Pinned"
+                  text="Закреплен"
                   selected={assistantFilters[AssistantFilter.Pinned]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Pinned)
@@ -190,7 +190,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text="Mine"
+                  text="Личный"
                   selected={assistantFilters[AssistantFilter.Mine]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Mine)
@@ -198,7 +198,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text="Private"
+                  text="Приватный"
                   selected={assistantFilters[AssistantFilter.Private]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Private)
@@ -206,7 +206,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                 />
 
                 <AssistantBadgeSelector
-                  text="Public"
+                  text="Публичный"
                   selected={assistantFilters[AssistantFilter.Public]}
                   toggleFilter={() =>
                     toggleAssistantFilter(AssistantFilter.Public)

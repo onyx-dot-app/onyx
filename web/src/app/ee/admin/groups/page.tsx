@@ -59,7 +59,7 @@ const Main = () => {
       {isAdmin && (
         <CreateButton
           onClick={() => setShowForm(true)}
-          text="Create New User Group"
+          text="Создать новую группу"
         />
       )}
       {data.length > 0 && (

@@ -114,8 +114,8 @@ export default function FunctionalHeader({
               documentSidebarVisible && !sidebarToggled
                 ? "left-[calc(50%-175px)]"
                 : !documentSidebarVisible && sidebarToggled
-                  ? "left-[calc(50%+100px)]"
-                  : "left-1/2"
+                ? "left-[calc(50%+100px)]"
+                : "left-1/2"
             }
             ${
               documentSidebarVisible || sidebarToggled
@@ -155,7 +155,7 @@ export default function FunctionalHeader({
               </div>
             )}
 
-            <div className="mobile:hidden flex my-auto">
+            <div className="flex my-auto">
               <UserDropdown
                 hideUserDropdown={hideUserDropdown}
                 page={page}

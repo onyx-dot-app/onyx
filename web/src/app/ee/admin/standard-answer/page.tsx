@@ -281,7 +281,7 @@ const StandardAnswersTable = ({
               <FiTag size={16} />
             </div>
           }
-          defaultDisplay="All Categories"
+          defaultDisplay="Все категории"
         />
 
         <div className="flex flex-wrap pb-4 mt-3">

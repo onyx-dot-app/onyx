@@ -20,7 +20,7 @@ export const ConnectorEditor = ({
   return (
     <ConnectorMultiSelect
       name="connectors"
-      label="Connectors"
+      label="Коннекторы"
       connectors={privateCCPairs}
       selectedIds={selectedCCPairIds}
       onChange={setSetCCPairIds}

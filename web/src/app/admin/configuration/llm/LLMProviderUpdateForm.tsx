@@ -315,11 +315,11 @@ export function LLMProviderUpdateForm({
               {llmProviderDescriptor.llm_names.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
-                  subtext="The model to use by default for this provider unless otherwise specified."
-                  label="Default Model"
+                  subtext="Модель, используемая по умолчанию для этого поставщика, если не указано иное."
+                  label="LLM-модель по умолчанию"
                   options={llmProviderDescriptor.llm_names.map((name) => ({
-                    // don't clean up names here to give admins descriptive names / handle duplicates
-                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                    // не очищайте имена здесь, чтобы дать администраторам описательные имена / обрабатывать дубликаты
+                    // как us.anthropic.claude-3-7-sonnet-20250219-v1:0 и anthropic.claude-3-7-sonnet-20250219-v1:0
                     name: name,
                     value: name,
                   }))}
@@ -328,9 +328,9 @@ export function LLMProviderUpdateForm({
               ) : (
                 <TextFormField
                   name="default_model_name"
-                  subtext="The model to use by default for this provider unless otherwise specified."
-                  label="Default Model"
-                  placeholder="Например gpt-4"
+                  subtext="Модель, используемая по умолчанию для этого поставщика, если не указано иное."
+                  label="LLM-модель по дефолт"
+                  Placeholder="Например gpt-4"
                 />
               )}
 

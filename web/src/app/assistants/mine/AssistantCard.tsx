@@ -348,7 +348,7 @@ const AssistantCard: React.FC<{
                         !pinned
                       );
                     }}
-                    className="hover:bg-neutral-100  dark:hover:bg-neutral-700 dark:bg-[#2E2E2D] px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-neutral-400 dark:border-neutral-600 flex items-center w-[65px]"
+                    className="hover:bg-neutral-100  dark:hover:bg-neutral-700 dark:bg-[#2E2E2D] px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-neutral-400 dark:border-neutral-600 flex items-center"
                   >
                     <PinnedIcon size={12} />
                     {!pinned ? (

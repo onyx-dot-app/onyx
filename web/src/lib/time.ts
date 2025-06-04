@@ -1,10 +1,10 @@
 import { User } from "./types";
 
-const conditionallyAddPlural = (noun: string, cnt: number) => {
+const conditionallyAddPlural = (solo: string, noun: string, cnt: number) => {
   if (cnt > 1) {
-    return `${noun}s`;
+    return `${noun}`;
   }
-  return noun;
+  return solo;
 };
 
 export const timeAgo = (
@@ -20,41 +20,63 @@ export const timeAgo = (
 
   if (secondsDiff < 60) {
     return `${secondsDiff} ${conditionallyAddPlural(
-      "second",
+      "секунду",
+      "секунд",
       secondsDiff
-    )} ago`;
+    )} назад`;
   }
 
   const minutesDiff = Math.floor(secondsDiff / 60);
   if (minutesDiff < 60) {
     return `${minutesDiff} ${conditionallyAddPlural(
-      "minute",
+      "минуту",
+      "минут",
       secondsDiff
-    )} ago`;
+    )} назад`;
   }
 
   const hoursDiff = Math.floor(minutesDiff / 60);
   if (hoursDiff < 24) {
-    return `${hoursDiff} ${conditionallyAddPlural("hour", hoursDiff)} ago`;
+    return `${hoursDiff} ${conditionallyAddPlural(
+      "час",
+      "часов",
+      hoursDiff
+    )} назад`;
   }
 
   const daysDiff = Math.floor(hoursDiff / 24);
   if (daysDiff < 30) {
-    return `${daysDiff} ${conditionallyAddPlural("day", daysDiff)} ago`;
+    return `${daysDiff} ${conditionallyAddPlural(
+      "день",
+      "дней",
+      daysDiff
+    )} назад`;
   }
 
   const weeksDiff = Math.floor(daysDiff / 7);
   if (weeksDiff < 4) {
-    return `${weeksDiff} ${conditionallyAddPlural("week", weeksDiff)} ago`;
+    return `${weeksDiff} ${conditionallyAddPlural(
+      "неделя",
+      "недель",
+      weeksDiff
+    )} назад`;
   }
 
   const monthsDiff = Math.floor(daysDiff / 30);
   if (monthsDiff < 12) {
-    return `${monthsDiff} ${conditionallyAddPlural("month", monthsDiff)} ago`;
+    return `${monthsDiff} ${conditionallyAddPlural(
+      "месяц",
+      "месяцев",
+      monthsDiff
+    )} назад`;
   }
 
   const yearsDiff = Math.floor(monthsDiff / 12);
-  return `${yearsDiff} ${conditionallyAddPlural("year", yearsDiff)} ago`;
+  return `${yearsDiff} ${conditionallyAddPlural(
+    "год",
+    "лет",
+    yearsDiff
+  )} назад`;
 };
 
 export function localizeAndPrettify(dateString: string) {
@@ -68,7 +90,7 @@ export function humanReadableFormat(dateString: string): string {
 
   // Use Intl.DateTimeFormat to format the date
   // Specify the locale as 'en-US' and options for month, day, and year
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const formatter = new Intl.DateTimeFormat("ru-RU", {
     month: "long", // full month name
     day: "numeric", // numeric day
     year: "numeric", // numeric year
@@ -84,7 +106,7 @@ export function humanReadableFormatWithTime(datetimeString: string): string {
 
   // Use Intl.DateTimeFormat to format the date
   // Specify the locale as 'en-US' and options for month, day, and year
-  const formatter = new Intl.DateTimeFormat("en-US", {
+  const formatter = new Intl.DateTimeFormat("ru-RU", {
     month: "long", // full month name
     day: "numeric", // numeric day
     year: "numeric", // numeric year

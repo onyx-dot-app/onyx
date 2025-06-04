@@ -113,7 +113,7 @@ function ActionForm({
         <TextFormField
           name="definition"
           label="Определение"
-          subtext="Укажите схему OpenAPI, которая определяет API, которые вы хотите сделать доступными в рамках этого действия."
+          subtext="Укажите схему OpenAPI, которая определяет API, которые вы хотите сделать доступными в рамках этого инструмента."
           placeholder="Введите здесь схему OpenAPI"
           isTextArea={true}
           defaultHeight="h-96"

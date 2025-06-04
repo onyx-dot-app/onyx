@@ -26,7 +26,10 @@ export default async function Page() {
         <Separator />
 
         <Title>{i18n.t(k.CREATE_AN_ASSISTANT)}</Title>
-        <CreateButton href="/assistants/new?admin=true" text="New Assistant" />
+        <CreateButton
+          href="/assistants/new?admin=true"
+          text="Новый ассистент"
+        />
 
         <Separator />
 

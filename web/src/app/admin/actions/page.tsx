@@ -33,7 +33,7 @@ export default async function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ToolIcon size={32} className="my-auto" />}
-        title="Действия"
+        title="Инструменты"
       />
 
       <Text className="mb-2">{i18n.t(k.ACTIONS_ALLOW_ASSISTANTS_TO_RE)}</Text>

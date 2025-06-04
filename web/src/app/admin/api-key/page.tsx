@@ -32,7 +32,7 @@ import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 import CreateButton from "@/components/ui/createButton";
 
-const API_KEY_TEXT = `API Keys allow you to access SmartSearch APIs programmatically. Click the button below to generate a new API Key.`;
+const API_KEY_TEXT = `Ключи API позволяют получить программный доступ к API SmartSearch. Нажмите кнопку ниже, чтобы сгенерировать новый ключ API.`;
 
 function NewApiKeyModal({
   apiKey,
@@ -115,7 +115,7 @@ function Main() {
   const newApiKeyButton = (
     <CreateButton
       onClick={() => setShowCreateUpdateForm(true)}
-      text="Create API Key"
+      text="Создать API-ключ"
     />
   );
 
@@ -279,7 +279,7 @@ function Main() {
 export default function Page() {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title="API Keys" icon={<KeyIcon size={32} />} />
+      <AdminPageTitle title="API-ключи" icon={<KeyIcon size={32} />} />
 
       <Main />
     </div>

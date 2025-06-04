@@ -685,21 +685,21 @@ export function AssistantEditor({
               <p className="text-base font-normal text-2xl">
                 {existingPersona ? (
                   <>
-                    Edit assistant <b>{existingPersona.name}</b>
+                    Редактировать ассистента <b>{existingPersona.name}</b>
                   </>
                 ) : (
-                  "Create an Assistant"
+                  "Создание нового ассистента"
                 )}
               </p>
               <div className="max-w-4xl w-full">
                 <Separator />
                 <div className="flex gap-x-2 items-center">
                   <div className="block font-medium text-sm">
-                    Assistant Icon
+                    Значок ассистента
                   </div>
                 </div>
                 <SubLabel>
-                  The icon that will visually represent your Assistant
+                  Значок, который будет визуально представлять вашего ассистента
                 </SubLabel>
                 <div className="flex gap-x-2 items-center">
                   <div
@@ -713,14 +713,14 @@ export function AssistantEditor({
                     {values.uploaded_image ? (
                       <img
                         src={URL.createObjectURL(values.uploaded_image)}
-                        alt="Uploaded assistant icon"
+                        alt="Загрузить значок ассистента"
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : existingPersona?.uploaded_image_id &&
                       !removePersonaImage ? (
                       <img
                         src={buildImgUrl(existingPersona?.uploaded_image_id)}
-                        alt="Uploaded assistant icon"
+                        alt="Загрузить значок ассистента"
                         className="w-12 h-12 rounded-full object-cover"
                       />
                     ) : (
@@ -749,7 +749,7 @@ export function AssistantEditor({
                       }}
                     >
                       <CameraIcon size={14} />
-                      Upload {values.uploaded_image && "New "}Image
+                      Загрузить {values.uploaded_image && "новое "}изображение
                     </Button>
 
                     {values.uploaded_image && (
@@ -764,8 +764,10 @@ export function AssistantEditor({
                         }}
                       >
                         <TrashIcon className="h-3 w-3" />
-                        {removePersonaImage ? "Revert to Previous " : "Remove "}
-                        Image
+                        {removePersonaImage
+                          ? "Вернуться к предыдущему"
+                          : "Удалить"}
+                        Изображение
                       </Button>
                     )}
 
@@ -789,7 +791,7 @@ export function AssistantEditor({
                           }}
                         >
                           <NewChatIcon size={14} />
-                          Generate Icon
+                          Генерировать значок
                         </Button>
                       )}
 
@@ -808,7 +810,7 @@ export function AssistantEditor({
                           }}
                         >
                           <SwapIcon className="h-3 w-3" />
-                          Revert to Previous Image
+                          Вернуться к предыдущему изображению
                         </Button>
                       )}
 
@@ -826,7 +828,7 @@ export function AssistantEditor({
                           }}
                         >
                           <TrashIcon className="h-3 w-3" />
-                          Remove Image
+                          Удалить изображение
                         </Button>
                       )}
                   </div>
@@ -837,7 +839,7 @@ export function AssistantEditor({
                 maxWidth="max-w-lg"
                 name="name"
                 label="Название"
-                placeholder="Email Ассистент"
+                placeholder="Копирайтер"
                 aria-label="assistant-name-input"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
@@ -871,7 +873,7 @@ export function AssistantEditor({
                         <div>
                           <div className="flex items-start gap-x-2">
                             <p className="block font-medium text-sm">
-                              Knowledge
+                              База знаний
                             </p>
                             <div className="flex items-center">
                               <TooltipProvider delayDuration={0}>
@@ -899,8 +901,9 @@ export function AssistantEditor({
                                   {ccPairs.length === 0 && (
                                     <TooltipContent side="top" align="center">
                                       <p className="bg-background-900 max-w-[200px] text-sm rounded-lg p-1.5 text-white">
-                                        To use the Knowledge Action, you need to
-                                        have at least one Connector configured.
+                                        Чтобы использовать действие «Знание»,
+                                        вам необходимо настроить хотя бы один
+                                        соединитель.
                                       </p>
                                     </TooltipContent>
                                   )}
@@ -936,7 +939,7 @@ export function AssistantEditor({
                                   <BookIcon size={24} />
                                 </div>
                                 <p className="font-medium text-xs">
-                                  Team Knowledge
+                                  База знаний группы
                                 </p>
                               </div>
 
@@ -957,7 +960,7 @@ export function AssistantEditor({
                                   <FileIcon size={24} />
                                 </div>
                                 <p className="font-medium text-xs">
-                                  User Knowledge
+                                  База знаний пользователя
                                 </p>
                               </div>
                             </div>
@@ -970,8 +973,8 @@ export function AssistantEditor({
                         !admin && (
                           <div className="text-sm flex flex-col items-start">
                             <SubLabel>
-                              Click below to add documents or folders from the
-                              My Document feature
+                              Нажмите ниже, чтобы добавить документы или папки
+                              из функции «Мой документ»
                             </SubLabel>
                             {(selectedFiles.length > 0 ||
                               selectedFolders.length > 0) && (
@@ -998,7 +1001,7 @@ export function AssistantEditor({
                               onClick={() => setFilePickerModalOpen(true)}
                               className="text-primary hover:underline"
                             >
-                              + Add User Files
+                              + Добавить файлы пользователя
                             </button>
                           </div>
                         )}
@@ -1009,22 +1012,22 @@ export function AssistantEditor({
                             <div>
                               <SubLabel>
                                 <>
-                                  Select which{" "}
+                                  Выберите, какие{" "}
                                   {!user || user.role === "admin" ? (
                                     <Link
                                       href="/admin/documents/sets"
                                       className="font-semibold underline hover:underline text-text"
                                       target="_blank"
                                     >
-                                      Document Sets
+                                      наборы документов
                                     </Link>
                                   ) : (
-                                    "Team Document Sets"
+                                    "наборы документов"
                                   )}{" "}
-                                  this Assistant should use to inform its
-                                  responses. If none are specified, the
-                                  Assistant will reference all available
-                                  documents.
+                                  должен использовать этот ассистент для
+                                  формирования своих ответов. Если ни один из
+                                  них не указан, ассистент будет ссылаться на
+                                  все доступные документы.
                                 </>
                               </SubLabel>
                             </div>
@@ -1065,7 +1068,7 @@ export function AssistantEditor({
                                   href="/admin/documents/sets/new"
                                   className="text-primary hover:underline"
                                 >
-                                  + Create Document Set
+                                  + Создать набор документов
                                 </Link>
                               </p>
                             )}
@@ -1106,7 +1109,9 @@ export function AssistantEditor({
 
                   <Separator />
                   <div className="py-2">
-                    <p className="block font-medium text-sm mb-2">Actions</p>
+                    <p className="block font-medium text-sm mb-2">
+                      Инструменты
+                    </p>
 
                     {imageGenerationTool && (
                       <>
@@ -1114,15 +1119,15 @@ export function AssistantEditor({
                           <BooleanFormField
                             name={`enabled_tools_map.${imageGenerationTool.id}`}
                             label={imageGenerationTool.display_name}
-                            subtext="Generate and manipulate images using AI-powered tools"
+                            subtext="Создавайте и обрабатывайте изображения с помощью инструментов на базе ИИ"
                             disabled={
                               !currentLLMSupportsImageOutput ||
                               !isImageGenerationAvailable
                             }
                             disabledTooltip={
                               !currentLLMSupportsImageOutput
-                                ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
-                                : "Image Generation requires an OpenAI or Azure Dall-E configuration."
+                                ? "Чтобы использовать генерацию изображений, выберите GPT-4 или другую совместимую с изображениями модель в качестве модели по умолчанию для этого помощника."
+                                : "Для генерации изображений требуется конфигурация OpenAI или Azure Dall-E."
                             }
                           />
                         </div>
@@ -1134,7 +1139,7 @@ export function AssistantEditor({
                         <BooleanFormField
                           name={`enabled_tools_map.${internetSearchTool.id}`}
                           label={internetSearchTool.display_name}
-                          subtext="Access real-time information and search the web for up-to-date results"
+                          subtext="Получайте доступ к информации в режиме реального времени и ищите в Интернете актуальные результаты"
                         />
                       </>
                     )}
@@ -1155,7 +1160,9 @@ export function AssistantEditor({
 
               <div className="-mt-2">
                 <div className="flex gap-x-2 mb-2 items-center">
-                  <div className="block font-medium text-sm">Default Model</div>
+                  <div className="block font-medium text-sm">
+                    Модель по умолчанию
+                  </div>
                 </div>
                 <LLMSelector
                   llmProviders={llmProviders}
