@@ -5,6 +5,8 @@ from typing import Dict
 
 from pydantic import BaseModel
 
+from onyx.configs.kg_configs import KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
+
 
 class KGConfigSettings(BaseModel):
     KG_ENABLED: bool = False
@@ -15,7 +17,7 @@ class KGConfigSettings(BaseModel):
     KG_CLUSTERING_IN_PROGRESS: bool = False
     KG_COVERAGE_START: datetime = datetime(1970, 1, 1)
     KG_MAX_COVERAGE_DAYS: int = 10000
-    KG_MAX_PARENT_RECURSION_DEPTH: int = 2
+    KG_MAX_PARENT_RECURSION_DEPTH: int = KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
 
 
 class KGConfigVars(str, Enum):

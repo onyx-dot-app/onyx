@@ -51,14 +51,11 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
             )
 
         elif result.kg_variable_name == KGConfigVars.KG_MAX_COVERAGE_DAYS:
-            kg_max_coverage_days_str: str = "10000"
-            if result.kg_variable_values:
-                kg_max_coverage_days_str = result.kg_variable_values[0] or "10000"
-                if not kg_max_coverage_days_str.isdigit():
-                    raise ValueError(
-                        f"KG_MAX_COVERAGE_DAYS is not a number: {kg_max_coverage_days_str}"
-                    )
-
+            kg_max_coverage_days_str = result.kg_variable_values[0]
+            if not kg_max_coverage_days_str.isdigit():
+                raise ValueError(
+                    f"KG_MAX_COVERAGE_DAYS is not a number: {kg_max_coverage_days_str}"
+                )
             kg_config_settings.KG_MAX_COVERAGE_DAYS = max(
                 0, int(kg_max_coverage_days_str)
             )
@@ -72,14 +69,11 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
                 result.kg_variable_values[0] == "true"
             )
         elif result.kg_variable_name == KGConfigVars.KG_MAX_PARENT_RECURSION_DEPTH:
-            kg_max_parent_recursion_depth_str: str = "2"
-            if result.kg_variable_values:
-                kg_max_parent_recursion_depth_str = result.kg_variable_values[0] or "2"
-                if not kg_max_parent_recursion_depth_str.isdigit():
-                    raise ValueError(
-                        f"KG_MAX_PARENT_RECURSION_DEPTH is not a number: {kg_max_parent_recursion_depth_str}"
-                    )
-
+            kg_max_parent_recursion_depth_str = result.kg_variable_values[0]
+            if not kg_max_parent_recursion_depth_str.isdigit():
+                raise ValueError(
+                    f"KG_MAX_PARENT_RECURSION_DEPTH is not a number: {kg_max_parent_recursion_depth_str}"
+                )
             kg_config_settings.KG_MAX_PARENT_RECURSION_DEPTH = max(
                 0, int(kg_max_parent_recursion_depth_str)
             )
