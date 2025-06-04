@@ -699,7 +699,7 @@ Here is the *original* SQL statement:
 
 Please structure your answer using <reasoning>, </reasoning>,<sql>, </sql> start and end tags as in:
 
-<reasoning>[think briefly through the problem step by step</reasoning> \
+<reasoning>[think very briefly through the problem step by step, not more than 2-3 sentences]</reasoning> \
 <sql>[the new SQL statement that returns the source documents involved in the original SQL statement]</sql>
 """.strip()
 
@@ -840,20 +840,25 @@ by the attribute 'created_date', you must also have a WHERE clause that checks w
 entity attribute contains 'created_date'. This is vital for proper ordering with null values.
 - Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
 have entities involved in the SELECT clause.
-- If you do joins consider the possibility that the second entity does not exist for all examples.\
- Therefore consider using LEFT joins (or RIGHT joins) as appropriate.
+- Questions like 'What did Paul work on last week?' should generally be handled by finding all entities \
+that reasonably relate to 'work entities' that are i) related to Paul, and ii) that were created or \
+updated (by him) last week. So this would likely be a UNION of multiple queries.
+- If you do joins consider the possibility that the second entity does not exist for all examples. \
+Therefore joins should generally be LEFT joins (or RIGHT joins) as appropriate. Think about which \
+entities you are interested in, and which ones provides attributes.
 - Joins should always be made on entities, not source documents!
 - Try to be as efficient as possible.
 
 APPROACH:
 Please think through this step by step. Make sure that you include all columns in the ORDER BY clause \
 also in the SELECT DISTINCT clause, \
-if applicable!
+if applicable! And again, joins should generally be LEFT JOINS!
+
 Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
 
 Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
 
-<reasoning>[go through the logic step by step]</reasoning>
+<reasoning>[think through the logic but do so extremely briefly! Not more than 3-4 sentences.]</reasoning>
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
 """.strip()
 
