@@ -40,3 +40,5 @@ next-env.d.ts
 /user_auth.json
 /build-archive.log
 /test-results
+
+/src/lib/generated
