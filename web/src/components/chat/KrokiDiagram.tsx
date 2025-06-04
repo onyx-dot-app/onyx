@@ -1,42 +1,74 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, Loader2, Download, Copy, Maximize2, Code as CodeIcon, ClipboardCopy, AlertCircle, RefreshCw } from 'lucide-react'; // Added AlertCircle, RefreshCw
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import {
+  AlertTriangle, Loader2, Download, Copy, Maximize2, Code as CodeIcon, ClipboardCopy,
+  ZoomIn, ZoomOut, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, RefreshCcw
+} from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import { CodeBlock } from "@/app/chat/message/CodeBlock"; // Import CodeBlock
+import { CodeBlock } from "@/app/chat/message/CodeBlock";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogClose,
-} from "@/components/ui/dialog"; // For fullscreen modal
+} from "@/components/ui/dialog";
 import { KROKI_SUPPORTED_LANGUAGES } from "@/lib/kroki_constants";
-
 
 interface KrokiDiagramProps {
   diagramType: string;
   codeText: string;
-  onFeatureDisabled: () => void; // Added callback prop
+  onFeatureDisabled: () => void;
+  isStreaming?: boolean;
+  isCodeComplete?: boolean;
 }
 
-const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFeatureDisabled }) => {
+enum LoadingPhase {
+  RETRIEVING = "retrieving",
+  PARSING = "parsing",
+  RENDERING = "rendering"
+}
+
+const KrokiDiagram: React.FC<KrokiDiagramProps> = ({
+  diagramType,
+  codeText,
+  onFeatureDisabled,
+  isStreaming = false,
+  isCodeComplete = true
+}) => {
   const [svgContent, setSvgContent] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null); // Will store the error message
-  const [renderFallbackAsCodeBlock, setRenderFallbackAsCodeBlock] = useState(false); // New state for fallback
+  const [error, setError] = useState<string | null>(null);
+  const [renderFallbackAsCodeBlock, setRenderFallbackAsCodeBlock] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>(LoadingPhase.RETRIEVING);
+  const [inRetrievingPhase, setInRetrievingPhase] = useState(false);
+  const retrievingConfiguredRef = useRef(false); // Correct ref name
   const [showRawCode, setShowRawCode] = useState(false);
   const [showFullscreenModal, setShowFullscreenModal] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
-  const [copyCodeStatus, setCopyCodeStatus] = useState<string | null>(null); // New state for copy code status
-  const [currentAppTheme, setCurrentAppTheme] = useState<'light' | 'dark'>(() => 
-    typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-  );
+  const [copyCodeStatus, setCopyCodeStatus] = useState<string | null>(null);
+  const [currentAppTheme, setCurrentAppTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+    }
+    return 'light';
+  });
 
-  // Effect to listen for theme changes on the HTML element
+  const [fullscreenScale, setFullscreenScale] = useState(1);
+  const [fullscreenTranslateX, setFullscreenTranslateX] = useState(0);
+  const [fullscreenTranslateY, setFullscreenTranslateY] = useState(0);
+  const PAN_STEP = 50;
+  const ZOOM_FACTOR = 1.2;
+
+  const onFeatureDisabledRef = useRef(onFeatureDisabled);
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    onFeatureDisabledRef.current = onFeatureDisabled;
+  }, [onFeatureDisabled]);
 
+  useEffect(() => {
+    setCurrentAppTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    if (typeof window === 'undefined') return;
     const observer = new MutationObserver((mutationsList) => {
       for (const mutation of mutationsList) {
         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
@@ -45,14 +77,31 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
         }
       }
     });
-
     observer.observe(document.documentElement, { attributes: true });
-
     return () => {
       observer.disconnect();
     };
   }, []);
 
+  useEffect(() => {
+    if (showFullscreenModal) {
+      setFullscreenScale(1);
+      setFullscreenTranslateX(0);
+      setFullscreenTranslateY(0);
+    }
+  }, [showFullscreenModal]);
+
+  const handleFullscreenZoomIn = () => setFullscreenScale(prev => prev * ZOOM_FACTOR);
+  const handleFullscreenZoomOut = () => setFullscreenScale(prev => prev / ZOOM_FACTOR);
+  const handleFullscreenPan = (dx: number, dy: number) => {
+    setFullscreenTranslateX(prev => prev + dx);
+    setFullscreenTranslateY(prev => prev + dy);
+  };
+  const handleFullscreenResetView = () => {
+    setFullscreenScale(1);
+    setFullscreenTranslateX(0);
+    setFullscreenTranslateY(0);
+  };
 
   const handleDownloadSvg = useCallback(() => {
     if (!svgContent) return;
@@ -75,21 +124,14 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
     if (!svgContent) return;
     setCopyStatus("Copying...");
     try {
-      // Attempt to remove foreignObject elements to prevent canvas tainting
-      // This may affect diagrams that use HTML for text rendering (e.g., some Mermaid charts)
       const cleanedSvgContent = svgContent.replace(/<foreignObject[\s\S]*?<\/foreignObject>/g, '');
-
-      // 1. Create an image element
       const img = new Image();
-      img.crossOrigin = "anonymous"; 
+      img.crossOrigin = "anonymous";
       const svgBlob = new Blob([cleanedSvgContent], { type: 'image/svg+xml;charset=utf-8' });
       const url = URL.createObjectURL(svgBlob);
-  
       img.onload = async () => {
-        // 2. Create a canvas
         const canvas = document.createElement('canvas');
-        // Optional: Add a small padding or ensure dimensions are sufficient
-        const scale = window.devicePixelRatio || 1; // Consider device pixel ratio for sharpness
+        const scale = window.devicePixelRatio || 1;
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
         const ctx = canvas.getContext('2d');
@@ -98,13 +140,10 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
         }
         ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0);
-  
-        // 3. Convert canvas to blob
         canvas.toBlob(async (blob) => {
           if (!blob) {
             throw new Error('Canvas to Blob conversion failed');
           }
-          // 4. Use Clipboard API
           try {
             await navigator.clipboard.write([
               new ClipboardItem({ 'image/png': blob })
@@ -114,7 +153,7 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
             console.error('Clipboard API error:', clipErr);
             setCopyStatus("Copy failed.");
           } finally {
-            URL.revokeObjectURL(url); // Clean up object URL
+            URL.revokeObjectURL(url);
             setTimeout(() => setCopyStatus(null), 2000);
           }
         }, 'image/png');
@@ -124,7 +163,6 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
         throw new Error('Image loading failed');
       };
       img.src = url;
-  
     } catch (err) {
       console.error("Error copying SVG as image:", err);
       setCopyStatus(err instanceof Error ? err.message : "Error.");
@@ -147,6 +185,94 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
       });
   }, [codeText]);
 
+  // Effect to manage the "Retrieving" phase UI and state
+  useEffect(() => {
+    if (isStreaming && !isCodeComplete) {
+      // Condition: Actively streaming and code is not yet complete.
+      if (!retrievingConfiguredRef.current) {
+        // This is the first time we hit this condition for the current diagram attempt.
+        // Configure the "Retrieving" state.
+        setIsLoading(true);
+        setLoadingPhase(LoadingPhase.RETRIEVING);
+        setInRetrievingPhase(true); // Gate for the main processing effect
+        setError(null);
+        setSvgContent(null);
+        setRenderFallbackAsCodeBlock(false);
+        retrievingConfiguredRef.current = true; // Mark as configured.
+      } else {
+        // Already configured, stream is ongoing, code still incomplete.
+        // Ensure we stay in the "inRetrievingPhase" state if it somehow got unset.
+        if (!inRetrievingPhase) {
+          setInRetrievingPhase(true);
+        }
+      }
+    } else {
+      // Condition: Not (actively streaming AND code incomplete).
+      // This means either:
+      //   1. Streaming stopped (`!isStreaming`).
+      //   2. Code is complete (`isCodeComplete`).
+      //   3. Both.
+
+      // We must exit the "inRetrievingPhase" state to allow main processing or final state.
+      if (inRetrievingPhase) {
+        setInRetrievingPhase(false);
+      }
+
+      // Reset retrievingConfiguredRef only when isCodeComplete becomes true.
+      // This makes the "setLoadingPhase(LoadingPhase.RETRIEVING)" truly once per incomplete diagram lifecycle,
+      // resilient to isStreaming prop flapping.
+      if (isCodeComplete && retrievingConfiguredRef.current) {
+        retrievingConfiguredRef.current = false;
+      }
+    }
+  }, [isStreaming, isCodeComplete, inRetrievingPhase]); // inRetrievingPhase is read and set
+
+  const getLoadingMessage = useCallback(() => {
+    switch (loadingPhase) {
+      case LoadingPhase.RETRIEVING:
+        return "Retrieving chart...";
+      case LoadingPhase.PARSING:
+        return "Parsing chart...";
+      case LoadingPhase.RENDERING:
+        return "Loading diagram...";
+      default:
+        return "Loading diagram...";
+    }
+  }, [loadingPhase]);
+
+  const loadingIndicator = useMemo(() => {
+    return (
+      <div className="kroki-diagram-outer-container relative group overflow-hidden flex flex-col" style={{
+        borderRadius: '0.5rem',
+        border: currentAppTheme === 'dark' ? '1px solid #374151' : '1px solid #e5e7eb',
+        boxShadow: 'none',
+        outline: 'none',
+        background: 'transparent'
+      }}>
+        <style>{`
+          .prose pre:has(.kroki-diagram-outer-container) {
+            background: transparent !important;
+            border: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            outline: none !important;
+          }
+        `}</style>
+        <div className="kroki-diagram-inner-container p-4 grow flex flex-col items-center justify-center min-h-[200px]" style={{
+          backgroundColor: currentAppTheme === 'dark' ? '#1f2937' : '#ffffff',
+          borderRadius: '0.5rem',
+          border: 'none',
+          boxShadow: 'none',
+          outline: 'none'
+        }}>
+          <Loader2 className="h-10 w-10 animate-spin text-gray-500 dark:text-gray-400 mb-3" />
+          <p className="text-sm text-gray-600 dark:text-gray-300">{getLoadingMessage()}</p>
+        </div>
+      </div>
+    );
+  }, [currentAppTheme, getLoadingMessage]);
 
   useEffect(() => {
     if (!KROKI_SUPPORTED_LANGUAGES.has(diagramType)) {
@@ -155,85 +281,109 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
       return;
     }
 
-    const fetchDiagram = async () => {
-      setIsLoading(true);
-      setError(null);
-      setSvgContent(null);
+    if (inRetrievingPhase) { // Gate: Don't process if we are in the "Retrieving" phase
+      return;
+    }
 
-      let processedCodeText = codeText;
-      const isDarkMode = currentAppTheme === 'dark';
-
-      if (diagramType === 'mermaid') {
-        const mermaidTheme = isDarkMode ? 'dark' : 'default';
-        processedCodeText = `%%{init: {'theme':'${mermaidTheme}'}}%%\n${codeText}`;
-      } else if ((diagramType === 'plantuml' || diagramType === 'c4plantuml') && isDarkMode) {
-        // Basic dark theme for PlantUML. For light mode, PlantUML's default is usually fine.
-        // More comprehensive themes can be very long, so keeping it simple.
-        const plantUmlDarkTheme = 'skinparam backgroundColor #333333\nskinparam shadowing false\nskinparam FontColor #FFFFFF\nskinparam ArrowColor #CCCCCC\nskinparam ActorBorderColor #CCCCCC\nskinparam ParticipantBorderColor #CCCCCC\nskinparam NoteBorderColor #CCCCCC\nskinparam ClassBorderColor #CCCCCC\n';
-        processedCodeText = `${plantUmlDarkTheme}${codeText}`;
-      }
-      // Other diagram types could be added here if simple theme injection methods are identified
-
-      try {
-        const response = await fetch(`/api/kroki/${diagramType}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ content: processedCodeText }), // Use processedCodeText
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({})); // Gracefully handle non-JSON error responses
-          const errorMessage = errorData.detail || errorData.error || `Failed to render diagram (status: ${response.status})`;
-
-          // If Kroki service itself is not found or explicitly disabled by backend
-          if (response.status === 404 || (errorMessage && errorMessage.toLowerCase().includes("kroki service not enabled"))) {
-            onFeatureDisabled();
-          }
-          throw new Error(errorMessage);
-        }
-
-        const result = await response.json();
-        if (result.svg) {
-          // SVG customization code removed as per feedback
-          setSvgContent(result.svg);
-          setRenderFallbackAsCodeBlock(false);
-        } else {
-          // Kroki returned an error in the JSON response (e.g. syntax error)
-          const krokiErrorMsg = result.error ? `Kroki Error: ${result.error} (Type: ${result.error_type})` : 'Unexpected response from Kroki service.';
-          console.warn(krokiErrorMsg);
-          setError(krokiErrorMsg); // Store error for potential display if needed, but primarily trigger fallback
-          setRenderFallbackAsCodeBlock(true);
-        }
-      } catch (err) {
-        // Network error or non-JSON error response from fetch
-        const fetchErrorMsg = err instanceof Error ? err.message : 'An unknown error occurred during fetch.';
-        console.error("Error fetching Kroki diagram:", err);
-        setError(fetchErrorMsg);
-        setRenderFallbackAsCodeBlock(true);
-      } finally {
+    const debounceTime = isCodeComplete ? 0 : 300;
+    const handler = setTimeout(() => {
+      if (codeText.trim() === "") {
+        setError("Diagram code cannot be empty.");
+        setSvgContent(null);
         setIsLoading(false);
+        setRenderFallbackAsCodeBlock(false);
+        return;
       }
-    };
 
-    fetchDiagram();
-  }, [diagramType, codeText, currentAppTheme, onFeatureDisabled]); // Added onFeatureDisabled to deps
+      const fetchDiagram = async () => {
+        setIsLoading(true);
+        setLoadingPhase(LoadingPhase.PARSING); // Now we are parsing
+        setError(null);
+        setSvgContent(null);
+
+        let processedCodeText = codeText;
+        const isDarkMode = currentAppTheme === 'dark';
+
+        if (diagramType === 'mermaid') {
+          const mermaidTheme = isDarkMode ? 'dark' : 'default';
+          processedCodeText = `%%{init: {'theme':'${mermaidTheme}'}}%%\n${codeText}`;
+        } else if ((diagramType === 'plantuml' || diagramType === 'c4plantuml') && isDarkMode) {
+          const plantUmlDarkTheme = 'skinparam backgroundColor #333333\nskinparam shadowing false\nskinparam FontColor #FFFFFF\nskinparam ArrowColor #CCCCCC\nskinparam ActorBorderColor #CCCCCC\nskinparam ParticipantBorderColor #CCCCCC\nskinparam NoteBorderColor #CCCCCC\nskinparam ClassBorderColor #CCCCCC\n';
+          processedCodeText = `${plantUmlDarkTheme}${codeText}`;
+        }
+
+        try {
+          const response = await fetch(`/api/kroki/${diagramType}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content: processedCodeText }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail || errorData.error || `Failed to render diagram (status: ${response.status})`;
+            if (response.status === 404 || (errorMessage && errorMessage.toLowerCase().includes("kroki service not enabled"))) {
+              if (typeof onFeatureDisabledRef.current === 'function') {
+                onFeatureDisabledRef.current();
+              }
+            }
+            throw new Error(errorMessage);
+          }
+
+          setLoadingPhase(LoadingPhase.RENDERING);
+          const result = await response.json();
+          if (result.svg) {
+            let rawSvg = result.svg;
+            if (rawSvg.trim().startsWith("<?xml")) {
+              try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(rawSvg, "application/xml");
+                const svgElement = xmlDoc.getElementsByTagName("svg")[0];
+                if (svgElement) {
+                  rawSvg = svgElement.outerHTML;
+                } else {
+                  throw new Error("SVG tag not found in XML-wrapped content.");
+                }
+              } catch (parseError) {
+                console.error("Error parsing XML-wrapped SVG:", parseError);
+                setError(parseError instanceof Error ? `SVG Parse Error: ${parseError.message}` : "SVG Parse Error");
+                setRenderFallbackAsCodeBlock(true);
+                setIsLoading(false);
+                return;
+              }
+            }
+            setSvgContent(rawSvg);
+            setRenderFallbackAsCodeBlock(false);
+          } else {
+            const krokiErrorMsg = result.error ? `Kroki Error: ${result.error} (Type: ${result.error_type})` : 'Unexpected response from Kroki service.';
+            console.warn(krokiErrorMsg);
+            setError(krokiErrorMsg);
+            setRenderFallbackAsCodeBlock(true);
+          }
+        } catch (err) {
+          const fetchErrorMsg = err instanceof Error ? err.message : 'An unknown error occurred during fetch.';
+          console.error("Error fetching Kroki diagram:", err);
+          setError(fetchErrorMsg);
+          setRenderFallbackAsCodeBlock(true);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchDiagram();
+    }, debounceTime);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [diagramType, codeText, currentAppTheme, onFeatureDisabledRef, isStreaming, isCodeComplete, inRetrievingPhase]);
 
   if (isLoading) {
-    return (
-      <div className="kroki-diagram-loading-container flex items-center justify-center p-4 bg-white">
-        <Loader2 className="h-6 w-6 animate-spin" />
-      </div>
-    );
+    return loadingIndicator;
   }
 
-  // If rendering failed, fall back to showing the original code in a standard CodeBlock
   if (renderFallbackAsCodeBlock) {
-    // Optionally, you could display the 'error' message above the CodeBlock if desired
-    // For now, just rendering the CodeBlock as per feedback.
-    // The CodeBlock component itself should handle its own styling including the header.
-    // Pass codeText as an array to children to ensure CodeBlock renders it as block content.
     return (
       <CodeBlock codeText={codeText} className={`language-${diagramType}`} isFallback={true}>
         {[codeText]}
@@ -243,22 +393,42 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
 
   if (svgContent) {
     return (
-      <div className="kroki-diagram-container relative group p-2 bg-white overflow-x-auto">
-        {/* Style for the normal view SVG rendering to respect max-height and scale proportionally */}
-        <style>{`
+      <div className="kroki-diagram-outer-container relative group overflow-hidden flex flex-col" style={{
+        borderRadius: '0.5rem',
+        border: currentAppTheme === 'dark' ? '1px solid #374151' : '1px solid #e5e7eb',
+        boxShadow: 'none',
+        outline: 'none',
+        background: 'transparent'
+      }}>
+        <div className="kroki-diagram-inner-container p-2 overflow-x-auto grow" style={{
+          backgroundColor: currentAppTheme === 'dark' ? '#1f2937' : '#ffffff',
+          borderRadius: '0.5rem',
+          border: 'none',
+          boxShadow: 'none',
+          outline: 'none'
+        }}>
+          <style>{`
           .kroki-diagram-svg-render svg {
             display: block;
-            width: auto;     /* Calculate width based on height and aspect ratio */
-            height: 100%;    /* Attempt to fill the parent container's height */
-            max-width: 100%; /* Ensure the auto-calculated width doesn't exceed parent's width */
-            margin: 0 auto;  /* Center the SVG horizontally if its width is less than the container's width */
+            width: auto;
+            height: 100%;
+            max-width: 100%;
+            margin: 0 auto;
+          }
+          .prose pre:has(.kroki-diagram-outer-container) {
+            background: transparent !important;
+            border: none !important;
+            border-radius: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            outline: none !important;
           }
         `}</style>
         <div
-          className="kroki-diagram-svg-render overflow-hidden" // Ensure no flex here, max-h-96 removed
+          className="kroki-diagram-svg-render flex items-center justify-center overflow-hidden min-h-[200px]"
           dangerouslySetInnerHTML={{ __html: svgContent }}
         />
-
         <div className="absolute top-1 right-1 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-slate-200 dark:bg-slate-700 p-1 rounded">
           <Button variant="ghost" size="icon" title="Download SVG" onClick={handleDownloadSvg}>
             <Download className="h-4 w-4 text-slate-600 dark:text-slate-300" />
@@ -273,19 +443,14 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
             <CodeIcon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
           </Button>
         </div>
-
         {showRawCode && (
-          // Removed h4 heading, border-t, and pt-2. 
-          // The CodeBlock itself, when isFallback=true, will have my-2 from prose styling.
-          // If further spacing adjustment is needed, it can be done here or on CodeBlock.
-          // For now, relying on CodeBlock's inherent spacing when it's a fallback.
-          <div className="mt-0"> {/* Or simply remove this div if CodeBlock's margin is sufficient */}
+          <div className="mt-0">
             <CodeBlock codeText={codeText} className={`language-${diagramType}`} isFallback={true}>
               {[codeText]}
             </CodeBlock>
           </div>
         )}
-
+        </div>
         {showFullscreenModal && (
           <Dialog open={showFullscreenModal} onOpenChange={setShowFullscreenModal}>
             <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] flex flex-col p-2">
@@ -293,32 +458,73 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
                 <DialogTitle className="truncate">Fullscreen Diagram</DialogTitle>
                 <DialogClose asChild>
                   <Button variant="ghost" size="icon" className="absolute top-2 right-2">
-                    <Maximize2 className="h-4 w-4 transform rotate-45" /> {/* Simple close icon */}
+                    <Maximize2 className="h-4 w-4 transform rotate-45" />
                   </Button>
                 </DialogClose>
               </DialogHeader>
               <style>{`
-                .fullscreen-svg-inner-wrapper {
-                  width: 100%; /* Ensure the wrapper takes full space */
+                .fullscreen-svg-container {
+                  width: 100%;
                   height: 100%;
-                  display: flex; /* Use flex to center the SVG child */
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  overflow: auto;
+                }
+                .fullscreen-svg-inner-wrapper {
+                  transition: transform 0.2s ease-out;
+                  transform-origin: center center;
+                  width: 100%;
+                  height: 100%;
+                  display: flex;
                   align-items: center;
                   justify-content: center;
                 }
                 .fullscreen-svg-inner-wrapper svg {
                   display: block;
-                  width: 100%;   /* Attempt to fill the container's width */
-                  height: 100%;  /* Attempt to fill the container's height */
-                  /* preserveAspectRatio="xMidYMid meet" (expected from Kroki) will handle scaling */
+                  width: 100%;
+                  height: 100%;
+                  object-fit: contain;
                 }
               `}</style>
-              <div className="flex-grow overflow-auto p-4 bg-background-50"> 
+              <div className="flex-grow overflow-auto p-4 bg-background-50 relative fullscreen-svg-container">
                 <div
+                  style={{ transform: `translate(${fullscreenTranslateX}px, ${fullscreenTranslateY}px) scale(${fullscreenScale})` }}
                   dangerouslySetInnerHTML={{ __html: svgContent }}
-                  className="fullscreen-svg-inner-wrapper" 
+                  className="fullscreen-svg-inner-wrapper"
                 />
+                <div className="absolute bottom-4 right-4 flex items-end space-x-2">
+                  <div className="grid grid-cols-3 gap-1 p-1 rounded-md shadow-lg bg-white/70 dark:bg-black/70 backdrop-blur-sm">
+                    <div></div>
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleFullscreenPan(0, PAN_STEP)} title="Pan Up">
+                      <ArrowUp className="h-5 w-5" />
+                    </Button>
+                    <div></div>
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleFullscreenPan(PAN_STEP, 0)} title="Pan Left">
+                      <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={handleFullscreenResetView} title="Reset View">
+                      <RefreshCcw className="h-5 w-5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleFullscreenPan(-PAN_STEP, 0)} title="Pan Right">
+                      <ArrowRight className="h-5 w-5" />
+                    </Button>
+                    <div></div>
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={() => handleFullscreenPan(0, -PAN_STEP)} title="Pan Down">
+                      <ArrowDown className="h-5 w-5" />
+                    </Button>
+                    <div></div>
+                  </div>
+                  <div className="flex flex-col space-y-1 p-1 rounded-md shadow-lg bg-white/70 dark:bg-black/70 backdrop-blur-sm">
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={handleFullscreenZoomIn} title="Zoom In">
+                      <ZoomIn className="h-5 w-5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="hover:bg-slate-200 dark:hover:bg-slate-700" onClick={handleFullscreenZoomOut} title="Zoom Out">
+                      <ZoomOut className="h-5 w-5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-              {/* Footer for buttons in fullscreen modal */}
               <div className="flex-shrink-0 flex items-center justify-center space-x-2 p-2 border-t">
                 <Button variant="outline" size="sm" onClick={handleDownloadSvg}>
                   <Download className="h-4 w-4 mr-2" />
@@ -346,7 +552,7 @@ const KrokiDiagram: React.FC<KrokiDiagramProps> = ({ diagramType, codeText, onFe
     );
   }
 
-  return null; // Should not happen if logic is correct
+  return null;
 };
 
 export default KrokiDiagram;
