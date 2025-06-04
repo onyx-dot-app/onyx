@@ -15,12 +15,11 @@ from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
 
-@retry(tries=3, delay=0.1, backoff=3)
+@retry(tries=3, delay=1, backoff=2)
 def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> None:
     vespa_index = VespaIndex(
         index_name=index_name,
@@ -117,13 +116,6 @@ def reset_vespa_kg_index(
             .all()
         ]
 
-    # Reset the kg fields in batches of 32 documents
-    for idx in range(0, len(document_ids), 32):
-        function_with_args = [
-            (
-                _reset_vespa_for_doc,
-                (document_id, tenant_id, index_name),
-            )
-            for document_id in document_ids[idx : idx + 32]
-        ]
-        run_functions_tuples_in_parallel(function_with_args, allow_failures=True)
+    # Reset the kg fields
+    for document_id in document_ids:
+        _reset_vespa_for_doc(document_id, tenant_id, index_name)

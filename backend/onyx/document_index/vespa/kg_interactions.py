@@ -60,7 +60,7 @@ def get_document_kg_info(
     return kg_doc_info
 
 
-@retry(tries=3, delay=0.1, backoff=3)
+@retry(tries=3, delay=1, backoff=2)
 def update_kg_chunks_vespa_info(
     kg_update_requests: list[KGUChunkUpdateRequest],
     index_name: str,
@@ -82,19 +82,17 @@ def update_kg_chunks_vespa_info(
     )
 
 
-def update_kg_vespa_info_for_document(
-    document_id: str,
-    index_name: str,
-    tenant_id: str,
-) -> None:
-    """Update the vespa index with the new kg_info."""
+def get_kg_vespa_info_update_requests_for_document(
+    document_id: str, index_name: str
+) -> list[KGUChunkUpdateRequest]:
+    """Get the kg_info update requests for a document."""
     # get all entities and relationships tied to the document
     with get_session_with_current_tenant() as db_session:
         entities = (
             db_session.query(KGEntity).filter(KGEntity.document_id == document_id).all()
         )
         if not entities:
-            return
+            return []
         entity_id_names = [entity.id_name for entity in entities]
 
         relationships = (
@@ -138,8 +136,8 @@ def update_kg_vespa_info_for_document(
         get_large_chunks=False,
     )
 
-    # update vespa
-    kg_update_requests = [
+    # get vespa update requests
+    return [
         KGUChunkUpdateRequest(
             document_id=document_id,
             chunk_id=chunk["fields"]["chunk_id"],
@@ -149,8 +147,3 @@ def update_kg_vespa_info_for_document(
         )
         for chunk in chunks
     ]
-    update_kg_chunks_vespa_info(
-        kg_update_requests=kg_update_requests,
-        index_name=index_name,
-        tenant_id=tenant_id,
-    )

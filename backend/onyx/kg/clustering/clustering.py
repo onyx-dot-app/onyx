@@ -18,7 +18,10 @@ from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.relationships import get_parent_child_relationships_and_types
 from onyx.db.relationships import transfer_relationship
 from onyx.db.relationships import transfer_relationship_type
-from onyx.document_index.vespa.kg_interactions import update_kg_vespa_info_for_document
+from onyx.document_index.vespa.kg_interactions import (
+    get_kg_vespa_info_update_requests_for_document,
+)
+from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import KGGroundingType
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -130,7 +133,7 @@ def _transfer_batch_relationship(
 
 
 def kg_clustering(
-    tenant_id: str, index_name: str, processing_chunk_batch_size: int = 8
+    tenant_id: str, index_name: str, processing_chunk_batch_size: int = 16
 ) -> None:
     """
     Here we will cluster the extractions based on their cluster frameworks.
@@ -233,17 +236,19 @@ def kg_clustering(
 
     # Update vespa for documents that had their kg info updated in parallel
     for i in range(0, len(vespa_update_documents), processing_chunk_batch_size):
-        run_functions_tuples_in_parallel(
+        batch_update_requests = run_functions_tuples_in_parallel(
             [
                 (
-                    update_kg_vespa_info_for_document,
-                    (document_id, index_name, tenant_id),
+                    get_kg_vespa_info_update_requests_for_document,
+                    (document_id, index_name),
                 )
                 for document_id in list(vespa_update_documents)[
                     i : i + processing_chunk_batch_size
                 ]
             ]
         )
+        for update_requests in batch_update_requests:
+            update_kg_chunks_vespa_info(update_requests, index_name, tenant_id)
 
     # Delete the transferred objects from the staging tables
     try:
