@@ -267,7 +267,7 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
                 file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{file_path}"
                 
                 try:
-                    file_resp = requests.get(file_url, timeout=30)
+                    file_resp = requests.get(file_url, headers=self.github_headers, timeout=30) 
                     if file_resp.status_code == 200:
                         content = file_resp.text
                         
@@ -319,9 +319,12 @@ class GitHubCodeConnector(LoadConnector, PollConnector):
         file_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{repo_name}/{branch}/{filepath}"
         
         try:
-            resp = requests.get(file_url, timeout=30)
+            resp = requests.get(file_url, headers=self.github_headers, timeout=30)
             if resp.status_code == 200:
                 content = resp.text
+                if not content or len(content) > 1024 * 1024:
+                    return []
+                
                 doc = self._create_document(repo_name, filepath, content, branch)
                 return [doc] if doc else []
         except Exception as e:
