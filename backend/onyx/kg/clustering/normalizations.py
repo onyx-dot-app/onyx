@@ -81,14 +81,13 @@ def _normalize_one_entity(
         # get allowed documents
 
         metadata = MetaData()
-        if allowed_docs_temp_view_name is not None:
-            allowed_docs_temp_view = Table(
-                allowed_docs_temp_view_name,
-                metadata,
-                autoload_with=db_session.get_bind(),
-            )
-        else:
+        if allowed_docs_temp_view_name is None:
             raise ValueError("allowed_docs_temp_view_name is not available")
+        allowed_docs_temp_view = Table(
+            allowed_docs_temp_view_name,
+            metadata,
+            autoload_with=db_session.get_bind(),
+        )
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(

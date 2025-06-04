@@ -44,7 +44,7 @@ def populate_default_account_employee_definitions() -> None:
     return None
 
 
-def execute_kg_setting_tests(kg_config_settings: KGConfigSettings) -> None:
+def validate_kg_settings(kg_config_settings: KGConfigSettings) -> None:
     if not kg_config_settings.KG_ENABLED:
         raise ValueError("KG is not enabled")
     if not kg_config_settings.KG_VENDOR:
