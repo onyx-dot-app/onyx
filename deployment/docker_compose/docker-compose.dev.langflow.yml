@@ -457,7 +457,7 @@ services:
       retries: 3
 
   langflow:
-    image: langflowai/langflow:latest
+    image: langflowai/langflow:1.4.2
     container_name: Langflow
     user: root
     ports:
