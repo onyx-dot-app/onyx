@@ -94,7 +94,7 @@ def update_kg_type_dict(
     if "fields" not in dict_to_update:
         dict_to_update["fields"] = {}
     dict_to_update["fields"][kg_type] = {
-        "add": {kg_type_object: 1 for kg_type_object in value_set}
+        "assign": {kg_type_object: 1 for kg_type_object in value_set}
     }
     return dict_to_update
 

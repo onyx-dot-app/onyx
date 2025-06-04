@@ -5,8 +5,11 @@ from typing import Dict
 
 from pydantic import BaseModel
 
+from onyx.configs.kg_configs import KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
+
 
 class KGConfigSettings(BaseModel):
+    KG_EXPOSED: bool = False
     KG_ENABLED: bool = False
     KG_VENDOR: str | None = None
     KG_VENDOR_DOMAINS: list[str] | None = None
@@ -14,10 +17,12 @@ class KGConfigSettings(BaseModel):
     KG_EXTRACTION_IN_PROGRESS: bool = False
     KG_CLUSTERING_IN_PROGRESS: bool = False
     KG_COVERAGE_START: datetime = datetime(1970, 1, 1)
-    KG_MAX_COVERAGE_DAYS: int = 1000000
+    KG_MAX_COVERAGE_DAYS: int = 10000
+    KG_MAX_PARENT_RECURSION_DEPTH: int = KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
 
 
 class KGConfigVars(str, Enum):
+    KG_EXPOSED = "KG_EXPOSED"
     KG_ENABLED = "KG_ENABLED"
     KG_VENDOR = "KG_VENDOR"
     KG_VENDOR_DOMAINS = "KG_VENDOR_DOMAINS"
@@ -26,6 +31,7 @@ class KGConfigVars(str, Enum):
     KG_CLUSTERING_IN_PROGRESS = "KG_CLUSTERING_IN_PROGRESS"
     KG_COVERAGE_START = "KG_COVERAGE_START"
     KG_MAX_COVERAGE_DAYS = "KG_MAX_COVERAGE_DAYS"
+    KG_MAX_PARENT_RECURSION_DEPTH = "KG_MAX_PARENT_RECURSION_DEPTH"
 
 
 class KGChunkFormat(BaseModel):

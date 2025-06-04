@@ -355,8 +355,6 @@ def kg_extraction(
         kg_config_settings = get_kg_config_settings(db_session)
 
     execute_kg_setting_tests(kg_config_settings)
-    assert kg_config_settings.KG_VENDOR is not None
-    assert kg_config_settings.KG_VENDOR_DOMAINS is not None
 
     # get connector ids that are enabled for KG extraction
 
@@ -366,9 +364,6 @@ def kg_extraction(
     connector_extraction_stats: list[ConnectorExtractionStats] = []
 
     processing_chunk_doc_extractions: list[
-        tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
-    ] = []
-    carryover_chunk_doc_extractions: list[
         tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
     ] = []
     connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions] = []
@@ -496,7 +491,7 @@ def kg_extraction(
 
             # run this only for primary grounded sources that have a classification approach configured
 
-            # mark docs in unprocessed_document_batch as EXTRACTING
+            # get documents with classification enabled
             classification_batch_list = []
             for unprocessed_document in unprocessed_document_batch:
                 # generate document batch for classifications
@@ -584,7 +579,7 @@ def kg_extraction(
                     continue
 
                 # 1. perform (implicit) KG 'extractions' on the documents that should be processed
-                # This is really about assigning document meta-data to KG entities/relationships or KG entity attrbutes
+                # This is really about assigning document meta-data to KG entities/relationships or KG entity attributes
                 # General approach:
                 #    - vendor emails to Employee-type entities + relationship to current primary grounded entity
                 #    - external account emails to Account-type entities + relationship to current primary grounded entity
@@ -604,135 +599,32 @@ def kg_extraction(
                     )
                 )
 
-                # 2. perform KG extraction on the chunks that should be processed
-
-                # TODO: kg-id-refactor: just grab first chunk as we update vespa in clustering
+                # 2. process each chunk in the document
+                # TODO: revisit once deep extraction is implemented, or metadata is different per chunk
+                # for now, just grab a single chunk (could be any chunk, as metadata is the same) per document
                 formatted_chunk_batches = get_document_chunks_for_kg_processing(
                     document_id=unprocessed_document.id,
                     deep_extraction=batch_metadata[
                         unprocessed_document.id
                     ].deep_extraction,
                     index_name=index_name,
-                    batch_size=processing_chunk_batch_size,
+                    batch_size=1,
                 )
 
-                formatted_chunk_doc_batches_list = list(formatted_chunk_batches)
+                formatted_chunk_doc_batch = next(formatted_chunk_batches)
+                if not formatted_chunk_doc_batch:
+                    continue
 
-                for formatted_chunk_doc_batch in formatted_chunk_doc_batches_list:
-
-                    processing_chunk_doc_extractions.extend(
-                        [
-                            (chunk, kg_document_extractions)
-                            for chunk in formatted_chunk_doc_batch
-                        ]
-                    )
-
-                    if (
-                        len(processing_chunk_doc_extractions)
-                        >= processing_chunk_batch_size
-                    ):
-                        carryover_chunk_doc_extractions.extend(
-                            processing_chunk_doc_extractions[
-                                processing_chunk_batch_size:
-                            ]
-                        )
-                        processing_chunk_doc_extractions = (
-                            processing_chunk_doc_extractions[
-                                :processing_chunk_batch_size
-                            ]
-                        )
-
-                        chunk_processing_batch_results = _kg_chunk_batch_extraction(
-                            chunk_doc_extractions=processing_chunk_doc_extractions,
-                            index_name=index_name,
-                            tenant_id=tenant_id,
-                            kg_config_settings=kg_config_settings,
-                        )
-
-                        # Consider removing the stats expressions here and rather write to the db(?)
-                        connector_failed_chunk_extractions.extend(
-                            chunk_processing_batch_results.failed
-                        )
-                        connector_succeeded_chunk_extractions.extend(
-                            chunk_processing_batch_results.succeeded
-                        )
-
-                        aggregated_batch_extractions = (
-                            chunk_processing_batch_results.aggregated_kg_extractions
-                        )
-                        # Update grounded_entities_document_ids (replace values)
-                        connector_aggregated_kg_extractions.grounded_entities_document_ids.update(
-                            aggregated_batch_extractions.grounded_entities_document_ids
-                        )
-                        # Add to entity counts instead of replacing
-                        for (
-                            entity,
-                            count,
-                        ) in aggregated_batch_extractions.entities.items():
-                            if (
-                                entity
-                                not in connector_aggregated_kg_extractions.entities
-                            ):
-                                connector_aggregated_kg_extractions.entities[entity] = (
-                                    count
-                                )
-                            else:
-                                connector_aggregated_kg_extractions.entities[
-                                    entity
-                                ] += count
-                        # Add to relationship counts instead of replacing
-                        for (
-                            relationship,
-                            relationship_data,
-                        ) in aggregated_batch_extractions.relationships.items():
-                            for source_document_id, count in relationship_data.items():
-                                if (
-                                    relationship
-                                    not in connector_aggregated_kg_extractions.relationships
-                                ):
-                                    connector_aggregated_kg_extractions.relationships[
-                                        relationship
-                                    ] = defaultdict(int)
-                                connector_aggregated_kg_extractions.relationships[
-                                    relationship
-                                ][source_document_id] += count
-
-                        # Add to term counts instead of replacing
-                        for term, count in aggregated_batch_extractions.terms.items():
-                            if term not in connector_aggregated_kg_extractions.terms:
-                                connector_aggregated_kg_extractions.terms[term] = count
-                            else:
-                                connector_aggregated_kg_extractions.terms[term] += count
-
-                        for (
-                            document_id,
-                            attributes,
-                        ) in aggregated_batch_extractions.attributes.items():
-                            connector_aggregated_kg_extractions.attributes[
-                                document_id
-                            ] = attributes
-
-                        connector_extraction_stats.append(
-                            ConnectorExtractionStats(
-                                connector_id=connector_id,
-                                num_failed=len(connector_failed_chunk_extractions),
-                                num_succeeded=len(
-                                    connector_succeeded_chunk_extractions
-                                ),
-                                num_processed=len(processing_chunk_doc_extractions),
-                            )
-                        )
-
-                        processing_chunk_doc_extractions = (
-                            carryover_chunk_doc_extractions.copy()
-                        )
-                        carryover_chunk_doc_extractions = []
+                processing_chunk_doc_extractions.extend(
+                    [
+                        (chunk, kg_document_extractions)
+                        for chunk in formatted_chunk_doc_batch
+                    ]
+                )
 
             # processes remaining chunks
             chunk_processing_batch_results = _kg_chunk_batch_extraction(
                 chunk_doc_extractions=processing_chunk_doc_extractions,
-                index_name=index_name,
-                tenant_id=tenant_id,
                 kg_config_settings=kg_config_settings,
             )
 
@@ -797,7 +689,6 @@ def kg_extraction(
             )
 
             processing_chunk_doc_extractions = []
-            carryover_chunk_doc_extractions = []
 
             connector_aggregated_kg_extractions_list.append(
                 connector_aggregated_kg_extractions
@@ -934,12 +825,7 @@ def kg_extraction(
                         )
                         continue
 
-                    source_entity, _, target_entity = relationship.split("__")
-                    source_entity = relationship_split[0]
-                    relationship_type = " ".join(relationship_split[1:-1]).replace(
-                        "__", "_"
-                    )
-                    target_entity = relationship_split[-1]
+                    source_entity, relationship_type, target_entity = relationship_split
 
                     source_entity_type = source_entity.split("::")[0]
                     target_entity_type = target_entity.split("::")[0]
@@ -1094,8 +980,6 @@ def _kg_chunk_batch_extraction(
     chunk_doc_extractions: list[
         tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
     ],
-    index_name: str,
-    tenant_id: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGBatchExtractionStats:
     _, fast_llm = get_default_llms()
