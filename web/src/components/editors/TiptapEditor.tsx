@@ -67,7 +67,7 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
     const currentDocId = documentData?.id || null;
 
     // Only update content when document ID changes (switching documents)
-    if (editor) {
+    if (editor && currentDocId !== docIdRef.current) {
       editor.commands.setContent(content);
       docIdRef.current = currentDocId;
     }

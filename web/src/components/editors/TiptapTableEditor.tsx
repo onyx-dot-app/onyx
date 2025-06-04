@@ -77,7 +77,7 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
     onUpdate: ({ editor }) => {
       onChange?.(editor.getHTML());
     },
-  }, [content]); // Add content as a dependency to re-initialize editor when content changes
+  }); // Remove content dependency to prevent re-initialization during typing
 
   // Call enableClickableLinks when the editor is ready
   useEffect(() => {

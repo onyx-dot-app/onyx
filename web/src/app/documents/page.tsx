@@ -17,6 +17,8 @@ export default function DocumentsPage() {
   const [documentData, setDocumentData] = useState<DocumentBase | null>(null);
   const [formattedDocumentData, setFormattedDocumentData] = useState<FormattedDocumentBase | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const [isUserTyping, setIsUserTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // TODO: We should move this to the backend and manage this using the groups instead
   // set to correct DocumentConfig. As an intermediate step, this could also use an
@@ -178,7 +180,16 @@ export default function DocumentsPage() {
               <TiptapTableEditor 
                 key={`sheet-${docId}-${selectedSheet}`}
                 content={content}
-                onChange={setContent}
+                onChange={(newContent) => {
+                  setContent(newContent);
+                  setIsUserTyping(true);
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+                  typingTimeoutRef.current = setTimeout(() => {
+                    setIsUserTyping(false);
+                  }, 1000);
+                }}
                 editable={true}
               />
             ) : (
@@ -186,7 +197,16 @@ export default function DocumentsPage() {
                 key={`doc-${docId}`}
                 content={content}
                 documentData={formattedDocumentData || documentData}
-                onChange={setContent}
+                onChange={(newContent) => {
+                  setContent(newContent);
+                  setIsUserTyping(true);
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+                  typingTimeoutRef.current = setTimeout(() => {
+                    setIsUserTyping(false);
+                  }, 1000);
+                }}
                 editable={true}
               />
             )}
