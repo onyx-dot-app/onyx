@@ -29,7 +29,6 @@ class UserManager:
     def create(
         name: str | None = None,
         email: str | None = None,
-        is_first_user: bool = False,
     ) -> DATestUser:
         if name is None:
             name = f"test{str(uuid4())}"
@@ -51,14 +50,14 @@ class UserManager:
         )
         response.raise_for_status()
 
-        role = UserRole.ADMIN if is_first_user else UserRole.BASIC
-
         test_user = DATestUser(
             id=response.json()["id"],
             email=email,
             password=password,
             headers=deepcopy(GENERAL_HEADERS),
-            role=role,
+            # fill as basic for now, the `login_as_user` call will
+            # fill it in correctly
+            role=UserRole.BASIC,
             is_active=True,
         )
         print(f"Created user {test_user.email}")
@@ -93,6 +92,17 @@ class UserManager:
         # Set cookies in the headers
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         test_user.cookies = {"fastapiusersauth": session_cookie}
+
+        # Get user role from /me endpoint
+        me_response = requests.get(
+            url=f"{API_SERVER_URL}/me",
+            headers=test_user.headers,
+            cookies=test_user.cookies,
+        )
+        me_response.raise_for_status()
+        role = UserRole(me_response.json()["role"])
+        test_user.role = role
+
         return test_user
 
     @staticmethod

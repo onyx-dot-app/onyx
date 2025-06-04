@@ -1,3 +1,8 @@
+# Dependency updates (when subchart versions are bumped)
+* If updating subcharts, you need to run this before committing!
+* cd charts/onyx
+* helm dependency update .
+
 # Local testing
 
 ## One time setup

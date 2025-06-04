@@ -1,9 +1,11 @@
+from uuid import UUID
+
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Persona
 from onyx.db.models import UserFile
 from onyx.file_store.models import InMemoryChatFile
-from onyx.file_store.utils import get_user_files
+from onyx.file_store.utils import get_user_files_as_user
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.utils.logger import setup_logger
@@ -18,6 +20,8 @@ def parse_user_files(
     db_session: Session,
     persona: Persona,
     actual_user_input: str,
+    # should only be None if auth is disabled
+    user_id: UUID | None,
 ) -> tuple[list[InMemoryChatFile], list[UserFile], SearchToolOverrideKwargs | None]:
     """
     Parse user files and folders into in-memory chat files and create search tool override kwargs.
@@ -29,6 +33,7 @@ def parse_user_files(
         db_session: Database session
         persona: Persona to calculate available tokens
         actual_user_input: User's input message for token calculation
+        user_id: User ID to validate file ownership
 
     Returns:
         Tuple of (
@@ -49,9 +54,10 @@ def parse_user_files(
         db_session,
     )
 
-    user_file_models = get_user_files(
+    user_file_models = get_user_files_as_user(
         user_file_ids or [],
         user_folder_ids or [],
+        user_id,
         db_session,
     )
 
@@ -88,15 +94,13 @@ def parse_user_files(
         return user_files, user_file_models, None
 
     # Token overflow or folders present - need to use search tool
-    search_for_ordering_only = have_enough_tokens
     override_kwargs = SearchToolOverrideKwargs(
-        force_no_rerank=search_for_ordering_only,
+        force_no_rerank=have_enough_tokens,
         alternate_db_session=None,
         retrieved_sections_callback=None,
-        skip_query_analysis=search_for_ordering_only,
+        skip_query_analysis=have_enough_tokens,
         user_file_ids=user_file_ids,
         user_folder_ids=user_folder_ids,
-        ordering_only=search_for_ordering_only,
     )
 
     return user_files, user_file_models, override_kwargs

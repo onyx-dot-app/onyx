@@ -354,7 +354,7 @@ class AgentSubQuery__SearchDoc(Base):
     __tablename__ = "agent__sub_query__search_doc"
 
     sub_query_id: Mapped[int] = mapped_column(
-        ForeignKey("agent__sub_query.id"), primary_key=True
+        ForeignKey("agent__sub_query.id", ondelete="CASCADE"), primary_key=True
     )
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id"), primary_key=True
@@ -405,7 +405,7 @@ class ChatMessage__StandardAnswer(Base):
     __tablename__ = "chat_message__standard_answer"
 
     chat_message_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id"), primary_key=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
     )
     standard_answer_id: Mapped[int] = mapped_column(
         ForeignKey("standard_answer.id"), primary_key=True
@@ -1430,7 +1430,9 @@ class AgentSubQuestion(Base):
     __tablename__ = "agent__sub_question"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    primary_question_id: Mapped[int] = mapped_column(ForeignKey("chat_message.id"))
+    primary_question_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id")
     )
@@ -1464,7 +1466,7 @@ class AgentSubQuery(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     parent_question_id: Mapped[int] = mapped_column(
-        ForeignKey("agent__sub_question.id")
+        ForeignKey("agent__sub_question.id", ondelete="CASCADE")
     )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id")

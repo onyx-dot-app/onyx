@@ -60,6 +60,14 @@ _FIELD_KEY = "key"
 _FIELD_CREATED = "created"
 _FIELD_DUEDATE = "duedate"
 _FIELD_ISSUETYPE = "issuetype"
+_FIELD_PARENT = "parent"
+_FIELD_ASSIGNEE_EMAIL = "assignee_email"
+_FIELD_REPORTER_EMAIL = "reporter_email"
+_FIELD_PROJECT = "project"
+_FIELD_PROJECT_NAME = "project_name"
+_FIELD_UPDATED = "updated"
+_FIELD_RESOLUTION_DATE = "resolutiondate"
+_FIELD_RESOLUTION_DATE_KEY = "resolution_date"
 
 
 def _perform_jql_search(
@@ -131,6 +139,9 @@ def process_jira_issue(
         if basic_expert_info := best_effort_basic_expert_info(creator):
             people.add(basic_expert_info)
             metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
+            if email := basic_expert_info.get_email():
+                metadata_dict[_FIELD_REPORTER_EMAIL] = email
+
     except Exception:
         # Author should exist but if not, doesn't matter
         pass
@@ -140,6 +151,8 @@ def process_jira_issue(
         if basic_expert_info := best_effort_basic_expert_info(assignee):
             people.add(basic_expert_info)
             metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
+            if email := basic_expert_info.get_email():
+                metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
     except Exception:
         # Author should exist but if not, doesn't matter
         pass
@@ -154,10 +167,32 @@ def process_jira_issue(
         metadata_dict[_FIELD_LABELS] = labels
     if created := best_effort_get_field_from_issue(issue, _FIELD_CREATED):
         metadata_dict[_FIELD_CREATED] = created
+    if updated := best_effort_get_field_from_issue(issue, _FIELD_UPDATED):
+        metadata_dict[_FIELD_UPDATED] = updated
     if duedate := best_effort_get_field_from_issue(issue, _FIELD_DUEDATE):
         metadata_dict[_FIELD_DUEDATE] = duedate
     if issuetype := best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE):
         metadata_dict[_FIELD_ISSUETYPE] = issuetype.name
+    if resolutiondate := best_effort_get_field_from_issue(
+        issue, _FIELD_RESOLUTION_DATE
+    ):
+        metadata_dict[_FIELD_RESOLUTION_DATE_KEY] = resolutiondate
+
+    try:
+        parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+        if parent:
+            metadata_dict[_FIELD_PARENT] = parent.key
+    except Exception:
+        # Parent should exist but if not, doesn't matter
+        pass
+    try:
+        project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+        if project:
+            metadata_dict[_FIELD_PROJECT_NAME] = project.name
+            metadata_dict[_FIELD_PROJECT] = project.key
+    except Exception:
+        # Project should exist.
+        logger.error(f"Project should exist but does not for {issue.key}")
 
     return Document(
         id=page_url,

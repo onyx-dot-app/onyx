@@ -60,6 +60,7 @@ class ChatSessionManager:
         prompt_override: PromptOverride | None = None,
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
+        use_agentic_search: bool = False,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -76,6 +77,7 @@ class ChatSessionManager:
             prompt_override=prompt_override,
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
+            use_agentic_search=use_agentic_search,
         )
 
         headers = (
@@ -175,3 +177,136 @@ class ChatSessionManager:
             ),
         )
         response.raise_for_status()
+
+    @staticmethod
+    def delete(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Delete a chat session and all its related records (messages, agent data, etc.)
+        Uses the default deletion method configured on the server.
+
+        Returns True if deletion was successful, False otherwise.
+        """
+        response = requests.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        return response.ok
+
+    @staticmethod
+    def soft_delete(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Soft delete a chat session (marks as deleted but keeps in database).
+
+        Returns True if deletion was successful, False otherwise.
+        """
+        # Since there's no direct API for soft delete, we'll use a query parameter approach
+        # or make a direct call with hard_delete=False parameter via a new endpoint
+        response = requests.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        return response.ok
+
+    @staticmethod
+    def hard_delete(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Hard delete a chat session (completely removes from database).
+
+        Returns True if deletion was successful, False otherwise.
+        """
+        response = requests.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        return response.ok
+
+    @staticmethod
+    def verify_deleted(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Verify that a chat session has been deleted by attempting to retrieve it.
+
+        Returns True if the chat session is confirmed deleted, False if it still exists.
+        """
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        # Chat session should return 400 if it doesn't exist
+        return response.status_code == 400
+
+    @staticmethod
+    def verify_soft_deleted(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Verify that a chat session has been soft deleted (marked as deleted but still in DB).
+
+        Returns True if the chat session is soft deleted, False otherwise.
+        """
+        # Try to get the chat session with include_deleted=true
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+
+        if response.status_code == 200:
+            # Chat exists, check if it's marked as deleted
+            chat_data = response.json()
+            return chat_data.get("deleted", False) is True
+        return False
+
+    @staticmethod
+    def verify_hard_deleted(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Verify that a chat session has been hard deleted (completely removed from DB).
+
+        Returns True if the chat session is hard deleted, False otherwise.
+        """
+        # Try to get the chat session with include_deleted=true
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+
+        # For hard delete, even with include_deleted=true, the record should not exist
+        return response.status_code != 200
