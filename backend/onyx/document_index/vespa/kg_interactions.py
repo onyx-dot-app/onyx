@@ -12,8 +12,6 @@ from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.utils.logger import setup_logger
 
-# from backend.onyx.chat.process_message import get_inference_chunks
-# from backend.onyx.document_index.vespa.index import VespaIndex
 
 logger = setup_logger()
 
@@ -84,119 +82,68 @@ def update_kg_chunks_vespa_info(
     )
 
 
-def update_kg_chunks_vespa_info_for_entity(
-    entity: KGEntity,
-    index_name: str,
-    tenant_id: str,
-) -> None:
-    """Add the entity information to vespa for filtered search."""
-    if entity.document_id is None:
-        raise ValueError("Entity has no document_id")
-
-    # Add entity, and the generalized entity
-    kg_entities = {entity.id_name, f"{entity.entity_type_id_name}::*"}
-
-    # Add relationship and the generalized relationships in case
-    # an entity referenced already by a relationship gains a document_id
-    kg_relationships: set[str] = set()
+def get_kg_vespa_info_update_requests_for_document(
+    document_id: str, index_name: str
+) -> list[KGUChunkUpdateRequest]:
+    """Get the kg_info update requests for a document."""
+    # get all entities and relationships tied to the document
     with get_session_with_current_tenant() as db_session:
+        entities = (
+            db_session.query(KGEntity).filter(KGEntity.document_id == document_id).all()
+        )
+        if not entities:
+            return []
+        entity_id_names = [entity.id_name for entity in entities]
+
         relationships = (
             db_session.query(KGRelationship)
             .filter(
                 or_(
-                    KGRelationship.source_node == entity.id_name,
-                    KGRelationship.target_node == entity.id_name,
+                    KGRelationship.source_node.in_(entity_id_names),
+                    KGRelationship.target_node.in_(entity_id_names),
+                    KGRelationship.source_document == document_id,
                 )
             )
             .all()
         )
-        for relationship in relationships:
-            kg_relationships.update(
-                {
-                    relationship.id_name,
-                    f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node}",
-                    f"{relationship.source_node}__{relationship.type}__{relationship.target_node_type}::*",
-                    f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node_type}::*",
-                }
-            )
 
-    # get chunks in the entity document
+    # create the kg vespa info
+    kg_entities: set[str] = set()
+    kg_relationships: set[str] = set()
+
+    for entity in entities:
+        kg_entities.add(entity.id_name)
+        kg_entities.add(f"{entity.entity_type_id_name}::*")
+
+    for relationship in relationships:
+        kg_relationships.add(relationship.id_name)
+        kg_relationships.add(
+            f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node}"
+        )
+        kg_relationships.add(
+            f"{relationship.source_node}__{relationship.type}__{relationship.target_node_type}::*",
+        )
+        kg_relationships.add(
+            f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node_type}::*"
+        )
+
+    # get chunks in the document
     chunks = _get_chunks_via_visit_api(
-        chunk_request=VespaChunkRequest(document_id=entity.document_id),
+        chunk_request=VespaChunkRequest(document_id=document_id),
         index_name=index_name,
         filters=IndexFilters(access_control_list=None),
-        field_names=["chunk_id", "metadata"],
+        field_names=["chunk_id"],
         get_large_chunks=False,
     )
 
-    # update vespa
-    kg_update_requests = [
+    # get vespa update requests
+    return [
         KGUChunkUpdateRequest(
-            document_id=entity.document_id,
+            document_id=document_id,
             chunk_id=chunk["fields"]["chunk_id"],
-            core_entity=entity.id_name,
+            core_entity="unused",
             entities=kg_entities,
             relationships=kg_relationships or None,
         )
         for chunk in chunks
     ]
-    update_kg_chunks_vespa_info(
-        kg_update_requests=kg_update_requests,
-        index_name=index_name,
-        tenant_id=tenant_id,
-    )
-
-
-def update_kg_chunks_vespa_info_for_relationship(
-    relationship: KGRelationship,
-    index_name: str,
-    tenant_id: str,
-) -> None:
-    """Add the relationship information to vespa for filtered search."""
-    # Add relationship, and the generalized relationship
-    kg_relationships = {
-        relationship.id_name,
-        f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node}",
-        f"{relationship.source_node}__{relationship.type}__{relationship.target_node_type}::*",
-        f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node_type}::*",
-    }
-
-    with get_session_with_current_tenant() as db_session:
-        entity_documents = (
-            db_session.query(KGEntity.id_name, KGEntity.document_id)
-            .filter(
-                KGEntity.id_name.in_(
-                    [relationship.source_node, relationship.target_node]
-                )
-            )
-            .all()
-        )
-
-    for entity_id_name, source_document_id in entity_documents:
-        if source_document_id is None:
-            continue
-
-        # get chunks in the entity document
-        chunks = _get_chunks_via_visit_api(
-            chunk_request=VespaChunkRequest(document_id=source_document_id),
-            index_name=index_name,
-            filters=IndexFilters(access_control_list=None),
-            field_names=["chunk_id"],
-            get_large_chunks=False,
-        )
-
-        # update vespa
-        kg_update_requests = [
-            KGUChunkUpdateRequest(
-                document_id=source_document_id,
-                chunk_id=chunk["fields"]["chunk_id"],
-                core_entity=entity_id_name,
-                relationships=kg_relationships,
-            )
-            for chunk in chunks
-        ]
-        update_kg_chunks_vespa_info(
-            kg_update_requests=kg_update_requests,
-            index_name=index_name,
-            tenant_id=tenant_id,
-        )

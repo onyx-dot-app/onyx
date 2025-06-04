@@ -80,6 +80,7 @@ def upgrade() -> None:
             sa.column("kg_variable_values", postgresql.ARRAY(sa.String)),
         ),
         [
+            {"kg_variable_name": "KG_EXPOSED", "kg_variable_values": ["false"]},
             {"kg_variable_name": "KG_ENABLED", "kg_variable_values": ["false"]},
             {"kg_variable_name": "KG_VENDOR", "kg_variable_values": []},
             {"kg_variable_name": "KG_VENDOR_DOMAINS", "kg_variable_values": []},
@@ -99,6 +100,10 @@ def upgrade() -> None:
                 ],
             },
             {"kg_variable_name": "KG_MAX_COVERAGE_DAYS", "kg_variable_values": ["90"]},
+            {
+                "kg_variable_name": "KG_MAX_PARENT_RECURSION_DEPTH",
+                "kg_variable_values": ["2"],
+            },
         ],
     )
 

@@ -589,6 +589,7 @@ def stream_chat_message_objects(
             raise Exception("Clustering done")
 
         elif new_msg_req.message == "kg":
+            reset_vespa_kg_index(tenant_id, index_str)
             reset_full_kg_index()
             kg_extraction(tenant_id, index_str)
             kg_clustering(tenant_id, index_str)
