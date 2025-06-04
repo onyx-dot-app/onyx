@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import {
   redirect,
   usePathname,
@@ -2705,28 +2706,28 @@ export function ChatPage({
                                 completeMessageDetail
                               );
 
-                              if (
-                                currentRegenerationState()?.finalMessageIndex &&
-                                currentRegenerationState()?.finalMessageIndex! <
-                                  message.messageId
-                              ) {
-                                return <></>;
-                              }
+if (
+  currentRegenerationState()?.finalMessageIndex &&
+  currentRegenerationState()?.finalMessageIndex! <
+    message.messageId
+) {
+  return <React.Fragment key={`empty-user-${message.messageId}`}></React.Fragment>;
+}
 
                               const messageReactComponentKey = `${i}-${currentSessionId()}`;
                               const parentMessage = message.parentMessageId
                                 ? messageMap.get(message.parentMessageId)
                                 : null;
                               if (message.type === "user") {
-                                if (
-                                  (currentSessionChatState == "loading" &&
-                                    i == messageHistory.length - 1) ||
-                                  (currentSessionRegenerationState?.regenerating &&
-                                    message.messageId >=
-                                      currentSessionRegenerationState?.finalMessageIndex!)
-                                ) {
-                                  return <></>;
-                                }
+if (
+  (currentSessionChatState == "loading" &&
+    i == messageHistory.length - 1) ||
+  (currentSessionRegenerationState?.regenerating &&
+    message.messageId >=
+      currentSessionRegenerationState?.finalMessageIndex!)
+) {
+  return <React.Fragment key={`empty-user-${message.messageId}`}></React.Fragment>;
+}
                                 const nextMessage =
                                   messageHistory.length > i + 1
                                     ? messageHistory[i + 1]
@@ -2805,18 +2806,18 @@ export function ChatPage({
                                       )
                                     : null;
 
-                                if (
-                                  (currentSessionChatState == "loading" &&
-                                    i > messageHistory.length - 1) ||
-                                  (currentSessionRegenerationState?.regenerating &&
-                                    message.messageId >
-                                      currentSessionRegenerationState?.finalMessageIndex!)
-                                ) {
-                                  return <></>;
-                                }
-                                if (parentMessage?.type == "assistant") {
-                                  return <></>;
-                                }
+if (
+  (currentSessionChatState == "loading" &&
+    i > messageHistory.length - 1) ||
+  (currentSessionRegenerationState?.regenerating &&
+    message.messageId >
+      currentSessionRegenerationState?.finalMessageIndex!)
+) {
+  return <React.Fragment key={`empty-assistant1-${message.messageId}`}></React.Fragment>;
+}
+if (parentMessage?.type == "assistant") {
+  return <React.Fragment key={`empty-assistant2-${message.messageId}`}></React.Fragment>;
+}
                                 const secondLevelMessage =
                                   messageHistory[i + 1]?.type === "assistant"
                                     ? messageHistory[i + 1]
