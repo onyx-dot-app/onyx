@@ -13,7 +13,7 @@ import { BrainIcon } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { SwitchField } from "@/components/ui/switch";
-import { Form, Formik, useFormikContext } from "formik";
+import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
@@ -112,7 +112,14 @@ function KGConfiguration({
     values.enabled ? enabledSchema : disabledSchema
   );
 
-  const onSubmit = async (values: KGConfig) => {
+  const onSubmit = async (
+    values: KGConfig,
+    {
+      resetForm,
+    }: {
+      resetForm: (nextState?: Partial<FormikState<KGConfig>>) => void;
+    }
+  ) => {
     const body = values.enabled ? values : { enabled: false };
 
     const response = await fetch("/api/admin/kg/config", {
@@ -137,7 +144,7 @@ function KGConfiguration({
       message: "Succesfully configured Knowledge Graph.",
       type: "success",
     });
-
+    resetForm({ values });
     onSubmitSuccess?.();
   };
 
@@ -247,7 +254,14 @@ function KGEntityType({
     })
   );
 
-  const onSubmit = async (values: EntityTypeValues) => {
+  const onSubmit = async (
+    values: EntityTypeValues,
+    {
+      resetForm,
+    }: {
+      resetForm: (nextState?: Partial<FormikState<EntityTypeValues>>) => void;
+    }
+  ) => {
     const diffs: EntityType[] = [];
 
     for (const key in data) {
@@ -286,21 +300,26 @@ function KGEntityType({
       type: "success",
     });
     mutate();
+    resetForm({ values });
   };
+
+  const sortedData = Object.values(data);
+  sortedData.sort((a, b) => {
+    if (a.name < b.name) return -1;
+    else if (a.name > b.name) return 1;
+    return 0;
+  });
 
   return (
     <CardSection className="flex w-min px-10">
       <Formik
         initialValues={data}
         validationSchema={validationSchema}
-        validate={(values) => {
-          validationSchema.validate(Object.values(values));
-        }}
         onSubmit={onSubmit}
       >
         {(props) => (
           <Form>
-            <DataTable columns={columns} data={Object.values(data)} />
+            <DataTable columns={columns} data={sortedData} />
             <div className="flex flex-row items-center gap-x-4">
               <Button type="submit" variant="submit" disabled={!props.dirty}>
                 Save
@@ -379,10 +398,7 @@ function Main() {
         >
           <KGConfiguration
             kgConfig={kgConfig}
-            onSubmitSuccess={() => {
-              setConfigureModalShown(false);
-              mutate();
-            }}
+            onSubmitSuccess={mutate}
             setPopup={setPopup}
           />
         </Modal>
