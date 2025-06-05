@@ -112,7 +112,9 @@ def build_vespa_filters(
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
     # If running in multi-tenant mode
-    if filters.tenant_id and MULTI_TENANT:
+    if MULTI_TENANT:
+        if not filters.tenant_id:
+            raise ValueError("Tenant ID is required in multi-tenant mode")
         filter_str += f'({TENANT_ID} contains "{filters.tenant_id}") and '
 
     # ACL filters

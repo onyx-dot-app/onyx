@@ -15,6 +15,7 @@ from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -26,7 +27,7 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
         secondary_index_name=None,
         large_chunks_enabled=False,
         secondary_large_chunks_enabled=False,
-        multitenant=False,
+        multitenant=MULTI_TENANT,
         httpx_client=None,
     )
 
