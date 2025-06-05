@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import ConfigDict
 from pydantic.main import BaseModel
 
+from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
 
 
@@ -45,3 +46,20 @@ class DisableKGConfigRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
+
+
+class EntityType(BaseModel):
+    name: str
+    description: str
+    active: bool
+
+    @classmethod
+    def from_model(
+        cls,
+        model: KGEntityType,
+    ) -> "EntityType":
+        return cls(
+            name=model.id_name,
+            description=model.description or "",
+            active=model.active,
+        )

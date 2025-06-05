@@ -1,13 +1,16 @@
 from datetime import datetime
 from enum import Enum
 
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGConfig
+from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
 from onyx.server.kg.models import EnableKGConfigRequest
+from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 
 
@@ -138,39 +141,35 @@ def get_kg_processing_in_progress_status(
     return config.kg_variable_values[0] == "true"
 
 
-# API helpers
+# server API helpers
+
+
+VALID_ENTITY_TYPE_NAMES = set(
+    [
+        "ACCOUNT",
+        "CONCERN",
+        "CONNECTOR",
+        "EMPLOYEE",
+        "ENGAGEMENT",
+        "FIREFLIES",
+        "GITHUB",
+        "GMAIL",
+        "GOAL",
+        "GONG",
+        "GOOGLE_DRIVE",
+        "JIRA",
+        "LINEAR",
+        "OPPORTUNITY",
+        "SLACK",
+        "VENDOR",
+        "WEB",
+    ]
+)
 
 
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:
     config = get_kg_config_settings(db_session=db_session)
     return KGConfigAPIModel.from_kg_config_settings(config)
-
-
-def disable_kg(db_session: Session) -> None:
-    var = (
-        db_session.query(KGConfig)
-        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED)
-        .first()
-    )
-
-    values = [bool_to_string(False)]
-
-    if var:
-        db_session.query(KGConfig).where(
-            KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED
-        ).update(
-            {"kg_variable_values": values},
-            synchronize_session=False,
-        )
-    else:
-        db_session.add(
-            KGConfig(
-                kg_variable_name=KGConfigVars.KG_ENABLED,
-                kg_variable_values=values,
-            )
-        )
-
-    db_session.commit()
 
 
 def enable_kg(
@@ -227,6 +226,62 @@ def enable_kg(
         ).update(
             {"kg_variable_values": var.kg_variable_values},
             synchronize_session=False,
+        )
+
+    db_session.commit()
+
+
+def disable_kg(db_session: Session) -> None:
+    var = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED)
+        .first()
+    )
+
+    values = [bool_to_string(False)]
+
+    if var:
+        db_session.query(KGConfig).where(
+            KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED
+        ).update(
+            {"kg_variable_values": values},
+            synchronize_session=False,
+        )
+    else:
+        db_session.add(
+            KGConfig(
+                kg_variable_name=KGConfigVars.KG_ENABLED,
+                kg_variable_values=values,
+            )
+        )
+
+    db_session.commit()
+
+
+def get_kg_entity_types(db_session: Session) -> list[EntityType]:
+    return [
+        EntityType.from_model(kg_entity_type)
+        for kg_entity_type in db_session.query(KGEntityType)
+    ]
+
+
+def update_kg_entity_types(
+    db_session: Session,
+    updates: list[EntityType],
+) -> None:
+    for upd in updates:
+        if upd.name not in VALID_ENTITY_TYPE_NAMES:
+            raise ValueError(
+                f"Invalid entity-type name; expected one of {VALID_ENTITY_TYPE_NAMES=}, instead got {upd.name=}"
+            )
+
+        db_session.execute(
+            update(KGEntityType)
+            .where(KGEntityType.id_name == upd.name)
+            .values(
+                description=upd.description,
+                active=upd.active,
+            )
         )
 
     db_session.commit()
