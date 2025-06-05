@@ -26,7 +26,7 @@ export const AssistantBadgeSelector = ({
           selected
             ? "bg-background-900 text-white"
             : "bg-transparent text-text-900"
-        } w-12 h-5 text-center px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
+        } h-5 text-center px-1 py-0.5 rounded-lg cursor-pointer text-[12px] font-normal leading-[10px] border border-black justify-center items-center gap-1 inline-flex`}
       onClick={toggleFilter}
     >
       {text}
