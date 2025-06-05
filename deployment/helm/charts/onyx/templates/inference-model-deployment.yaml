@@ -34,6 +34,8 @@ spec:
             name: {{ .Values.config.envConfigMapName }}
         env:
           {{- include "onyx-stack.envSecrets" . | nindent 12}}
+        resources:
+          {{- toYaml .Values.indexCapability.resources | nindent 12 }}
         volumeMounts:
         {{- range .Values.inferenceCapability.volumeMounts }}
         - name: {{ .name }}

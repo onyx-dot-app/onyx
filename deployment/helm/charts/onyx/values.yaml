@@ -95,7 +95,8 @@ inferenceCapability:
   podLabels:
     - key: app
       value: inference-model-server
-
+  resources: {}
+  
 indexCapability:
   service:
     portName: modelserver
@@ -129,6 +130,8 @@ indexCapability:
     tag: ""
     pullPolicy: IfNotPresent
   limitConcurrency: 10
+  resources: {}
+
 config:
   envConfigMapName: env-configmap
 
