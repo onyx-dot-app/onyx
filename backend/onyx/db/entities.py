@@ -2,9 +2,7 @@ import uuid
 from datetime import datetime
 from datetime import timezone
 from typing import List
-from typing import Type
 
-from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -267,66 +265,6 @@ def get_grounded_entities_by_types(
         .filter(KGEntityType.grounding == grounding)
         .all()
     )
-
-
-def delete_entities_by_id_names(
-    db_session: Session, id_names: list[str], kg_stage: KGStage
-) -> int:
-    """
-    Delete entities from the database based on a list of id_names.
-
-    Args:
-        db_session: SQLAlchemy database session
-        id_names: List of entity id_names to delete
-
-    Returns:
-        Number of entities deleted
-    """
-
-    if kg_stage not in [KGStage.EXTRACTED, KGStage.NORMALIZED]:
-        raise ValueError(f"Invalid KGStage: {kg_stage}")
-
-    if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging] = (
-            KGEntityExtractionStaging
-        )
-    else:
-        _KGEntityObject = KGEntity
-
-    deleted_count = (
-        db_session.query(_KGEntityObject)
-        .filter(_KGEntityObject.id_name.in_(id_names))
-        .delete(synchronize_session=False)
-    )
-
-    db_session.flush()  # Flush to ensure deletion is processed
-    return deleted_count
-
-
-def get_entities_by_document_ids(
-    db_session: Session, document_ids: list[str], kg_stage: KGStage
-) -> List[str]:
-    """Get all entity id_names that belong to the specified document ids.
-
-    Args:
-        db_session: SQLAlchemy database session
-        document_ids: List of document ids to filter by
-
-    Returns:
-        List of entity id_names belonging to the specified document ids
-    """
-    if kg_stage == KGStage.EXTRACTED:
-        stmt = select(KGEntityExtractionStaging.id_name).where(
-            func.lower(KGEntityExtractionStaging.document_id).in_(document_ids)
-        )
-    elif kg_stage == KGStage.NORMALIZED:
-        stmt = select(KGEntity.id_name).where(
-            func.lower(KGEntity.document_id).in_(document_ids)
-        )
-    else:
-        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
-    result = db_session.execute(stmt).scalars().all()
-    return list(result)
 
 
 def get_document_id_for_entity(db_session: Session, entity_id_name: str) -> str | None:
