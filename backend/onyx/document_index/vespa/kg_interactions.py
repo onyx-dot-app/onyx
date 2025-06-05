@@ -105,7 +105,7 @@ def get_kg_vespa_info_update_requests_for_document(
     chunks = _get_chunks_via_visit_api(
         chunk_request=VespaChunkRequest(document_id=document_id),
         index_name=index_name,
-        filters=IndexFilters(access_control_list=None),
+        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
         field_names=["chunk_id"],
         get_large_chunks=False,
     )
