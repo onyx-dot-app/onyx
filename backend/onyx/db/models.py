@@ -646,7 +646,7 @@ class KGEntityType(Base):
         NullFilteredString, nullable=False, index=False
     )
 
-    attributes: Mapped[str] = mapped_column(
+    attributes: Mapped[dict] = mapped_column(
         postgresql.JSONB,
         nullable=True,
         default=dict,

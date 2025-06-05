@@ -51,6 +51,11 @@ KG_MAX_DEEP_SEARCH_RESULTS: int = int(
 )
 
 
+KG_METADATA_TRACkING_THRESHOLD: int = int(
+    os.environ.get("KG_METADATA_TRACkING_THRESHOLD", "10")
+)
+
+
 KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH: int = int(
     os.environ.get("KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH", "2")
 )
