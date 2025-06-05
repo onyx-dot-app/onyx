@@ -227,18 +227,28 @@ class SharepointConnector(LoadConnector, PollConnector):
 
         return final_driveitems
 
-    def _fetch_sites(self) -> list[SiteDescriptor]:
-        sites = self.graph_client.sites.get_all().execute_query()
-        site_descriptors = []
-        for site in sites.current_page:
-            site_descriptors.append(
-                SiteDescriptor(
-                    url=site.web_url,
-                    drive_name=None,
-                    folder_path=None,
-                )
-            )
+    def _handle_paginated_sites(self, sites):
+        while sites:
+            if sites.current_page:
+                yield from sites.current_page
+            if not sites.has_next:
+                break
+            sites = sites._get_next().execute_query()
 
+    def _fetch_sites(self) -> list[SiteDescriptor]:
+        sites = self.graph_client.sites.get_all_sites().execute_query()
+
+        if not sites:
+            raise RuntimeError("No sites found in the tenant")
+
+        site_descriptors = [
+            SiteDescriptor(
+                url=site.web_url,
+                drive_name=None,
+                folder_path=None,
+            )
+            for site in self._handle_paginated_sites(sites)
+        ]
         return site_descriptors
 
     def _fetch_from_sharepoint(
