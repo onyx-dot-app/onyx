@@ -19,11 +19,15 @@ import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
 import {
   EntityType,
-  ConfigurationValues,
+  KGConfig,
   EntityTypeValues,
+  sanitizeKGConfig,
+  KGConfigRaw,
 } from "./interfaces";
 import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/dataTable";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 function createDomainField(
   name: string,
@@ -50,7 +54,7 @@ function createDomainField(
 }
 
 const VendorDomains = createDomainField(
-  "vendorDomains",
+  "vendor_domains",
   "Vendor Domains",
   "Domain names of your vendor.",
   "Domain",
@@ -58,45 +62,74 @@ const VendorDomains = createDomainField(
 );
 
 const IgnoreDomains = createDomainField(
-  "ignoreDomains",
+  "ignore_domains",
   "Ignore Domains",
   "Domain names to ignore.",
   "Domain"
 );
 
-function KGConfiguration() {
-  const initialValues: ConfigurationValues = {
+function KGConfiguration({
+  kgConfig,
+  onSubmitSuccess: onSubmit,
+}: {
+  kgConfig: KGConfig;
+  onSubmitSuccess?: () => void;
+}) {
+  const disabledInitialValues: KGConfig = {
     enabled: false,
     vendor: "",
-    vendorDomains: [""],
-    ignoreDomains: [],
-    coverageStart: null,
-    coverageDays: null,
+    vendor_domains: [""],
+    ignore_domains: [],
+    coverage_start: new Date(),
   };
 
-  const validationSchema = Yup.object({
+  const initialValues = kgConfig.enabled ? kgConfig : disabledInitialValues;
+
+  const enabledSchema = Yup.object({
     enabled: Yup.boolean().required(),
     vendor: Yup.string().required("Vendor is required."),
-    vendorDomains: Yup.array(
+    vendor_domains: Yup.array(
       Yup.string().required("Vendor Domain is required.")
     )
       .min(1)
       .required(),
-    ignoreDomains: Yup.array(Yup.string().required("Ignore Domain is required"))
+    ignore_domains: Yup.array(
+      Yup.string().required("Ignore Domain is required")
+    )
       .min(0)
       .required(),
-    coverageStart: Yup.date().nullable(),
-    coverageDays: Yup.number().positive().nullable(),
+    coverage_start: Yup.date().nullable(),
   });
 
-  const [isEnabled, setIsEnabled] = useState(false);
+  const disabledSchema = Yup.object({
+    enabled: Yup.boolean().required(),
+  });
+
+  const validationSchema = Yup.lazy((values) =>
+    values.enabled ? enabledSchema : disabledSchema
+  );
 
   return (
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values) => {
-        console.log(values);
+        const body = values.enabled ? values : { enabled: false };
+
+        const response = await fetch("/api/admin/kg/config", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+          const errorMsg = (await response.json()).detail;
+          console.log(errorMsg);
+          return;
+        }
+        onSubmit?.();
       }}
     >
       {(props) => (
@@ -112,16 +145,14 @@ function KGConfiguration() {
                 name="enabled"
                 className="flex flex-1"
                 onCheckedChange={(state) => {
-                  setIsEnabled(state);
-                  if (!state) {
-                    props.resetForm();
-                  }
+                  props.resetForm();
+                  props.setFieldValue("enabled", state);
                 }}
               />
             </div>
             <div
               className={`flex flex-col gap-y-6 ${
-                isEnabled ? "" : "opacity-50"
+                props.values.enabled ? "" : "opacity-50"
               }`}
             >
               <TextFormField
@@ -130,20 +161,20 @@ function KGConfiguration() {
                 subtext="The company which is providing this feature."
                 className="flex flex-row flex-1 w-full"
                 placeholder="My Company Inc."
-                disabled={!isEnabled}
+                disabled={!props.values.enabled}
               />
-              <VendorDomains disabled={!isEnabled} />
-              <IgnoreDomains disabled={!isEnabled} />
+              <VendorDomains disabled={!props.values.enabled} />
+              <IgnoreDomains disabled={!props.values.enabled} />
               <DatePickerField
-                name="coverageStart"
+                name="coverage_start"
                 label="Coverage Start"
                 subtext="The start date of coverage for Knowledge Graph."
-                disabled={!isEnabled}
+                disabled={!props.values.enabled}
               />
-              <Button variant="submit" type="submit" disabled={!isEnabled}>
-                Submit
-              </Button>
             </div>
+            <Button variant="submit" type="submit">
+              Submit
+            </Button>
           </div>
         </Form>
       )}
@@ -247,6 +278,15 @@ function KGEntityType() {
 
 function Main() {
   const [configureModalShown, setConfigureModalShown] = useState(false);
+  const { data, isLoading, mutate } = useSWR<KGConfigRaw>(
+    "/api/admin/kg/config",
+    errorHandlingFetcher
+  );
+  if (isLoading || !data) {
+    return <></>;
+  }
+
+  const kgConfig = sanitizeKGConfig(data);
 
   return (
     <div className="flex flex-col py-4 gap-y-8">
@@ -277,18 +317,26 @@ function Main() {
           </Button>
         </div>
       </CardSection>
-      <div>
-        <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-          Knowledge Graph Configuration
-        </p>
-        <KGEntityType />
-      </div>
+      {kgConfig.enabled && (
+        <div>
+          <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
+            Entity Types
+          </p>
+          <KGEntityType />
+        </div>
+      )}
       {configureModalShown && (
         <Modal
           title="Configure Knowledge Graph"
           onOutsideClick={() => setConfigureModalShown(false)}
         >
-          <KGConfiguration />
+          <KGConfiguration
+            kgConfig={kgConfig}
+            onSubmitSuccess={() => {
+              setConfigureModalShown(false);
+              mutate();
+            }}
+          />
         </Modal>
       )}
     </div>
