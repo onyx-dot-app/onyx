@@ -10,6 +10,7 @@ import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
 from office365.onedrive.sites.site import Site  # type: ignore
+from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -229,7 +230,9 @@ class SharepointConnector(LoadConnector, PollConnector):
 
         return final_driveitems
 
-    def _handle_paginated_sites(self, sites) -> Generator[Site, None, None]:
+    def _handle_paginated_sites(
+        self, sites: SitesWithRoot
+    ) -> Generator[Site, None, None]:
         while sites:
             if sites.current_page:
                 yield from sites.current_page
