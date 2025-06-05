@@ -5,23 +5,31 @@ from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGPerson
 
 
-def format_entity(entity: str) -> str:
-    if len(entity.split("::")) == 2:
-        entity_type, entity_name = entity.split("::")
-        return f"{entity_type.upper()}::{entity_name.lower()}"
-    else:
-        return entity
+def format_entity_id(entity_id_name: str) -> str:
+    return make_entity_id(*split_entity_id(entity_id_name))
 
 
-def format_entity_for_models(entity: str) -> str:
-    entity_split = entity.split("::")
+def make_entity_id(entity_type: str, entity_name: str) -> str:
+    return f"{entity_type.upper()}::{entity_name.lower()}"
+
+
+def split_entity_id(entity_id_name: str) -> list[str]:
+    return entity_id_name.split("::")
+
+
+def get_entity_type(entity_id_name: str) -> str:
+    return entity_id_name.split("::", 1)[0].upper()
+
+
+def format_entity_id_for_models(entity_id_name: str) -> str:
+    entity_split = entity_id_name.split("::")
     if len(entity_split) == 2:
         entity_type, entity_name = entity_split
         separator = "::"
     elif len(entity_split) > 2:
-        raise ValueError(f"Entity {entity} is not in the correct format")
+        raise ValueError(f"Entity {entity_id_name} is not in the correct format")
     else:
-        entity_name = entity
+        entity_name = entity_id_name
         separator = entity_type = ""
 
     formatted_entity_type = entity_type.strip().upper()
@@ -32,19 +40,33 @@ def format_entity_for_models(entity: str) -> str:
     return f"{formatted_entity_type}{separator}{formatted_entity_name}"
 
 
-def format_relationship(relationship: str) -> str:
-    source_node, relationship_type, target_node = relationship.split("__")
+def format_relationship_id(relationship_id_name: str) -> str:
+    return make_relationship_id(*split_relationship_id(relationship_id_name))
+
+
+def make_relationship_id(
+    source_node: str, relationship_type: str, target_node: str
+) -> str:
     return (
-        f"{format_entity(source_node)}__"
+        f"{format_entity_id(source_node)}__"
         f"{relationship_type.lower()}__"
-        f"{format_entity(target_node)}"
+        f"{format_entity_id(target_node)}"
     )
 
 
-def format_relationship_type(relationship_type: str) -> str:
-    source_node_type, relationship_type, target_node_type = relationship_type.split(
-        "__"
+def split_relationship_id(relationship_id_name: str) -> list[str]:
+    return relationship_id_name.split("__")
+
+
+def format_relationship_type_id(relationship_type_id_name: str) -> str:
+    return make_relationship_type_id(
+        *split_relationship_type_id(relationship_type_id_name)
     )
+
+
+def make_relationship_type_id(
+    source_node_type: str, relationship_type: str, target_node_type: str
+) -> str:
     return (
         f"{source_node_type.upper()}__"
         f"{relationship_type.lower()}__"
@@ -52,12 +74,16 @@ def format_relationship_type(relationship_type: str) -> str:
     )
 
 
-def generate_relationship_type(relationship: str) -> str:
-    source_node, relationship_type, target_node = relationship.split("__")
-    return (
-        f"{source_node.split('::')[0].upper()}__"
-        f"{relationship_type.lower()}__"
-        f"{target_node.split('::')[0].upper()}"
+def split_relationship_type_id(relationship_type_id_name: str) -> list[str]:
+    return relationship_type_id_name.split("__")
+
+
+def extract_relationship_type_id(relationship_id_name: str) -> str:
+    source_node, relationship_type, target_node = split_relationship_id(
+        relationship_id_name
+    )
+    return make_relationship_type_id(
+        get_entity_type(source_node), relationship_type, get_entity_type(target_node)
     )
 
 
@@ -130,7 +156,7 @@ def generalize_entities(entities: list[str]) -> set[str]:
     """
     Generalize entities to their superclass.
     """
-    return set([f"{entity.split('::')[0]}:*" for entity in entities])
+    return {make_entity_id(get_entity_type(entity), "*") for entity in entities}
 
 
 def generalize_relationships(relationships: list[str]) -> set[str]:
@@ -142,17 +168,15 @@ def generalize_relationships(relationships: list[str]) -> set[str]:
         assert (
             len(relationship.split("__")) == 3
         ), "Relationship is not in the correct format"
-        source_entity, relationship_type, target_entity = relationship.split("__")
-        generalized_source_entity = list(generalize_entities([source_entity]))[0]
-        generalized_target_entity = list(generalize_entities([target_entity]))[0]
-        generalized_relationships.add(
-            f"{generalized_source_entity}__{relationship_type}__{target_entity}"
+        source_entity, relationship_type, target_entity = split_relationship_id(
+            relationship
         )
-        generalized_relationships.add(
-            f"{source_entity}__{relationship_type}__{generalized_target_entity}"
-        )
-        generalized_relationships.add(
-            f"{generalized_source_entity}__{relationship_type}__{generalized_target_entity}"
-        )
+        source_general = make_entity_id(get_entity_type(source_entity), "*")
+        target_general = make_entity_id(get_entity_type(target_entity), "*")
+        generalized_relationships |= {
+            make_relationship_id(source_general, relationship_type, target_entity),
+            make_relationship_id(source_entity, relationship_type, target_general),
+            make_relationship_id(source_general, relationship_type, target_general),
+        }
 
     return generalized_relationships

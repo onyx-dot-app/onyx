@@ -10,9 +10,10 @@ from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
+from onyx.kg.utils.formatting_utils import generalize_entities
+from onyx.kg.utils.formatting_utils import generalize_relationships
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-
 
 logger = setup_logger()
 
@@ -109,24 +110,13 @@ def get_kg_vespa_info_update_requests_for_document(
         )
 
     # create the kg vespa info
-    kg_entities: set[str] = set()
-    kg_relationships: set[str] = set()
+    entity_id_names = [entity.id_name for entity in entities]
+    relationship_id_names = [relationship.id_name for relationship in relationships]
 
-    for entity in entities:
-        kg_entities.add(entity.id_name)
-        kg_entities.add(f"{entity.entity_type_id_name}::*")
-
-    for relationship in relationships:
-        kg_relationships.add(relationship.id_name)
-        kg_relationships.add(
-            f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node}"
-        )
-        kg_relationships.add(
-            f"{relationship.source_node}__{relationship.type}__{relationship.target_node_type}::*",
-        )
-        kg_relationships.add(
-            f"{relationship.source_node_type}::*__{relationship.type}__{relationship.target_node_type}::*"
-        )
+    kg_entities = generalize_entities(entity_id_names) | set(entity_id_names)
+    kg_relationships = generalize_relationships(relationship_id_names) | set(
+        relationship_id_names
+    )
 
     # get chunks in the document
     chunks = _get_chunks_via_visit_api(

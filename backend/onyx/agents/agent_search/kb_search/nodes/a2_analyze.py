@@ -32,6 +32,7 @@ from onyx.kg.clustering.normalizations import normalize_entities
 from onyx.kg.clustering.normalizations import normalize_entities_w_attributes_from_map
 from onyx.kg.clustering.normalizations import normalize_relationships
 from onyx.kg.clustering.normalizations import normalize_terms
+from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.prompts.kg_prompts import STRATEGY_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -77,7 +78,7 @@ def _get_fully_connected_entities(
     for relationship in relationships:
         # Split relationship into parts. Test for proper formatting just in case.
         # Should never be an error though at this point.
-        parts = relationship.split("__")
+        parts = split_relationship_id(relationship)
         if len(parts) != 3:
             raise ValueError(f"Invalid relationship: {relationship}")
 
