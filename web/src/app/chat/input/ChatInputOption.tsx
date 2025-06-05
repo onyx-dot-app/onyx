@@ -71,12 +71,11 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
           >
             <Icon size={size} className="h-4 w-4 my-auto  flex-none" />
             <div className={`flex items-center ${minimize && "mobile:hidden"}`}>
-              {name ||
-                (label && (
-                  <span className="text-sm  break-all line-clamp-1">
-                    {label || name}
-                  </span>
-                ))}
+              {(name || label) && (
+                <span className="text-sm  break-all line-clamp-1">
+                  {label ?? name}
+                </span>
+              )}
               {toggle && (
                 <ChevronDownIcon className="flex-none ml-1" size={size - 4} />
               )}

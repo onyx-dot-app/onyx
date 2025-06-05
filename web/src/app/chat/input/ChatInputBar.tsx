@@ -622,10 +622,10 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`${i18n.t(k.MESSAGE2)} ${truncateString(
+              placeholder={`${i18n.t(k.MESSAGE2)} ассистенту ${truncateString(
                 selectedAssistant.name,
                 70
-              )} ассистенту...`}
+              )}...`}
               value={message}
               onKeyDown={(event) => {
                 if (
