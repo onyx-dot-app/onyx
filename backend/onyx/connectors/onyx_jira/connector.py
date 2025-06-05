@@ -130,9 +130,6 @@ def process_jira_issue(
     metadata_dict: dict[str, str | list[str]] = {}
     people = set()
 
-    if "KAN-2" in page_url:
-        pass
-
     creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
     if creator is not None and (
         basic_expert_info := best_effort_basic_expert_info(creator)
