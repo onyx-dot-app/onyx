@@ -40,6 +40,8 @@ from onyx.db.models import Credential
 from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import KGEntity
+from onyx.db.models import KGRelationship
 from onyx.db.models import User
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import (
@@ -1260,3 +1262,30 @@ def check_for_documents_needing_kg_clustering(db_session: Session) -> bool:
     )
 
     return db_session.execute(select(stmt)).scalar() or False
+
+
+def get_document_kg_entities_and_relationships(
+    db_session: Session, document_id: str
+) -> tuple[list[KGEntity], list[KGRelationship]]:
+    """
+    Get the KG entities and relationships that references the document.
+    """
+    entities = (
+        db_session.query(KGEntity).filter(KGEntity.document_id == document_id).all()
+    )
+    if not entities:
+        return [], []
+    entity_id_names = [entity.id_name for entity in entities]
+
+    relationships = (
+        db_session.query(KGRelationship)
+        .filter(
+            or_(
+                KGRelationship.source_node.in_(entity_id_names),
+                KGRelationship.target_node.in_(entity_id_names),
+                KGRelationship.source_document == document_id,
+            )
+        )
+        .all()
+    )
+    return entities, relationships
