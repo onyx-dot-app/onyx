@@ -240,7 +240,7 @@ def kg_clustering(
             [
                 (
                     get_kg_vespa_info_update_requests_for_document,
-                    (document_id, index_name),
+                    (document_id, index_name, tenant_id),
                 )
                 for document_id in list(vespa_update_documents)[
                     i : i + processing_chunk_batch_size
