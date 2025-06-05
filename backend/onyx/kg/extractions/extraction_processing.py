@@ -49,7 +49,15 @@ from onyx.kg.utils.extraction_utils import kg_process_person
 from onyx.kg.utils.extraction_utils import prepare_llm_content_extraction
 from onyx.kg.utils.extraction_utils import prepare_llm_document_content
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
+from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import generalize_entities
+from onyx.kg.utils.formatting_utils import get_entity_type
+from onyx.kg.utils.formatting_utils import make_entity_id
+from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import make_relationship_type_id
+from onyx.kg.utils.formatting_utils import split_entity_id
+from onyx.kg.utils.formatting_utils import split_relationship_id
+from onyx.kg.utils.formatting_utils import split_relationship_type_id
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
 from onyx.kg.vespa.vespa_interactions import (
     get_document_classification_content_for_kg_processing,
@@ -212,7 +220,11 @@ def get_relationship_types_str(active: bool | None = None) -> str:
         relationship_types_list = []
         for rel_type in active_relationship_types:
             # Format as "source_type__relationship_type__target_type"
-            formatted_type = f"{rel_type.source_entity_type_id_name}__{rel_type.type}__{rel_type.target_entity_type_id_name}"
+            formatted_type = make_relationship_type_id(
+                rel_type.source_entity_type_id_name,
+                rel_type.type,
+                rel_type.target_entity_type_id_name,
+            )
             relationship_types_list.append(formatted_type)
 
     return "\n".join(relationship_types_list)
@@ -484,7 +496,7 @@ def kg_extraction(
             #   - Get and analyze batches of chunks
             #   - Store results in postgres:
             #      - entities and relationships in temp kg extraction tables
-            #      - document classification in temp kg entity etraction table
+            #      - document classification in temp kg entity extraction table
             #      - set kg_stage = extracted in document table
 
             classification_outcomes: list[tuple[bool, KGClassificationDecisions]] = []
@@ -720,13 +732,14 @@ def kg_extraction(
                 entity,
                 extraction_count,
             ) in aggregated_kg_extractions.entities.items():
-                if len(entity.split("::")) != 2:
+                parts = split_entity_id(entity)
+                if len(parts) != 2:
                     logger.error(
                         f"Invalid entity {entity} in aggregated_kg_extractions.entities"
                     )
                     continue
 
-                entity_type, entity_name = entity.split("::")
+                entity_type, entity_name = parts
                 entity_type = entity_type.upper()
                 entity_name = entity_name.capitalize()
 
@@ -819,7 +832,7 @@ def kg_extraction(
                 relationship_data,
             ) in aggregated_kg_extractions.relationships.items():
                 for source_document_id, extraction_count in relationship_data.items():
-                    relationship_split = relationship.split("__")
+                    relationship_split = split_relationship_id(relationship)
 
                     if len(relationship_split) != 3:
                         logger.error(
@@ -829,8 +842,8 @@ def kg_extraction(
 
                     source_entity, relationship_type, target_entity = relationship_split
 
-                    source_entity_type = source_entity.split("::")[0]
-                    target_entity_type = target_entity.split("::")[0]
+                    source_entity_type = get_entity_type(source_entity)
+                    target_entity_type = get_entity_type(target_entity)
 
                     if (
                         source_entity_type not in tracked_entity_types
@@ -838,13 +851,9 @@ def kg_extraction(
                     ):
                         continue
 
-                    source_entity_general = f"{source_entity_type.upper()}"
-                    target_entity_general = f"{target_entity_type.upper()}"
-                    relationship_type_id_name = (
-                        f"{source_entity_general}__{relationship_type.lower()}__"
-                        f"{target_entity_general}"
+                    relationship_type_id_name = extract_relationship_type_id(
+                        relationship
                     )
-
                     relationship_type_counter[
                         relationship_type_id_name
                     ] += extraction_count
@@ -857,7 +866,7 @@ def kg_extraction(
                     source_entity_type,
                     relationship_type,
                     target_entity_type,
-                ) = relationship_type_id_name.split("__")
+                ) = split_relationship_type_id(relationship_type_id_name)
 
                 if (
                     source_entity_type not in tracked_entity_types
@@ -885,7 +894,7 @@ def kg_extraction(
                 relationship_data,
             ) in aggregated_kg_extractions.relationships.items():
                 for source_document_id, extraction_count in relationship_data.items():
-                    relationship_split = relationship.split("__")
+                    relationship_split = split_relationship_id(relationship)
 
                     if len(relationship_split) != 3:
                         logger.error(
@@ -893,19 +902,11 @@ def kg_extraction(
                         )
                         continue
 
-                    source_entity, relationship_type_, target_entity = (
-                        relationship.split("__")
+                    source_entity, relationship_type, target_entity = (
+                        split_relationship_id(relationship)
                     )
-                    source_entity = relationship_split[0]
-                    relationship_type = (
-                        " ".join(relationship_split[1:-1])
-                        .replace("__", " ")
-                        .replace("_", " ")
-                    )
-                    target_entity = relationship_split[-1]
-
-                    source_entity_type = source_entity.split("::")[0]
-                    target_entity_type = target_entity.split("::")[0]
+                    source_entity_type = get_entity_type(source_entity)
+                    target_entity_type = get_entity_type(target_entity)
 
                     with get_session_with_current_tenant() as db_session:
                         try:
@@ -1138,11 +1139,11 @@ def _kg_chunk_batch_extraction(
                 )
 
         implied_extracted_relationships = [
-            kg_document_extractions.kg_core_document_id_name
-            + "__"
-            + "mentions"
-            + "__"
-            + extracted_entity
+            make_relationship_id(
+                kg_document_extractions.kg_core_document_id_name,
+                "mentions",
+                extracted_entity,
+            )
             for extracted_entity in extracted_entities
         ]
 
@@ -1169,11 +1170,11 @@ def _kg_chunk_batch_extraction(
 
         if not all_relationships:
             all_relationships.append(
-                f"VENDOR::{kg_config_settings.KG_VENDOR}"
-                + "__"
-                + "relates_to"
-                + "__"
-                + kg_document_extractions.kg_core_document_id_name
+                make_relationship_id(
+                    make_entity_id("VENDOR", cast(str, kg_config_settings.KG_VENDOR)),
+                    "relates_to",
+                    kg_document_extractions.kg_core_document_id_name,
+                )
             )
 
         logger.info(f"KG extracted: doc {chunk.document_id} chunk {chunk.chunk_id}")
@@ -1235,7 +1236,7 @@ def _kg_chunk_batch_extraction(
 
         mentioned_chunk_entities: set[str] = set()
         for relationship in chunk_result.relationships:
-            relationship_split = relationship.split("__")
+            relationship_split = split_relationship_id(relationship)
             if len(relationship_split) == 3:
                 source_entity = relationship_split[0]
                 target_entity = relationship_split[2]

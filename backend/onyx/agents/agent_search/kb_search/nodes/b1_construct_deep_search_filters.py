@@ -15,6 +15,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.configs.kg_configs import KG_FILTER_CONSTRUCTION_TIMEOUT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import get_entity_types_with_grounded_source_name
+from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.prompts.kg_prompts import SEARCH_FILTER_CONSTRUCTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -168,7 +169,7 @@ def construct_deep_search_filters(
         div_con_entities=div_con_structure,
         source_division=source_division,
         global_entity_filters=[
-            f"{global_filter}::*"
+            make_entity_id(global_filter, "*")
             for global_filter in filter_results.global_entity_filters
         ],
         global_relationship_filters=filter_results.global_relationship_filters,

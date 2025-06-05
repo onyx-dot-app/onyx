@@ -17,7 +17,7 @@ from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
-from onyx.kg.utils.formatting_utils import format_entity
+from onyx.kg.utils.formatting_utils import make_entity_id
 
 
 def upsert_staging_entity(
@@ -45,7 +45,7 @@ def upsert_staging_entity(
     """
     entity_type = entity_type.upper()
     name = name.title()
-    id_name = format_entity(f"{entity_type}::{name}")
+    id_name = make_entity_id(entity_type, name)
     attributes = attributes or {}
 
     entity_type_split = entity_type.split("-")
@@ -127,9 +127,7 @@ def transfer_entity(
     stmt = (
         pg_insert(KGEntity)
         .values(
-            id_name=format_entity(
-                f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}"
-            ),
+            id_name=make_entity_id(entity.entity_type_id_name, uuid.uuid4().hex[:20]),
             name=entity.name.casefold(),
             entity_class=entity.entity_class,
             entity_subtype=entity.entity_subtype,

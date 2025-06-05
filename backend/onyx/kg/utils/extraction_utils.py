@@ -17,6 +17,8 @@ from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import kg_email_processing
+from onyx.kg.utils.formatting_utils import make_entity_id
+from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
 from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
@@ -117,7 +119,7 @@ def kg_document_entities_relationships_attribute_generation(
     if kg_core_document:
         kg_core_document_id_name = kg_core_document.id_name
     else:
-        kg_core_document_id_name = f"{document_entity_type.upper()}::{document_id}"
+        kg_core_document_id_name = make_entity_id(document_entity_type, document_id)
 
     # Get implied entities and relationships from primary/secondary owners
 
@@ -182,38 +184,55 @@ def kg_document_entities_relationships_attribute_generation(
             if attribute.lower() in [x.lower() for x in active_entities]:
                 converted_attributes_to_relationships.add(attribute)
                 if isinstance(value, str):
-                    implied_entity = f"{attribute.upper()}::{value.capitalize()}"
+                    implied_entity = make_entity_id(attribute, value)
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                        make_relationship_id(
+                            implied_entity,
+                            f"is_{attribute}_of",
+                            kg_core_document_id_name,
+                        )
                     )
 
-                    implied_entity = f"{attribute.upper()}::*"
+                    implied_entity = make_entity_id(attribute, "*")
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                        make_relationship_id(
+                            implied_entity,
+                            f"is_{attribute}_of",
+                            kg_core_document_id_name,
+                        )
+                    )
+                    implied_relationships.add(
+                        make_relationship_id(
+                            implied_entity,
+                            f"is_{attribute}_of",
+                            make_entity_id(document_entity_type, "*"),
+                        )
                     )
 
-                    implied_entity = f"{attribute.upper()}::*"
+                    implied_entity = make_entity_id(attribute, value)
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{document_entity_type.upper()}::*"
-                    )
-
-                    implied_entity = f"{attribute.upper()}::{value.capitalize()}"
-                    implied_entities.add(implied_entity)
-                    implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{document_entity_type.upper()}::*"
+                        make_relationship_id(
+                            implied_entity,
+                            f"is_{attribute}_of",
+                            make_entity_id(document_entity_type, "*"),
+                        )
                     )
 
                     cleaned_document_attributes.pop(attribute)
 
                 elif isinstance(value, list):
                     for item in value:
-                        implied_entity = f"{attribute.upper()}::{item.capitalize()}"
+                        implied_entity = make_entity_id(attribute, item)
                         implied_entities.add(implied_entity)
                         implied_relationships.add(
-                            f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                            make_relationship_id(
+                                implied_entity,
+                                f"is_{attribute}_of",
+                                kg_core_document_id_name,
+                            )
                         )
                         cleaned_document_attributes.pop(attribute)
             if attribute.lower().endswith("_id") or attribute.endswith("Id"):
@@ -296,22 +315,36 @@ def kg_process_person(
             f"{kg_person.name} -- ({kg_person.company})"
         }
         if kg_person.name not in implied_entities:
-            generalized_target_entity = list(
-                generalize_entities([core_document_id_name])
-            )[0]
+            target_general = list(generalize_entities([core_document_id_name]))[0]
+            employee_entity = make_entity_id("EMPLOYEE", kg_person.name)
+            employee_general = make_entity_id("EMPLOYEE", "*")
 
-            implied_entities = implied_entities | {f"EMPLOYEE::{kg_person.name}"}
-            implied_relationships = implied_relationships | {
-                f"EMPLOYEE::{kg_person.name}__{relationship_type}__{core_document_id_name}",
-                f"EMPLOYEE::{kg_person.name}__{relationship_type}__{generalized_target_entity}",
-                f"EMPLOYEE::*__{relationship_type}__{core_document_id_name}",
-                f"EMPLOYEE::*__{relationship_type}__{generalized_target_entity}",
+            implied_entities.add(employee_entity)
+            implied_relationships |= {
+                make_relationship_id(
+                    employee_entity, relationship_type, core_document_id_name
+                ),
+                make_relationship_id(
+                    employee_entity, relationship_type, target_general
+                ),
+                make_relationship_id(
+                    employee_general, relationship_type, core_document_id_name
+                ),
+                make_relationship_id(
+                    employee_general, relationship_type, target_general
+                ),
             }
             if kg_person.company not in implied_entities:
-                implied_entities = implied_entities | {f"VENDOR::{kg_person.company}"}
-                implied_relationships = implied_relationships | {
-                    f"VENDOR::{kg_person.company}__{relationship_type}__{core_document_id_name}",
-                    f"VENDOR::{kg_person.company}__{relationship_type}__{generalized_target_entity}",
+                company_entity = make_entity_id("VENDOR", kg_person.company)
+
+                implied_entities.add(company_entity)
+                implied_relationships |= {
+                    make_relationship_id(
+                        company_entity, relationship_type, core_document_id_name
+                    ),
+                    make_relationship_id(
+                        company_entity, relationship_type, target_general
+                    ),
                 }
 
     else:
@@ -319,22 +352,22 @@ def kg_process_person(
             f"{kg_person.name} -- ({kg_person.company})"
         }
         if kg_person.company not in implied_entities:
-            implied_entities = implied_entities | {
-                f"ACCOUNT::{kg_person.company}",
-                "ACCOUNT::*",
-            }
-            implied_relationships = implied_relationships | {
-                f"ACCOUNT::{kg_person.company}__{relationship_type}__{core_document_id_name}",
-                f"ACCOUNT::*__{relationship_type}__{core_document_id_name}",
-            }
+            account_entity = make_entity_id("ACCOUNT", kg_person.company)
+            account_general = make_entity_id("ACCOUNT", "*")
+            target_general = list(generalize_entities([core_document_id_name]))[0]
 
-            generalized_target_entity = list(
-                generalize_entities([core_document_id_name])
-            )[0]
-
-            implied_relationships = implied_relationships | {
-                f"ACCOUNT::*__{relationship_type}__{generalized_target_entity}",
-                f"ACCOUNT::{kg_person.company}__{relationship_type}__{generalized_target_entity}",
+            implied_entities |= {account_entity, account_general}
+            implied_relationships |= {
+                make_relationship_id(
+                    account_entity, relationship_type, core_document_id_name
+                ),
+                make_relationship_id(
+                    account_general, relationship_type, core_document_id_name
+                ),
+                make_relationship_id(account_entity, relationship_type, target_general),
+                make_relationship_id(
+                    account_general, relationship_type, target_general
+                ),
             }
 
     return (

@@ -23,6 +23,8 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_document_id_for_entity
 from onyx.db.entities import get_entity_name
 from onyx.db.entity_type import get_entity_types
+from onyx.kg.utils.formatting_utils import make_entity_id
+from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -51,7 +53,7 @@ def _check_entities_disconnected(
     # Build the graph from relationships
     for relationship in current_relationships:
         try:
-            source, _, target = relationship.split("__")
+            source, _, target = split_relationship_id(relationship)
             if source in graph and target in graph:
                 graph[source].add(target)
                 # Add reverse edge to capture that we do also have a relationship in the other direction,
@@ -379,13 +381,13 @@ def rename_entities_in_answer(answer: str) -> str:
     for match in matches:
         entity_type = match.group(1).upper().strip()
         entity_name = match.group(2).strip()
-        logger.debug(f"Processing entity: {entity_type}::{entity_name}")
+        potential_entity_id_name = make_entity_id(entity_type, entity_name)
+        logger.debug(f"Processing entity: {potential_entity_id_name}")
 
         if entity_type not in active_entity_types:
             logger.debug(f"Entity type {entity_type} not in active types")
             continue
 
-        potential_entity_id_name = f"{entity_type}::{entity_name}"
         replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)
 
         if replacement_candidate.doc_id:

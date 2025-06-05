@@ -13,8 +13,12 @@ from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
-from onyx.kg.utils.formatting_utils import format_relationship
-from onyx.kg.utils.formatting_utils import generate_relationship_type
+from onyx.kg.utils.formatting_utils import extract_relationship_type_id
+from onyx.kg.utils.formatting_utils import format_relationship_id
+from onyx.kg.utils.formatting_utils import get_entity_type
+from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import make_relationship_type_id
+from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -41,16 +45,16 @@ def upsert_staging_relationship(
         sqlalchemy.exc.IntegrityError: If there's an error with the database operation
     """
     # Generate a unique ID for the relationship
-    relationship_id_name = format_relationship(relationship_id_name)
+    relationship_id_name = format_relationship_id(relationship_id_name)
     (
         source_entity_id_name,
         relationship_string,
         target_entity_id_name,
-    ) = relationship_id_name.split("__")
+    ) = split_relationship_id(relationship_id_name)
 
-    source_entity_type = source_entity_id_name.split("::")[0]
-    target_entity_type = target_entity_id_name.split("::")[0]
-    relationship_type = generate_relationship_type(relationship_id_name)
+    source_entity_type = get_entity_type(source_entity_id_name)
+    target_entity_type = get_entity_type(target_entity_id_name)
+    relationship_type = extract_relationship_type_id(relationship_id_name)
 
     # Insert the new relationship
     stmt = (
@@ -110,7 +114,9 @@ def transfer_relationship(
     target_node = entity_translations.get(
         relationship.target_node, relationship.target_node
     )
-    relationship_id_name = f"{source_node}__{relationship.type}__{target_node}"
+    relationship_id_name = make_relationship_id(
+        source_node, relationship.type, target_node
+    )
 
     # Create the transferred relationship
     stmt = (
@@ -173,7 +179,9 @@ def upsert_staging_relationship_type(
         The created KGRelationshipTypeExtractionStaging object
     """
 
-    id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
+    id_name = make_relationship_type_id(
+        source_entity_type, relationship_type, target_entity_type
+    )
 
     # Create new relationship type
     stmt = (
@@ -279,6 +287,9 @@ def get_parent_child_relationships_and_types(
     # create has_subcomponent relationships and relationship types
     for entity in parented_entities:
         child = entity
+        if entity.transferred_id_name is None:
+            logger.warning(f"Entity {entity.id_name} has not yet been transferred")
+            continue
 
         for i in range(depth):
             if not child.parent_key:
@@ -309,19 +320,19 @@ def get_parent_child_relationships_and_types(
 
             # create the relationship
             # (don't add it to the table as we're using the transferred id, which breaks fk constraints)
-            relationship_id_name = format_relationship(
-                f"{parent.id_name}__has_subcomponent__{entity.transferred_id_name}"
+            relationship_id_name = make_relationship_id(
+                parent.id_name, "has_subcomponent", entity.transferred_id_name
             )
             if (parent.id_name, entity.document_id) not in relationships:
                 (
                     source_entity_id_name,
                     relationship_string,
                     target_entity_id_name,
-                ) = relationship_id_name.split("__")
+                ) = split_relationship_id(relationship_id_name)
 
-                source_entity_type = source_entity_id_name.split("::")[0]
-                target_entity_type = target_entity_id_name.split("::")[0]
-                relationship_type_id_name = generate_relationship_type(
+                source_entity_type = get_entity_type(source_entity_id_name)
+                target_entity_type = get_entity_type(target_entity_id_name)
+                relationship_type_id_name = extract_relationship_type_id(
                     relationship_id_name
                 )
                 relationships[(relationship_id_name, entity.document_id)] = (
@@ -466,7 +477,7 @@ def get_allowed_relationship_type_pairs(
         List of id_names from KGRelationshipType where both source and target entity types
         are in the provided entities list
     """
-    entity_types = list(set([entity.split("::")[0] for entity in entities]))
+    entity_types = list({get_entity_type(entity) for entity in entities})
 
     return [
         row[0]

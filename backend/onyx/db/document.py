@@ -49,6 +49,7 @@ from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
+from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 
@@ -1061,12 +1062,11 @@ def get_document_updated_at(
     Returns:
         Optional[datetime]: The doc_updated_at timestamp if found, None if document doesn't exist
     """
-    if len(document_id.split("::")) == 2:
-        document_id = document_id.split("::")[1]
-    elif len(document_id.split("::")) > 2:
+    parts = split_entity_id(document_id)
+    if len(parts) == 2:
+        document_id = parts[1]
+    elif len(parts) > 2:
         raise ValueError(f"Invalid document ID: {document_id}")
-    else:
-        pass
 
     stmt = select(DbDocument.doc_updated_at).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none()
@@ -1097,7 +1097,7 @@ def update_document_kg_stages(
     db_session: Session, source_stage: KGStage, target_stage: KGStage
 ) -> int:
     """Reset the KG stage only of documents back to NOT_STARTED.
-    Part of reset flow for documemnts that have been extracted but not clustered.
+    Part of reset flow for documents that have been extracted but not clustered.
 
     Args:
         db_session (Session): The database session to use
