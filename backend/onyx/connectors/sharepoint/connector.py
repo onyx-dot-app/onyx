@@ -1,5 +1,6 @@
 import io
 import os
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -8,6 +9,7 @@ from urllib.parse import unquote
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
+from office365.onedrive.sites.site import Site  # type: ignore
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -227,7 +229,7 @@ class SharepointConnector(LoadConnector, PollConnector):
 
         return final_driveitems
 
-    def _handle_paginated_sites(self, sites):
+    def _handle_paginated_sites(self, sites) -> Generator[Site, None, None]:
         while sites:
             if sites.current_page:
                 yield from sites.current_page
