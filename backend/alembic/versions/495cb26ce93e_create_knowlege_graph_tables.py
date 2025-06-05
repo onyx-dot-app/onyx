@@ -80,6 +80,7 @@ def upgrade() -> None:
             sa.column("kg_variable_values", postgresql.ARRAY(sa.String)),
         ),
         [
+            {"kg_variable_name": "KG_EXPOSED", "kg_variable_values": ["false"]},
             {"kg_variable_name": "KG_ENABLED", "kg_variable_values": ["false"]},
             {"kg_variable_name": "KG_VENDOR", "kg_variable_values": []},
             {"kg_variable_name": "KG_VENDOR_DOMAINS", "kg_variable_values": []},
@@ -99,6 +100,10 @@ def upgrade() -> None:
                 ],
             },
             {"kg_variable_name": "KG_MAX_COVERAGE_DAYS", "kg_variable_values": ["90"]},
+            {
+                "kg_variable_name": "KG_MAX_PARENT_RECURSION_DEPTH",
+                "kg_variable_values": ["2"],
+            },
         ],
     )
 
@@ -434,6 +439,16 @@ def upgrade() -> None:
         ),
     )
 
+    op.add_column(
+        "connector",
+        sa.Column(
+            "kg_coverage_days",
+            sa.Integer(),
+            nullable=True,
+            server_default=None,
+        ),
+    )
+
     # Create GIN index for clustering and normalization
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
@@ -608,6 +623,7 @@ def downgrade() -> None:
     op.drop_table("kg_entity_extraction_staging")
     op.drop_table("kg_entity_type")
     op.drop_column("connector", "kg_processing_enabled")
+    op.drop_column("connector", "kg_coverage_days")
     op.drop_column("document", "kg_stage")
     op.drop_column("document", "kg_processing_time")
     op.drop_table("kg_config")

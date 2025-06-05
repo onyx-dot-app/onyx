@@ -346,13 +346,13 @@ def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
         list[KGConnectorData]: List of connector IDs with KG extraction enabled but have unprocessed documents
     """
     try:
-        stmt = select(Connector.id, Connector.source).where(
+        stmt = select(Connector.id, Connector.source, Connector.kg_coverage_days).where(
             Connector.kg_processing_enabled
         )
         result = db_session.execute(stmt)
 
         connector_results = [
-            KGConnectorData(id=row[0], source=row[1].lower())
+            KGConnectorData(id=row[0], source=row[1].lower(), kg_coverage_days=row[2])
             for row in result.fetchall()
         ]
 

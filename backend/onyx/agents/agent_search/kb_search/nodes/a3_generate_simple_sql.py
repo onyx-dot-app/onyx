@@ -133,8 +133,10 @@ def generate_simple_sql(
 
     single_doc_id = state.single_doc_id
 
-    if state.kg_doc_temp_view_name is None or state.kg_rel_temp_view_name is None:
-        raise ValueError("kg_doc_temp_view_name or kg_rel_temp_view_name is not set")
+    if state.kg_doc_temp_view_name is None:
+        raise ValueError("kg_doc_temp_view_name is not set")
+    if state.kg_rel_temp_view_name is None:
+        raise ValueError("kg_rel_temp_view_name is not set")
 
     ## STEP 3 - articulate goals
 

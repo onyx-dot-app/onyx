@@ -25,7 +25,11 @@ from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
-from onyx.kg.utils.formatting_utils import format_entity_for_models
+from onyx.kg.utils.formatting_utils import format_entity_id_for_models
+from onyx.kg.utils.formatting_utils import get_entity_type
+from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import split_entity_id
+from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -34,21 +38,6 @@ logger = setup_logger()
 
 alphanum_regex = re.compile(r"[^a-z0-9]+")
 rem_email_regex = re.compile(r"(?<=\S)@([a-z0-9-]+)\.([a-z]{2,6})$")
-
-
-def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
-    """
-    Split an entity string into type and name.
-    """
-
-    entity_split = entity.split("::")
-    if len(entity_split) < 2:
-        raise ValueError(f"Invalid entity: {entity}")
-
-    entity_type = entity_split[0]
-    entity_name = "::".join(entity_split[1:])
-
-    return entity_type, entity_name
 
 
 def _clean_name(entity_name: str) -> str:
@@ -69,7 +58,7 @@ def _normalize_one_entity(
     """
     Matches a single entity to the best matching entity of the same type.
     """
-    entity_type, entity_name = _split_entity_type_v_name(entity)
+    entity_type, entity_name = split_entity_id(entity)
     if entity_name == "*":
         return entity
 
@@ -81,14 +70,13 @@ def _normalize_one_entity(
         # get allowed documents
 
         metadata = MetaData()
-        if allowed_docs_temp_view_name is not None:
-            allowed_docs_temp_view = Table(
-                allowed_docs_temp_view_name,
-                metadata,
-                autoload_with=db_session.get_bind(),
-            )
-        else:
+        if allowed_docs_temp_view_name is None:
             raise ValueError("allowed_docs_temp_view_name is not available")
+        allowed_docs_temp_view = Table(
+            allowed_docs_temp_view_name,
+            metadata,
+            autoload_with=db_session.get_bind(),
+        )
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
@@ -196,15 +184,13 @@ def _get_existing_normalized_relationships(
         lambda: defaultdict(list)
     )
     relationship_pairs = list(
-        set(
-            [
-                (
-                    relationship.split("__")[0].split("::")[0],
-                    relationship.split("__")[2].split("::")[0],
-                )
-                for relationship in raw_relationships
-            ]
-        )
+        {
+            (
+                get_entity_type(split_relationship_id(relationship)[0]),
+                get_entity_type(split_relationship_id(relationship)[2]),
+            )
+            for relationship in raw_relationships
+        }
     )
 
     with get_session_with_current_tenant() as db_session:
@@ -246,9 +232,9 @@ def normalize_entities(
     for entity, normalized_entity in zip(raw_entities_no_attributes, mapping):
         if normalized_entity is not None:
             normalized_results.append(normalized_entity)
-            normalized_map[format_entity_for_models(entity)] = normalized_entity
+            normalized_map[format_entity_id_for_models(entity)] = normalized_entity
         else:
-            normalized_map[format_entity_for_models(entity)] = entity
+            normalized_map[format_entity_id_for_models(entity)] = entity
 
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map
@@ -270,7 +256,7 @@ def normalize_entities_w_attributes_from_map(
             len(raw_entities_w_attribute.split("--")) == 2
         ), f"Invalid entity with attributes: {raw_entities_w_attribute}"
         raw_entity, attributes = raw_entities_w_attribute.split("--")
-        formatted_raw_entity = format_entity_for_models(raw_entity)
+        formatted_raw_entity = format_entity_id_for_models(raw_entity)
         normalized_entity = entity_normalization_map.get(formatted_raw_entity)
         if normalized_entity is None:
             logger.warning(f"No normalized entity found for {raw_entity}")
@@ -305,7 +291,7 @@ def normalize_relationships(
     for raw_rel in raw_relationships:
         # 1. Split and normalize entities
         try:
-            source, rel_string, target = raw_rel.split("__")
+            source, rel_string, target = split_relationship_id(raw_rel)
         except ValueError:
             raise ValueError(f"Invalid relationship format: {raw_rel}")
 
@@ -319,14 +305,14 @@ def normalize_relationships(
 
         # 2. Find candidate normalized relationships
         candidate_rels = []
-        norm_source_type = norm_source.split("::")[0]
-        norm_target_type = norm_target.split("::")[0]
+        norm_source_type = get_entity_type(norm_source)
+        norm_target_type = get_entity_type(norm_target)
         if (
             norm_source_type in nor_relationships
             and norm_target_type in nor_relationships[norm_source_type]
         ):
             candidate_rels = [
-                rel.split("__")[1]
+                split_relationship_id(rel)[1]
                 for rel in nor_relationships[norm_source_type][norm_target_type]
             ]
 
@@ -347,7 +333,9 @@ def normalize_relationships(
         best_match_idx = np.argmax(dot_products)
 
         # Create normalized relationship
-        norm_rel = f"{norm_source}__{candidate_rels[best_match_idx]}__{norm_target}"
+        norm_rel = make_relationship_id(
+            norm_source, candidate_rels[best_match_idx], norm_target
+        )
         normalized_rels.append(norm_rel)
         normalization_map[raw_rel] = norm_rel
 

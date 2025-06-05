@@ -13,12 +13,18 @@ from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
-from onyx.kg.utils.formatting_utils import format_entity
-from onyx.kg.utils.formatting_utils import format_relationship
-from onyx.kg.utils.formatting_utils import generate_relationship_type
+from onyx.kg.utils.formatting_utils import extract_relationship_type_id
+from onyx.kg.utils.formatting_utils import format_relationship_id
+from onyx.kg.utils.formatting_utils import get_entity_type
+from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import make_relationship_type_id
+from onyx.kg.utils.formatting_utils import split_relationship_id
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
-def add_or_update_staging_relationship(
+def upsert_staging_relationship(
     db_session: Session,
     relationship_id_name: str,
     source_document_id: str,
@@ -39,19 +45,16 @@ def add_or_update_staging_relationship(
         sqlalchemy.exc.IntegrityError: If there's an error with the database operation
     """
     # Generate a unique ID for the relationship
-
+    relationship_id_name = format_relationship_id(relationship_id_name)
     (
         source_entity_id_name,
         relationship_string,
         target_entity_id_name,
-    ) = relationship_id_name.split("__")
+    ) = split_relationship_id(relationship_id_name)
 
-    source_entity_id_name = format_entity(source_entity_id_name)
-    source_entity_type = source_entity_id_name.split("::")[0]
-    target_entity_id_name = format_entity(target_entity_id_name)
-    target_entity_type = target_entity_id_name.split("::")[0]
-    relationship_id_name = format_relationship(relationship_id_name)
-    relationship_type = generate_relationship_type(relationship_id_name)
+    source_entity_type = get_entity_type(source_entity_id_name)
+    target_entity_type = get_entity_type(target_entity_id_name)
+    relationship_type = extract_relationship_type_id(relationship_id_name)
 
     # Insert the new relationship
     stmt = (
@@ -96,84 +99,6 @@ def add_or_update_staging_relationship(
     return result
 
 
-def add_or_update_relationship(
-    db_session: Session,
-    relationship_id_name: str,
-    source_document_id: str,
-    occurrences: int = 1,
-) -> KGRelationship:
-    """
-    Add or update a new relationship to the database.
-
-    Args:
-        db_session: SQLAlchemy database session
-        relationship_id_name: The ID name of the relationship in format "source__relationship__target"
-        source_document_id: ID of the source document
-        occurrences: Number of times this relationship has been found
-    Returns:
-        The created or updated KGRelationshipExtractionStaging object
-
-    Raises:
-        sqlalchemy.exc.IntegrityError: If there's an error with the database operation
-    """
-    # Generate a unique ID for the relationship
-
-    (
-        source_entity_id_name,
-        relationship_string,
-        target_entity_id_name,
-    ) = relationship_id_name.split("__")
-
-    source_entity_id_name = format_entity(source_entity_id_name)
-    source_entity_type = source_entity_id_name.split("::")[0]
-    target_entity_id_name = format_entity(target_entity_id_name)
-    target_entity_type = target_entity_id_name.split("::")[0]
-    relationship_id_name = format_relationship(relationship_id_name)
-    relationship_type = generate_relationship_type(relationship_id_name)
-
-    # Insert the new relationship
-    stmt = (
-        postgresql.insert(KGRelationship)
-        .values(
-            {
-                "id_name": relationship_id_name,
-                "source_node": source_entity_id_name,
-                "target_node": target_entity_id_name,
-                "source_node_type": source_entity_type,
-                "target_node_type": target_entity_type,
-                "type": relationship_string.lower(),
-                "relationship_type_id_name": relationship_type,
-                "source_document": source_document_id,
-                "occurrences": occurrences,
-            }
-        )
-        .on_conflict_do_update(
-            index_elements=["id_name", "source_document"],
-            set_=dict(
-                occurrences=KGRelationship.occurrences + occurrences,
-            ),
-        )
-        .returning(KGRelationship)
-    )
-
-    result = db_session.execute(stmt).scalar()
-    if result is None:
-        raise RuntimeError(
-            f"Failed to create or increment staging relationship with id_name: {relationship_id_name}"
-        )
-
-    # Update the document's kg_stage if source_document is provided
-    if source_document_id is not None:
-        dbdocument.update_document_kg_info(
-            db_session,
-            document_id=source_document_id,
-            kg_stage=KGStage.NORMALIZED,
-        )
-    db_session.flush()  # Flush to get any DB errors early
-
-    return result
-
-
 def transfer_relationship(
     db_session: Session,
     relationship: KGRelationshipExtractionStaging,
@@ -183,9 +108,15 @@ def transfer_relationship(
     Transfer a relationship from the staging table to the normalized table.
     """
     # Translate the source and target nodes
-    source_node = entity_translations[relationship.source_node]
-    target_node = entity_translations[relationship.target_node]
-    relationship_id_name = f"{source_node}__{relationship.type}__{target_node}"
+    source_node = entity_translations.get(
+        relationship.source_node, relationship.source_node
+    )
+    target_node = entity_translations.get(
+        relationship.target_node, relationship.target_node
+    )
+    relationship_id_name = make_relationship_id(
+        source_node, relationship.type, target_node
+    )
 
     # Create the transferred relationship
     stmt = (
@@ -226,7 +157,7 @@ def transfer_relationship(
     return new_relationship
 
 
-def add_or_update_staging_relationship_type(
+def upsert_staging_relationship_type(
     db_session: Session,
     source_entity_type: str,
     relationship_type: str,
@@ -248,7 +179,9 @@ def add_or_update_staging_relationship_type(
         The created KGRelationshipTypeExtractionStaging object
     """
 
-    id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
+    id_name = make_relationship_type_id(
+        source_entity_type, relationship_type, target_entity_type
+    )
 
     # Create new relationship type
     stmt = (
@@ -273,64 +206,6 @@ def add_or_update_staging_relationship_type(
             ),
         )
         .returning(KGRelationshipTypeExtractionStaging)
-    )
-
-    result = db_session.execute(stmt).scalar()
-    if result is None:
-        raise RuntimeError(
-            f"Failed to create or increment staging relationship type with id_name: {id_name}"
-        )
-    db_session.flush()  # Flush to get any DB errors early
-
-    return result
-
-
-def add_or_update_relationship_type(
-    db_session: Session,
-    source_entity_type: str,
-    relationship_type: str,
-    target_entity_type: str,
-    definition: bool = False,
-    extraction_count: int = 1,
-) -> KGRelationshipType:
-    """
-    Add a new relationship type to the database.
-
-    Args:
-        db_session: SQLAlchemy session
-        source_entity_type: Type of the source entity
-        relationship_type: Type of relationship
-        target_entity_type: Type of the target entity
-        definition: Whether this relationship type represents a definition (default False)
-
-    Returns:
-        The created KGRelationshipTypeExtractionStaging object
-    """
-
-    id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
-
-    # Create new relationship type
-    stmt = (
-        postgresql.insert(KGRelationshipType)
-        .values(
-            {
-                "id_name": id_name,
-                "name": relationship_type,
-                "source_entity_type_id_name": source_entity_type.upper(),
-                "target_entity_type_id_name": target_entity_type.upper(),
-                "definition": definition,
-                "occurrences": extraction_count,
-                "type": relationship_type,  # Using the relationship_type as the type
-                "active": True,  # Setting as active by default
-            }
-        )
-        .on_conflict_do_update(
-            index_elements=["id_name"],
-            set_=dict(
-                occurrences=KGRelationshipType.occurrences + extraction_count,
-            ),
-        )
-        .returning(KGRelationshipType)
     )
 
     result = db_session.execute(stmt).scalar()
@@ -385,6 +260,112 @@ def transfer_relationship_type(
     db_session.flush()
 
     return new_relationship_type
+
+
+def get_parent_child_relationships_and_types(
+    db_session: Session,
+    depth: int,
+) -> tuple[
+    list[KGRelationshipExtractionStaging], list[KGRelationshipTypeExtractionStaging]
+]:
+    """
+    Create parent-child relationships and relationship types from staging entities with
+    a parent key, if the parent exists in the normalized entities table. Will create
+    relationships up to depth levels. E.g., if depth is 2, a relationship will be created
+    between the entity and its parent, and the entity and its grandparents (if any).
+    A relationship will not be created if the parent does not exist.
+    """
+    relationship_types: dict[str, KGRelationshipTypeExtractionStaging] = {}
+    relationships: dict[tuple[str, str | None], KGRelationshipExtractionStaging] = {}
+
+    parented_entities = (
+        db_session.query(KGEntityExtractionStaging)
+        .filter(KGEntityExtractionStaging.parent_key.isnot(None))
+        .all()
+    )
+
+    # create has_subcomponent relationships and relationship types
+    for entity in parented_entities:
+        child = entity
+        if entity.transferred_id_name is None:
+            logger.warning(f"Entity {entity.id_name} has not yet been transferred")
+            continue
+
+        for i in range(depth):
+            if not child.parent_key:
+                break
+
+            # find the transferred parent entity
+            parent = (
+                db_session.query(KGEntity)
+                .filter(
+                    KGEntity.entity_class == child.entity_class,
+                    KGEntity.entity_key == child.parent_key,
+                )
+                .first()
+            )
+            if parent is None:
+                logger.warning(f"Parent entity not found for {entity.id_name}")
+                break
+
+            # create the relationship type
+            relationship_type = upsert_staging_relationship_type(
+                db_session=db_session,
+                source_entity_type=parent.entity_type_id_name,
+                relationship_type="has_subcomponent",
+                target_entity_type=entity.entity_type_id_name,
+                definition=False,
+                extraction_count=1,
+            )
+            relationship_types[relationship_type.id_name] = relationship_type
+
+            # create the relationship
+            # (don't add it to the table as we're using the transferred id, which breaks fk constraints)
+            relationship_id_name = make_relationship_id(
+                parent.id_name, "has_subcomponent", entity.transferred_id_name
+            )
+            if (parent.id_name, entity.document_id) not in relationships:
+                (
+                    source_entity_id_name,
+                    relationship_string,
+                    target_entity_id_name,
+                ) = split_relationship_id(relationship_id_name)
+
+                source_entity_type = get_entity_type(source_entity_id_name)
+                target_entity_type = get_entity_type(target_entity_id_name)
+                relationship_type_id_name = extract_relationship_type_id(
+                    relationship_id_name
+                )
+                relationships[(relationship_id_name, entity.document_id)] = (
+                    KGRelationshipExtractionStaging(
+                        id_name=relationship_id_name,
+                        source_node=source_entity_id_name,
+                        target_node=target_entity_id_name,
+                        source_node_type=source_entity_type,
+                        target_node_type=target_entity_type,
+                        type=relationship_string,
+                        relationship_type_id_name=relationship_type_id_name,
+                        source_document=entity.document_id,
+                        occurrences=1,
+                    )
+                )
+            else:
+                relationships[(parent.id_name, entity.document_id)].occurrences += 1
+
+            # set parent as the next child (unless we're at the max depth)
+            if i < depth - 1:
+                parent_staging = (
+                    db_session.query(KGEntityExtractionStaging)
+                    .filter(
+                        KGEntityExtractionStaging.transferred_id_name == parent.id_name
+                    )
+                    .first()
+                )
+                if parent_staging is None:
+                    break
+                child = parent_staging
+
+    return list(relationships.values()), list(relationship_types.values())
 
 
 def delete_relationships_by_id_names(
@@ -497,7 +478,7 @@ def get_allowed_relationship_type_pairs(
         List of id_names from KGRelationshipType where both source and target entity types
         are in the provided entities list
     """
-    entity_types = list(set([entity.split("::")[0] for entity in entities]))
+    entity_types = list({get_entity_type(entity) for entity in entities})
 
     return [
         row[0]
