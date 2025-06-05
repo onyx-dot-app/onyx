@@ -9,6 +9,7 @@ from typing import Any
 
 import gitlab
 import pytz
+from gitlab import GitlabListError
 from gitlab.v4.objects import Project
 
 from onyx.configs.app_configs import GITLAB_CONNECTOR_INCLUDE_CODE_FILES
@@ -22,6 +23,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
+from onyx.db.engine import provide_iam_token
 from onyx.utils.logger import setup_logger
 
 
@@ -66,6 +68,20 @@ def _convert_merge_request_to_document(mr: Any) -> Document:
         primary_owners=[get_author(mr.author)],
         metadata={"state": mr.state, "type": "MergeRequest"},
     )
+    return doc
+
+def _convert_wikis_to_document(slug: str, url: str, content: str, title: str, updated_at: datetime,
+                               author: str) -> Document:
+    doc = Document(
+        id=slug,
+        sections=[TextSection(link=url, text=content)],
+        source=DocumentSource.GITLAB,
+        semantic_identifier=title,
+        doc_updated_at=updated_at.replace(tzinfo=timezone.utc),
+        primary_owners=[BasicExpertInfo(display_name=author)],  # fallback author
+        metadata={"type": "Wiki"},
+    )
+
     return doc
 
 
@@ -125,6 +141,7 @@ class GitlabConnector(LoadConnector, PollConnector):
         state_filter: str = "all",
         include_mrs: bool = True,
         include_issues: bool = True,
+        include_wikis: bool = True,
         include_code_files: bool = GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     ) -> None:
         self.project_owner = project_owner
@@ -134,11 +151,12 @@ class GitlabConnector(LoadConnector, PollConnector):
         self.include_mrs = include_mrs
         self.include_issues = include_issues
         self.include_code_files = include_code_files
+        self.include_wikis = include_wikis
         self.gitlab_client: gitlab.Gitlab | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.gitlab_client = gitlab.Gitlab(
-            credentials["gitlab_url"], private_token=credentials["gitlab_access_token"]
+            credentials["gitlab_url"], private_token=credentials["gitlab_access_token"],
         )
         return None
 
@@ -181,28 +199,53 @@ class GitlabConnector(LoadConnector, PollConnector):
                         yield code_doc_batch
 
         if self.include_mrs:
-            merge_requests = project.mergerequests.list(
-                state=self.state_filter, order_by="updated_at", sort="desc"
+            try:
+                merge_requests = project.mergerequests.list(
+                    state=self.state_filter, order_by="updated_at", sort="desc"
+                )
+            except GitlabListError:
+                pass
+            else:
+                for mr_batch in _batch_gitlab_objects(merge_requests, self.batch_size):
+                    mr_doc_batch: list[Document] = []
+                    for mr in mr_batch:
+                        mr.updated_at = datetime.strptime(
+                            mr.updated_at, "%Y-%m-%dT%H:%M:%S.%f%z"
+                        )
+                        if start is not None and mr.updated_at < start.replace(
+                            tzinfo=pytz.UTC
+                        ):
+                            yield mr_doc_batch
+                            return
+                        if end is not None and mr.updated_at > end.replace(tzinfo=pytz.UTC):
+                            continue
+                        mr_doc_batch.append(_convert_merge_request_to_document(mr))
+                    yield mr_doc_batch
+
+        if self.include_wikis:
+            wikis = self.gitlab_client.http_get(
+                f"/projects/{project.id}/wikis?with_content=1"
             )
 
-            for mr_batch in _batch_gitlab_objects(merge_requests, self.batch_size):
-                mr_doc_batch: list[Document] = []
-                for mr in mr_batch:
-                    mr.updated_at = datetime.strptime(
-                        mr.updated_at, "%Y-%m-%dT%H:%M:%S.%f%z"
+            for wiki_batch in _batch_gitlab_objects(wikis, self.batch_size):
+                wikis_doc_batch: list[Document] = []
+                for wiki in wiki_batch:
+                    slug = wiki['slug']
+                    title = wiki['title']
+                    text = wiki['content']
+                    doc = _convert_wikis_to_document(
+                        slug,
+                        f"{self.gitlab_client.url}/{self.project_owner}/{self.project_name}/-/wikis/{slug}",
+                        text,
+                        title,
+                        datetime.now(),
+                        self.project_owner
                     )
-                    if start is not None and mr.updated_at < start.replace(
-                        tzinfo=pytz.UTC
-                    ):
-                        yield mr_doc_batch
-                        return
-                    if end is not None and mr.updated_at > end.replace(tzinfo=pytz.UTC):
-                        continue
-                    mr_doc_batch.append(_convert_merge_request_to_document(mr))
-                yield mr_doc_batch
+                    wikis_doc_batch.append(doc)
+                yield wikis_doc_batch
 
         if self.include_issues:
-            issues = project.issues.list(state=self.state_filter)
+            issues = project.issues.list(state=self.state_filter, get_all=True)
 
             for issue_batch in _batch_gitlab_objects(issues, self.batch_size):
                 issue_doc_batch: list[Document] = []
@@ -244,6 +287,7 @@ if __name__ == "__main__":
         state_filter="all",
         include_mrs=True,
         include_issues=True,
+        include_wikis=True,
         include_code_files=GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     )
 
