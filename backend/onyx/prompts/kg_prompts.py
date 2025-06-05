@@ -786,66 +786,46 @@ you should count the entities of entity_type_id_name 'ACCOUNT'.
 
 
 IMPORTANT NOTES:
-- The id_name of each relationship has the format \
-<source_entity_id_name>__<relationship_type>__<target_entity_id_name>.
-- The relationship id_names are NOT UNIQUE, only the combinations of relationship id_name and source_document_id are unique. \
-That is because each relationship is extracted from a document. So make sure you use the proper 'distinct's!
-- If the SQL contains a 'SELECT DISTINCT' clause and an ORDER BY clause, then you MUST include the columns from the ORDER BY \
-clause ALSO IN THE SELECT DISTINCT CLAUSE! This is very important! (This is a postgres db., so this is a MUST!). \
-You MUST NOT have a column in the ORDER BY clause that is not ALSO in the SELECT DISTINCT clause!
-- If you join the relationship table on itself using the source_node or target_node, you need to make sure that you also \
-join on the source_document_id.
-- The id_name of each node/entity has the format <entity_type_id_name>::<name>, where 'entity_type_id_name' \
-and 'name' are columns and \
-  the values <entity_type_id_name> and <name> can be used for filtering.
+- Relationship id names have the format <source_entity_id_name>__<relationship_type>__<target_entity_id_name>. \
+These are NOT UNIQUE; only the combination of relationship id name and source document id is unique, so make sure \
+you use the proper 'distinct's!
+- Entity id names have the format <entity_type_id_name>::<name>, with 'entity_type_id_name' and 'name' also being \
+columns in the entity table.
+- Attributes are json fields. Use the `attributes ->> '<attribute>' = '<attribute value>'` syntax to filter on them, \
+or the `attributes ? '<attribute>'` syntax to check whether they exist.
+- Never make up or modify attribute names or values for selection, filtering, sorting, etc.
+- Dates are always in the format YYYY-MM-DD.
+- Be careful with dates! Often a date will refer to the source data, which is the date when an underlying piece of \
+information was updated. However, if the attributes of an entity contain time information as well (like 'started_at', \
+'completed_at', etc.), then you should really look at the wording to see whether you should use a date in the attributes \
+or the source date.
+- The output SQL statement must return only entities (node), aggregations of entities (count, avg, max, etc.), attributes, \
+or source_date (but only if the question is about dates/times) - never relationships or source documents! In other words, \
+you should only do a SELECT on those columns.
+- Again, source_documents and relationships or their counts MUST NOT be returned! They may still be used for sorting, \
+filtering, etc.
+- Do not count or retrieve source documents in SELECT CLAUSE, even when combined with entities!
+- Entities may be source_entity or target_entity; choose based on the provided relationship types and question context.
+- If the entity (source/target) is unclear, or if the question only requires knowledge of the entities and not the \
+relationships, search both source and target entities, combining the results with 'distinct's to avoid duplicates.
+- Typically, queries retrieve/count entities, but you almost always want to have entities involved in the SELECT clause.
+- Nested SQL is allowed if it is valid Postgres syntax.
+- Questions like 'What did Paul work on last week?' should generally be handled by finding all entities that reasonably \
+relate to 'work entities' that are i) related to Paul, and ii) that were created or updated by Paul last week. \
+So this would likely be a UNION of multiple queries.
 - The table can be joined on itself on source nodes and/or target nodes if needed.
-- the SQL statement MUST ultimately only return NODES/ENTITIES (not relationships!), or aggregations of \
-entities/nodes(count, avg, max, min, etc.). \
-Again, DO NOT compose a SQL statement that returns id_name of relationships.
-- You CAN ONLY return ENTITIES or COUNTS (or other aggregations) of ENTITIES, or you can return \
-source_date (but only if the question asks for event dates or times). DO NOT return \
-source documents or counts of source documents, or relationships or counts of relationships! \
-Those can only appear in where clauses, ordering etc., but they cannot be returned or ultimately \
-counted here! source_date and date operations can appear in select statements, particularly if \
-there is time ordering or grouping involved.
-- ENTITIES can be target_entity or source_entity. Think about the allowed relationships and the \
-question to decide which one you want!
-- It is ok to generate nested SQL as long as it is correct postgres syntax!
-- Attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
-"attributes ->> '<attribute>' = '<attribute value>'".
--  The SELECT clause MUST only contain entities or aggregations/counts of entities, or, in cases the \
-question was about dates or times, then it can also include source_date. But source_document MUST NEVER appear \
-in the SELECT clause!
-- Again, NEVER count or retrieve source documents in SELECT CLAUSE, whether it is in combination with \
-entities, with a distinct, etc. NO source_document in SELECT CLAUSE! So NEVER produce a \
-'SELECT COUNT(source_entity, source_document)...'
-- Please think about whether you are interested in source entities or target entities! For that purpose, \
-consider the allowed relationship types to make sure you select or count the correct one!
-- Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \
-of that in the reasoning.
-- Be careful with dates! Often a date will refer to the source data, which is the date when \
-an underlying piece of information was updated. However, if the attributes of an entity contain \
-time information as well (like 'started_at', 'completed_at', etc.), then you should really look at \
-the wording to see whether you should use a date in the attributes or the event date.
-- Dates are ALWAYS in string format of the form YYYY-MM-DD, for source date as well as for date-like the attributes! \
-So please use that format, particularly if you use data comparisons (>, <, ...)
-- Again, NO 'relationship' or 'source_document' in the SELECT CLAUSE, be it as direct columns are in aggregations!
-- Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
-want to sort by. If the sorting is time-based and there is a limit for example, then you do want to have a suitable date \
-variable as the first column to sort by.
-- When doing a SORT on an attribute value of an entity, you MUST also apply a WHERE clause to filter \
-for entities that have the attribute value set. For example, if you want to sort the target entity \
-by the attribute 'created_date', you must also have a WHERE clause that checks whether the target \
-entity attribute contains 'created_date'. This is vital for proper ordering with null values.
-- Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
-have entities involved in the SELECT clause.
-- Questions like 'What did Paul work on last week?' should generally be handled by finding all entities \
-that reasonably relate to 'work entities' that are i) related to Paul, and ii) that were created or \
-updated (by him) last week. So this would likely be a UNION of multiple queries.
-- If you do joins consider the possibility that the second entity does not exist for all examples. \
-Therefore joins should generally be LEFT joins (or RIGHT joins) as appropriate. Think about which \
-entities you are interested in, and which ones provides attributes.
-- Joins should always be made on entities, not source documents!
+- When self-joining the relationship table on source_node or target_node, you MUST also join on the source_document_id. \
+In all other cases, joins should always be made on entities, not source documents!
+- If you do joins, consider the possibility that the second entity does not exist for all examples. \
+Therefore consider using LEFT joins (or RIGHT joins) as appropriate. Think about which entities you are interested in, \
+and which ones provides attributes.
+- Always ensure every ORDER BY column is also in the SELECT clause!
+- If doing a SELECT DISTINCT with ORDER BY, every ORDER BY column MUST also be in SELECT DISTINCT (Postgres requirement). \
+This is very important, and you should remind yourself of that in the reasoning.
+- When sorting by an entity attribute, add a WHERE clause to ensure the attribute exists to prevent NULL sorting issues. \
+However, this only applies when sorting. If the question asks about a specific attribute, you should not add a WHERE clause \
+as a NULL value is a valid answer.
+- Carefully choose the sort order, especially for time-based queries with limits; sort by date first if needed.
 - Try to be as efficient as possible.
 
 APPROACH:
