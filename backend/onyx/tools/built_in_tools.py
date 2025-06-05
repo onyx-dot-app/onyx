@@ -34,15 +34,15 @@ class InCodeToolInfo(TypedDict):
 BUILT_IN_TOOLS: list[InCodeToolInfo] = [
     InCodeToolInfo(
         cls=SearchTool,
-        description="The Search Action allows the Assistant to search through connected knowledge to help build an answer.",
+        description="Инструмент поиска позволяет Ассистенту выполнять поиск в связанных знаниях, чтобы помочь составить ответ.",
         in_code_tool_id=SearchTool.__name__,
         display_name=SearchTool._DISPLAY_NAME,
     ),
     InCodeToolInfo(
         cls=ImageGenerationTool,
         description=(
-            "The Image Generation Action allows the assistant to use DALL-E 3 to generate images. "
-            "The action will be used when the user asks the assistant to generate an image."
+            "Инструмент создания изображения позволяет ассистенту использовать генеративную модель для создания изображений. "
+            "Инструмент будет использоваться, когда пользователь попросит ассистента сгенерировать изображение."
         ),
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,

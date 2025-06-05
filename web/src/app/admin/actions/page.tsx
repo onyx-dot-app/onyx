@@ -42,7 +42,7 @@ export default async function Page() {
         <Separator />
 
         <Title>{i18n.t(k.CREATE_AN_ACTION)}</Title>
-        <CreateButton href="/admin/actions/new" text="Новое действие" />
+        <CreateButton href="/admin/actions/new" text="Новый инструмент" />
 
         <Separator />
 

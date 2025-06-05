@@ -456,7 +456,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           }
           if (response.error) {
             setPopup({
-              message: "Не удалось создать действие - " + response.error,
+              message: "Не удалось создать инструмент - " + response.error,
               type: "error",
             });
             return;

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/tooltip";
 
 interface ChatInputOptionProps {
+  label?: string;
   name?: string;
   Icon: ({ size, className }: IconProps) => JSX.Element;
   onClick?: () => void;
@@ -19,6 +20,7 @@ interface ChatInputOptionProps {
 }
 
 export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
+  label,
   name,
   Icon,
   // icon: Icon,
@@ -69,9 +71,12 @@ export const ChatInputOption: React.FC<ChatInputOptionProps> = ({
           >
             <Icon size={size} className="h-4 w-4 my-auto  flex-none" />
             <div className={`flex items-center ${minimize && "mobile:hidden"}`}>
-              {name && (
-                <span className="text-sm  break-all line-clamp-1">{name}</span>
-              )}
+              {name ||
+                (label && (
+                  <span className="text-sm  break-all line-clamp-1">
+                    {label || name}
+                  </span>
+                ))}
               {toggle && (
                 <ChevronDownIcon className="flex-none ml-1" size={size - 4} />
               )}

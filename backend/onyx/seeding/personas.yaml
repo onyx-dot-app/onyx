@@ -5,9 +5,9 @@ personas:
   # this is for OnyxBot to use when tagged in a non-configured channel
   # Careful setting specific IDs, this won't autoincrement the next ID value for postgres
   - id: 0
-    name: "Search"
+    name: "SmartSearch"
     description: >
-      Assistant with access to documents and knowledge from Connected Sources.
+      Ассистент с доступом к документам и знаниям из подключенных источников.
     # Default Prompt objects attached to the persona, see prompts.yaml
     prompts:
       - "Answer-Question"
@@ -55,7 +55,7 @@ personas:
         message: "Попроси меня выбрать тему. Как только я задам ее, сверься с базой знаний и укажи на любые несоответствия. Во всех следующих ответах сосредоточься на выявлении противоречий."
 
   - id: 1
-    name: "General"
+    name: "LLM"
     description: >
       Помощник без функций поиска. Общайтесь напрямую с Large Language Model.
     prompts:
@@ -81,7 +81,7 @@ personas:
         message: "В чем разница между диаграммой Ганта, графиком выгорания и канбан-доской?"
 
   - id: 2
-    name: "Paraphrase"
+    name: "Цитаты"
     description: >
       Помощник, который сильно ограничен и предоставляет точные цитаты только из подключенных источников.
     prompts:

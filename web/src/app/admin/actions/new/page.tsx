@@ -12,7 +12,7 @@ export default function NewToolPage() {
       <BackButton />
 
       <AdminPageTitle
-        title="Создать действие"
+        title="Создать инструмент"
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 

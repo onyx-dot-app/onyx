@@ -625,7 +625,7 @@ export function ChatInputBar({
               placeholder={`${i18n.t(k.MESSAGE2)} ${truncateString(
                 selectedAssistant.name,
                 70
-              )} ${i18n.t(k.ASSISTANT2)}`}
+              )} ассистенту...`}
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -794,6 +794,7 @@ export function ChatInputBar({
               <div className="space-x-1 flex  px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
+                  label="Файл"
                   name="File"
                   Icon={FiPlusCircle}
                   onClick={() => {
@@ -846,6 +847,7 @@ export function ChatInputBar({
                     trigger={
                       <ChatInputOption
                         flexPriority="stiff"
+                        label="Фильтры"
                         name="Filters"
                         Icon={FiFilter}
                         toggle
