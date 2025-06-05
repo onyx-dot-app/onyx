@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 
 from onyx.db.enums import EmbeddingPrecision
-from shared_configs.model_server_models import SupportedEmbeddingModel
 
 
 class _BaseEmbeddingModel(BaseModel):
@@ -10,6 +9,13 @@ class _BaseEmbeddingModel(BaseModel):
     name: str
     dim: int
     index_name: str
+
+
+class SupportedEmbeddingModel(BaseModel):
+    name: str
+    dim: int
+    index_name: str
+    embedding_precision: EmbeddingPrecision
 
 
 # Base embedding model configurations (without precision)
