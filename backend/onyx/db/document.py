@@ -991,29 +991,6 @@ def update_document_kg_stage(
     db_session.flush()
 
 
-def get_document_kg_info(
-    db_session: Session,
-    document_id: str,
-) -> KGStage | None:
-    """Retrieves the knowledge graph processing status and data for a document.
-    Args:
-        db_session (Session): The database session to use
-        document_id (str): The ID of the document to query
-    Returns:
-        Optional[Tuple[bool, dict]]: A tuple containing:
-            - bool: Whether the document has been KG processed
-            - dict: The KG data containing 'entities', 'relationships', and 'terms'
-            Returns None if the document is not found
-    """
-    stmt = select(DbDocument.kg_stage).where(DbDocument.id == document_id)
-    result = db_session.execute(stmt).one_or_none()
-
-    if result is None:
-        return None
-
-    return result.kg_stage or KGStage.NOT_STARTED
-
-
 def get_all_kg_extracted_documents_info(
     db_session: Session,
 ) -> list[str]:

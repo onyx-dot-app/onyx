@@ -622,6 +622,7 @@ def kg_extraction(
                         unprocessed_document.id
                     ].deep_extraction,
                     index_name=index_name,
+                    tenant_id=tenant_id,
                     batch_size=1,
                 )
 
