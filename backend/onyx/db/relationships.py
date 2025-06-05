@@ -295,6 +295,7 @@ def get_parent_child_relationships_and_types(
             if not child.parent_key:
                 break
 
+            # find the transferred parent entity
             parent = (
                 db_session.query(KGEntity)
                 .filter(
@@ -351,7 +352,7 @@ def get_parent_child_relationships_and_types(
             else:
                 relationships[(parent.id_name, entity.document_id)].occurrences += 1
 
-            # set parent as the next child
+            # set parent as the next child (unless we're at the max depth)
             if i < depth - 1:
                 parent_staging = (
                     db_session.query(KGEntityExtractionStaging)

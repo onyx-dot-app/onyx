@@ -8,6 +8,14 @@ from onyx.configs.app_configs import DB_READONLY_USER
 Base = declarative_base()
 
 
+def get_user_view_names(user_email: str) -> tuple[str, str]:
+    user_email_cleaned = user_email.replace("@", "_").replace(".", "_")
+    return (
+        f"allowed_docs_{user_email_cleaned}",
+        f"kg_relationships_with_access_{user_email_cleaned}",
+    )
+
+
 # First, create the view definition
 def create_views(
     db_session: Session,
