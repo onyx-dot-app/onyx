@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 from onyx.configs.constants import OnyxCallTypes
-from onyx.configs.kg_configs import KG_METADATA_TRACkING_THRESHOLD
+from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
 from onyx.db.kg_config import KGConfigSettings
@@ -552,7 +552,7 @@ class EntityTypeMetadataTracker:
             # if we see to many different values, we stop tracking
             if (
                 trackinfo.values is None
-                or len(trackinfo.values) > KG_METADATA_TRACkING_THRESHOLD
+                or len(trackinfo.values) > KG_METADATA_TRACKING_THRESHOLD
             ):
                 trackinfo.values = None
                 continue
