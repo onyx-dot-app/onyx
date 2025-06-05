@@ -28,6 +28,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/dataTable";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 
 function createDomainField(
   name: string,
@@ -70,10 +71,12 @@ const IgnoreDomains = createDomainField(
 
 function KGConfiguration({
   kgConfig,
-  onSubmitSuccess: onSubmit,
+  onSubmitSuccess,
+  setPopup,
 }: {
   kgConfig: KGConfig;
   onSubmitSuccess?: () => void;
+  setPopup?: (spec: PopupSpec | null) => void;
 }) {
   const disabledInitialValues: KGConfig = {
     enabled: false,
@@ -109,28 +112,40 @@ function KGConfiguration({
     values.enabled ? enabledSchema : disabledSchema
   );
 
+  const onSubmit = async (values: KGConfig) => {
+    const body = values.enabled ? values : { enabled: false };
+
+    const response = await fetch("/api/admin/kg/config", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorMsg = (await response.json()).detail;
+      console.warn({ errorMsg });
+      setPopup?.({
+        message: "Failed to configure Knowledge Graph.",
+        type: "error",
+      });
+      return;
+    }
+
+    setPopup?.({
+      message: "Succesfully configured Knowledge Graph.",
+      type: "success",
+    });
+
+    onSubmitSuccess?.();
+  };
+
   return (
     <Formik
       initialValues={initialValues}
       validationSchema={validationSchema}
-      onSubmit={async (values) => {
-        const body = values.enabled ? values : { enabled: false };
-
-        const response = await fetch("/api/admin/kg/config", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const errorMsg = (await response.json()).detail;
-          console.log(errorMsg);
-          return;
-        }
-        onSubmit?.();
-      }}
+      onSubmit={onSubmit}
     >
       {(props) => (
         <Form>
@@ -172,7 +187,7 @@ function KGConfiguration({
                 disabled={!props.values.enabled}
               />
             </div>
-            <Button variant="submit" type="submit">
+            <Button variant="submit" type="submit" disabled={!props.dirty}>
               Submit
             </Button>
           </div>
@@ -182,7 +197,11 @@ function KGConfiguration({
   );
 }
 
-function KGEntityType() {
+function KGEntityType({
+  setPopup,
+}: {
+  setPopup?: (spec: PopupSpec | null) => void;
+}) {
   const columns: ColumnDef<EntityType>[] = [
     {
       accessorKey: "name",
@@ -209,38 +228,65 @@ function KGEntityType() {
     },
   ];
 
-  const data: EntityTypeValues = {
-    account: {
-      name: "ACCOUNT",
-      description:
-        "A company that could potentially be or is or was a customer of the vendor (Onyx). Note that Onyx can never be an ACCOUNT.",
-      active: false,
-    },
-    concern: {
-      name: "CONCERN",
-      description:
-        "A concern that an  ACCOUNT has/had/ with implementing the VENDOR's (Onyx) solution. This is high-level, as shown by the allowed options.",
-      active: false,
-    },
-    connector: {
-      name: "CONNECTOR",
-      description:
-        "A connection of Onyx/Danswer to a data source (generally an application or service) that the (potential customer) ACCOUNT uses, that the VENDOR Onyx can then connect to and ingest data from. This CANNOT be tools that Onyx uses directly to deliver its service.",
-      active: false,
-    },
-    employee: {
-      name: "EMPLOYEE",
-      description:
-        "A person who speaks on behalf of 'our' company (the VENDOR Onyx or Danswer), NOT of another account. Therefore, employees of other companies are NOT included here. If in doubt, do NOT extract.",
-      active: false,
-    },
-  };
+  const {
+    data: rawData,
+    isLoading,
+    mutate,
+  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
+
+  if (isLoading || !rawData) return <></>;
+
+  const data: EntityTypeValues = {};
+  for (const entityType of rawData) {
+    data[entityType.name.toLowerCase()] = entityType;
+  }
 
   const validationSchema = Yup.array(
     Yup.object({
       active: Yup.boolean().required(),
     })
   );
+
+  const onSubmit = async (values: EntityTypeValues) => {
+    const diffs: EntityType[] = [];
+
+    for (const key in data) {
+      const initialValue = data[key]!;
+      const currentValue = values[key]!;
+      const equals =
+        initialValue.description === currentValue.description &&
+        initialValue.active === currentValue.active;
+      if (!equals) {
+        diffs.push(currentValue);
+      }
+    }
+
+    if (diffs.length === 0) return;
+
+    const response = await fetch("/api/admin/kg/entity-types", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(diffs),
+    });
+
+    if (!response.ok) {
+      const errorMsg = (await response.json()).detail;
+      console.warn({ errorMsg });
+      setPopup?.({
+        message: "Failed to configure Entity Types.",
+        type: "error",
+      });
+      return;
+    }
+
+    setPopup?.({
+      message: "Successfully updated Entity Types.",
+      type: "success",
+    });
+    mutate();
+  };
 
   return (
     <CardSection className="flex w-min px-10">
@@ -250,9 +296,7 @@ function KGEntityType() {
         validate={(values) => {
           validationSchema.validate(Object.values(values));
         }}
-        onSubmit={async (values) => {
-          console.log({ values });
-        }}
+        onSubmit={onSubmit}
       >
         {(props) => (
           <Form>
@@ -282,6 +326,8 @@ function Main() {
     "/api/admin/kg/config",
     errorHandlingFetcher
   );
+  const { popup, setPopup } = usePopup();
+
   if (isLoading || !data) {
     return <></>;
   }
@@ -290,6 +336,7 @@ function Main() {
 
   return (
     <div className="flex flex-col py-4 gap-y-8">
+      {popup}
       <CardSection className="max-w-2xl text-text shadow-lg rounded-lg">
         <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
           Knowledge Graph Configuration
@@ -322,7 +369,7 @@ function Main() {
           <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
             Entity Types
           </p>
-          <KGEntityType />
+          <KGEntityType setPopup={setPopup} />
         </div>
       )}
       {configureModalShown && (
@@ -336,6 +383,7 @@ function Main() {
               setConfigureModalShown(false);
               mutate();
             }}
+            setPopup={setPopup}
           />
         </Modal>
       )}
