@@ -101,6 +101,7 @@ from onyx.server.query_and_chat.models import DocumentChatRequest
 
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tools.tool_implementations.document.document_editor_tool import DocumentEditorTool
+from onyx.tools.tool_implementations.regulatory.regulatory_review_tool import RegulatoryReviewTool
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -916,7 +917,19 @@ def handle_document_chat_message(
                         document_content=request.document_content,
                     )
                     tools.append(document_editor_tool)
-                    
+                
+                # Always add regulatory review tool
+                regulatory_review_tool = RegulatoryReviewTool(
+                    db_session=db_session,
+                    user=user,
+                    persona=persona,
+                    llm=llm,
+                    fast_llm=fast_llm,
+                    prompt_config=PromptConfig.from_model(persona.prompts[0]),
+                    answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                    document_content=request.document_content,
+                )
+                tools.append(regulatory_review_tool)
                 
                 config = GraphConfig(
                     inputs=GraphInputs(

@@ -1,4 +1,4 @@
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, List, Dict, Any
 from pydantic import BaseModel
 from langchain_core.messages import AIMessageChunk
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
@@ -29,6 +29,15 @@ class DocumentEditUpdate(BaseModel):
     edit_successful: bool = False
     edit_error: Optional[AgentErrorLog] = None
 
+class RegulatoryReviewComments(BaseModel):
+    """Class to store regulatory review comments and findings."""
+    document_content: Optional[str] = None
+    regulatory_body: str = "FDA"  # Default to FDA
+    findings: Optional[List[Dict[str, Any]]] = None
+    summary: Optional[str] = None
+    review_completed: bool = False
+    needs_followup: bool = False
+
 class DocumentChatState(
     DocumentChatInput,
     ToolChoiceInput,
@@ -36,5 +45,6 @@ class DocumentChatState(
     ToolChoiceUpdate,
     SearchResultUpdate,
     DocumentEditUpdate,
+    RegulatoryReviewComments,
 ):
     pass

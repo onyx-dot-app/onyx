@@ -37,7 +37,16 @@ def should_continue(state: DocumentChatState) -> str:
     return END if state.tool_choice is None else "call_tool"
 
 
+# def should_use_tool_response(state: DocumentChatState) -> str:
+#     # For regulatory_review tool, go directly to END
+#     if state.tool_choice and state.tool_choice.tool.name == "regulatory_review":
+#         return END
+#     return "basic_use_tool_response"
+
+
 def should_repeat(state: DocumentChatState) -> str:
-    if state.tool_choice is None or state.tool_choice.tool.name == "document_editor":
+    # End the graph if no tool was chosen or if it was the document editor or regulatory review tool
+    if state.tool_choice is None or state.tool_choice.tool.name in ["document_editor", "regulatory_review"]:
         return END
     return "choose_tool"
+    
