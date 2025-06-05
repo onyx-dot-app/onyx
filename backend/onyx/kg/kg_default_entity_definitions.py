@@ -13,7 +13,7 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
     )
 
     GITHUB_PR: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
-        description="The Engineering PRs of Onyx describing what was actually implemented.",
+        description="Our (---vendor_name---) Engineering PRs describing what was actually implemented.",
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name="github",
     )

@@ -546,8 +546,8 @@ a1) "Search Type":
 Should the question be answered as a SEARCH ('filtered search'), or as a SQL ('SQL query search')?
 
 The options are:
-1. SEARCH: A filtered search simply uses the entities and relationships that you have been extracted earlier and \
-applies those as filters to search the underlying documents, which are indexed with them. Examples are \
+1. SEARCH: A filtered search simply uses the entities and relationships that you extracted earlier and \
+applies them as filters to search the underlying documents, which are properly indexed. Examples are \
 'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nike about pricing?'. So this \
 is used really when there is *no implicit or explicit constraint or requirements* on underlying source documents \
 outside of filters, and there is no ordering, no limiting their number, etc. So use this for a question that \
@@ -555,7 +555,7 @@ tries to get information *across* documents which may be filtered by their relat
 other constraints.
 
 2. SQL: Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
-if the query refers to specific entities that first need to be identified and then those entities are analyzed/searched/listed. \
+if the query refers to specific entities that first need to be identified and then analyzed/searched/listed. \
 Examples here are 'what did I say about pricing in my call with Nike last week?' (the specific call needs to \
 be identified first and then analyzed),  \
 'what are the next steps of our two largest opportunities?', or 'summarize my 3 most recent customer calls'. So \

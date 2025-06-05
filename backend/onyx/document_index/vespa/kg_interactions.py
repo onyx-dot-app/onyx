@@ -11,6 +11,7 @@ from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 
 logger = setup_logger()
@@ -73,7 +74,7 @@ def update_kg_chunks_vespa_info(
         secondary_index_name=None,
         large_chunks_enabled=False,
         secondary_large_chunks_enabled=False,
-        multitenant=False,
+        multitenant=MULTI_TENANT,
         httpx_client=None,
     )
 
@@ -83,7 +84,7 @@ def update_kg_chunks_vespa_info(
 
 
 def get_kg_vespa_info_update_requests_for_document(
-    document_id: str, index_name: str
+    document_id: str, index_name: str, tenant_id: str
 ) -> list[KGUChunkUpdateRequest]:
     """Get the kg_info update requests for a document."""
     # get all entities and relationships tied to the document
