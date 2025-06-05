@@ -1,10 +1,8 @@
 from pydantic import BaseModel
 from retry import retry
-from sqlalchemy import or_
 
+from onyx.db.document import get_document_kg_entities_and_relationships
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import KGEntity
-from onyx.db.models import KGRelationship
 from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
@@ -90,23 +88,8 @@ def get_kg_vespa_info_update_requests_for_document(
     """Get the kg_info update requests for a document."""
     # get all entities and relationships tied to the document
     with get_session_with_current_tenant() as db_session:
-        entities = (
-            db_session.query(KGEntity).filter(KGEntity.document_id == document_id).all()
-        )
-        if not entities:
-            return []
-        entity_id_names = [entity.id_name for entity in entities]
-
-        relationships = (
-            db_session.query(KGRelationship)
-            .filter(
-                or_(
-                    KGRelationship.source_node.in_(entity_id_names),
-                    KGRelationship.target_node.in_(entity_id_names),
-                    KGRelationship.source_document == document_id,
-                )
-            )
-            .all()
+        entities, relationships = get_document_kg_entities_and_relationships(
+            db_session, document_id
         )
 
     # create the kg vespa info
