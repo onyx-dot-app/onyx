@@ -330,7 +330,7 @@ export function LLMProviderUpdateForm({
                   name="default_model_name"
                   subtext="Модель, используемая по умолчанию для этого поставщика, если не указано иное."
                   label="LLM-модель по дефолт"
-                  Placeholder="Например gpt-4"
+                  placeholder="Например gpt-4"
                 />
               )}
 
