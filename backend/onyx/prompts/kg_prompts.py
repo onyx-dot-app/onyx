@@ -830,8 +830,7 @@ as a NULL value is a valid answer.
 
 APPROACH:
 Please think through this step by step. Make sure that you include all columns in the ORDER BY clause \
-also in the SELECT DISTINCT clause, \
-if applicable! And again, joins should generally be LEFT JOINS!
+also in the SELECT DISTINCT clause, if applicable! And again, joins should generally be LEFT JOINS!
 
 Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
 
