@@ -1,4 +1,15 @@
 #!/bin/bash
+set -e
+
+cleanup() {
+  echo "Error occurred. Cleaning up..."
+  docker stop onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
+  docker rm onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
+}
+
+# Trap errors and output a message, then cleanup
+trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
+trap cleanup EXIT
 
 # Usage of the script with optional volume arguments
 # ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
