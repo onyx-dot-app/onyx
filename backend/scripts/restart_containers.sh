@@ -2,7 +2,7 @@
 set -e
 
 cleanup() {
-  echo "Error occured.Cleaning up..."
+  echo "Error occurred. Cleaning up..."
   docker stop onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
   docker rm onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
 }
