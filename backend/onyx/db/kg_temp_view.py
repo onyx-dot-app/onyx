@@ -126,10 +126,11 @@ def create_views(
     db_session.execute(allowed_docs_view)
     db_session.execute(kg_relationships_view)
 
-    grant_kg_relationships = text(
-        f"GRANT SELECT ON {kg_relationships_view_name} TO {DB_READONLY_USER}"
+    # Grant permissions on view to readonly user
+
+    db_session.execute(
+        text(f"GRANT SELECT ON {kg_relationships_view_name} TO {DB_READONLY_USER}")
     )
-    db_session.execute(grant_kg_relationships)
 
     db_session.commit()
 

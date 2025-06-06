@@ -1,7 +1,7 @@
 """create knowledge graph tables
 
 Revision ID: 495cb26ce93e
-Revises: 238b84885828
+Revises: ca04500b9ee8
 Create Date: 2025-03-19 08:51:14.341989
 
 """
@@ -64,6 +64,21 @@ def upgrade() -> None:
                 """
             )
         )
+
+    # Grant usage on current schema to readonly user
+    op.execute(
+        text(
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                    EXECUTE format('GRANT USAGE ON SCHEMA current_schema() TO %I', '{DB_READONLY_USER}');
+                END IF;
+            END
+            $$;
+            """
+        )
+    )
 
     op.create_table(
         "kg_config",
@@ -629,6 +644,21 @@ def downgrade() -> None:
     op.drop_column("document", "kg_processing_time")
     op.drop_table("kg_config")
 
+    # Revoke usage on current schema for the readonly user
+    op.execute(
+        text(
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                    EXECUTE format('REVOKE ALL ON SCHEMA current_schema() FROM %I', '{DB_READONLY_USER}');
+                END IF;
+            END
+            $$;
+            """
+        )
+    )
+
     if not MULTI_TENANT:
         # Drop read-only db user here only in single tenant mode. For multi-tenant mode,
         # the user is dropped in the alembic_tenants migration.
@@ -641,8 +671,6 @@ def downgrade() -> None:
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
                     -- First revoke all privileges from the database
                     EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
-                    -- Then revoke all privileges from the public schema
-                    EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', '{DB_READONLY_USER}');
                     -- Then drop the user
                     EXECUTE format('DROP USER %I', '{DB_READONLY_USER}');
                 END IF;
