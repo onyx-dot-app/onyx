@@ -78,28 +78,28 @@ export const useObjectState = <T>(
   return [state, set];
 };
 
-const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
+// const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
 const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
-export const useConnectorCredentialIndexingStatus = (
-  refreshInterval = 30000, // 30 seconds
-  getEditable = false
-) => {
-  const { mutate } = useSWRConfig();
-  const url = `${INDEXING_STATUS_URL}${
-    getEditable ? "?get_editable=true" : ""
-  }`;
-  const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
-    url,
-    errorHandlingFetcher,
-    { refreshInterval: refreshInterval }
-  );
+// export const useConnectorCredentialIndexingStatus = (
+//   refreshInterval = 30000, // 30 seconds
+//   getEditable = false
+// ) => {
+//   const { mutate } = useSWRConfig();
+//   const url = `${INDEXING_STATUS_URL}${
+//     getEditable ? "?get_editable=true" : ""
+//   }`;
+//   const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
+//     url,
+//     errorHandlingFetcher,
+//     { refreshInterval: refreshInterval }
+//   );
 
-  return {
-    ...swrResponse,
-    refreshIndexingStatus: () => mutate(url),
-  };
-};
+//   return {
+//     ...swrResponse,
+//     refreshIndexingStatus: () => mutate(url),
+//   };
+// };
 
 export const useConnectorStatus = (refreshInterval = 30000) => {
   const { mutate } = useSWRConfig();

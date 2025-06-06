@@ -45,6 +45,13 @@ jobs:
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
 
+      - name: Generate OpenAPI schema
+        working-directory: ./backend
+        env:
+          PYTHONPATH: "."
+        run: |
+          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
+
       - name: Setup node
         uses: actions/setup-node@v4
         with:
@@ -54,6 +61,11 @@ jobs:
         working-directory: ./web
         run: npm ci
 
+      - name: Generate OpenAPI TypeScript Client (orval)
+        working-directory: ./web
+        run: |
+          npx orval --config orval.config.js
+          
       - name: Install playwright browsers
         working-directory: ./web
         run: npx playwright install --with-deps

@@ -6,22 +6,51 @@ import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Link from "next/link";
 import Text from "@/components/ui/text";
-import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
+// import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 import { Button } from "@/components/ui/button";
+import {
+  GetConnectorIndexingStatusQueryError,
+  GetConnectorIndexingStatusQueryResult,
+  useGetConnectorIndexingStatus,
+} from "@/lib/generated/onyx-api/default/default";
+import { HTTPValidationError } from "@/lib/generated/onyx-api/model";
 
 function Main() {
   const {
     data: indexAttemptData,
     isLoading: indexAttemptIsLoading,
     error: indexAttemptError,
-  } = useConnectorCredentialIndexingStatus();
+  } = useGetConnectorIndexingStatus<HTTPValidationError>(undefined, {
+    swr: {
+      refreshInterval: 30000,
+    },
+  });
 
   const {
     data: editableIndexAttemptData,
     isLoading: editableIndexAttemptIsLoading,
     error: editableIndexAttemptError,
-  } = useConnectorCredentialIndexingStatus(undefined, true);
+  } = useGetConnectorIndexingStatus<HTTPValidationError>(
+    { get_editable: true }, // or undefined if false
+    {
+      swr: {
+        refreshInterval: undefined,
+      },
+    }
+  );
+
+  // const {
+  //   data: indexAttemptData,
+  //   isLoading: indexAttemptIsLoading,
+  //   error: indexAttemptError,
+  // } = useConnectorCredentialIndexingStatus();
+
+  // const {
+  //   data: editableIndexAttemptData,
+  //   isLoading: editableIndexAttemptIsLoading,
+  //   error: editableIndexAttemptError,
+  // } = useConnectorCredentialIndexingStatus(undefined, true);
 
   if (indexAttemptIsLoading || editableIndexAttemptIsLoading) {
     return <LoadingAnimation text="" />;
@@ -35,14 +64,46 @@ function Main() {
   ) {
     return (
       <div className="text-error">
-        {indexAttemptError?.info?.detail ||
-          editableIndexAttemptError?.info?.detail ||
+        {indexAttemptError?.detail?.[0]?.msg ||
+          editableIndexAttemptError?.detail?.[0]?.msg ||
           "Error loading indexing history."}
       </div>
     );
   }
 
-  if (indexAttemptData.length === 0) {
+  // Handle cases where data from SWR is unexpectedly undefined
+  if (!indexAttemptData || !editableIndexAttemptData) {
+    return (
+      <div className="text-error">
+        Indexing history data is not available. This is an unexpected state.
+      </div>
+    );
+  }
+
+  // Handle API errors returned in the response (e.g., status 422)
+  if (indexAttemptData.status !== 200) {
+    const apiError = indexAttemptData.data as HTTPValidationError;
+    const message =
+      apiError.detail?.[0]?.msg ||
+      `API error fetching primary indexing status (Status: ${indexAttemptData.status}).`;
+    return <div className="text-error">{message}</div>;
+  }
+
+  if (editableIndexAttemptData.status !== 200) {
+    const apiError = editableIndexAttemptData.data as HTTPValidationError;
+    const message =
+      apiError.detail?.[0]?.msg ||
+      `API error fetching editable indexing status (Status: ${editableIndexAttemptData.status}).`;
+    return <div className="text-error">{message}</div>;
+  }
+
+  // At this point, both API calls were successful (status 200)
+  // indexAttemptData.data is ConnectorIndexingStatus[]
+  // editableIndexAttemptData.data is ConnectorIndexingStatus[]
+  const actualIndexAttempts = indexAttemptData.data; // No `as ConnectorIndexingStatus[]` needed if TS infers correctly
+  const actualEditableIndexAttempts = editableIndexAttemptData.data;
+
+  if (actualIndexAttempts.length === 0) {
     return (
       <Text>
         It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
@@ -55,7 +116,7 @@ function Main() {
   }
 
   // sort by source name
-  indexAttemptData.sort((a, b) => {
+  actualIndexAttempts.sort((a, b) => {
     if (a.connector.source < b.connector.source) {
       return -1;
     } else if (a.connector.source > b.connector.source) {
@@ -67,8 +128,8 @@ function Main() {
 
   return (
     <CCPairIndexingStatusTable
-      ccPairsIndexingStatuses={indexAttemptData}
-      editableCcPairsIndexingStatuses={editableIndexAttemptData}
+      ccPairsIndexingStatuses={actualIndexAttempts}
+      editableCcPairsIndexingStatuses={actualEditableIndexAttempts}
     />
   );
 }
