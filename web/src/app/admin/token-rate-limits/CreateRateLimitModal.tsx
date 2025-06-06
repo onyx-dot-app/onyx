@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Form, Formik } from "formik";
-import {
-  SelectorFormField,
-  TextFormField,
-} from "@/components/admin/connectors/Field";
+import { SelectorFormField, TextFormField } from "@/components/Field";
 import { UserGroup } from "@/lib/types";
 import { Scope } from "./types";
 import { PopupSpec } from "@/components/admin/connectors/Popup";

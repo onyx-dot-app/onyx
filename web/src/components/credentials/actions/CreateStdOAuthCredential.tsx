@@ -3,7 +3,7 @@ import * as Yup from "yup";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { ValidSources } from "@/lib/types";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import CardSection from "@/components/admin/CardSection";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";

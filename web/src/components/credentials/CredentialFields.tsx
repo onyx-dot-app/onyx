@@ -6,7 +6,7 @@ import {
   ManualErrorMessage,
   SubLabel,
   ToolTipDetails,
-} from "../admin/connectors/Field";
+} from "@/components/Field";
 
 // Specifically for text
 export function AdminTextField({

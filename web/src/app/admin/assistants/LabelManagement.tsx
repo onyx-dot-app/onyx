@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { SubLabel, TextFormField } from "@/components/admin/connectors/Field";
+import { SubLabel, TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useLabels } from "@/lib/hooks";
 import { PersonaLabel } from "./interfaces";

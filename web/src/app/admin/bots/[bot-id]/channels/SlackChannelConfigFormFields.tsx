@@ -9,7 +9,7 @@ import {
   SubLabel,
   TextArrayField,
   TextFormField,
-} from "@/components/admin/connectors/Field";
+} from "@/components/Field";
 import { Button } from "@/components/ui/button";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";

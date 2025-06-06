@@ -18,7 +18,7 @@ import {
   MarkdownFormField,
   BooleanFormField,
   SelectorFormField,
-} from "@/components/admin/connectors/Field";
+} from "@/components/Field";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {

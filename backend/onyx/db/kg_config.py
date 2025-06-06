@@ -1,12 +1,17 @@
 from datetime import datetime
 from enum import Enum
 
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGConfig
+from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
+from onyx.server.kg.models import EnableKGConfigRequest
+from onyx.server.kg.models import EntityType
+from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 
 
 class KGProcessingType(Enum):
@@ -28,6 +33,9 @@ def get_kg_enablement(db_session: Session) -> bool:
 
 
 def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
+    # TODO (raunakab):
+    # Cleanup.
+
     results = db_session.query(KGConfig).all()
 
     kg_config_settings = KGConfigSettings()
@@ -139,3 +147,153 @@ def get_kg_processing_in_progress_status(
         return False
 
     return config.kg_variable_values[0] == "true"
+
+
+# server API helpers
+
+
+VALID_ENTITY_TYPE_NAMES = set(
+    [
+        "ACCOUNT",
+        "CONCERN",
+        "CONNECTOR",
+        "EMPLOYEE",
+        "ENGAGEMENT",
+        "FIREFLIES",
+        "GITHUB",
+        "GMAIL",
+        "GOAL",
+        "GONG",
+        "GOOGLE_DRIVE",
+        "JIRA",
+        "LINEAR",
+        "OPPORTUNITY",
+        "SLACK",
+        "VENDOR",
+        "WEB",
+    ]
+)
+
+
+def get_kg_config(db_session: Session) -> KGConfigAPIModel:
+    config = get_kg_config_settings(db_session=db_session)
+    return KGConfigAPIModel.from_kg_config_settings(config)
+
+
+def enable_kg(
+    db_session: Session,
+    enable_req: EnableKGConfigRequest,
+) -> None:
+    # cannot be empty string
+    if not enable_req.vendor:
+        raise ValueError(
+            f"KG vendor must be specified; instead got {enable_req.vendor=}"
+        )
+
+    # cannot be empty list
+    if not enable_req.vendor_domains:
+        raise ValueError(
+            f"KG vendor domains must be specified; instead got {enable_req.vendor_domains=}"
+        )
+
+    vars = [
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_ENABLED,
+            kg_variable_values=[bool_to_string(True)],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR,
+            kg_variable_values=[enable_req.vendor],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR_DOMAINS,
+            kg_variable_values=enable_req.vendor_domains,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_IGNORE_EMAIL_DOMAINS,
+            kg_variable_values=enable_req.ignore_domains,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_COVERAGE_START,
+            kg_variable_values=[enable_req.coverage_start.strftime("%Y-%m-%d")],
+        ),
+    ]
+
+    for var in vars:
+        existing_var = (
+            db_session.query(KGConfig)
+            .filter(KGConfig.kg_variable_name == var.kg_variable_name)
+            .first()
+        )
+        if not existing_var:
+            db_session.add(var)
+            continue
+
+        db_session.query(KGConfig).filter(
+            KGConfig.kg_variable_name == var.kg_variable_name
+        ).update(
+            {"kg_variable_values": var.kg_variable_values},
+            synchronize_session=False,
+        )
+
+    db_session.commit()
+
+
+def disable_kg(db_session: Session) -> None:
+    var = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED)
+        .first()
+    )
+
+    values = [bool_to_string(False)]
+
+    if var:
+        db_session.query(KGConfig).where(
+            KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED
+        ).update(
+            {"kg_variable_values": values},
+            synchronize_session=False,
+        )
+    else:
+        db_session.add(
+            KGConfig(
+                kg_variable_name=KGConfigVars.KG_ENABLED,
+                kg_variable_values=values,
+            )
+        )
+
+    db_session.commit()
+
+
+def get_kg_entity_types(db_session: Session) -> list[EntityType]:
+    return [
+        EntityType.from_model(kg_entity_type)
+        for kg_entity_type in db_session.query(KGEntityType)
+    ]
+
+
+def update_kg_entity_types(
+    db_session: Session,
+    updates: list[EntityType],
+) -> None:
+    for upd in updates:
+        if upd.name not in VALID_ENTITY_TYPE_NAMES:
+            raise ValueError(
+                f"Invalid entity-type name; expected one of {VALID_ENTITY_TYPE_NAMES=}, instead got {upd.name=}"
+            )
+
+        db_session.execute(
+            update(KGEntityType)
+            .where(KGEntityType.id_name == upd.name)
+            .values(
+                description=upd.description,
+                active=upd.active,
+            )
+        )
+
+    db_session.commit()
+
+
+def bool_to_string(b: bool) -> str:
+    return "true" if b else "false"

@@ -3,7 +3,7 @@ import { AdminBooleanFormField } from "@/components/credentials/CredentialFields
 import { TabOption } from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import ListInput from "./ConnectorInput/ListInput";
 import FileInput from "./ConnectorInput/FileInput";
 import { ConfigurableSources } from "@/lib/types";
