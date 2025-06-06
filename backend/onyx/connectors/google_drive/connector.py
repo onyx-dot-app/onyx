@@ -10,6 +10,7 @@ from typing import cast
 from typing import Protocol
 from urllib.parse import urlparse
 
+import psutil
 from google.auth.exceptions import RefreshError  # type: ignore
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
@@ -229,6 +230,20 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         self.allow_images = False
 
         self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
+
+    def log_memory_usage(self) -> None:
+        """
+        Logs how much memory is being used by the connector by
+        getting the size of each instance attribute as well as
+        the current process's memory usage and available memory.
+        """
+        process_memory_usage = psutil.Process().memory_info().rss
+        available_memory = psutil.virtual_memory().available
+        logger.info(f"Process memory usage: {process_memory_usage/1000_000:.2f} MB")
+        logger.info(f"Available memory: {available_memory/1000_000:.2f} MB")
+        logger.debug(
+            f"num retrieved folder and drive ids: {len(self._retrieved_folder_and_drive_ids)}"
+        )
 
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
@@ -1096,6 +1111,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 if len(files_batch) < DRIVE_BATCH_SIZE:
                     continue
 
+                self.log_memory_usage()
                 yield from _yield_batch(files_batch)
                 files_batch = []
 

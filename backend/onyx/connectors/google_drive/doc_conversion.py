@@ -433,6 +433,7 @@ def _convert_drive_item_to_document(
                         f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
                     )
                     return None
+                logger.debug(f"File size: {size_int/1000_000:.4f} MB")
 
         # If we don't have sections yet, use the basic extraction method
         if not sections:
