@@ -194,6 +194,8 @@ def process_jira_issue(
         # Project should exist.
         logger.error(f"Project should exist but does not for {issue.key}")
 
+    metadata_dict[_FIELD_KEY] = issue.key
+
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
