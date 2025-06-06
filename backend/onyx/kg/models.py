@@ -1,7 +1,6 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from typing import Dict
 
 from pydantic import BaseModel
 
@@ -44,9 +43,9 @@ class KGChunkFormat(BaseModel):
     secondary_owners: list[str]
     source_type: str
     metadata: dict[str, str | list[str]] | None = None
-    entities: Dict[str, int] = {}
-    relationships: Dict[str, int] = {}
-    terms: Dict[str, int] = {}
+    entities: dict[str, int] = {}
+    relationships: dict[str, int] = {}
+    terms: dict[str, int] = {}
     deep_extraction: bool = False
 
 
@@ -137,15 +136,10 @@ class KGClassificationDecisions(BaseModel):
     source_metadata: dict[str, Any] | None = None
 
 
-class KGClassificationRule(BaseModel):
-    description: str
-    extration: bool
-
-
 class KGClassificationInstructions(BaseModel):
     classification_enabled: bool
     classification_options: str
-    classification_class_definitions: dict[str, Dict[str, str | bool]]
+    classification_class_definitions: dict[str, dict[str, str | bool]]
 
 
 class KGExtractionInstructions(BaseModel):
@@ -227,9 +221,3 @@ class KGDefaultEntityDefinition(BaseModel):
     grounded_source_name: str | None
     attributes: dict = {}
     entity_values: dict = {}
-
-
-class KGEntityInformation(BaseModel):
-    entity_type: str
-    entity_name: str
-    occurences: int
