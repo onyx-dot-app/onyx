@@ -325,7 +325,7 @@ def start_query_history_export(
         start_time=start_time,
     )
 
-    task = client_app.send_task(
+    client_app.send_task(
         OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
         task_id=task_id,
         priority=OnyxCeleryPriority.MEDIUM,
@@ -336,9 +336,6 @@ def start_query_history_export(
             "start_time": start_time,
         },
     )
-
-    if task.id != task_id:
-        raise Exception("!" * 80)
 
     return {"request_id": task_id}
 
