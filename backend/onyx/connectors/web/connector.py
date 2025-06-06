@@ -1,7 +1,9 @@
+import gc
 import io
 import ipaddress
 import random
 import socket
+import functools
 import time
 from datetime import datetime
 from datetime import timezone
@@ -15,6 +17,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 from oauthlib.oauth2 import BackendApplicationClient
+from playwright.sync_api import Browser
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
@@ -52,28 +55,41 @@ class ScrapeSessionContext:
         self.to_visit = to_visit
         self.visited_links: set[str] = set()
         self.content_hashes: set[int] = set()
-
+        self.seen_domains: set[str] = set()
         self.doc_batch: list[Document] = []
 
         self.at_least_one_doc: bool = False
         self.last_error: str | None = None
         self.needs_retry: bool = False
-
         self.playwright: Playwright | None = None
+        self.browser: Browser | None = None
         self.playwright_context: BrowserContext | None = None
+        self.page: Any | None = None  # Reusable page object (type: Page)
 
     def initialize(self) -> None:
         self.stop()
-        self.playwright, self.playwright_context = start_playwright()
+        self.playwright, self.browser, self.playwright_context = start_playwright()
+        if self.playwright_context:
+            self.page = self.playwright_context.new_page()
 
     def stop(self) -> None:
+        if self.page:
+            self.page.close()
+            self.page = None
+
         if self.playwright_context:
             self.playwright_context.close()
             self.playwright_context = None
 
+        if self.browser:
+            self.browser.close()
+            self.browser = None
+
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
+
+        gc.collect()
 
 
 class ScrapeResult:
@@ -133,9 +149,11 @@ class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     UPLOAD = "upload"
 
 
+@functools.lru_cache(maxsize=1024)
 def protected_url_check(url: str) -> None:
     """Couple considerations:
-    - DNS mapping changes over time so we don't want to cache the results
+    - DNS mapping changes over time, but caching is applied here assuming changes are infrequent
+      enough for the typical use case, prioritizing performance.
     - Fetching this is assumed to be relatively fast compared to other bottlenecks like reading
       the page or embedding the contents
     - To be extra safe, all IPs associated with the URL must be global
@@ -250,7 +268,7 @@ def is_pdf_content(response: requests.Response) -> bool:
     return any(pdf_type in content_type for pdf_type in PDF_MIME_TYPES)
 
 
-def start_playwright() -> Tuple[Playwright, BrowserContext]:
+def start_playwright() -> Tuple[Playwright, Browser, BrowserContext]:
     playwright = sync_playwright().start()
 
     # Launch browser with more realistic settings
@@ -277,6 +295,11 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
         bypass_csp=True,
         ignore_https_errors=True,
     )
+
+    # SYNAPSE: Block heavy/unneeded resources
+    context.route("**/*", lambda route: 
+        route.abort() if route.request.resource_type in ("image", "stylesheet", "font", "media", "websocket", "other")
+        else route.continue_())
 
     # Set additional headers to mimic a real browser
     context.set_extra_http_headers(
@@ -326,7 +349,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             {"Authorization": "Bearer {}".format(token["access_token"])}
         )
 
-    return playwright, context
+    return playwright, browser, context
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
@@ -334,7 +357,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, "html.parser")
+        soup = BeautifulSoup(response.content, "lxml")
         urls = [
             _ensure_absolute_url(sitemap_url, loc_tag.text)
             for loc_tag in soup.find_all("loc")
@@ -387,12 +410,18 @@ def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | No
         return None
 
 
-def _handle_cookies(context: BrowserContext, url: str) -> None:
-    """Handle cookies for the given URL to help with bot detection"""
+def _handle_cookies(
+    context: BrowserContext, url: str, session_ctx: ScrapeSessionContext
+) -> None:
+    """Handle cookies for the given URL to help with bot detection, once per domain."""
     try:
         # Parse the URL to get the domain
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
+
+        # Only add cookies once per domain per session
+        if domain in session_ctx.seen_domains:
+            return
 
         # Add some common cookies that might help with bot detection
         cookies: list[dict[str, str]] = [
@@ -416,12 +445,14 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
             },
         ]
 
-        # Add cookies to the context
-        for cookie in cookies:
-            try:
-                context.add_cookies([cookie])  # type: ignore
-            except Exception as e:
-                logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
+        # Add cookies to the context in a single call
+        try:
+            context.add_cookies(cookies)  # type: ignore
+        except Exception as e:
+            logger.warning(f"Failed to add one or more cookies for {domain}: {e}")
+
+        # Mark domain as seen after attempting to add cookies
+        session_ctx.seen_domains.add(domain)
     except Exception:
         logger.exception(
             f"Unexpected error while handling cookies for Web Connector with URL {url}"
@@ -440,6 +471,14 @@ class WebConnector(LoadConnector):
         scroll_before_scraping: bool = False,
         **kwargs: Any,
     ) -> None:
+        # one per connector instance
+        self._http = requests.Session()
+        self._http.headers.update(DEFAULT_HEADERS)
+        # Add connection pooling
+        adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
+        self._http.mount('http://', adapter)
+        self._http.mount('https://', adapter)
+
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
@@ -495,47 +534,97 @@ class WebConnector(LoadConnector):
 
         result = ScrapeResult()
 
-        # Handle cookies for the URL
-        _handle_cookies(session_ctx.playwright_context, initial_url)
+        # Handle cookies for the URL (now passes session_ctx)
+        _handle_cookies(session_ctx.playwright_context, initial_url, session_ctx)
 
-        # First do a HEAD request to check content type without downloading the entire content
-        head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
-        )
-        is_pdf = is_pdf_content(head_response)
+        # --- PDF Handling ---
+        # Optimize: Only do HEAD request if URL explicitly ends with .pdf
+        # Otherwise, rely on Playwright which handles redirects and content fetching.
+        if initial_url.lower().endswith(".pdf"):
+            head_response = None
+            is_pdf_confirmed = False
+            try:
+                head_response = self._http.head(initial_url, allow_redirects=True)
+                # Allow redirects might change the final URL, check content type
+                if head_response.ok and is_pdf_content(head_response):
+                    is_pdf_confirmed = True
+            except requests.RequestException as e:
+                 logger.warning(f"HEAD request failed for potential PDF {initial_url}: {e}")
+            finally:
+                if head_response:
+                    head_response.close()
 
-        if is_pdf or initial_url.lower().endswith(".pdf"):
-            # PDF files are not checked for links
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
-            page_text, metadata, images = read_pdf_file(
-                file=io.BytesIO(response.content)
-            )
-            last_modified = response.headers.get("Last-Modified")
+            if is_pdf_confirmed:
+                # Confirmed PDF, proceed with streaming download
+                response = None
+                pdf_buffer = io.BytesIO()
+                try:
+                    # Use stream=True to avoid loading the whole PDF into memory
+                    response = self._http.get(initial_url, stream=True)
+                    response.raise_for_status()  # Check for HTTP errors
 
-            result.doc = Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=page_text)],
-                source=DocumentSource.WEB,
-                semantic_identifier=initial_url.split("/")[-1],
-                metadata=metadata,
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
-            )
+                    # Download in chunks and write to buffer
+                    chunk_size = 128 * 1024  # 128 kB chunks
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        pdf_buffer.write(chunk)
 
-            return result
+                    # Reset buffer position to the beginning for reading
+                    pdf_buffer.seek(0)
 
-        page = session_ctx.playwright_context.new_page()
+                    # Process the PDF from the buffer
+                    page_text, metadata, images = read_pdf_file(file=pdf_buffer)
+                    last_modified = response.headers.get("Last-Modified")
+
+                    result.doc = Document(
+                        id=initial_url, # Use initial_url as ID even if redirected by HEAD
+                        sections=[TextSection(link=initial_url, text=page_text)],
+                        source=DocumentSource.WEB,
+                        semantic_identifier=initial_url.split("/")[-1],
+                        metadata=metadata,
+                        doc_updated_at=(
+                            _get_datetime_from_last_modified_header(last_modified)
+                            if last_modified
+                            else None
+                        ),
+                    )
+                finally:
+                    if response:
+                        response.close()  # Ensure the connection is closed
+                    pdf_buffer.close() # Close the BytesIO buffer
+                # Return early as PDF processing is complete
+                return result
+            else:
+                 logger.info(f"URL {initial_url} ends with .pdf but HEAD request did not confirm PDF content type. Proceeding with Playwright.")
+
+
+        # --- HTML/Other Content Handling (using Playwright) ---
+        # This block runs if it wasn't a confirmed PDF OR if the .pdf check failed
+        page = session_ctx.page
+        if not page:
+            raise RuntimeError("Session context page not initialized")
+
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+            # Use Playwright to fetch the page content
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
                 wait_until="domcontentloaded",  # Wait for DOM to be ready
             )
 
+            # --- Content-Type Check ---
+            # Ensure we only process HTML-like content with Playwright
+            allowed_html_types = ("text/html", "application/xhtml+xml")
+            if page_response:
+                content_type_header = page_response.header_value("Content-Type")
+                # Normalize header (lowercase, remove parameters like charset)
+                normalized_content_type = (content_type_header or "").lower().split(";")[0].strip()
+                if normalized_content_type and not normalized_content_type.startswith(allowed_html_types):
+                    logger.info(
+                        f"Skipping non-HTML content type '{content_type_header}' for URL: {page.url}"
+                    )
+                    return result # Return empty result, skip processing
+
+            # --- Redirect Handling & Further Processing ---
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
             )
@@ -547,38 +636,49 @@ class WebConnector(LoadConnector):
                     logger.info(
                         f"{index}: {initial_url} redirected to {final_url} - already indexed"
                     )
-                    page.close()
-                    return result
+                    # No need to close page here, managed by context
+                    return result # Return empty result as it's already visited
 
                 logger.info(f"{index}: {initial_url} redirected to {final_url}")
                 session_ctx.visited_links.add(initial_url)
 
-            # If we got here, the request was successful
+            # If we got here, the request was successful (or handled redirect)
             if self.scroll_before_scraping:
-                scroll_attempts = 0
-                previous_height = page.evaluate("document.body.scrollHeight")
-                while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
-                    time.sleep(0.5)  # let javascript run
-
-                    new_height = page.evaluate("document.body.scrollHeight")
-                    if new_height == previous_height:
-                        break  # Stop scrolling when no more content is loaded
-                    previous_height = new_height
-                    scroll_attempts += 1
+                # Execute the scrolling logic entirely within the browser's JS context
+                page.evaluate("""
+                    async () => {
+                        let lastHeight = -1;
+                        let unchangedCount = 0;
+                        
+                        for (let i = 0; i < 20; i++) {
+                            const currentHeight = document.body.scrollHeight;
+                            if (currentHeight === lastHeight) {
+                                unchangedCount++;
+                                if (unchangedCount >= 3) break; // Stop earlier if height doesn't change
+                            } else {
+                                unchangedCount = 0;
+                            }
+                            window.scrollTo(0, currentHeight);
+                            lastHeight = currentHeight;
+                            await new Promise(resolve => setTimeout(resolve, 300)); // Reduced wait time
+                        }
+                    }
+                """)
+                # Add a small final pause after the JS loop finishes, just in case
+                time.sleep(0.5)
 
             content = page.content()
-            soup = BeautifulSoup(content, "html.parser")
+            soup = BeautifulSoup(content, "lxml")
 
             if self.recursive:
                 internal_links = get_internal_links(
-                    session_ctx.base_url, initial_url, soup
+                    session_ctx.base_url, initial_url, soup # Use final URL for relative links
                 )
-                for link in internal_links:
-                    if link not in session_ctx.visited_links:
-                        session_ctx.to_visit.append(link)
+                # Filter out already visited links and extend the list in bulk
+                new_links = [link for link in internal_links
+                             if link not in session_ctx.visited_links]
+                if new_links:
+                    session_ctx.to_visit.extend(new_links)
 
             if page_response and str(page_response.status)[0] in ("4", "5"):
                 session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
@@ -633,7 +733,8 @@ class WebConnector(LoadConnector):
                 ),
             )
         finally:
-            page.close()
+            # No longer need to close the page here, it's managed by ScrapeSessionContext.stop()
+            pass  # Keep the finally block structure
 
         return result
 
@@ -648,70 +749,91 @@ class WebConnector(LoadConnector):
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
         session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
-        session_ctx.initialize()
+        session_ctx.initialize()  # Initialize ONCE here
 
-        while session_ctx.to_visit:
-            initial_url = session_ctx.to_visit.pop()
-            if initial_url in session_ctx.visited_links:
-                continue
-            session_ctx.visited_links.add(initial_url)
-
-            try:
-                protected_url_check(initial_url)
-            except Exception as e:
-                session_ctx.last_error = f"Invalid URL {initial_url} due to {e}"
-                logger.warning(session_ctx.last_error)
-                continue
-
-            index = len(session_ctx.visited_links)
-            logger.info(f"{index}: Visiting {initial_url}")
-
-            # Add retry mechanism with exponential backoff
-            retry_count = 0
-
-            while retry_count < self.MAX_RETRIES:
-                if retry_count > 0:
-                    # Add a random delay between retries (exponential backoff)
-                    delay = min(2**retry_count + random.uniform(0, 1), 10)
-                    logger.info(
-                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
-                    )
-                    time.sleep(delay)
+        try:  # Ensure stop is called even if errors occur in the loop
+            while session_ctx.to_visit:
+                initial_url = session_ctx.to_visit.pop()
+                if initial_url in session_ctx.visited_links:
+                    continue
+                session_ctx.visited_links.add(initial_url)
 
                 try:
-                    result = self._do_scrape(index, initial_url, session_ctx)
-                    if result.retry:
-                        continue
-
-                    if result.doc:
-                        session_ctx.doc_batch.append(result.doc)
+                    protected_url_check(initial_url)
                 except Exception as e:
-                    session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
-                    logger.exception(session_ctx.last_error)
-                    session_ctx.initialize()
+                    session_ctx.last_error = f"Invalid URL {initial_url} due to {e}"
+                    logger.warning(session_ctx.last_error)
                     continue
-                finally:
-                    retry_count += 1
 
-                break  # success / don't retry
+                index = len(session_ctx.visited_links)
+                logger.info(f"{index}: Visiting {initial_url}")
 
-            if len(session_ctx.doc_batch) >= self.batch_size:
-                session_ctx.initialize()
+                # Add retry mechanism with exponential backoff
+                retry_count = 0
+                scraped_successfully = False
+                while retry_count < self.MAX_RETRIES:
+                    if retry_count > 0:
+                        # Add a random delay between retries (exponential backoff)
+                        delay = min(2**retry_count + random.uniform(0, 1), 10)
+                        logger.info(
+                            f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
+                        )
+                        time.sleep(delay)
+
+                    try:
+                        result = self._do_scrape(index, initial_url, session_ctx)
+                        if result.retry:
+                            # If _do_scrape signals a retryable error (like HTTP 4xx/5xx)
+                            # we increment retry_count and continue the inner loop.
+                            # We don't re-initialize here.
+                            logger.info(f"Retrying {initial_url} due to server response.")
+                            retry_count += 1
+                            continue  # Continue to the next retry iteration
+
+                        # If scrape was successful (even if result.doc is None)
+                        if result.doc:
+                            session_ctx.doc_batch.append(result.doc)
+                        scraped_successfully = True
+                        break  # Exit retry loop on success or non-retryable issue from _do_scrape
+
+                    except Exception as e:
+                        # This catches exceptions *within* the _do_scrape call itself
+                        # or potentially issues setting up the call.
+                        session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
+                        logger.exception(session_ctx.last_error)
+                        # DO NOT re-initialize here.
+                        # Increment retry count and continue the retry loop for unexpected exceptions
+                        retry_count += 1
+                        continue # Continue to the next retry iteration
+
+                if not scraped_successfully:
+                    logger.error(f"Failed to scrape {initial_url} after {self.MAX_RETRIES} retries.")
+                    # Optionally continue to the next URL or raise an error depending on desired behavior
+
+
+                # --- Batch Handling ---
+                if len(session_ctx.doc_batch) >= self.batch_size:
+                    # REMOVE session_ctx.initialize() here
+                    session_ctx.at_least_one_doc = True
+                    yield session_ctx.doc_batch
+                    session_ctx.doc_batch = []  # Just clear the batch
+
+            # --- Final Batch ---
+            if session_ctx.doc_batch:
+                # No need to call stop() here, it's handled in finally
                 session_ctx.at_least_one_doc = True
                 yield session_ctx.doc_batch
-                session_ctx.doc_batch = []
 
-        if session_ctx.doc_batch:
-            session_ctx.stop()
-            session_ctx.at_least_one_doc = True
-            yield session_ctx.doc_batch
+            if not session_ctx.at_least_one_doc:
+                if session_ctx.last_error:
+                    # Raise the last known error if no documents were processed at all
+                    raise RuntimeError(session_ctx.last_error)
+                # If there were no errors but still no docs (e.g., empty sitemap), raise a generic error
+                raise RuntimeError("No valid pages found or processed.")
 
-        if not session_ctx.at_least_one_doc:
-            if session_ctx.last_error:
-                raise RuntimeError(session_ctx.last_error)
-            raise RuntimeError("No valid pages found.")
-
-        session_ctx.stop()
+        finally:
+            self._http.close()  # Close the requests session
+            session_ctx.stop()  # Ensure Playwright cleanup happens
 
     def validate_connector_settings(self) -> None:
         # Make sure we have at least one valid URL to check
