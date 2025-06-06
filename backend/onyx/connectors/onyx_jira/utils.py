@@ -34,13 +34,13 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
             email = obj.emailAddress
         else:
             email = obj.get("emailAddress")
+
+        if not email and not display_name:
+            return None
+
+        return BasicExpertInfo(display_name=display_name, email=email)
     except Exception:
         return None
-
-    if not email and not display_name:
-        return None
-
-    return BasicExpertInfo(display_name=display_name, email=email)
 
 
 def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
