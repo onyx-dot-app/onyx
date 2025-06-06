@@ -7,6 +7,7 @@ beautifulsoup4==4.12.3
 boto3==1.36.23
 celery==5.5.1
 chardet==5.2.0
+chonkie==1.0.9
 dask==2023.8.1
 ddtrace==2.6.5
 discord.py==2.4.0
@@ -42,7 +43,6 @@ langgraph-sdk==0.1.44
 litellm==1.72.2 
 lxml==5.3.0
 lxml_html_clean==0.2.2
-chonkie==1.0.9
 Mako==1.2.4
 msal==1.28.0
 nltk==3.9.1
