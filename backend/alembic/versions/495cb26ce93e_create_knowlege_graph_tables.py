@@ -72,7 +72,7 @@ def upgrade() -> None:
             DO $$
             BEGIN
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
-                    EXECUTE format('GRANT USAGE ON SCHEMA current_schema() TO %I', '{DB_READONLY_USER}');
+                    EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', current_schema(), '{DB_READONLY_USER}');
                 END IF;
             END
             $$;
