@@ -32,6 +32,7 @@ from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 logger = setup_logger()
 
@@ -80,7 +81,10 @@ def _normalize_one_entity(
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
-            func.show_trgm(cleaned_entity).cast(ARRAY(String(3))).label("trigrams")
+            getattr(func, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+            .show_trgm(cleaned_entity)
+            .cast(ARRAY(String(3)))
+            .label("trigrams")
         ).cte("query")
 
         candidates = cast(
