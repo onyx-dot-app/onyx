@@ -1,9 +1,5 @@
 import re
 from collections import defaultdict
-from typing import Dict
-from typing import Literal
-
-from pydantic import BaseModel
 
 from onyx.configs.constants import OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
@@ -19,6 +15,8 @@ from onyx.kg.models import (
 )
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
+from onyx.kg.models import MetadataTrackInfo
+from onyx.kg.models import MetadataTrackType
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.kg.utils.formatting_utils import make_entity_id
@@ -413,7 +411,7 @@ def prepare_llm_content_extraction(
 def prepare_llm_document_content(
     document_classification_content: KGClassificationContent,
     category_list: str,
-    category_definitions: dict[str, Dict[str, str | bool]],
+    category_definitions: dict[str, dict[str, str | bool]],
     kg_config_settings: KGConfigSettings,
 ) -> KGDocumentClassificationPrompt:
     """
@@ -447,20 +445,15 @@ def is_email(email: str) -> bool:
     return re.match(r"[^@]+@[^@]+\.[^@]+", email) is not None
 
 
-class MetadataTrackInfo(BaseModel):
-    type: Literal["value", "list"]
-    values: set[str] | None
-
-
 def trackinfo_to_str(trackinfo: MetadataTrackInfo | None) -> str:
     if trackinfo is None:
         return ""
 
-    if trackinfo.type == "list":
+    if trackinfo.type == MetadataTrackType.LIST:
         if trackinfo.values is None:
             return "a list of any suitable values"
         return "a list with possible values: " + ", ".join(trackinfo.values)
-    elif trackinfo.type == "value":
+    elif trackinfo.type == MetadataTrackType.VALUE:
         if trackinfo.values is None:
             return "any suitable value"
         return "one of: " + ", ".join(trackinfo.values)
@@ -468,15 +461,15 @@ def trackinfo_to_str(trackinfo: MetadataTrackInfo | None) -> str:
 
 def trackinfo_from_str(trackinfo_str: str) -> MetadataTrackInfo | None:
     if trackinfo_str == "any suitable value":
-        return MetadataTrackInfo(type="value", values=None)
+        return MetadataTrackInfo(type=MetadataTrackType.VALUE, values=None)
     elif trackinfo_str == "a list of any suitable values":
-        return MetadataTrackInfo(type="list", values=None)
+        return MetadataTrackInfo(type=MetadataTrackType.LIST, values=None)
     elif trackinfo_str.startswith("a list with possible values: "):
         values = set(trackinfo_str[len("a list with possible values: ") :].split(", "))
-        return MetadataTrackInfo(type="list", values=values)
+        return MetadataTrackInfo(type=MetadataTrackType.LIST, values=values)
     elif trackinfo_str.startswith("one of: "):
         values = set(trackinfo_str[len("one of: ") :].split(", "))
-        return MetadataTrackInfo(type="value", values=values)
+        return MetadataTrackInfo(type=MetadataTrackType.VALUE, values=values)
     return None
 
 
@@ -545,7 +538,12 @@ class EntityTypeMetadataTracker:
             trackinfo = self.type_attr_info[entity_type][attribute]
             if trackinfo is None:
                 trackinfo = MetadataTrackInfo(
-                    type="value" if isinstance(value, str) else "list", values=set()
+                    type=(
+                        MetadataTrackType.VALUE
+                        if isinstance(value, str)
+                        else MetadataTrackType.LIST
+                    ),
+                    values=set(),
                 )
                 self.type_attr_info[entity_type][attribute] = trackinfo
 

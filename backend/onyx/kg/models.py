@@ -221,3 +221,13 @@ class KGDefaultEntityDefinition(BaseModel):
     grounded_source_name: str | None
     attributes: dict = {}
     entity_values: dict = {}
+
+
+class MetadataTrackType(str, Enum):
+    VALUE = "value"
+    LIST = "list"
+
+
+class MetadataTrackInfo(BaseModel):
+    type: MetadataTrackType
+    values: set[str] | None
