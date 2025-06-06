@@ -8,7 +8,6 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -17,9 +16,9 @@ function LLMProviderUpdateModal({
   shouldMarkAsDefault,
   setPopup,
 }: {
-  llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
+  llmProviderDescriptor: WellKnownLLMProviderDescriptor | undefined;
   onClose: () => void;
-  existingLlmProvider?: LLMProviderView;
+  existingLlmProvider: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
@@ -29,6 +28,17 @@ function LLMProviderUpdateModal({
       llmProviderDescriptor?.name ||
       "Custom LLM Provider";
 
+  let displayNativeModal: boolean;
+  if (existingLlmProvider.native_or_custom === "NATIVE") {
+    if (!llmProviderDescriptor)
+      throw new Error(
+        "If `native_or_custom` is true, then `llmProviderDescriptor` must be non-null"
+      );
+    displayNativeModal = true;
+  } else {
+    displayNativeModal = false;
+  }
+
   return (
     <Modal
       title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
@@ -36,9 +46,10 @@ function LLMProviderUpdateModal({
       hideOverflow={true}
     >
       <div className="max-h-[70vh] overflow-y-auto px-4">
-        {llmProviderDescriptor ? (
+        {displayNativeModal ? (
           <LLMProviderUpdateForm
-            llmProviderDescriptor={llmProviderDescriptor}
+            // if `displayNativeModal` is true, then `llmProviderDescriptor` must be well-defined (i.e., defined and non-null).
+            llmProviderDescriptor={llmProviderDescriptor!}
             onClose={onClose}
             existingLlmProvider={existingLlmProvider}
             shouldMarkAsDefault={shouldMarkAsDefault}
@@ -62,7 +73,7 @@ function LLMProviderDisplay({
   existingLlmProvider,
   shouldMarkAsDefault,
 }: {
-  llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
+  llmProviderDescriptor: WellKnownLLMProviderDescriptor | undefined;
   existingLlmProvider: LLMProviderView;
   shouldMarkAsDefault?: boolean;
 }) {
@@ -172,23 +183,7 @@ export function ConfiguredLLMProviderDisplay({
         return (
           <LLMProviderDisplay
             key={provider.id}
-            // if the user has specified custom model names,
-            // then the provider is custom - don't use the default
-            // provider descriptor
-            llmProviderDescriptor={
-              isSubset(
-                defaultProviderDesciptor
-                  ? defaultProviderDesciptor.model_configurations.map(
-                      (model_configuration) => model_configuration.name
-                    )
-                  : [],
-                provider.model_configurations.map(
-                  (model_configuration) => model_configuration.name
-                )
-              )
-                ? defaultProviderDesciptor
-                : null
-            }
+            llmProviderDescriptor={defaultProviderDesciptor}
             existingLlmProvider={provider}
           />
         );
