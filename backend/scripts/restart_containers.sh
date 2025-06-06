@@ -19,8 +19,8 @@ REDIS_VOLUME=${3:-""}  # Default is empty if not provided
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
-docker stop onyx_postgres onyx_vespa onyx_redis
-docker rm onyx_postgres onyx_vespa onyx_redis
+docker stop onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
+docker rm onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
 
 # Start the PostgreSQL container with optional volume
 echo "Starting PostgreSQL container..."
