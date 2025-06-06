@@ -77,3 +77,4 @@ def downgrade() -> None:
         """
             )
         )
+        op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

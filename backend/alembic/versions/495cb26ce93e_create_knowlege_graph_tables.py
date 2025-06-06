@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from onyx.configs.app_configs import DB_READONLY_USER
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 # revision identifiers, used by Alembic.
@@ -452,7 +453,7 @@ def upgrade() -> None:
     # Create GIN index for clustering and normalization
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
-        "ON kg_entity USING GIN (name gin_trgm_ops)"
+        f"ON kg_entity USING GIN (name {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_normalization_trigrams "
@@ -492,7 +493,7 @@ def upgrade() -> None:
 
                 -- Set name and name trigrams
                 NEW.name = name;
-                NEW.name_trigrams = show_trgm(cleaned_name);
+                NEW.name_trigrams = {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.show_trgm(cleaned_name);
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
@@ -537,7 +538,7 @@ def upgrade() -> None:
                 UPDATE kg_entity
                 SET
                     name = doc_name,
-                    name_trigrams = show_trgm(cleaned_name)
+                    name_trigrams = {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.show_trgm(cleaned_name)
                 WHERE document_id = NEW.id;
                 RETURN NEW;
             END;
@@ -650,3 +651,4 @@ def downgrade() -> None:
         """
             )
         )
+        op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

@@ -1,6 +1,7 @@
 from typing import cast
 
 from rapidfuzz.fuzz import ratio
+from sqlalchemy import func
 from sqlalchemy import text
 
 from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
@@ -25,6 +26,7 @@ from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_inf
 from onyx.kg.models import KGGroundingType
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 logger = setup_logger()
 
@@ -65,7 +67,9 @@ def _cluster_one_grounded_entity(
                     # find entities of the same type with a similar name
                     *filtering,
                     KGEntity.entity_type_id_name == entity.entity_type_id_name,
-                    KGEntity.name.op("%")(entity_name),
+                    getattr(func, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE).similarity_op(
+                        KGEntity.name, entity_name
+                    ),
                 )
                 .all()
             )
