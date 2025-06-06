@@ -48,7 +48,7 @@ def upsert_staging_entity(
 
     entity_type_split = entity_type.split("-")
     entity_class, entity_subtype = (
-        entity_type_split if len(entity_type_split) == 2 else (None, None)
+        entity_type_split if len(entity_type_split) == 2 else (entity_type, None)
     )
 
     entity_key = attributes.get("key")
