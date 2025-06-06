@@ -2,7 +2,6 @@ import time
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
-from contextlib import contextmanager
 from functools import wraps
 from typing import Any
 from typing import cast
@@ -85,12 +84,3 @@ def log_generator_function_time(
         return cast(FG, wrapped_func)
 
     return decorator
-
-
-@contextmanager
-def timed(label: str) -> Generator[None, None, None]:
-    start_time = time.monotonic()
-    yield
-    elapsed_time = time.monotonic() - start_time
-    elapsed_time_str = f"{elapsed_time:.3f}"
-    logger.info(f"{label} took {elapsed_time_str} seconds")
