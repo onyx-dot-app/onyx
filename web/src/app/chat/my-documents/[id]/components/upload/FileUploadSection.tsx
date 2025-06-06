@@ -570,7 +570,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           </TooltipTrigger>
         </Tooltip>
       </TooltipProvider>
-      <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mt-2 w-fit mx-auto">
+      <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mt-2 w-fit mx-auto gap-x-2">
         <button
           type="button"
           className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
