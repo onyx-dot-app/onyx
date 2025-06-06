@@ -106,11 +106,11 @@ services:
     command: >
       /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
         echo 'Skipping service...';
-        exit 0;
+        sleep infinity;
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: on-failure
+    restart: always
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
@@ -129,11 +129,11 @@ services:
     command: >
       /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
         echo 'Skipping service...';
-        exit 0;
+        sleep infinity;
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: on-failure
+    restart: always
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
