@@ -578,6 +578,12 @@ def update_user_group(
     That will be processed by check_for_vespa_user_groups_sync_task and trigger
     a long running background sync to Vespa.
     """
+    _validate_curator_relationship_update_requester(
+        db_session=db_session,
+        user_group_id=user_group_id,
+        user_making_change=user,
+    )
+
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
     if db_user_group is None:
