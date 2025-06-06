@@ -1,5 +1,6 @@
 import copy
 import threading
+from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
@@ -152,6 +153,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         shared_folder_urls: str | None = None,
         specific_user_emails: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
+        calculate_metrics=False,
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,
         include_shared: bool | None = None,
@@ -229,6 +231,12 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         self.allow_images = False
 
         self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
+
+        self.calculate_metrics = calculate_metrics
+        self.metrics: dict[str, dict[str, int]] = {
+            "my_drive": defaultdict(int),
+            "shared_with_me": defaultdict(int),
+        }
 
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
@@ -927,6 +935,18 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             if document_id not in checkpoint.all_retrieved_file_ids:
                 checkpoint.all_retrieved_file_ids.add(document_id)
                 yield file
+
+            if (
+                self.calculate_metrics
+                and file.completion_stage == DriveRetrievalStage.MY_DRIVE_FILES
+            ):
+                if file.user_email in get_file_owners(file.drive_file):
+                    print(
+                        f"File: {file.drive_file['name']} is owned by {file.user_email}"
+                    )
+                    self.metrics["my_drive"][file.user_email] += 1
+                else:
+                    self.metrics["shared_with_me"][file.user_email] += 1
 
     def _manage_oauth_retrieval(
         self,
