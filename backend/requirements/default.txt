@@ -42,7 +42,7 @@ langgraph-sdk==0.1.44
 litellm==1.72.2 
 lxml==5.3.0
 lxml_html_clean==0.2.2
-llama-index==0.12.28
+chonkie==1.0.9
 Mako==1.2.4
 msal==1.28.0
 nltk==3.9.1
