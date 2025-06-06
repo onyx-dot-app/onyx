@@ -17,6 +17,7 @@ from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_google_docs_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
@@ -453,14 +454,17 @@ def _convert_drive_item_to_document(
             sections=sections,
             source=DocumentSource.GOOGLE_DRIVE,
             semantic_identifier=file.get("name", ""),
-            metadata={
-                "owner_names": ", ".join(
-                    owner.get("displayName", "") for owner in file.get("owners", [])
-                ),
-            },
+            metadata={},
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
+            primary_owners=[
+                BasicExpertInfo(
+                    display_name=owner.get("displayName", ""),
+                    email=owner.get("emailAddress", ""),
+                )
+                for owner in file.get("owners", [])
+            ],
         )
     except Exception as e:
         file_name = file.get("name")
