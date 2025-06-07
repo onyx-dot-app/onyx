@@ -80,11 +80,19 @@ class ConnectorRunner(Generic[CT]):
         self,
         connector: BaseConnector,
         batch_size: int,
+        # cannot be True for non-checkpointed connectors
+        include_permissions: bool,
         time_range: TimeRange | None = None,
     ):
+        if not isinstance(connector, CheckpointedConnector) and include_permissions:
+            raise ValueError(
+                "include_permissions cannot be True for non-checkpointed connectors"
+            )
+
         self.connector = connector
         self.time_range = time_range
         self.batch_size = batch_size
+        self.include_permissions = include_permissions
 
         self.doc_batch: list[Document] = []
 
@@ -104,6 +112,7 @@ class ConnectorRunner(Generic[CT]):
                     start=self.time_range[0].timestamp(),
                     end=self.time_range[1].timestamp(),
                     checkpoint=checkpoint,
+                    include_permissions=self.include_permissions,
                 )
                 next_checkpoint: CT | None = None
                 # this is guaranteed to always run at least once with next_checkpoint being non-None

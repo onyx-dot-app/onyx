@@ -725,6 +725,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: GithubConnectorCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[GithubConnectorCheckpoint]:
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         # add a day for timezone safety
@@ -899,7 +900,7 @@ if __name__ == "__main__":
 
     # Initialize the runner with a batch size of 10
     runner: ConnectorRunner[GithubConnectorCheckpoint] = ConnectorRunner(
-        connector, batch_size=10, time_range=time_range
+        connector, batch_size=10, include_permissions=False, time_range=time_range
     )
 
     # Get initial checkpoint

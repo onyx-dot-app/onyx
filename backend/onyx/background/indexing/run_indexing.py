@@ -33,6 +33,7 @@ from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_r
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -76,6 +77,7 @@ def _get_connector_runner(
     batch_size: int,
     start_time: datetime,
     end_time: datetime,
+    include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
 ) -> ConnectorRunner:
     """
@@ -132,6 +134,7 @@ def _get_connector_runner(
     return ConnectorRunner(
         connector=runnable_connector,
         batch_size=batch_size,
+        include_permissions=include_permissions,
         time_range=(start_time, end_time),
     )
 
@@ -403,6 +406,10 @@ def _run_indexing(
                 batch_size=INDEX_BATCH_SIZE,
                 start_time=window_start,
                 end_time=window_end,
+                include_permissions=(
+                    index_attempt.connector_credential_pair.access_type
+                    == AccessType.SYNC
+                ),
             )
 
             # don't use a checkpoint if we're explicitly indexing from
