@@ -947,22 +947,18 @@ def kg_extraction(
                 classification_result = classification_outcome[1]
                 if classification_result.classification_decision:
                     document_id = classification_result.document_id
+                    kg_stage = KGStage.EXTRACTED
 
-                    with get_session_with_current_tenant() as db_session:
-                        update_document_kg_stage(
-                            db_session,
-                            document_id,
-                            KGStage.EXTRACTED,
-                        )
-                        db_session.commit()
                 else:
-                    with get_session_with_current_tenant() as db_session:
-                        update_document_kg_stage(
-                            db_session,
-                            document_id,
-                            KGStage.SKIPPED,
-                        )
-                        db_session.commit()
+                    kg_stage = KGStage.SKIPPED
+
+                with get_session_with_current_tenant() as db_session:
+                    update_document_kg_stage(
+                        db_session,
+                        document_id,
+                        kg_stage,
+                    )
+                    db_session.commit()
 
         # Update the the Skipped Docs back to Not Started in
 
