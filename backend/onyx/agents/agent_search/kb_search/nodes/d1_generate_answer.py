@@ -13,6 +13,7 @@ from onyx.agents.agent_search.kb_search.graph_utils import stream_write_close_st
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_main_answer_token,
 )
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -20,6 +21,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.calculations import (
     get_answer_generation_documents,
 )
+from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -65,6 +67,8 @@ def generate_answer(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.prompt_builder.raw_user_query
+
+    user = graph_config.tooling.search_tool.user
 
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
@@ -116,6 +120,10 @@ def generate_answer(
 
     assert graph_config.tooling.search_tool is not None
 
+
+    with get_session_with_current_tenant() as graph_db_session: 
+        user_acl = get_acl_for_user(user, graph_db_session)
+
     for tool_response in yield_search_responses(
         query=question,
         get_retrieved_sections=lambda: answer_generation_documents.context_documents,
@@ -124,7 +132,7 @@ def generate_answer(
             predicted_search=SearchType.KEYWORD,
             # acl here is empty, because the searach alrady happened and
             # we are streaming out the results.
-            final_filters=IndexFilters(access_control_list=[]),
+            final_filters=IndexFilters(access_control_list=user_acl),
             recency_bias_multiplier=1.0,
         ),
         get_section_relevance=lambda: relevance_list,
