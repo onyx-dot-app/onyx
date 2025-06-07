@@ -747,11 +747,17 @@ def test_salesforce_sqlite() -> None:
         sf_db.apply_schema()
 
         _create_csv_with_example_data(sf_db)
+
         _test_query(sf_db)
+
         _test_upsert(sf_db)
+
         _test_relationships(sf_db)
+
         _test_account_with_children(sf_db)
+
         _test_relationship_updates(sf_db)
+
         _test_get_affected_parent_ids(sf_db)
 
         sf_db.close()

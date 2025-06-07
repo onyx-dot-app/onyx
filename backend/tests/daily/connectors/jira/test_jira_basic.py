@@ -71,6 +71,7 @@ def test_jira_connector_basic(
         "project_name": "DailyConnectorTestProject",
         "project": "AS",
         "parent": "AS-4",
+        "key": "AS-3",
         "updated": "2025-05-29T15:33:31.085-0700",
     }
     assert story.secondary_owners is None
@@ -98,6 +99,7 @@ def test_jira_connector_basic(
         "assignee_email": "chris@onyx.app",
         "project_name": "DailyConnectorTestProject",
         "project": "AS",
+        "key": "AS-4",
         "updated": "2025-05-29T14:43:05.312-0700",
     }
     assert epic.secondary_owners is None

@@ -166,18 +166,19 @@ def _get_chunks_via_visit_api(
 
     # build the list of fields to retrieve
     field_set_list = (
-        None
-        if not field_names
-        else [f"{index_name}:{field_name}" for field_name in field_names]
+        [f"{field_name}" for field_name in field_names] if field_names else []
     )
-    acl_fieldset_entry = f"{index_name}:{ACCESS_CONTROL_LIST}"
+    acl_fieldset_entry = f"{ACCESS_CONTROL_LIST}"
     if (
         field_set_list
         and filters.access_control_list
         and acl_fieldset_entry not in field_set_list
     ):
         field_set_list.append(acl_fieldset_entry)
-    field_set = ",".join(field_set_list) if field_set_list else None
+    if field_set_list:
+        field_set = f"{index_name}:" + ",".join(field_set_list)
+    else:
+        field_set = None
 
     # build filters
     selection = f"{index_name}.document_id=='{chunk_request.document_id}'"

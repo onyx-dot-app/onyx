@@ -111,6 +111,11 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
+    kg_entities: list[str] | None = None
+    kg_relationships: list[str] | None = None
+    kg_terms: list[str] | None = None
+    kg_sources: list[str] | None = None
+    kg_chunk_id_zero_only: bool | None = False
 
 
 class UserFileFilters(BaseModel):

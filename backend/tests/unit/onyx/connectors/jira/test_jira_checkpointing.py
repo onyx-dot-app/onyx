@@ -22,8 +22,10 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.onyx_jira.connector import JiraConnector
 from onyx.connectors.onyx_jira.connector import JiraConnectorCheckpoint
+from onyx.utils.logger import setup_logger
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
+logger = setup_logger()
 PAGE_SIZE = 2
 
 
@@ -86,9 +88,9 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         mock_issue.fields.labels = labels or []
 
         # Set up creator and assignee for testing owner extraction
-        mock_issue.fields.creator = MagicMock()
-        mock_issue.fields.creator.displayName = "Test Creator"
-        mock_issue.fields.creator.emailAddress = "creator@example.com"
+        mock_issue.fields.reporter = MagicMock()
+        mock_issue.fields.reporter.displayName = "Test Creator"
+        mock_issue.fields.reporter.emailAddress = "creator@example.com"
 
         mock_issue.fields.assignee = MagicMock()
         mock_issue.fields.assignee.displayName = "Test Assignee"
