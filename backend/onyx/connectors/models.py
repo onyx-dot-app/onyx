@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import model_validator
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.configs.constants import RETURN_SEPARATOR
@@ -154,6 +155,9 @@ class DocumentBase(BaseModel):
     # parts of the code may need. If you're unsure, this can be left as None
     additional_info: Any = None
 
+    # only filled in EE for connectors w/ permission sync enabled
+    external_access: ExternalAccess | None = None
+
     def get_title_for_document_index(
         self,
     ) -> str | None:
@@ -275,7 +279,7 @@ class IndexingDocument(Document):
 
 class SlimDocument(BaseModel):
     id: str
-    perm_sync_data: Any | None = None
+    external_access: ExternalAccess | None = None
 
 
 class IndexAttemptMetadata(BaseModel):
