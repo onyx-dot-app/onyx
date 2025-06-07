@@ -5,7 +5,6 @@ from typing import Dict
 from onyx.configs.constants import OnyxCallTypes
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
-from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Document
 from onyx.kg.models import KGChunkFormat
