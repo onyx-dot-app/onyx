@@ -152,7 +152,7 @@ def kg_clustering(
     can be extracted and then need to be clustered.
     """
 
-    #TODO: revisit splitting into batches
+    # TODO: revisit splitting into batches
 
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 

@@ -28,7 +28,7 @@ def get_kg_enablement(db_session: Session) -> bool:
 
 
 def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
-    #TODO: restructure togethert with KGConfig redesign
+    # TODO: restructure togethert with KGConfig redesign
     results = db_session.query(KGConfig).all()
 
     kg_config_settings = KGConfigSettings()
@@ -98,7 +98,7 @@ def set_kg_processing_in_progress_status(
     value = [str(in_progress).lower()]
 
     kg_variable_name = KGConfigVars.KG_EXTRACTION_IN_PROGRESS.value  # Default value
-    
+
     if processing_type == KGProcessingType.CLUSTERING:
         kg_variable_name = KGConfigVars.KG_CLUSTERING_IN_PROGRESS.value
 

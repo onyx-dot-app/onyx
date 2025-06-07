@@ -580,7 +580,7 @@ def stream_chat_message_objects(
         search_settings = get_current_search_settings(db_session)
         index_str = search_settings.index_name
 
-        #TODO: Move these special calls  to endpoints
+        # TODO: Move these special calls  to endpoints
         if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)
             raise Exception("Extractions done")
