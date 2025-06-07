@@ -74,6 +74,9 @@ def generate_answer(
         else None
     )
 
+    if not user:
+        raise ValueError("User is not set")
+
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
         raise ValueError("Search tool is not set")
