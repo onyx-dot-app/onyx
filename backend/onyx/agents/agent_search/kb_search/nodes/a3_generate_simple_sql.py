@@ -103,12 +103,12 @@ def _get_source_documents(
         sql_statement = sql_statement.split("</sql>")[0].strip()
 
     except Exception as e:
-        if cleaned_response is not None:
-            logger.error(
-                f"Could not generate source documents SQL: {e}. Original model response: {cleaned_response}"
-            )
-        else:
-            logger.error(f"Could not generate source documents SQL: {e}")
+        error_msg = f"Could not generate source documents SQL: {e}"
+        if cleaned_response:
+            error_msg += f". Original model response: {cleaned_response}"
+        
+        logger.error(error_msg)
+    
 
         return None
 
@@ -186,6 +186,8 @@ def generate_simple_sql(
         # First, create string of contextualized entities to avoid the model not
         # being aware of what eg ACCOUNT::SF_8254Hs means as a normalized entity
 
+        #TODO: restructure with broader node rework
+
         entity_explanation_str = _build_entity_explanation_str(
             state.entity_normalization_map
         )
@@ -245,7 +247,8 @@ def generate_simple_sql(
             )
 
         except Exception as e:
-            logger.error(f"Error in strategy generation: {e}")
+            # TODO: restructure with broader node rework
+            logger.error(f"Error in SQL generation: {e}")
 
             _drop_temp_views(
                 allowed_docs_view_name=doc_temp_view,
