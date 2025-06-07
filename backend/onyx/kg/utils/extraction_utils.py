@@ -37,24 +37,26 @@ def _update_implied_entities_relationships(
 ) -> tuple[set[str], set[str], set[str], set[str], dict[str, list[str]]]:
 
     for owner in owner_list or []:
-        if is_email(owner):
-            (
-                implied_entities,
-                implied_relationships,
-                company_participant_emails,
-                account_participant_emails,
-            ) = kg_process_person(
-                owner,
-                kg_core_document_id_name,
-                implied_entities,
-                implied_relationships,
-                company_participant_emails,
-                account_participant_emails,
-                relationship_type,
-                kg_config_settings,
-            )
-        else:
+
+        if not is_email(owner):
             converted_relationships_to_attributes[relationship_type].append(owner)
+            continue
+
+        (
+            implied_entities,
+            implied_relationships,
+            company_participant_emails,
+            account_participant_emails,
+        ) = kg_process_person(
+            owner,
+            kg_core_document_id_name,
+            implied_entities,
+            implied_relationships,
+            company_participant_emails,
+            account_participant_emails,
+            relationship_type,
+            kg_config_settings,
+        )
 
     return (
         implied_entities,
@@ -291,8 +293,6 @@ def kg_process_person(
         tuple containing (implied_entities, implied_relationships, company_participant_emails, account_participant_emails)
     """
 
-    with get_session_with_current_tenant() as db_session:
-        kg_config_settings = get_kg_config_settings(db_session)
     if not kg_config_settings.KG_ENABLED:
         raise ValueError("KG is not enabled")
 

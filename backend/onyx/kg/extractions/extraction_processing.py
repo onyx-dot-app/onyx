@@ -100,10 +100,7 @@ def _get_classification_extraction_instructions() -> (
 
         classification_options = ", ".join(classification_attributes.keys())
 
-        if len(classification_options) > 0 and len(classification_attributes) > 0:
-            classification_enabled = True
-        else:
-            classification_enabled = False
+        classification_enabled = len(classification_options) > 0 and len(classification_attributes) > 0
 
         filter_instructions = cast(
             dict[str, Any] | None,
@@ -408,6 +405,8 @@ def kg_extraction(
 
         # iterate over un-kg-processed documents in connector
         while True:
+
+            #TODO: restructure using various functions
 
             # get a batch of unprocessed documents
             with get_session_with_current_tenant() as db_session:
@@ -1027,6 +1026,7 @@ def _kg_chunk_batch_extraction(
 
         kg_attributes: dict[str, str | list[str]] = {}
 
+        #TODO: wrap into a function
         if chunk.metadata:
             for attribute, value in chunk.metadata.items():
                 if isinstance(value, str):
@@ -1202,20 +1202,19 @@ def _kg_chunk_batch_extraction(
 
     # Sort results into succeeded and failed
     for success, chunk_results in results:
-        if success:
-            succeeded_chunk_id.append(
-                KGChunkId(
+
+        chunk_structure = KGChunkId(
                     document_id=chunk_results.document_id,
                     chunk_id=chunk_results.chunk_id,
                 )
-            )
+
+
+        if success:
+            succeeded_chunk_id.append(chunk_structure)
             succeeded_chunk_extraction.append(chunk_results)
         else:
             failed_chunk_id.append(
-                KGChunkId(
-                    document_id=chunk_results.document_id,
-                    chunk_id=chunk_results.chunk_id,
-                )
+                chunk_structure
             )
 
     # Collect data for postgres later on

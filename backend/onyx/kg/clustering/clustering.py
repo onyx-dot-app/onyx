@@ -152,6 +152,8 @@ def kg_clustering(
     can be extracted and then need to be clustered.
     """
 
+    #TODO: revisit splitting into batches
+
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 
     with get_session_with_current_tenant() as db_session:
