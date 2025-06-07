@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_close_main_answer,
@@ -13,7 +14,6 @@ from onyx.agents.agent_search.kb_search.graph_utils import stream_write_close_st
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_main_answer_token,
 )
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -21,7 +21,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.calculations import (
     get_answer_generation_documents,
 )
-from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -32,6 +31,7 @@ from onyx.configs.kg_configs import KG_ANSWER_GENERATION_TIMEOUT
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
@@ -68,7 +68,11 @@ def generate_answer(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.prompt_builder.raw_user_query
 
-    user = graph_config.tooling.search_tool.user
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
 
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
@@ -120,9 +124,8 @@ def generate_answer(
 
     assert graph_config.tooling.search_tool is not None
 
-
-    with get_session_with_current_tenant() as graph_db_session: 
-        user_acl = get_acl_for_user(user, graph_db_session)
+    with get_session_with_current_tenant() as graph_db_session:
+        user_acl = list(get_acl_for_user(user, graph_db_session))
 
     for tool_response in yield_search_responses(
         query=question,
