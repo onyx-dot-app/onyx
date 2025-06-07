@@ -617,7 +617,7 @@ class Document(Base):
     )
 
 
-#TODO: restructure config management
+# TODO: restructure config management
 class KGConfig(Base):
     __tablename__ = "kg_config"
 
