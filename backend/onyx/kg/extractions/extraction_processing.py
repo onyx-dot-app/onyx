@@ -41,6 +41,7 @@ from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
+from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
 from onyx.kg.utils.extraction_utils import is_email
 from onyx.kg.utils.extraction_utils import (
     kg_document_entities_relationships_attribute_generation,
@@ -160,7 +161,7 @@ def get_entity_types_str(active: bool | None = None) -> str:
                         entity_type_attribute_list.append(f"{attribute}: {values}")
                     else:
                         entity_type_attribute_list.append(
-                            f"{attribute}: (can take any suitable value)"
+                            f"{attribute}: any suitable value"
                         )
 
             if entity_type.attributes.get("classification_attributes"):
@@ -382,6 +383,10 @@ def kg_extraction(
     document_classification_extraction_instructions = (
         _get_classification_extraction_instructions()
     )
+
+    # Track which metadata attributes are possible for each entity type
+    metadata_tracker = EntityTypeMetadataTracker()
+    metadata_tracker.import_typeinfo()
 
     # Iterate over connectors that are enabled for KG extraction
 
@@ -813,7 +818,7 @@ def kg_extraction(
                                         }
                                     )
 
-                            upsert_staging_entity(
+                            upserted_entity = upsert_staging_entity(
                                 db_session=db_session,
                                 name=entity_name,
                                 entity_type=entity_type,
@@ -821,6 +826,9 @@ def kg_extraction(
                                 occurrences=extraction_count,
                                 attributes=entity_attributes,
                                 event_time=event_time,
+                            )
+                            metadata_tracker.track_metadata(
+                                entity_type, upserted_entity.attributes
                             )
 
                         db_session.commit()
@@ -974,6 +982,7 @@ def kg_extraction(
                 )
                 db_session.commit()
 
+    metadata_tracker.export_typeinfo()
     return connector_extraction_stats
 
 
