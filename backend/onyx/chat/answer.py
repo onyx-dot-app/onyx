@@ -11,7 +11,7 @@ from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
 from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
-from onyx.agents.agent_search.run_graph import run_dc_graph
+from onyx.agents.agent_search.run_graph import run_deepplanner_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
@@ -142,7 +142,7 @@ class Answer:
                 "DivCon Beta Agent"
             )
         ):
-            run_langgraph = run_dc_graph
+            run_langgraph = run_deepplanner_graph
         else:
             run_langgraph = run_basic_graph
 
