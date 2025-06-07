@@ -53,7 +53,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     if llm and llm.config.api_key and llm.config.model_provider == "openai":
         return LLMConfig(
             model_provider=llm.config.model_provider,
-            model_name="dall-e-3",
+            model_name="gpt-image-1",
             temperature=GEN_AI_TEMPERATURE,
             api_key=llm.config.api_key,
             api_base=llm.config.api_base,
@@ -90,7 +90,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     return LLMConfig(
         model_provider=openai_provider.provider,
-        model_name="dall-e-3",
+        model_name="gpt-image-1",
         temperature=GEN_AI_TEMPERATURE,
         api_key=openai_provider.api_key,
         api_base=openai_provider.api_base,

@@ -90,7 +90,7 @@ class ImageGenerationTool(Tool[None]):
         api_key: str,
         api_base: str | None,
         api_version: str | None,
-        model: str = "dall-e-3",
+        model: str = "gpt-image-1",
         num_imgs: int = 2,
         additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
@@ -198,9 +198,15 @@ class ImageGenerationTool(Tool[None]):
         self, prompt: str, shape: ImageShape, format: ImageFormat
     ) -> ImageGenerationResponse:
         if shape == ImageShape.LANDSCAPE:
-            size = "1792x1024"
+            if self.model == "gpt-image-1":
+                size = "1536x1024"
+            else:
+                size = "1792x1024"
         elif shape == ImageShape.PORTRAIT:
-            size = "1024x1792"
+            if self.model == "gpt-image-1":
+                size = "1024x1536"
+            else:
+                size = "1024x1792"
         else:
             size = "1024x1024"
 
