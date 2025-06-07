@@ -208,6 +208,7 @@ class CheckpointedConnector(BaseConnector[CT]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[CT]:
         """Yields back documents or failures. Final return is the new checkpoint.
 
@@ -215,7 +216,7 @@ class CheckpointedConnector(BaseConnector[CT]):
 
         ```
         try:
-            for document_or_failure in connector.load_from_checkpoint(start, end, checkpoint):
+            for document_or_failure in connector.load_from_checkpoint(start, end, checkpoint, include_permissions=True):
                 print(document_or_failure)
         except StopIteration as e:
             checkpoint = e.value  # Extracting the return value
@@ -225,7 +226,7 @@ class CheckpointedConnector(BaseConnector[CT]):
         OR
 
         ```
-        checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint)
+        checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint, include_permissions=True)
         ```
         """
         raise NotImplementedError

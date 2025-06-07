@@ -734,6 +734,7 @@ class SlackConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: SlackCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[SlackCheckpoint]:
         """Rough outline:
 
@@ -1108,7 +1109,10 @@ if __name__ == "__main__":
     checkpoint = connector.build_dummy_checkpoint()
 
     gen = connector.load_from_checkpoint(
-        one_day_ago, current, cast(SlackCheckpoint, checkpoint)
+        one_day_ago,
+        current,
+        cast(SlackCheckpoint, checkpoint),
+        include_permissions=True,
     )
     try:
         for document_or_failure in gen:

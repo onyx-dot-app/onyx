@@ -27,7 +27,9 @@ def load_all_docs_from_checkpoint_connector(
     documents: list[Document] = []
     while checkpoint.has_more:
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
-            connector.load_from_checkpoint(start, end, checkpoint)
+            connector.load_from_checkpoint(
+                start, end, checkpoint, include_permissions=True
+            )
         )
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:
@@ -56,7 +58,9 @@ def load_everything_from_checkpoint_connector(
     outputs: list[Document | ConnectorFailure] = []
     while checkpoint.has_more:
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
-            connector.load_from_checkpoint(start, end, checkpoint)
+            connector.load_from_checkpoint(
+                start, end, checkpoint, include_permissions=True
+            )
         )
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:

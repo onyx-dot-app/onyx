@@ -28,6 +28,7 @@ from onyx.connectors.google_drive.doc_conversion import (
     convert_drive_item_to_document,
 )
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
+from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
 from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
 from onyx.connectors.google_drive.file_retrieval import (
@@ -1073,8 +1074,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
     def _extract_docs_from_google_drive(
         self,
         checkpoint: GoogleDriveCheckpoint,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+        include_permissions: bool,
     ) -> Iterator[Document | ConnectorFailure]:
         try:
             # Prepare a partial function with the credentials and admin email
@@ -1083,6 +1085,14 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 self.creds,
                 self.allow_images,
                 self.size_threshold,
+                (
+                    PermissionSyncContext(
+                        primary_admin_email=self.primary_admin_email,
+                        google_domain=self.google_domain,
+                    )
+                    if include_permissions
+                    else None
+                ),
             )
             # Fetch files in batches
             batches_complete = 0
@@ -1154,6 +1164,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: GoogleDriveCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[GoogleDriveCheckpoint]:
         """
         Entrypoint for the connector; first run is with an empty checkpoint.
@@ -1200,7 +1211,17 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         ):
             if file.error is not None:
                 raise file.error
-            if doc := build_slim_document(file.drive_file):
+            if doc := build_slim_document(
+                self.creds,
+                file.drive_file,
+                # for now, always fetch permissions for slim runs
+                # TODO: move everything to load_from_checkpoint
+                # and only fetch permissions if needed
+                PermissionSyncContext(
+                    primary_admin_email=self.primary_admin_email,
+                    google_domain=self.google_domain,
+                ),
+            ):
                 slim_batch.append(doc)
             if len(slim_batch) >= SLIM_BATCH_SIZE:
                 yield slim_batch

@@ -385,6 +385,7 @@ class ZendeskConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ZendeskConnectorCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[ZendeskConnectorCheckpoint]:
         if self.client is None:
             raise ZendeskCredentialsNotSetUpError()
@@ -634,7 +635,10 @@ if __name__ == "__main__":
     current = time.time()
     one_day_ago = current - 24 * 60 * 60  # 1 day
     document_batches = connector.load_from_checkpoint(
-        one_day_ago, current, connector.build_dummy_checkpoint()
+        one_day_ago,
+        current,
+        connector.build_dummy_checkpoint(),
+        include_permissions=True,
     )
 
     print(next(document_batches))

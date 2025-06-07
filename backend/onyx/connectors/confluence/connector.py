@@ -532,6 +532,7 @@ class ConfluenceConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ConfluenceCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[ConfluenceCheckpoint]:
         end += ONE_DAY  # handle time zone weirdness
         try:
