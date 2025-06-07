@@ -1136,8 +1136,9 @@ def _post_llm_answer_processing(
             ]
         )
         # Reflexion flow
+        # Get message text from the answer object or pass it as parameter
         is_answer_valid = get_answer_validity(
-            query=message_text,
+            query=answer.prompt_builder.raw_user_query,
             answer=answer.llm_answer,
         )
         logger.info(f"Reflexion answer validation result: {is_answer_valid}")
