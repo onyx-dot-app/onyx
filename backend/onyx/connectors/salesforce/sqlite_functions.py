@@ -456,7 +456,7 @@ class OnyxSalesforceSQLite:
             return result[0]
 
     def get_record(
-        self, object_id: str, object_type: str | None = None
+        self, object_id: str, object_type: str | None = None, isChild: bool = False
     ) -> SalesforceObject | None:
         """Retrieve the record and return it as a SalesforceObject."""
         if self._conn is None:
@@ -469,15 +469,44 @@ class OnyxSalesforceSQLite:
 
         with self._conn:
             cursor = self._conn.cursor()
-            cursor.execute(
-                "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
-            )
-            result = cursor.fetchone()
+            # Get the object data and account data
+            if object_type == "Account" or isChild:
+                cursor.execute(
+                    "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
+                )
+            else:
+                cursor.execute(
+                    "SELECT pso.data, r.parent_id as parent_id, sso.object_type FROM salesforce_objects pso \
+                        LEFT JOIN relationships r on r.child_id = pso.id \
+                        LEFT JOIN salesforce_objects sso on r.parent_id = sso.id \
+                        WHERE pso.id = ? ",
+                    (object_id,),
+                )
+            result = cursor.fetchall()
             if not result:
                 logger.warning(f"Object ID {object_id} not found")
                 return None
 
-            data = json.loads(result[0])
+            data = json.loads(result[0][0])
+
+            if object_type != "Account":
+
+                # convert any account ids of the relationships back into data fields, with name
+                for row in result:
+
+                    # the following skips Account objects.
+                    if len(row) < 3:
+                        continue
+
+                    if row[1] and row[2] and row[2] == "Account":
+                        data["AccountId"] = row[1]
+                        cursor.execute(
+                            "SELECT data FROM salesforce_objects WHERE id = ?",
+                            (row[1],),
+                        )
+                        account_data = json.loads(cursor.fetchone()[0])
+                        data["Account"] = account_data.get("Name", "")
+
             return SalesforceObject(id=object_id, type=object_type, data=data)
 
     def find_ids_by_type(self, object_type: str) -> list[str]:

@@ -134,29 +134,26 @@ def process_jira_issue(
 
     metadata_dict: dict[str, str | list[str]] = {}
     people = set()
-    try:
-        creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
-        if basic_expert_info := best_effort_basic_expert_info(creator):
-            people.add(basic_expert_info)
-            metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
-            if email := basic_expert_info.get_email():
-                metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
-    except Exception:
-        # Author should exist but if not, doesn't matter
-        pass
+    creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
+    if creator is not None and (
+        basic_expert_info := best_effort_basic_expert_info(creator)
+    ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
+            metadata_dict[_FIELD_REPORTER_EMAIL] = email
 
-    try:
-        assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
-        if basic_expert_info := best_effort_basic_expert_info(assignee):
-            people.add(basic_expert_info)
-            metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
-            if email := basic_expert_info.get_email():
-                metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
-    except Exception:
-        # Author should exist but if not, doesn't matter
-        pass
+    assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
+    if assignee is not None and (
+        basic_expert_info := best_effort_basic_expert_info(assignee)
+    ):
+        people.add(basic_expert_info)
+        metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
+        if email := basic_expert_info.get_email():
+            metadata_dict[_FIELD_ASSIGNEE_EMAIL] = email
 
+    metadata_dict[_FIELD_KEY] = issue.key
     if priority := best_effort_get_field_from_issue(issue, _FIELD_PRIORITY):
         metadata_dict[_FIELD_PRIORITY] = priority.name
     if status := best_effort_get_field_from_issue(issue, _FIELD_STATUS):
@@ -178,20 +175,15 @@ def process_jira_issue(
     ):
         metadata_dict[_FIELD_RESOLUTION_DATE_KEY] = resolutiondate
 
-    try:
-        parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
-        if parent:
-            metadata_dict[_FIELD_PARENT] = parent.key
-    except Exception:
-        # Parent should exist but if not, doesn't matter
-        pass
-    try:
-        project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
-        if project:
-            metadata_dict[_FIELD_PROJECT_NAME] = project.name
-            metadata_dict[_FIELD_PROJECT] = project.key
-    except Exception:
-        # Project should exist.
+    parent = best_effort_get_field_from_issue(issue, _FIELD_PARENT)
+    if parent is not None:
+        metadata_dict[_FIELD_PARENT] = parent.key
+
+    project = best_effort_get_field_from_issue(issue, _FIELD_PROJECT)
+    if project is not None:
+        metadata_dict[_FIELD_PROJECT_NAME] = project.name
+        metadata_dict[_FIELD_PROJECT] = project.key
+    else:
         logger.error(f"Project should exist but does not for {issue.key}")
 
     return Document(

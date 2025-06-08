@@ -166,6 +166,8 @@ services:
       - POSTGRES_HOST=relational_db
       - POSTGRES_USER=${POSTGRES_USER:-}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - DB_READONLY_USER=${DB_READONLY_USER:-}
+      - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
       - POSTGRES_DB=${POSTGRES_DB:-}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - VESPA_HOST=index
@@ -357,6 +359,8 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_READONLY_USER=${DB_READONLY_USER:-}
+      - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
     ports:
       - "5432:5432"
     volumes:

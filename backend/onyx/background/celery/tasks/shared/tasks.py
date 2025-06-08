@@ -23,6 +23,7 @@ from onyx.db.document import mark_document_as_modified
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.relationships import delete_document_references_from_kg
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
@@ -117,6 +118,11 @@ def document_by_cc_pair_cleanup_task(
                     document_id,
                     tenant_id=tenant_id,
                     chunk_count=chunk_count,
+                )
+
+                delete_document_references_from_kg(
+                    db_session=db_session,
+                    document_id=document_id,
                 )
 
                 delete_documents_complete__no_commit(
