@@ -160,7 +160,6 @@ class TeamsConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
-        include_permissions: bool = False,
     ) -> CheckpointOutput[TeamsCheckpoint]:
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams")

@@ -270,19 +270,18 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: JiraConnectorCheckpoint,
-        include_permissions: bool = False,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._get_jql_query(start, end)
         try:
-            return self._load_from_checkpoint(jql, checkpoint, include_permissions)
+            return self._load_from_checkpoint(jql, checkpoint)
         except Exception as e:
             if is_atlassian_date_error(e):
                 jql = self._get_jql_query(start - ONE_HOUR, end)
-                return self._load_from_checkpoint(jql, checkpoint, include_permissions)
+                return self._load_from_checkpoint(jql, checkpoint)
             raise e
 
     def _load_from_checkpoint(
-        self, jql: str, checkpoint: JiraConnectorCheckpoint, include_permissions: bool
+        self, jql: str, checkpoint: JiraConnectorCheckpoint
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         # Get the current offset from checkpoint or start at 0
         starting_offset = checkpoint.offset or 0
@@ -435,6 +434,5 @@ if __name__ == "__main__":
         0,
         float("inf"),
         JiraConnectorCheckpoint(has_more=True),
-        include_permissions=False,
     )
     print(next(document_batches))

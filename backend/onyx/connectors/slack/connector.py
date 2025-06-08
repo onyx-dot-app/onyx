@@ -36,7 +36,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
@@ -581,7 +581,9 @@ def _process_message(
 
 
 class SlackConnector(
-    SlimConnector, CredentialsConnector, CheckpointedConnector[SlackCheckpoint]
+    SlimConnector,
+    CredentialsConnector,
+    CheckpointedConnectorWithPermSync[SlackCheckpoint],
 ):
     FAST_TIMEOUT = 1
 
@@ -746,7 +748,7 @@ class SlackConnector(
             callback=callback,
         )
 
-    def load_from_checkpoint(
+    def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
@@ -1006,6 +1008,26 @@ class SlackConnector(
 
         return checkpoint
 
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SlackCheckpoint,
+    ) -> CheckpointOutput[SlackCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SlackCheckpoint,
+    ) -> CheckpointOutput[SlackCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
+
     def validate_connector_settings(self) -> None:
         """
         1. Verify the bot token is valid for the workspace (via auth_test).
@@ -1145,7 +1167,6 @@ if __name__ == "__main__":
         one_day_ago,
         current,
         cast(SlackCheckpoint, checkpoint),
-        include_permissions=False,
     )
     try:
         for document_or_failure in gen:

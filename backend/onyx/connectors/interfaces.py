@@ -208,7 +208,6 @@ class CheckpointedConnector(BaseConnector[CT]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
-        include_permissions: bool = False,
     ) -> CheckpointOutput[CT]:
         """Yields back documents or failures. Final return is the new checkpoint.
 
@@ -216,7 +215,7 @@ class CheckpointedConnector(BaseConnector[CT]):
 
         ```
         try:
-            for document_or_failure in connector.load_from_checkpoint(start, end, checkpoint, include_permissions=True):
+            for document_or_failure in connector.load_from_checkpoint(start, end, checkpoint):
                 print(document_or_failure)
         except StopIteration as e:
             checkpoint = e.value  # Extracting the return value
@@ -226,7 +225,7 @@ class CheckpointedConnector(BaseConnector[CT]):
         OR
 
         ```
-        checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint, include_permissions=True)
+        checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint)
         ```
         """
         raise NotImplementedError
@@ -238,4 +237,15 @@ class CheckpointedConnector(BaseConnector[CT]):
     @abc.abstractmethod
     def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
         """Validate the checkpoint json and return the checkpoint object"""
+        raise NotImplementedError
+
+
+class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
+    @abc.abstractmethod
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CT,
+    ) -> CheckpointOutput[CT]:
         raise NotImplementedError

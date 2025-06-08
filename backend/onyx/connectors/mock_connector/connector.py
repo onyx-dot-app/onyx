@@ -65,7 +65,6 @@ class MockConnector(CheckpointedConnector[MockConnectorCheckpoint]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: MockConnectorCheckpoint,
-        include_permissions: bool = False,
     ) -> CheckpointOutput[MockConnectorCheckpoint]:
         if self.connector_yields is None:
             raise ValueError("No connector yields configured")

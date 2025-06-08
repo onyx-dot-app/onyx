@@ -55,7 +55,7 @@ from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_S
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -147,7 +147,9 @@ class DriveIdStatus(Enum):
     FINISHED = "finished"
 
 
-class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheckpoint]):
+class GoogleDriveConnector(
+    SlimConnector, CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint]
+):
     def __init__(
         self,
         include_shared_drives: bool = False,
@@ -1159,12 +1161,12 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             logger.exception(f"Error extracting documents from Google Drive: {e}")
             raise e
 
-    def load_from_checkpoint(
+    def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: GoogleDriveCheckpoint,
-        include_permissions: bool = False,
+        include_permissions: bool,
     ) -> CheckpointOutput[GoogleDriveCheckpoint]:
         """
         Entrypoint for the connector; first run is with an empty checkpoint.
@@ -1196,6 +1198,28 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
         return checkpoint
+
+    @override
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GoogleDriveCheckpoint,
+    ) -> CheckpointOutput[GoogleDriveCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GoogleDriveCheckpoint,
+    ) -> CheckpointOutput[GoogleDriveCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
 
     def _extract_slim_docs_from_google_drive(
         self,
