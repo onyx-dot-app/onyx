@@ -2036,6 +2036,7 @@ class ChatMessage(Base):
     sub_questions: Mapped[list["AgentSubQuestion"]] = relationship(
         "AgentSubQuestion",
         back_populates="primary_message",
+        order_by="(AgentSubQuestion.level, AgentSubQuestion.level_question_num)",
     )
 
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
