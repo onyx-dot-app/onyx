@@ -12,6 +12,9 @@ from onyx.connectors.google_drive.models import DriveRetrievalStage
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.models import RetrievedDriveFile
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import (
+    execute_paginated_retrieval_with_max_pages,
+)
 from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.google_utils import ORDER_BY_KEY
 from onyx.connectors.google_utils.resources import GoogleDriveService
@@ -179,38 +182,42 @@ def get_files_in_shared_drive(
     service: Resource,
     drive_id: str,
     is_slim: bool,
+    max_num_pages: int,
     update_traversed_ids_func: Callable[[str], None] = lambda _: None,
+    cache_folders: bool = True,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[GoogleDriveFileType]:
+) -> Iterator[GoogleDriveFileType | None]:
     kwargs = {}
     if not is_slim:
         kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
 
-    # If we know we are going to folder crawl later, we can cache the folders here
-    # Get all folders being queried and add them to the traversed set
-    folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-    folder_query += " and trashed = false"
-    for file in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
-        list_key="files",
-        continue_on_404_or_403=True,
-        corpora="drive",
-        driveId=drive_id,
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
-        fields="nextPageToken, files(id)",
-        q=folder_query,
-    ):
-        update_traversed_ids_func(file["id"])
+    if cache_folders:
+        # If we know we are going to folder crawl later, we can cache the folders here
+        # Get all folders being queried and add them to the traversed set
+        folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
+        folder_query += " and trashed = false"
+        for folder in execute_paginated_retrieval(
+            retrieval_function=service.files().list,
+            list_key="files",
+            continue_on_404_or_403=True,
+            corpora="drive",
+            driveId=drive_id,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+            fields="nextPageToken, files(id)",
+            q=folder_query,
+        ):
+            update_traversed_ids_func(folder["id"])
 
     # Get all files in the shared drive
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
     file_query += " and trashed = false"
     file_query += generate_time_range_filter(start, end)
 
-    for file in execute_paginated_retrieval(
+    for file in execute_paginated_retrieval_with_max_pages(
         retrieval_function=service.files().list,
+        max_num_pages=max_num_pages,
         list_key="files",
         continue_on_404_or_403=True,
         corpora="drive",
@@ -236,31 +243,34 @@ def get_all_files_in_my_drive_and_shared(
     update_traversed_ids_func: Callable,
     is_slim: bool,
     include_shared_with_me: bool,
+    max_num_pages: int,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[GoogleDriveFileType]:
+    cache_folders: bool = True,
+) -> Iterator[GoogleDriveFileType | None]:
     kwargs = {}
     if not is_slim:
         kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
 
-    # If we know we are going to folder crawl later, we can cache the folders here
-    # Get all folders being queried and add them to the traversed set
-    folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-    folder_query += " and trashed = false"
-    if not include_shared_with_me:
-        folder_query += " and 'me' in owners"
-    found_folders = False
-    for folder in execute_paginated_retrieval(
-        retrieval_function=service.files().list,
-        list_key="files",
-        corpora="user",
-        fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
-        q=folder_query,
-    ):
-        update_traversed_ids_func(folder[GoogleFields.ID])
-        found_folders = True
-    if found_folders:
-        update_traversed_ids_func(get_root_folder_id(service))
+    if cache_folders:
+        # If we know we are going to folder crawl later, we can cache the folders here
+        # Get all folders being queried and add them to the traversed set
+        folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
+        folder_query += " and trashed = false"
+        if not include_shared_with_me:
+            folder_query += " and 'me' in owners"
+        found_folders = False
+        for folder in execute_paginated_retrieval(
+            retrieval_function=service.files().list,
+            list_key="files",
+            corpora="user",
+            fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+            q=folder_query,
+        ):
+            update_traversed_ids_func(folder[GoogleFields.ID])
+            found_folders = True
+        if found_folders:
+            update_traversed_ids_func(get_root_folder_id(service))
 
     # Then get the files
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
@@ -268,8 +278,9 @@ def get_all_files_in_my_drive_and_shared(
     if not include_shared_with_me:
         file_query += " and 'me' in owners"
     file_query += generate_time_range_filter(start, end)
-    yield from execute_paginated_retrieval(
+    yield from execute_paginated_retrieval_with_max_pages(
         retrieval_function=service.files().list,
+        max_num_pages=max_num_pages,
         list_key="files",
         continue_on_404_or_403=False,
         corpora="user",
@@ -286,9 +297,10 @@ def get_all_files_for_oauth(
     # One of the above 2 should be true
     include_shared_drives: bool,
     is_slim: bool,
+    max_num_pages: int,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[GoogleDriveFileType]:
+) -> Iterator[GoogleDriveFileType | None]:
     kwargs = {}
     if not is_slim:
         kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
@@ -308,7 +320,8 @@ def get_all_files_for_oauth(
         if not include_files_shared_with_me and include_my_drives:
             file_query += " and 'me' in owners"
 
-    yield from execute_paginated_retrieval(
+    yield from execute_paginated_retrieval_with_max_pages(
+        max_num_pages=max_num_pages,
         retrieval_function=service.files().list,
         list_key="files",
         continue_on_404_or_403=False,
