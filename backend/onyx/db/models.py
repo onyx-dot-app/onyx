@@ -849,6 +849,9 @@ class KGEntity(Base):
     entity_key: Mapped[str] = mapped_column(
         NullFilteredString, nullable=True, index=True
     )
+    parent_key: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
     entity_subtype: Mapped[str] = mapped_column(
         NullFilteredString, nullable=True, index=True
     )
@@ -1003,7 +1006,7 @@ class KGEntityExtractionStaging(Base):
     )
 
     # Basic entity information
-    parent_key: Mapped[str] = mapped_column(
+    parent_key: Mapped[str | None] = mapped_column(
         NullFilteredString, nullable=True, index=True
     )
 

@@ -130,6 +130,7 @@ def transfer_entity(
             entity_class=entity.entity_class,
             entity_subtype=entity.entity_subtype,
             entity_key=entity.entity_key,
+            parent_key=entity.parent_key,
             alternative_names=entity.alternative_names or [],
             entity_type_id_name=entity.entity_type_id_name,
             document_id=entity.document_id,
