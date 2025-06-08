@@ -1,10 +1,6 @@
-from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
-
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
@@ -42,20 +38,6 @@ def _get_slim_doc_generator(
         end=current_time.timestamp(),
         callback=callback,
     )
-
-
-def _drive_connector_creds_getter(
-    google_drive_connector: GoogleDriveConnector,
-) -> Callable[[], ServiceAccountCredentials | OAuthCredentials]:
-    def inner() -> ServiceAccountCredentials | OAuthCredentials:
-        if not google_drive_connector._creds_dict:
-            raise ValueError(
-                "Creds dict not found, load_credentials must be called first"
-            )
-        google_drive_connector.load_credentials(google_drive_connector._creds_dict)
-        return google_drive_connector.creds
-
-    return inner
 
 
 def get_external_access_for_raw_gdrive_file(

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from onyx.access.models import DocumentAccess
+from onyx.access.models import ExternalAccess
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
@@ -88,6 +89,8 @@ class DocumentMetadata:
     primary_owners: list[str] | None = None
     secondary_owners: list[str] | None = None
     from_ingestion_api: bool = False
+
+    external_access: ExternalAccess | None = None
 
 
 @dataclass

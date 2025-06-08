@@ -41,6 +41,7 @@ def confluence_connector() -> ConfluenceConnector:
 def test_confluence_connector_permissions(
     mock_get_api_key: MagicMock,
     confluence_connector: ConfluenceConnector,
+    set_ee_on: None,
 ) -> None:
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
@@ -71,6 +72,7 @@ def test_confluence_connector_permissions(
 def test_confluence_connector_restriction_handling(
     mock_get_api_key: MagicMock,
     mock_db_provider_class: MagicMock,
+    set_ee_on: None,
 ) -> None:
     # Test space key
     test_space_key = "DailyPermS"

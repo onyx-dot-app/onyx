@@ -2,6 +2,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from enum import Enum
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
@@ -25,12 +26,25 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+
+class DriveFileFieldType(Enum):
+    """Enum to specify which fields to retrieve from Google Drive files"""
+
+    SLIM = "slim"  # Minimal fields for basic file info
+    STANDARD = "standard"  # Standard fields including content metadata
+    WITH_PERMISSIONS = "with_permissions"  # Full fields including permissions
+
+
 PERMISSION_FULL_DESCRIPTION = (
     "permissions(id, emailAddress, type, domain, permissionDetails)"
 )
 FILE_FIELDS = (
-    "nextPageToken, files(mimeType, id, name, permissions, modifiedTime, webViewLink, "
-    "shortcutDetails, owners(emailAddress), size)"
+    "nextPageToken, files(mimeType, id, name, "
+    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
+)
+FILE_FIELDS_WITH_PERMISSIONS = (
+    f"nextPageToken, files(mimeType, id, name, {PERMISSION_FULL_DESCRIPTION}, permissionIds, "
+    "modifiedTime, webViewLink, shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
     f"nextPageToken, files(mimeType, driveId, id, name, {PERMISSION_FULL_DESCRIPTION}, "
@@ -79,16 +93,31 @@ def _get_folders_in_parent(
         yield file
 
 
+def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
+    """Get the appropriate fields string based on the field type enum"""
+    if field_type == DriveFileFieldType.SLIM:
+        return SLIM_FILE_FIELDS
+    elif field_type == DriveFileFieldType.WITH_PERMISSIONS:
+        return FILE_FIELDS_WITH_PERMISSIONS
+    else:  # DriveFileFieldType.STANDARD
+        return FILE_FIELDS
+
+
 def _get_files_in_parent(
     service: Resource,
     parent_id: str,
-    is_slim: bool,
+    field_type: DriveFileFieldType,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> Iterator[GoogleDriveFileType]:
     query = f"mimeType != '{DRIVE_FOLDER_TYPE}' and '{parent_id}' in parents"
     query += " and trashed = false"
     query += generate_time_range_filter(start, end)
+
+    kwargs = {}
+    # Only add ordering for non-slim field types to improve performance for slim queries
+    if field_type != DriveFileFieldType.SLIM:
+        kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
 
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -97,9 +126,9 @@ def _get_files_in_parent(
         corpora="allDrives",
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
-        fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+        fields=_get_fields_for_file_type(field_type),
         q=query,
-        **({} if is_slim else {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}),
+        **kwargs,
     ):
         yield file
 
@@ -107,7 +136,7 @@ def _get_files_in_parent(
 def crawl_folders_for_files(
     service: Resource,
     parent_id: str,
-    is_slim: bool,
+    field_type: DriveFileFieldType,
     user_email: str,
     traversed_parent_ids: set[str],
     update_traversed_ids_func: Callable[[str], None],
@@ -126,7 +155,7 @@ def crawl_folders_for_files(
             for file in _get_files_in_parent(
                 service=service,
                 parent_id=parent_id,
-                is_slim=is_slim,
+                field_type=field_type,
                 start=start,
                 end=end,
             ):
@@ -170,7 +199,7 @@ def crawl_folders_for_files(
         yield from crawl_folders_for_files(
             service=service,
             parent_id=subfolder["id"],
-            is_slim=is_slim,
+            field_type=field_type,
             user_email=user_email,
             traversed_parent_ids=traversed_parent_ids,
             update_traversed_ids_func=update_traversed_ids_func,
@@ -182,7 +211,7 @@ def crawl_folders_for_files(
 def get_files_in_shared_drive(
     service: Resource,
     drive_id: str,
-    is_slim: bool,
+    field_type: DriveFileFieldType,
     max_num_pages: int,
     update_traversed_ids_func: Callable[[str], None] = lambda _: None,
     cache_folders: bool = True,
@@ -190,9 +219,7 @@ def get_files_in_shared_drive(
     end: SecondsSinceUnixEpoch | None = None,
     page_token: str | None = None,
 ) -> Iterator[GoogleDriveFileType | str]:
-    kwargs = {}
-    if not is_slim:
-        kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
         logger.info(f"Using page token: {page_token}")
         kwargs[PAGE_TOKEN_KEY] = page_token
@@ -229,7 +256,7 @@ def get_files_in_shared_drive(
         driveId=drive_id,
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
-        fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+        fields=_get_fields_for_file_type(field_type),
         q=file_query,
         **kwargs,
     ):
@@ -246,7 +273,7 @@ def get_files_in_shared_drive(
 def get_all_files_in_my_drive_and_shared(
     service: GoogleDriveService,
     update_traversed_ids_func: Callable,
-    is_slim: bool,
+    field_type: DriveFileFieldType,
     include_shared_with_me: bool,
     max_num_pages: int,
     start: SecondsSinceUnixEpoch | None = None,
@@ -254,9 +281,7 @@ def get_all_files_in_my_drive_and_shared(
     cache_folders: bool = True,
     page_token: str | None = None,
 ) -> Iterator[GoogleDriveFileType | str]:
-    kwargs = {}
-    if not is_slim:
-        kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
         logger.info(f"Using page token: {page_token}")
         kwargs[PAGE_TOKEN_KEY] = page_token
@@ -273,7 +298,7 @@ def get_all_files_in_my_drive_and_shared(
             retrieval_function=service.files().list,
             list_key="files",
             corpora="user",
-            fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+            fields=_get_fields_for_file_type(field_type),
             q=folder_query,
         ):
             update_traversed_ids_func(folder[GoogleFields.ID])
@@ -293,7 +318,7 @@ def get_all_files_in_my_drive_and_shared(
         list_key="files",
         continue_on_404_or_403=False,
         corpora="user",
-        fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+        fields=_get_fields_for_file_type(field_type),
         q=file_query,
         **kwargs,
     )
@@ -305,15 +330,13 @@ def get_all_files_for_oauth(
     include_my_drives: bool,
     # One of the above 2 should be true
     include_shared_drives: bool,
-    is_slim: bool,
+    field_type: DriveFileFieldType,
     max_num_pages: int,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
     page_token: str | None = None,
 ) -> Iterator[GoogleDriveFileType | str]:
-    kwargs = {}
-    if not is_slim:
-        kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
     if page_token:
         logger.info(f"Using page token: {page_token}")
         kwargs[PAGE_TOKEN_KEY] = page_token
@@ -341,7 +364,7 @@ def get_all_files_for_oauth(
         corpora=corpora,
         includeItemsFromAllDrives=should_get_all,
         supportsAllDrives=should_get_all,
-        fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
+        fields=_get_fields_for_file_type(field_type),
         q=file_query,
         **kwargs,
     )

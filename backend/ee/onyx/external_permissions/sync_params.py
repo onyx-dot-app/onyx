@@ -1,3 +1,7 @@
+from collections.abc import Generator
+from typing import Optional
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel
 
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
@@ -12,12 +16,18 @@ from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from ee.onyx.external_permissions.perm_sync_types import CensoringFuncType
 from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.perm_sync_types import GroupSyncFuncType
 from ee.onyx.external_permissions.salesforce.postprocessing import (
     censor_salesforce_chunks,
 )
 from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
 from onyx.configs.constants import DocumentSource
+
+if TYPE_CHECKING:
+    from onyx.access.models import DocExternalAccess  # noqa
+    from onyx.db.models import ConnectorCredentialPair  # noqa
+    from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface  # noqa
 
 
 class DocSyncConfig(BaseModel):
@@ -43,6 +53,16 @@ class SyncConfig(BaseModel):
     group_sync_config: GroupSyncConfig | None = None
     # None means we don't perform a chunk_censoring
     censoring_config: CensoringConfig | None = None
+
+
+# Mock doc sync function for testing (no-op)
+def mock_doc_sync(
+    cc_pair: "ConnectorCredentialPair",
+    fetch_all_docs_fn: FetchAllDocumentsFunction,
+    callback: Optional["IndexingHeartbeatInterface"],
+) -> Generator["DocExternalAccess", None, None]:
+    """Mock doc sync function for testing - returns empty list since permissions are fetched during indexing"""
+    yield from []
 
 
 _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
@@ -90,6 +110,13 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     DocumentSource.SALESFORCE: SyncConfig(
         censoring_config=CensoringConfig(
             chunk_censoring_func=censor_salesforce_chunks,
+        ),
+    ),
+    DocumentSource.MOCK_CONNECTOR: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=mock_doc_sync,
+            initial_index_should_sync=True,
         ),
     ),
 }

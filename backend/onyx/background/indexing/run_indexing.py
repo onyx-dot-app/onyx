@@ -8,9 +8,7 @@ from datetime import timezone
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.background.indexing.access_utils import (
-    source_should_fetch_permissions_during_indexing,
-)
+from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
 from onyx.background.indexing.checkpointing_utils import get_latest_valid_checkpoint
 from onyx.background.indexing.checkpointing_utils import save_checkpoint

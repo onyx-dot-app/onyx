@@ -30,6 +30,7 @@ from onyx.connectors.google_drive.doc_conversion import (
 from onyx.connectors.google_drive.doc_conversion import onyx_document_id_from_drive_file
 from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.file_retrieval import crawl_folders_for_files
+from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.file_retrieval import get_all_files_for_oauth
 from onyx.connectors.google_drive.file_retrieval import (
     get_all_files_in_my_drive_and_shared,
@@ -116,7 +117,7 @@ def _clean_requested_drive_ids(
 class CredentialedRetrievalMethod(Protocol):
     def __call__(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -401,7 +402,7 @@ class GoogleDriveConnector(
     def _impersonate_user_for_retrieval(
         self,
         user_email: str,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         get_new_drive_id: Callable[[str], str | None],
         sorted_filtered_folder_ids: list[str],
@@ -467,7 +468,7 @@ class GoogleDriveConnector(
                     get_all_files_in_my_drive_and_shared(
                         service=drive_service,
                         update_traversed_ids_func=self._update_traversed_parent_ids,
-                        is_slim=is_slim,
+                        field_type=field_type,
                         include_shared_with_me=self.include_files_shared_with_me,
                         max_num_pages=MY_DRIVE_PAGES_PER_CHECKPOINT,
                         start=curr_stage.completed_until if resuming else start,
@@ -500,7 +501,7 @@ class GoogleDriveConnector(
                     get_files_in_shared_drive(
                         service=drive_service,
                         drive_id=drive_id,
-                        is_slim=is_slim,
+                        field_type=field_type,
                         max_num_pages=SHARED_DRIVE_PAGES_PER_CHECKPOINT,
                         update_traversed_ids_func=self._update_traversed_parent_ids,
                         cache_folders=not bool(
@@ -562,7 +563,7 @@ class GoogleDriveConnector(
                 for retrieved_file in crawl_folders_for_files(
                     service=drive_service,
                     parent_id=folder_id,
-                    is_slim=is_slim,
+                    field_type=field_type,
                     user_email=user_email,
                     traversed_parent_ids=self._retrieved_folder_and_drive_ids,
                     update_traversed_ids_func=self._update_traversed_parent_ids,
@@ -613,7 +614,7 @@ class GoogleDriveConnector(
 
     def _manage_service_account_retrieval(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -639,7 +640,7 @@ class GoogleDriveConnector(
             all_org_emails = checkpoint.user_emails
 
         sorted_drive_ids, sorted_folder_ids = self._determine_retrieval_ids(
-            checkpoint, is_slim, DriveRetrievalStage.MY_DRIVE_FILES
+            checkpoint, DriveRetrievalStage.MY_DRIVE_FILES
         )
 
         # Setup initial completion map on first connector run
@@ -686,7 +687,7 @@ class GoogleDriveConnector(
         user_retrieval_gens = [
             self._impersonate_user_for_retrieval(
                 email,
-                is_slim,
+                field_type,
                 checkpoint,
                 drive_id_getter,
                 sorted_folder_ids,
@@ -722,7 +723,6 @@ class GoogleDriveConnector(
     def _determine_retrieval_ids(
         self,
         checkpoint: GoogleDriveCheckpoint,
-        is_slim: bool,
         next_stage: DriveRetrievalStage,
     ) -> tuple[list[str], list[str]]:
         all_drive_ids = self.get_all_drive_ids()
@@ -757,7 +757,7 @@ class GoogleDriveConnector(
 
     def _oauth_retrieval_all_files(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         drive_service: GoogleDriveService,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -779,7 +779,7 @@ class GoogleDriveConnector(
                 include_files_shared_with_me=self.include_files_shared_with_me,
                 include_my_drives=self.include_my_drives,
                 include_shared_drives=self.include_shared_drives,
-                is_slim=is_slim,
+                field_type=field_type,
                 max_num_pages=OAUTH_PAGES_PER_CHECKPOINT,
                 start=start,
                 end=end,
@@ -791,7 +791,7 @@ class GoogleDriveConnector(
 
     def _oauth_retrieval_drives(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         drive_service: GoogleDriveService,
         drive_ids_to_retrieve: list[str],
         checkpoint: GoogleDriveCheckpoint,
@@ -805,7 +805,7 @@ class GoogleDriveConnector(
                 get_files_in_shared_drive(
                     service=drive_service,
                     drive_id=drive_id,
-                    is_slim=is_slim,
+                    field_type=field_type,
                     max_num_pages=SHARED_DRIVE_PAGES_PER_CHECKPOINT,
                     cache_folders=not bool(
                         drive_start
@@ -864,7 +864,7 @@ class GoogleDriveConnector(
 
     def _oauth_retrieval_folders(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         drive_service: GoogleDriveService,
         drive_ids_to_retrieve: set[str],
         folder_ids_to_retrieve: set[str],
@@ -889,7 +889,7 @@ class GoogleDriveConnector(
             yield from crawl_folders_for_files(
                 service=drive_service,
                 parent_id=folder_id,
-                is_slim=is_slim,
+                field_type=field_type,
                 user_email=self.primary_admin_email,
                 traversed_parent_ids=self._retrieved_folder_and_drive_ids,
                 update_traversed_ids_func=self._update_traversed_parent_ids,
@@ -934,13 +934,13 @@ class GoogleDriveConnector(
     def _checkpointed_retrieval(
         self,
         retrieval_method: CredentialedRetrievalMethod,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
         drive_files = retrieval_method(
-            is_slim=is_slim,
+            field_type=field_type,
             checkpoint=checkpoint,
             start=start,
             end=end,
@@ -965,7 +965,7 @@ class GoogleDriveConnector(
 
     def _manage_oauth_retrieval(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -988,8 +988,8 @@ class GoogleDriveConnector(
                 all_files_start = completion.completed_until
 
             for file_or_token in self._oauth_retrieval_all_files(
+                field_type=field_type,
                 drive_service=drive_service,
-                is_slim=is_slim,
                 start=all_files_start,
                 end=end,
                 page_token=checkpoint.completion_map[
@@ -1017,12 +1017,12 @@ class GoogleDriveConnector(
             return
 
         sorted_drive_ids, sorted_folder_ids = self._determine_retrieval_ids(
-            checkpoint, is_slim, DriveRetrievalStage.SHARED_DRIVE_FILES
+            checkpoint, DriveRetrievalStage.SHARED_DRIVE_FILES
         )
 
         if checkpoint.completion_stage == DriveRetrievalStage.SHARED_DRIVE_FILES:
             for file_or_token in self._oauth_retrieval_drives(
-                is_slim=is_slim,
+                field_type=field_type,
                 drive_service=drive_service,
                 drive_ids_to_retrieve=sorted_drive_ids,
                 checkpoint=checkpoint,
@@ -1041,7 +1041,7 @@ class GoogleDriveConnector(
 
         if checkpoint.completion_stage == DriveRetrievalStage.FOLDER_FILES:
             yield from self._oauth_retrieval_folders(
-                is_slim=is_slim,
+                field_type=field_type,
                 drive_service=drive_service,
                 drive_ids_to_retrieve=set(sorted_drive_ids),
                 folder_ids_to_retrieve=set(sorted_folder_ids),
@@ -1054,7 +1054,7 @@ class GoogleDriveConnector(
 
     def _fetch_drive_items(
         self,
-        is_slim: bool,
+        field_type: DriveFileFieldType,
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
@@ -1067,7 +1067,7 @@ class GoogleDriveConnector(
 
         return self._checkpointed_retrieval(
             retrieval_method=retrieval_method,
-            is_slim=is_slim,
+            field_type=field_type,
             checkpoint=checkpoint,
             start=start,
             end=end,
@@ -1080,6 +1080,15 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None,
         include_permissions: bool,
     ) -> Iterator[Document | ConnectorFailure]:
+        """
+        Retrieves and converts Google Drive files to documents.
+        """
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if include_permissions
+            else DriveFileFieldType.STANDARD
+        )
+
         try:
             # Prepare a partial function with the credentials and admin email
             convert_func = partial(
@@ -1128,7 +1137,7 @@ class GoogleDriveConnector(
                     batches_complete += 1
 
             for retrieved_file in self._fetch_drive_items(
-                is_slim=False,
+                field_type=field_type,
                 checkpoint=checkpoint,
                 start=start,
                 end=end,
@@ -1230,8 +1239,8 @@ class GoogleDriveConnector(
     ) -> GenerateSlimDocumentOutput:
         slim_batch = []
         for file in self._fetch_drive_items(
+            field_type=DriveFileFieldType.SLIM,
             checkpoint=checkpoint,
-            is_slim=True,
             start=start,
             end=end,
         ):

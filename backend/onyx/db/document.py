@@ -407,6 +407,19 @@ def upsert_documents(
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
                     kg_stage=KGStage.NOT_STARTED,
+                    **(
+                        {
+                            "external_user_emails": list(
+                                doc.external_access.external_user_emails
+                            ),
+                            "external_user_group_ids": list(
+                                doc.external_access.external_user_group_ids
+                            ),
+                            "is_public": doc.external_access.is_public,
+                        }
+                        if doc.external_access
+                        else {}
+                    ),
                 )
             )
             for doc in seen_documents.values()
