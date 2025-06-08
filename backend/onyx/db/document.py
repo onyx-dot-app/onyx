@@ -426,8 +426,6 @@ def upsert_documents(
         ]
     )
 
-    # This does not update the permissions of the document if
-    # the document already exists.
     on_conflict_stmt = insert_stmt.on_conflict_do_update(
         index_elements=["id"],  # Conflict target
         set_={
@@ -438,6 +436,9 @@ def upsert_documents(
             "link": insert_stmt.excluded.link,
             "primary_owners": insert_stmt.excluded.primary_owners,
             "secondary_owners": insert_stmt.excluded.secondary_owners,
+            "external_user_emails": insert_stmt.excluded.external_user_emails,
+            "external_user_group_ids": insert_stmt.excluded.external_user_group_ids,
+            "is_public": insert_stmt.excluded.is_public,
         },
     )
     db_session.execute(on_conflict_stmt)
