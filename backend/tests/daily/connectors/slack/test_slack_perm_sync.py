@@ -1,10 +1,12 @@
 import time
+from collections.abc import Generator
 
 import pytest
 
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.connector import SlackConnector
+from onyx.utils.variable_functionality import global_version
 from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -16,6 +18,17 @@ PRIVATE_CHANNEL_USERS = [
     # user 2 added via a group
     "test_user_2@onyx-test.com",
 ]
+
+
+@pytest.fixture(autouse=True)
+def set_ee_on() -> Generator[None, None, None]:
+    """Need EE to be enabled for these tests to work since
+    perm syncing is a an EE-only feature."""
+    global_version.set_ee()
+
+    yield
+
+    global_version._is_ee = False
 
 
 @pytest.mark.parametrize(
