@@ -37,7 +37,6 @@ const nextConfig = {
         pathname: "/s2/favicons/**",
       },
     ],
-    unoptimized: true, // Disable image optimization to avoid requiring Sharp
   },
   async headers() {
     return [
@@ -97,28 +96,11 @@ const nextConfig = {
 // - Without SENTRY_AUTH_TOKEN and NEXT_PUBLIC_SENTRY_DSN: Sentry is completely disabled
 // - With both configured: Capture errors and limited performance data
 
-// Determine if Sentry should be enabled
-const sentryEnabled = Boolean(
-  process.env.SENTRY_AUTH_TOKEN && process.env.NEXT_PUBLIC_SENTRY_DSN
-);
 
-// Sentry webpack plugin options
 const sentryWebpackPluginOptions = {
-  org: process.env.SENTRY_ORG || "onyx",
-  project: process.env.SENTRY_PROJECT || "data-plane-web",
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  silent: !sentryEnabled, // Silence output when Sentry is disabled
-  dryRun: !sentryEnabled, // Don't upload source maps when Sentry is disabled
-  ...(sentryEnabled && {
-    sourceMaps: {
-      include: ["./.next"],
-      ignore: ["node_modules"],
-      urlPrefix: "~/_next",
-      stripPrefix: ["webpack://_N_E/"],
-      validate: true,
-      cleanArtifacts: true,
-    },
-  }),
+  sourcemaps: {
+    disable: true,
+  },
 };
 
 // Export the module with conditional Sentry configuration
