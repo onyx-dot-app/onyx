@@ -149,3 +149,15 @@ def get_all_censoring_enabled_sources() -> set[DocumentSource]:
         for source, sync_config in _SOURCE_TO_SYNC_CONFIG.items()
         if sync_config.censoring_config is not None
     }
+
+
+def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:
+    """Returns True if the given DocumentSource requires permissions to be fetched during indexing."""
+    if source not in _SOURCE_TO_SYNC_CONFIG:
+        return False
+
+    doc_sync_config = _SOURCE_TO_SYNC_CONFIG[source].doc_sync_config
+    if doc_sync_config is None:
+        return False
+
+    return doc_sync_config.initial_index_should_sync

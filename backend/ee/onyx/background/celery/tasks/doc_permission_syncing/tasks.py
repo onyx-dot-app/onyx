@@ -100,11 +100,6 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
-    # If the last sync is None, it has never been run so we run the sync
-    last_perm_sync = cc_pair.last_time_perm_sync
-    if last_perm_sync is None:
-        return True
-
     sync_config = get_source_perm_sync_config(cc_pair.connector.source)
     if sync_config is None:
         logger.error(f"No sync config found for {cc_pair.connector.source}")
@@ -113,6 +108,19 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     if sync_config.doc_sync_config is None:
         logger.error(f"No doc sync config found for {cc_pair.connector.source}")
         return False
+
+    # if indexing also does perm sync, don't start running doc_sync until at
+    # least one indexing is done
+    if (
+        sync_config.doc_sync_config.initial_index_should_sync
+        and cc_pair.last_successful_index_time is None
+    ):
+        return False
+
+    # If the last sync is None, it has never been run so we run the sync
+    last_perm_sync = cc_pair.last_time_perm_sync
+    if last_perm_sync is None:
+        return True
 
     source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
     source_sync_period *= int(OnyxRuntime.get_doc_permission_sync_multiplier())
