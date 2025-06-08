@@ -235,9 +235,9 @@ export interface HighspotCredentialJson {
 
 export interface BackstageCredentialJson {
   backstage_client_id: string;
-  backstage_client_secret: string;
   backstage_token_endpoint: string;
   backstage_token_audience: string;
+  backstage_client_secret: string;
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
