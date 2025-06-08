@@ -174,12 +174,8 @@ def transfer_relationship(
     Transfer a relationship from the staging table to the normalized table.
     """
     # Translate the source and target nodes
-    source_node = entity_translations.get(
-        relationship.source_node, relationship.source_node
-    )
-    target_node = entity_translations.get(
-        relationship.target_node, relationship.target_node
-    )
+    source_node = entity_translations[relationship.source_node]
+    target_node = entity_translations[relationship.target_node]
     relationship_id_name = make_relationship_id(
         source_node, relationship.type, target_node
     )

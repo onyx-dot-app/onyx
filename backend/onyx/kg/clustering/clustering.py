@@ -225,6 +225,7 @@ def _create_one_parent_child_relationship(entity: KGEntityExtractionStaging) -> 
 
         # set the staging entity's parent to the next ancestor
         # if there is no parent or next ancestor, set to "" to differentiate from None
+        # None will mess up the pagination in _get_batch_entities_with_parent
         db_session.query(KGEntityExtractionStaging).filter(
             KGEntityExtractionStaging.id_name == entity.id_name
         ).update({"parent_key": next_ancestor})
@@ -236,25 +237,26 @@ def _transfer_batch_relationship_and_update_vespa(
     index_name: str,
     tenant_id: str,
 ) -> None:
-    vespa_documents: set[str] = set()
+    docs_to_update: set[str] = set()
 
     with get_session_with_current_tenant() as db_session:
         entity_id_names: set[str] = set()
 
+        # get the translations
+        staging_entity_id_names: set[str] = set()
+        for relationship in relationships:
+            staging_entity_id_names.add(relationship.source_node)
+            staging_entity_id_names.add(relationship.target_node)
+        entity_translations: dict[str, str] = {
+            entity.id_name: entity.transferred_id_name
+            for entity in db_session.query(KGEntityExtractionStaging)
+            .filter(KGEntityExtractionStaging.id_name.in_(staging_entity_id_names))
+            .all()
+            if entity.transferred_id_name is not None
+        }
+
         # transfer the relationships
         for relationship in relationships:
-            entity_translations: dict[str, str] = {
-                entity.id_name: entity.transferred_id_name
-                for entity in db_session.query(KGEntityExtractionStaging).filter(
-                    KGEntityExtractionStaging.id_name.in_(
-                        [
-                            relationship.source_node,
-                            relationship.target_node,
-                        ]
-                    )
-                )
-                if entity.transferred_id_name is not None
-            }
             transferred_relationship = transfer_relationship(
                 db_session=db_session,
                 relationship=relationship,
@@ -265,15 +267,13 @@ def _transfer_batch_relationship_and_update_vespa(
         db_session.commit()
 
         # get all documents that require a vespa update
-        vespa_documents.update(
-            (
-                entity.document_id
-                for entity in db_session.query(KGEntity)
-                .filter(KGEntity.id_name.in_(entity_id_names))
-                .all()
-                if entity.document_id is not None
-            )
-        )
+        docs_to_update |= {
+            entity.document_id
+            for entity in db_session.query(KGEntity)
+            .filter(KGEntity.id_name.in_(entity_id_names))
+            .all()
+            if entity.document_id is not None
+        }
 
     # update vespa in parallel
     batch_update_requests = run_functions_tuples_in_parallel(
@@ -282,7 +282,7 @@ def _transfer_batch_relationship_and_update_vespa(
                 get_kg_vespa_info_update_requests_for_document,
                 (document_id, index_name, tenant_id),
             )
-            for document_id in vespa_documents
+            for document_id in docs_to_update
         ]
     )
     for update_requests in batch_update_requests:
