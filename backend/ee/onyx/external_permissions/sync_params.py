@@ -74,7 +74,7 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=slack_doc_sync,
-            initial_index_should_sync=False,
+            initial_index_should_sync=True,
         ),
         # groups are not needed for Slack. All channel access is done at the
         # individual user level
