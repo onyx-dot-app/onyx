@@ -409,6 +409,19 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  backstage: {
+    description: "Configure Backstage connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the base URL:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+      },
+    ],
+    advanced_values: [],
+  },
   confluence: {
     description: "Configure Confluence connector",
     initialConnectorName: "cloud_name",
@@ -1450,6 +1463,9 @@ export interface GoogleDriveConfig {
   shared_folder_urls?: string;
 }
 
+export interface BackstageConfig {
+  base_url: string;
+}
 export interface GmailConfig {}
 
 export interface BookstackConfig {}
