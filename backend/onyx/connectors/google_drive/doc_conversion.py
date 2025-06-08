@@ -327,9 +327,9 @@ def _get_external_access_for_raw_gdrive_file(
         ),
     )
     return external_access_fn(
-        file=file,
-        company_domain=company_domain,
-        drive_service=drive_service,
+        file,
+        company_domain,
+        drive_service,
     )
 
 
@@ -337,10 +337,10 @@ def convert_drive_item_to_document(
     creds: Any,
     allow_images: bool,
     size_threshold: int,
-    retriever_emails: list[str],
     # if not specified, we will not sync permissions
     # will also be a no-op if EE is not enabled
     permission_sync_context: PermissionSyncContext | None,
+    retriever_emails: list[str],
     file: GoogleDriveFileType,
 ) -> Document | ConnectorFailure | None:
     """
@@ -549,12 +549,14 @@ def build_slim_document(
     if file.get("mimeType") in [DRIVE_FOLDER_TYPE, DRIVE_SHORTCUT_TYPE]:
         return None
 
+    owner_email = file.get("owners", [{}])[0].get("emailAddress")
     external_access = (
         _get_external_access_for_raw_gdrive_file(
             file=file,
             company_domain=permission_sync_context.google_domain,
             drive_service=get_drive_service(
-                creds, user_email=permission_sync_context.primary_admin_email
+                creds,
+                user_email=owner_email or permission_sync_context.primary_admin_email,
             ),
         )
         if permission_sync_context

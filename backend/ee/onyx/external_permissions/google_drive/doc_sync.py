@@ -71,8 +71,8 @@ def get_external_access_for_raw_gdrive_file(
         raise ValueError("No doc_id found in file")
 
     permissions = file.get("permissions")
-    permission_ids = file.get("permission_ids")
-    drive_id = file.get("drive_id")
+    permission_ids = file.get("permissionIds")
+    drive_id = file.get("driveId")
 
     permissions_list: list[GoogleDrivePermission] = []
     if permissions:

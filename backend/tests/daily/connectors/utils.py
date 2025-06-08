@@ -28,7 +28,7 @@ def load_all_docs_from_checkpoint_connector(
     while checkpoint.has_more:
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(
-                start, end, checkpoint, include_permissions=True
+                start, end, checkpoint, include_permissions=False
             )
         )
         for document, failure, next_checkpoint in doc_batch_generator:
@@ -50,6 +50,7 @@ def load_everything_from_checkpoint_connector(
     connector: CheckpointedConnector[CT],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    include_permissions: bool = False,
 ) -> list[Document | ConnectorFailure]:
     """Like load_all_docs_from_checkpoint_connector but returns both documents and failures"""
     num_iterations = 0
@@ -59,7 +60,7 @@ def load_everything_from_checkpoint_connector(
     while checkpoint.has_more:
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(
-                start, end, checkpoint, include_permissions=True
+                start, end, checkpoint, include_permissions=include_permissions
             )
         )
         for document, failure, next_checkpoint in doc_batch_generator:

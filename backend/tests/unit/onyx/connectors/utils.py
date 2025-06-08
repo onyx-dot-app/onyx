@@ -46,7 +46,7 @@ def load_everything_from_checkpoint_connector_from_checkpoint(
         items: list[Document | ConnectorFailure] = []
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(
-                start, end, checkpoint, include_permissions=True
+                start, end, checkpoint, include_permissions=False
             )
         )
         for document, failure, next_checkpoint in doc_batch_generator:

@@ -11,6 +11,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.web import SlackResponse
 
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.slack.models import MessageType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -34,10 +35,7 @@ def get_base_url(token: str) -> str:
     return client.auth_test()["url"]
 
 
-def get_message_link(
-    event: dict[str, Any], client: WebClient, channel_id: str | None = None
-) -> str:
-    channel_id = channel_id or event["channel"]
+def get_message_link(event: MessageType, client: WebClient, channel_id: str) -> str:
     message_ts = event["ts"]
     message_ts_without_dot = message_ts.replace(".", "")
     thread_ts = event.get("thread_ts")

@@ -638,7 +638,7 @@ if __name__ == "__main__":
         one_day_ago,
         current,
         connector.build_dummy_checkpoint(),
-        include_permissions=True,
+        include_permissions=False,
     )
 
     print(next(document_batches))

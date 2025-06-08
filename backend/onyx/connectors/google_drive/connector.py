@@ -1181,7 +1181,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         checkpoint = copy.deepcopy(checkpoint)
         self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
         try:
-            yield from self._extract_docs_from_google_drive(checkpoint, start, end)
+            yield from self._extract_docs_from_google_drive(
+                checkpoint, start, end, include_permissions
+            )
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e

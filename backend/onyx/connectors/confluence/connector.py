@@ -8,11 +8,14 @@ from urllib.parse import quote
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.confluence.access import get_all_space_permissions
+from onyx.connectors.confluence.access import get_page_restrictions
 from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
@@ -532,6 +535,7 @@ class ConfluenceConnector(
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ConfluenceCheckpoint,
+        # NOTE: not supported yet
         include_permissions: bool = False,
     ) -> CheckpointOutput[ConfluenceCheckpoint]:
         end += ONE_DAY  # handle time zone weirdness
@@ -568,6 +572,17 @@ class ConfluenceConnector(
         doc_metadata_list: list[SlimDocument] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
+        space_level_access_info = get_all_space_permissions(
+            self.confluence_client, self.is_cloud
+        )
+
+        def get_external_access(
+            doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
+        ) -> ExternalAccess | None:
+            return get_page_restrictions(
+                self.confluence_client, doc_id, restrictions, ancestors
+            ) or space_level_access_info.get(page_space_key)
+
         # Query pages
         page_query = self.base_cql_page_query + self.cql_label_filter
         for page in self.confluence_client.cql_paginate_all_expansions(
@@ -575,22 +590,20 @@ class ConfluenceConnector(
             expand=restrictions_expand,
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
-            page_restrictions = page.get("restrictions")
+            page_id = page["id"]
+            page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
             page_ancestors = page.get("ancestors", [])
 
-            page_perm_sync_data = {
-                "restrictions": page_restrictions or {},
-                "space_key": page_space_key,
-                "ancestors": page_ancestors,
-            }
-
+            page_id = build_confluence_document_id(
+                self.wiki_base, page["_links"]["webui"], self.is_cloud
+            )
             doc_metadata_list.append(
                 SlimDocument(
-                    id=build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                    id=page_id,
+                    external_access=get_external_access(
+                        page_id, page_restrictions, page_ancestors
                     ),
-                    perm_sync_data=page_perm_sync_data,
                 )
             )
 
@@ -616,19 +629,17 @@ class ConfluenceConnector(
                 if not attachment_space_key:
                     attachment_space_key = page_space_key
 
-                attachment_perm_sync_data = {
-                    "restrictions": attachment_restrictions,
-                    "space_key": attachment_space_key,
-                }
-
+                attachment_id = build_confluence_document_id(
+                    self.wiki_base,
+                    attachment["_links"]["webui"],
+                    self.is_cloud,
+                )
                 doc_metadata_list.append(
                     SlimDocument(
-                        id=build_confluence_document_id(
-                            self.wiki_base,
-                            attachment["_links"]["webui"],
-                            self.is_cloud,
+                        id=attachment_id,
+                        external_access=get_external_access(
+                            attachment_id, attachment_restrictions, []
                         ),
-                        perm_sync_data=attachment_perm_sync_data,
                     )
                 )
 
