@@ -48,6 +48,7 @@ from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
+from onyx.secondary_llm_flows.answer_validation import get_answer_validity
 from onyx.configs.constants import AGENT_SEARCH_INITIAL_KEY
 from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
@@ -1196,6 +1197,21 @@ def _post_llm_answer_processing(
                 )
             ]
         )
+        # Reflexion flow
+        # Get message text from the answer object or pass it as parameter
+        is_answer_valid = get_answer_validity(
+            query=answer.prompt_builder.raw_user_query,
+            answer=answer.llm_answer,
+        )
+        logger.info(f"Reflexion answer validation result: {is_answer_valid}")
+        # If answer is invalid, yield an error and return
+        if not is_answer_valid:
+            logger.info(f"Not responding due to invalid answer from Reflexion validation")  
+            # Yield a StreamingError with a clear message
+            yield StreamingError(error="Invalid answer detected by Reflexion validation")            
+            # Roll back any database changes and return early
+            db_session.rollback()
+            return
         gen_ai_response_message = partial_response(
             message=answer.llm_answer,
             rephrased_query=(
