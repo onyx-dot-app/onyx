@@ -446,6 +446,7 @@ def is_email(email: str) -> bool:
 
 
 def trackinfo_to_str(trackinfo: MetadataTrackInfo | None) -> str:
+    """Convert trackinfo to an LLM friendly string"""
     if trackinfo is None:
         return ""
 
@@ -460,6 +461,7 @@ def trackinfo_to_str(trackinfo: MetadataTrackInfo | None) -> str:
 
 
 def trackinfo_from_str(trackinfo_str: str) -> MetadataTrackInfo | None:
+    """Convert back from LLM friendly string to trackinfo"""
     if trackinfo_str == "any suitable value":
         return MetadataTrackInfo(type=MetadataTrackType.VALUE, values=None)
     elif trackinfo_str == "a list of any suitable values":
