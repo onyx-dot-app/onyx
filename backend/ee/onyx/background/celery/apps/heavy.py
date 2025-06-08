@@ -1,12 +1,10 @@
 import csv
 import io
 from datetime import datetime
-from datetime import timezone
 
 from celery import shared_task
 from celery import Task
 
-from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
 from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
@@ -19,10 +17,9 @@ from onyx.configs.constants import FileType
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import QueryHistoryType
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import TaskStatus
 from onyx.db.tasks import delete_task_with_id
 from onyx.db.tasks import mark_task_as_finished_with_id
-from onyx.db.tasks import register_task
+from onyx.db.tasks import mark_task_as_started_with_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -37,13 +34,13 @@ logger = setup_logger()
     bind=True,
     trail=False,
 )
-def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> None:
+def export_query_history_task(
+    self: Task, *, start: datetime, end: datetime, start_time: datetime
+) -> None:
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")
 
     task_id = self.request.id
-    start_time = datetime.now(tz=timezone.utc)
-
     stream = io.StringIO()
     writer = csv.DictWriter(
         stream,
@@ -53,12 +50,9 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
 
     with get_session_with_current_tenant() as db_session:
         try:
-            register_task(
+            mark_task_as_started_with_id(
                 db_session=db_session,
-                task_name=query_history_task_name(start=start, end=end),
                 task_id=task_id,
-                status=TaskStatus.STARTED,
-                start_time=start_time,
             )
 
             snapshot_generator = fetch_and_process_chat_session_history(
