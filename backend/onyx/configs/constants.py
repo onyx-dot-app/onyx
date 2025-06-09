@@ -471,6 +471,7 @@ class OnyxCeleryTask:
     KG_PROCESSING = "kg_processing"
     KG_CLUSTERING_ONLY = "kg_clustering_only"
     CHECK_KG_PROCESSING_CLUSTERING_ONLY = "check_kg_processing_clustering_only"
+    KG_RESET_SOURCE_INDEX = "kg_reset_source_index"
 
 
 # this needs to correspond to the matching entry in supervisord

@@ -108,6 +108,7 @@ from onyx.kg.setup.kg_default_entity_definitions import populate_default_entity_
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.background.celery.tasks.kg_processing.kg_indexing import try_creating_kg_processing_task
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -164,6 +165,7 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
+from onyx.background.celery.tasks.kg_processing.kg_indexing import try_creating_kg_source_reset_task
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
@@ -580,45 +582,21 @@ def stream_chat_message_objects(
         index_str = search_settings.index_name
 
         # TODO: Move these special calls  to endpoints
-        if new_msg_req.message == "kg_e":
-            kg_extraction(tenant_id, index_str)
+        if new_msg_req.message == "kg_p":
+            try_creating_kg_processing_task(tenant_id)
             raise Exception("Extractions done")
 
-        elif new_msg_req.message == "kg_c":
-            kg_clustering(tenant_id, index_str)
-            raise Exception("Clustering done")
+        elif new_msg_req.message.startswith("kg_rs_source"):
+            msg_split = [x.strip() for x in new_msg_req.message.split(":")]
+            if len(msg_split) > 2:
+                raise Exception("Invalid format for a source reset command")
+            elif len(msg_split) == 2:
+                source_name = msg_split[1].strip()
+            else:
+                source_name = None
 
-        elif new_msg_req.message == "kg":
-            reset_vespa_kg_index(tenant_id, index_str)
-            reset_full_kg_index()
-            kg_extraction(tenant_id, index_str)
-            kg_clustering(tenant_id, index_str)
-            raise Exception("Full KG index reset done")
-
-        elif new_msg_req.message == "kg_rs_full":
-            reset_full_kg_index()
-            raise Exception("Full KG index reset done")
-
-        elif new_msg_req.message == "kg_rs_extraction":
-            reset_extraction_kg_index()
-            raise Exception("Extraction KG index reset done")
-
-        elif new_msg_req.message == "kg_rs_normalization":
-            reset_normalization_kg_index()
-            raise Exception("Normalization KG index reset done")
-
-        elif new_msg_req.message.startswith("kg_rs_source:"):
-            source_name = new_msg_req.message.split(":")[1].strip()
-            reset_source_kg_index(source_name, tenant_id, index_str)
+            try_creating_kg_source_reset_task(tenant_id, source_name, index_str)
             raise Exception(f"KG index reset for source {source_name} done")
-
-        elif new_msg_req.message == "kg_rs_vespa":
-            reset_vespa_kg_index(tenant_id, index_str)
-            raise Exception("Vespa KG index reset done")
-
-        elif new_msg_req.message == "kg_setup":
-            populate_default_entity_types(db_session=db_session)
-            raise Exception("KG setup done")
 
     try:
         # Move these variables inside the try block
