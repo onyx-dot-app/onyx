@@ -16,6 +16,7 @@ from office365.teams.team import Team  # type: ignore
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -492,7 +493,12 @@ def _collect_documents_for_channel(
             continue
 
         try:
-            replies = list(message.replies.get_all().execute_query())
+
+            @rate_limit_builder(max_calls=50, period=60)
+            def fetch_replies() -> list[ChatMessage]:
+                return list(message.replies.get_all().execute_query())
+
+            replies = fetch_replies()
             thread = [message]
             thread.extend(replies[::-1])
 
