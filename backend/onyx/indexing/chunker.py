@@ -1,3 +1,5 @@
+from typing import cast
+
 from chonkie import SentenceChunker
 
 from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
@@ -205,7 +207,8 @@ class Chunker:
         """
         Extract a short blurb from the text (first chunk of size `blurb_size`).
         """
-        texts = self.blurb_splitter.chunk(text)
+        # chunker is in `text` mode
+        texts = cast(list[str], self.blurb_splitter.chunk(text))
         if not texts:
             return ""
         return texts[0]
@@ -215,7 +218,8 @@ class Chunker:
         For "multipass" mode: additional sub-chunks (mini-chunks) for use in certain embeddings.
         """
         if self.mini_chunk_splitter and chunk_text.strip():
-            return self.mini_chunk_splitter.chunk(chunk_text)
+            # chunker is in `text` mode
+            return cast(list[str], self.mini_chunk_splitter.chunk(chunk_text))
         return None
 
     # ADDED: extra param image_url to store in the chunk
@@ -335,7 +339,8 @@ class Chunker:
                     chunk_text = ""
                     link_offsets = {}
 
-                split_texts = self.chunk_splitter.chunk(section_text)
+                # chunker is in `text` mode
+                split_texts = cast(list[str], self.chunk_splitter.chunk(section_text))
                 for i, split_text in enumerate(split_texts):
                     # If even the split_text is bigger than strict limit, further split
                     if (

@@ -7,7 +7,7 @@ beautifulsoup4==4.12.3
 boto3==1.36.23
 celery==5.5.1
 chardet==5.2.0
-chonkie==1.0.9
+chonkie==1.0.10
 dask==2023.8.1
 ddtrace==2.6.5
 discord.py==2.4.0
