@@ -10,6 +10,7 @@ from onyx.db.kg_config import disable_kg
 from onyx.db.kg_config import enable_kg
 from onyx.db.kg_config import get_kg_config
 from onyx.db.kg_config import get_kg_entity_types
+from onyx.db.kg_config import get_kg_exposed
 from onyx.db.kg_config import update_kg_entity_types
 from onyx.db.models import User
 from onyx.server.kg.models import DisableKGConfigRequest
@@ -18,6 +19,14 @@ from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig
 
 admin_router = APIRouter(prefix="/admin/kg")
+
+
+@admin_router.get("/exposed")
+def kg_exposed(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> bool:
+    return get_kg_exposed(db_session=db_session)
 
 
 @admin_router.get("/config")

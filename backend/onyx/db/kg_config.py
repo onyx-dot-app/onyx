@@ -12,6 +12,10 @@ from onyx.kg.models import KGConfigVars
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
+from onyx.utils import logger
+
+
+log = logger.logging
 
 
 class KGProcessingType(Enum):
@@ -176,6 +180,35 @@ VALID_ENTITY_TYPE_NAMES = set(
         "WEB",
     ]
 )
+
+
+def get_kg_exposed(db_session: Session) -> bool:
+    exposed = (
+        db_session.query(KGConfig)
+        .where(KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED)
+        .first()
+    )
+
+    if not exposed:
+        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
+        return False
+
+    if exposed.kg_variable_name != KGConfigVars.KG_EXPOSED:
+        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
+        return False
+
+    if not exposed.kg_variable_values:
+        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
+        return False
+
+    value = exposed.kg_variable_values[0]
+    if value == "true":
+        return True
+    elif value == "false":
+        return False
+    else:
+        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
+        return False
 
 
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:
