@@ -1,34 +1,32 @@
 import os
 from unittest.mock import patch, MagicMock
 import pytest
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
-from onyx.connectors.file.connector import _process_file
-from onyx.connectors.models import Document, TextSection
-from onyx.configs.constants import DocumentSource
+from onyx.connectors.file.connector import LocalFileConnector
+from onyx.connectors.file.models import FileSource
 from onyx.file_processing.extract_file_text import extract_text_and_images
+
+@pytest.fixture
+def file_connector():
+    return LocalFileConnector([])
 
 @pytest.fixture
 def mock_db_session():
     return MagicMock(spec=Session)
 
-def test_process_file_pdf_with_page_numbers(mock_db_session):
+def test_process_file_pdf_with_page_numbers(file_connector, mock_db_session):
     test_file_path = "test.pdf"
     test_content = b"%PDF-1.4"
     
     mock_file = MagicMock()
     mock_file.read.return_value = test_content
     
-    # Mock the PG file store record
-    mock_pg_record = MagicMock()
-    mock_pg_record.file_name = test_file_path
-    
-    with patch("onyx.connectors.file.connector.get_pgfilestore_by_file_name", return_value=mock_pg_record), \
+    with patch("builtins.open", return_value=mock_file), \
          patch("onyx.connectors.file.connector.extract_text_and_images") as mock_extract:
         
-        # Mock the text extraction to return page-specific chunks
-        mock_extract.return_value = (
+        mock_ex        # Mock the text extraction to return page-specific chunks
+tract.return_value = (
             "Combined text",
             [],  # No images
             [
@@ -38,37 +36,24 @@ def test_process_file_pdf_with_page_numbers(mock_db_session):
             ]
         )
         
-        documents = _process_file(
-            file_name=test_file_path,
-            file=mock_file,
-            metadata={"link": "http://example.com/test.pdf"},
-            pdf_pass=None,
-            db_session=mock_db_session
-        )
+        sources = file_connector.process_file(test_file_path, mock_db_session)
         
-        assert len(documents) == 1
-        doc = documents[0]
-        assert isinstance(doc, Document)
-        assert len(doc.sections) == 3
+        assert len(sources) == 3
         
-        # Verify each section has the correct page number in its link
-        for idx, section in enumerate(doc.sections, 1):
-            assert isinstance(section, TextSection)
-            assert section.link == f"http://example.com/test.pdf#page={idx}"
-            assert section.text == f"Page {idx} content"
+        # Verify each source has the correct page number in its reference
+        for idx, source in enumerate(sources, 1):
+            assert isinstance(source, FileSource)
+            assert source.reference == f"{test_file_path}#page={idx}"
+            assert source.content == f"Page {idx} content"
 
-def test_process_file_non_pdf_backward_compatibility(mock_db_session):
+def test_process_file_non_pdf_backward_compatibility(file_connector, mock_db_session):
     test_file_path = "test.txt"
     test_content = "Some text content"
     
     mock_file = MagicMock()
     mock_file.read.return_value = test_content.encode()
     
-    # Mock the PG file store record
-    mock_pg_record = MagicMock()
-    mock_pg_record.file_name = test_file_path
-    
-    with patch("onyx.connectors.file.connector.get_pgfilestore_by_file_name", return_value=mock_pg_record), \
+    with patch("builtins.open", return_value=mock_file), \
          patch("onyx.connectors.file.connector.extract_text_and_images") as mock_extract:
         
         # Mock text extraction without page numbers for non-PDF
@@ -78,34 +63,34 @@ def test_process_file_non_pdf_backward_compatibility(mock_db_session):
             []   # No chunks (non-PDF behavior)
         )
         
-        documents = _process_file(
-            file_name=test_file_path,
-            file=mock_file,
-            metadata={"link": "http://example.com/test.txt"},
-            pdf_pass=None,
-            db_session=mock_db_session
-        )
+        sources = file_connector.process_file(test_file_path, mock_db_session)
         
-        assert len(documents) == 1
-        doc = documents[0]
-        assert isinstance(doc, Document)
-        assert len(doc.sections) == 1
-        assert isinstance(doc.sections[0], TextSection)
-        assert doc.sections[0].link == "http://example.com/test.txt"  # No page number
-        assert doc.sections[0].text == test_content
+        assert len(sources) == 1
+        assert isinstance(sources[0], FileSource)
+        assert sources[0].reference == test_file_path  # No page number
+        assert sources[0].content == test_content
 
-def test_process_file_with_spaces_and_special_chars(mock_db_session):
+def test_get_source_link_with_page_number():
+    connector = LocalFileConnector([])
+    
+    # Test PDF file with page number
+    source = FileSource(reference="document.pdf#page=5")
+    link = connector.get_source_link(source)
+    assert link == "file://document.pdf#page=5"
+    
+    # Test non-PDF file (backward compatibility)
+    source = FileSource(reference="document.txt")
+    link = connector.get_source_link(source)
+    assert link == "file://document.txt"
+
+def test_process_file_with_spaces_and_special_chars(file_connector, mock_db_session):
     test_file_path = "test file with spaces.pdf"
     test_content = b"%PDF-1.4"
     
     mock_file = MagicMock()
     mock_file.read.return_value = test_content
     
-    # Mock the PG file store record
-    mock_pg_record = MagicMock()
-    mock_pg_record.file_name = test_file_path
-    
-    with patch("onyx.connectors.file.connector.get_pgfilestore_by_file_name", return_value=mock_pg_record), \
+    with patch("builtins.open", return_value=mock_file), \
          patch("onyx.connectors.file.connector.extract_text_and_images") as mock_extract:
         
         mock_extract.return_value = (
@@ -114,18 +99,9 @@ def test_process_file_with_spaces_and_special_chars(mock_db_session):
             [("Page 1 content", 1)]
         )
         
-        documents = _process_file(
-            file_name=test_file_path,
-            file=mock_file,
-            metadata={"link": "http://example.com/test file with spaces.pdf"},
-            pdf_pass=None,
-            db_session=mock_db_session
-        )
+        sources = file_connector.process_file(test_file_path, mock_db_session)
         
-        assert len(documents) == 1
-        doc = documents[0]
-        assert isinstance(doc, Document)
-        assert len(doc.sections) == 1
-        assert isinstance(doc.sections[0], TextSection)
-        assert doc.sections[0].link == "http://example.com/test file with spaces.pdf#page=1"
-        assert doc.sections[0].text == "Page 1 content" 
+        assert len(sources) == 1
+        assert sources[0].reference == "test file with spaces.pdf#page=1"
+        link = file_connector.get_source_link(sources[0])
+        assert link == "file://test%20file%20with%20spaces.pdf#page=1" 

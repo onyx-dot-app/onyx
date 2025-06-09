@@ -18,13 +18,11 @@ def test_is_text_file_extension():
     assert not is_text_file_extension("test.docx")
 
 def test_is_text_file():
-    # Test with text content
     text_content = "This is a text file"
     text_file = io.BytesIO(text_content.encode())
     assert is_text_file(text_file)
 
-    # Test with binary content (using bytes outside text range)
-    binary_content = bytes([0x00, 0x01, 0x02, 0x03])  # Control characters
+    binary_content = bytes([0x89, 0x50, 0x4E, 0x47])
     binary_file = io.BytesIO(binary_content)
     assert not is_text_file(binary_file)
 
