@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Generic
 from typing import TypeVar
 
+import psutil
+
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
@@ -111,6 +113,14 @@ class ConnectorRunner(Generic[CT]):
                     checkpoint_connector_generator
                 ):
                     if document is not None:
+                        # memory logging
+                        logger.debug(
+                            f"Adding document to batch: {document.to_short_descriptor()} of size {sys.getsizeof(document)}"
+                        )
+                        # available memory
+                        logger.debug(
+                            f"Available memory: {psutil.virtual_memory().available/1000_000_000:.2f} GB"
+                        )
                         self.doc_batch.append(document)
 
                     if failure is not None:
