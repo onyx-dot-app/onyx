@@ -138,9 +138,7 @@ def source_requires_external_group_sync(source: DocumentSource) -> bool:
 
 def get_source_perm_sync_config(source: DocumentSource) -> SyncConfig | None:
     """Returns the frequency of the external group sync for the given DocumentSource."""
-    if source not in _SOURCE_TO_SYNC_CONFIG:
-        return None
-    return _SOURCE_TO_SYNC_CONFIG[source]
+    return _SOURCE_TO_SYNC_CONFIG.get(source)
 
 
 def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:

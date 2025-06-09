@@ -76,13 +76,11 @@ def _get_access_for_documents(
             continue
 
         perm_sync_config = get_source_perm_sync_config(source)
-        if perm_sync_config is None:
-            is_only_censored = False
-        else:
-            is_only_censored = (
-                perm_sync_config.censoring_config is not None
-                and perm_sync_config.doc_sync_config is None
-            )
+        is_only_censored = (
+            perm_sync_config
+            and perm_sync_config.censoring_config is not None
+            and perm_sync_config.doc_sync_config is None
+        )
 
         ext_u_emails = (
             set(document.external_user_emails)

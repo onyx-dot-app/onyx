@@ -114,10 +114,7 @@ def _get_files_in_parent(
     query += " and trashed = false"
     query += generate_time_range_filter(start, end)
 
-    kwargs = {}
-    # Only add ordering for non-slim field types to improve performance for slim queries
-    if field_type != DriveFileFieldType.SLIM:
-        kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    kwargs = {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}
 
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,

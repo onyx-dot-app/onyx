@@ -31,11 +31,9 @@ def _get_server_space_permissions(
     user_names = set()
     group_names = set()
     for permission in viewspace_permissions:
-        user_name = permission.get("userName")
-        if user_name:
+        if user_name := permission.get("userName"):
             user_names.add(user_name)
-        group_name = permission.get("groupName")
-        if group_name:
+        if group_name := permission.get("groupName"):
             group_names.add(group_name)
 
         # It seems that if anonymous access is turned on for the site and space,
