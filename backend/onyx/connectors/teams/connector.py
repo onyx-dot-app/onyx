@@ -493,8 +493,15 @@ def _collect_documents_for_channel(
             continue
 
         try:
+            # Rate limit parameters obtained from:
+            # https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/rate-limit
+            #
+            # "Get Conversation" goes from (14req per 1sec) to (3600req per 3600sec) [aka, (14 req/s) down to (1 req/s)].
+            # I elected to choose something in the middle (120 req per 30 sec) [4 req/s].
+            MAX_CALLS = 120
+            PERIOD = 30
 
-            @rate_limit_builder(max_calls=50, period=60)
+            @rate_limit_builder(max_calls=MAX_CALLS, period=PERIOD)
             def fetch_replies() -> list[ChatMessage]:
                 return list(message.replies.get_all().execute_query())
 
