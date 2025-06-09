@@ -223,16 +223,24 @@ def _process_file(
     embedded_images: list[tuple[bytes, str]] = []
 
     # Extract text and images from the file
-    text_content, embedded_images = extract_text_and_images(
+    text_content, embedded_images, text_chunks_with_pages = extract_text_and_images(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
     )
 
-    # Build sections: first the text as a single Section
+    # Build sections: first the text sections
     sections: list[TextSection | ImageSection] = []
     link_in_meta = metadata.get("link")
-    if text_content.strip():
+
+    if extension == ".pdf" and text_chunks_with_pages:
+        # For PDFs, create a separate section for each page with a page-specific link
+        for text_chunk, page_num in text_chunks_with_pages:
+            if text_chunk.strip():
+                page_link = f"{link_in_meta}#page={page_num}" if link_in_meta else None
+                sections.append(TextSection(link=page_link, text=text_chunk.strip()))
+    elif text_content.strip():
+        # For non-PDFs, create a single text section
         sections.append(TextSection(link=link_in_meta, text=text_content.strip()))
 
     # Then any extracted images from docx, etc.
