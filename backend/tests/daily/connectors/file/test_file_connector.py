@@ -4,7 +4,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.connectors.file.connector import LocalFileConnector
-from onyx.connectors.file.models import FileSource
+from onyx.connectors.models import Document, TextSection
+from onyx.configs.constants import DocumentSource
 from onyx.file_processing.extract_file_text import extract_text_and_images
 
 @pytest.fixture
@@ -25,8 +26,8 @@ def test_process_file_pdf_with_page_numbers(file_connector, mock_db_session):
     with patch("builtins.open", return_value=mock_file), \
          patch("onyx.connectors.file.connector.extract_text_and_images") as mock_extract:
         
-        mock_ex        # Mock the text extraction to return page-specific chunks
-tract.return_value = (
+        # Mock the text extraction to return page-specific chunks
+        mock_extract.return_value = (
             "Combined text",
             [],  # No images
             [
@@ -34,17 +35,20 @@ tract.return_value = (
                 ("Page 2 content", 2),
                 ("Page 3 content", 3),
             ]
-        )
+        )       
         
-        sources = file_connector.process_file(test_file_path, mock_db_session)
+        documents = file_connector.process_file(test_file_path, mock_db_session)
         
-        assert len(sources) == 3
+        assert len(documents) == 3
         
-        # Verify each source has the correct page number in its reference
-        for idx, source in enumerate(sources, 1):
-            assert isinstance(source, FileSource)
-            assert source.reference == f"{test_file_path}#page={idx}"
-            assert source.content == f"Page {idx} content"
+        # Verify each document has the correct page number in its reference
+        for idx, doc in enumerate(documents, 1):
+            assert isinstance(doc, Document)
+            assert doc.id == f"{test_file_path}#page={idx}"
+            assert len(doc.sections) == 1
+            assert isinstance(doc.sections[0], TextSection)
+            assert doc.sections[0].text == f"Page {idx} content"
+            assert doc.sections[0].page_number == idx
 
 def test_process_file_non_pdf_backward_compatibility(file_connector, mock_db_session):
     test_file_path = "test.txt"
@@ -63,24 +67,39 @@ def test_process_file_non_pdf_backward_compatibility(file_connector, mock_db_ses
             []   # No chunks (non-PDF behavior)
         )
         
-        sources = file_connector.process_file(test_file_path, mock_db_session)
+        documents = file_connector.process_file(test_file_path, mock_db_session)
         
-        assert len(sources) == 1
-        assert isinstance(sources[0], FileSource)
-        assert sources[0].reference == test_file_path  # No page number
-        assert sources[0].content == test_content
+        assert len(documents) == 1
+        assert isinstance(documents[0], Document)
+        assert documents[0].id == test_file_path  # No page number
+        assert len(documents[0].sections) == 1
+        assert isinstance(documents[0].sections[0], TextSection)
+        assert documents[0].sections[0].text == test_content
+        assert documents[0].sections[0].page_number is None
 
 def test_get_source_link_with_page_number():
     connector = LocalFileConnector([])
     
     # Test PDF file with page number
-    source = FileSource(reference="document.pdf#page=5")
-    link = connector.get_source_link(source)
+    doc = Document(
+        id="document.pdf#page=5",
+        sections=[TextSection(text="content", page_number=5)],
+        source=DocumentSource.FILE,
+        semantic_identifier="document.pdf",
+        metadata={}
+    )
+    link = connector.get_source_link(doc)
     assert link == "file://document.pdf#page=5"
     
     # Test non-PDF file (backward compatibility)
-    source = FileSource(reference="document.txt")
-    link = connector.get_source_link(source)
+    doc = Document(
+        id="document.txt",
+        sections=[TextSection(text="content")],
+        source=DocumentSource.FILE,
+        semantic_identifier="document.txt",
+        metadata={}
+    )
+    link = connector.get_source_link(doc)
     assert link == "file://document.txt"
 
 def test_process_file_with_spaces_and_special_chars(file_connector, mock_db_session):
@@ -99,9 +118,9 @@ def test_process_file_with_spaces_and_special_chars(file_connector, mock_db_sess
             [("Page 1 content", 1)]
         )
         
-        sources = file_connector.process_file(test_file_path, mock_db_session)
+        documents = file_connector.process_file(test_file_path, mock_db_session)
         
-        assert len(sources) == 1
-        assert sources[0].reference == "test file with spaces.pdf#page=1"
-        link = file_connector.get_source_link(sources[0])
+        assert len(documents) == 1
+        assert documents[0].id == "test file with spaces.pdf#page=1"
+        link = file_connector.get_source_link(documents[0])
         assert link == "file://test%20file%20with%20spaces.pdf#page=1" 

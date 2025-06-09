@@ -287,51 +287,65 @@ class LocalFileConnector(LoadConnector):
         file_locations: list[Path | str],
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        self.file_locations = [str(loc) for loc in file_locations]
+        self.file_locations = file_locations
         self.batch_size = batch_size
-        self.pdf_pass: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.pdf_pass = credentials.get("pdf_password")
-
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        """
-        Iterates over each file path, fetches from Postgres, tries to parse text
-        or images, and yields Document batches.
-        """
-        documents: list[Document] = []
+        return GenerateDocumentsOutput(documents=[], has_more=False)
 
-        with get_session_with_current_tenant() as db_session:
-            for file_path in self.file_locations:
-                current_datetime = datetime.now(timezone.utc)
-
-                files_iter = _read_files_and_metadata(
-                    file_name=file_path,
-                    db_session=db_session,
+    def process_file(self, file_path: str, db_session: Session) -> list[Document]:
+        """Process a file and return a list of Documents."""
+        try:
+            with open(file_path, 'rb') as file:
+                # Extract text and images
+                text, images, chunks = extract_text_and_images(file_path, file, None)
+                
+                # For PDFs with page-specific chunks, create a document per page
+                if chunks:
+                    documents = []
+                    for chunk_text, page_num in chunks:
+                        doc = Document(
+                            id=f"{file_path}#page={page_num}",
+                            sections=[TextSection(text=chunk_text, page_number=page_num)],
+                            source=DocumentSource.FILE,
+                            semantic_identifier=file_path,
+                            metadata={},
+                            title=os.path.basename(file_path)
+                        )
+                        documents.append(doc)
+                    return documents
+                
+                # For non-PDFs or PDFs without chunks, create a single document
+                doc = Document(
+                    id=file_path,
+                    sections=[TextSection(text=text)],
+                    source=DocumentSource.FILE,
+                    semantic_identifier=file_path,
+                    metadata={},
+                    title=os.path.basename(file_path)
                 )
+                return [doc]
+        except Exception as e:
+            logger.error(f"Failed to process file {file_path}: {e}")
+            return []
 
-                for actual_file_name, file, metadata in files_iter:
-                    metadata["time_updated"] = metadata.get(
-                        "time_updated", current_datetime
-                    )
-                    new_docs = _process_file(
-                        file_name=actual_file_name,
-                        file=file,
-                        metadata=metadata,
-                        pdf_pass=self.pdf_pass,
-                        db_session=db_session,
-                    )
-                    documents.extend(new_docs)
-
-                    if len(documents) >= self.batch_size:
-                        yield documents
-
-                        documents = []
-
-            if documents:
-                yield documents
+    def get_source_link(self, doc: Document) -> str:
+        """Get the source link for a document."""
+        # Split the ID into path and page number if present
+        parts = doc.id.split("#", 1)
+        path = parts[0]
+        page = parts[1] if len(parts) > 1 else None
+        
+        # URL encode the path, replacing spaces with %20
+        encoded_path = path.replace(" ", "%20")
+        
+        # Add the page number back if it was present
+        if page:
+            return f"file://{encoded_path}#{page}"
+        return f"file://{encoded_path}"
 
 
 if __name__ == "__main__":

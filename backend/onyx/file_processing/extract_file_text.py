@@ -89,13 +89,29 @@ def is_valid_file_ext(ext: str) -> bool:
 
 def is_text_file(file: IO[bytes]) -> bool:
     """
-    checks if the first 1024 bytes only contain printable or whitespace characters
-    if it does, then we say it's a plaintext file
+    Checks if a file is a text file by looking at its content.
+    Returns True if the file appears to be text, False if it appears to be binary.
     """
-    raw_data = file.read(1024)
-    file.seek(0)
-    text_chars = bytearray({7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100)) - {0x7F})
-    return all(c in text_chars for c in raw_data)
+    try:
+        raw_data = file.read(1024)
+        file.seek(0)
+        
+        # Check for common binary file signatures
+        binary_signatures = [
+            b'\x89PNG',  # PNG
+            b'%PDF',     # PDF
+            b'PK\x03\x04', # ZIP
+            b'\xFF\xD8\xFF', # JPEG
+        ]
+        for sig in binary_signatures:
+            if raw_data.startswith(sig):
+                return False
+        
+        # Check if all bytes are valid text characters
+        text_chars = bytearray({7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100)) - {0x7F})
+        return bool(raw_data) and all(c in text_chars for c in raw_data)
+    except Exception:
+        return False
 
 
 def detect_encoding(file: IO[bytes]) -> str:
