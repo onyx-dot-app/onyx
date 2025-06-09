@@ -237,69 +237,36 @@ def read_pdf_file(
     file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
 ) -> tuple[str, dict, list[tuple[bytes, str]], list[tuple[str, int]]]:
     """
-    Returns the text, basic PDF metadata, extracted images, and text chunks with page numbers.
-    The last element in the tuple is a list of (text_chunk, page_number) pairs.
+    Read a PDF file and extract text and images.
+    Returns:
+        - text: The combined text content
+        - metadata: PDF metadata
+        - images: List of (image_data, image_name) tuples
+        - text_chunks_with_pages: List of (text_chunk, page_number) tuples
     """
-    metadata: dict[str, Any] = {}
-    extracted_images: list[tuple[bytes, str]] = []
-    text_chunks_with_pages: list[tuple[str, int]] = []
-
     try:
-        pdf_reader = PdfReader(file)
+        reader = PdfReader(file, password=pdf_pass)
+        metadata = reader.metadata or {}
+        extracted_images = []
+        text_chunks_with_pages = []
 
-        if pdf_reader.is_encrypted and pdf_pass is not None:
-            decrypt_success = False
-            try:
-                decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
-            except Exception:
-                logger.error("Unable to decrypt pdf")
+        for page_num, page in enumerate(reader.pages, 1):
+            if extract_images:
+                # Extract images from this page
+                for image in page.images:
+                    extracted_images.append((image.data, image.name))
 
-            if not decrypt_success:
-                return "", metadata, [], []
-        elif pdf_reader.is_encrypted:
-            logger.warning("No Password for an encrypted PDF, returning empty text.")
-            return "", metadata, [], []
-
-        # Basic PDF metadata
-        if pdf_reader.metadata is not None:
-            for key, value in pdf_reader.metadata.items():
-                clean_key = key.lstrip("/")
-                if isinstance(value, str) and value.strip():
-                    metadata[clean_key] = value
-                elif isinstance(value, list) and all(
-                    isinstance(item, str) for item in value
-                ):
-                    metadata[clean_key] = ", ".join(value)
-
-        # Extract text with page numbers
-        for page_num, page in enumerate(pdf_reader.pages, start=1):
+            # Extract text from this page
             text = page.extract_text()
             if text.strip():
                 text_chunks_with_pages.append((text.strip(), page_num))
 
-            if extract_images:
-                for image_file_object in page.images:
-                    image = Image.open(io.BytesIO(image_file_object.data))
-                    img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format=image.format)
-                    img_bytes = img_byte_arr.getvalue()
-
-                    image_name = (
-                        f"page_{page_num}_image_{image_file_object.name}."
-                        f"{image.format.lower() if image.format else 'png'}"
-                    )
-                    extracted_images.append((img_bytes, image_name))
-
-        # Join all text with separators for backward compatibility
-        combined_text = TEXT_SECTION_SEPARATOR.join(chunk[0] for chunk in text_chunks_with_pages)
-        return combined_text, metadata, extracted_images, text_chunks_with_pages
-
-    except PdfStreamError:
-        logger.exception("Invalid PDF file")
-    except Exception:
-        logger.exception("Failed to read PDF")
-
-    return "", metadata, [], []
+        # Return raw chunks - let caller decide how to join them
+        return "", metadata, extracted_images, text_chunks_with_pages
+    except PdfStreamError as e:
+        if "password" in str(e).lower():
+            raise ValueError("PDF is password protected") from e
+        raise
 
 
 def docx_to_text_and_images(

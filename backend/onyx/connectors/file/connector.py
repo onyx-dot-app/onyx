@@ -289,47 +289,99 @@ class LocalFileConnector(LoadConnector):
     ) -> None:
         self.file_locations = file_locations
         self.batch_size = batch_size
+        self.pdf_pass: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        """Load credentials for password-protected PDFs."""
+        self.pdf_pass = credentials.get("pdf_password")
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        return GenerateDocumentsOutput(documents=[], has_more=False)
+        """
+        Iterates over each file path, fetches from Postgres, tries to parse text
+        or images, and yields Document batches.
+        """
+        documents: list[Document] = []
 
-    def process_file(self, file_path: str, db_session: Session) -> list[Document]:
+        with get_session_with_current_tenant() as db_session:
+            for file_path in self.file_locations:
+                current_datetime = datetime.now(timezone.utc)
+
+                files_iter = _read_files_and_metadata(
+                    file_name=file_path,
+                    db_session=db_session,
+                )
+
+                for actual_file_name, file, metadata in files_iter:
+                    metadata["time_updated"] = metadata.get(
+                        "time_updated", current_datetime
+                    )
+                    new_docs = self._process_file(
+                        file_name=actual_file_name,
+                        file=file,
+                        metadata=metadata,
+                        pdf_pass=self.pdf_pass,
+                        db_session=db_session,
+                    )
+                    documents.extend(new_docs)
+
+                    if len(documents) >= self.batch_size:
+                        yield GenerateDocumentsOutput(documents=documents, has_more=True)
+                        documents = []
+
+            if documents:
+                yield GenerateDocumentsOutput(documents=documents, has_more=False)
+
+    def _process_file(
+        self,
+        file_name: str,
+        file: IO[Any],
+        metadata: dict[str, Any] | None,
+        pdf_pass: str | None,
+        db_session: Session,
+    ) -> list[Document]:
         """Process a file and return a list of Documents."""
         try:
-            with open(file_path, 'rb') as file:
-                # Extract text and images
-                text, images, chunks = extract_text_and_images(file_path, file, None)
-                
-                # For PDFs with page-specific chunks, create a document per page
-                if chunks:
-                    documents = []
-                    for chunk_text, page_num in chunks:
-                        doc = Document(
-                            id=f"{file_path}#page={page_num}",
-                            sections=[TextSection(text=chunk_text, page_number=page_num)],
-                            source=DocumentSource.FILE,
-                            semantic_identifier=file_path,
-                            metadata={},
-                            title=os.path.basename(file_path)
-                        )
-                        documents.append(doc)
-                    return documents
-                
-                # For non-PDFs or PDFs without chunks, create a single document
-                doc = Document(
-                    id=file_path,
-                    sections=[TextSection(text=text)],
-                    source=DocumentSource.FILE,
-                    semantic_identifier=file_path,
-                    metadata={},
-                    title=os.path.basename(file_path)
-                )
-                return [doc]
+            # Extract text and images
+            text, images, chunks = extract_text_and_images(
+                os.path.basename(file_name),
+                file,
+                pdf_pass
+            )
+            
+            # For PDFs with page-specific chunks, create a document per page
+            if chunks:
+                documents = []
+                for chunk_text, page_num in chunks:
+                    doc = Document(
+                        id=f"{file_name}#page={page_num}",
+                        sections=[TextSection(text=chunk_text, page_number=page_num)],
+                        source=DocumentSource.FILE,
+                        semantic_identifier=file_name,
+                        metadata=metadata or {},
+                        title=os.path.basename(file_name),
+                        doc_updated_at=metadata.get("time_updated") if metadata else None,
+                        primary_owners=metadata.get("primary_owners") if metadata else None,
+                        secondary_owners=metadata.get("secondary_owners") if metadata else None,
+                    )
+                    documents.append(doc)
+                return documents
+            
+            # For non-PDFs or PDFs without chunks, create a single document
+            doc = Document(
+                id=file_name,
+                sections=[TextSection(text=text)],
+                source=DocumentSource.FILE,
+                semantic_identifier=file_name,
+                metadata=metadata or {},
+                title=os.path.basename(file_name),
+                doc_updated_at=metadata.get("time_updated") if metadata else None,
+                primary_owners=metadata.get("primary_owners") if metadata else None,
+                secondary_owners=metadata.get("secondary_owners") if metadata else None,
+            )
+            return [doc]
         except Exception as e:
-            logger.error(f"Failed to process file {file_path}: {e}")
+            logger.error(f"Failed to process file {file_name}: {e}")
             return []
 
     def get_source_link(self, doc: Document) -> str:
@@ -339,8 +391,9 @@ class LocalFileConnector(LoadConnector):
         path = parts[0]
         page = parts[1] if len(parts) > 1 else None
         
-        # URL encode the path, replacing spaces with %20
-        encoded_path = path.replace(" ", "%20")
+        # URL encode the path properly
+        from urllib.parse import quote
+        encoded_path = quote(path)
         
         # Add the page number back if it was present
         if page:

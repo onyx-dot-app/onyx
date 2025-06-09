@@ -1,14 +1,12 @@
 import io
 from unittest.mock import patch, MagicMock
-
 import pytest
-from sqlalchemy.orm import Session
 
 from onyx.file_processing.extract_file_text import (
-    extract_text_and_images,
-    is_text_file,
     is_text_file_extension,
+    is_text_file,
     read_pdf_file,
+    extract_text_and_images,
 )
 
 def test_is_text_file_extension():
