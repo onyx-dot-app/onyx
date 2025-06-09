@@ -49,11 +49,11 @@ vespa:
     # The Vespa Helm chart specifies default resources, which are quite modest. We override
     # them here to increase chances of the chart running successfully.
     requests:
-      cpu: 1500m
-      memory: 4000Mi
+      cpu: 4000m
+      memory: 8000Mi
     limits:
-      cpu: 1500m
-      memory: 4000Mi
+      cpu: 4000m
+      memory: 16000Mi
 
 persistent:
   storageClassName: ""
@@ -68,11 +68,6 @@ inferenceCapability:
     type: ClusterIP
     servicePort: 9000
     targetPort: 9000
-  pvc:
-    name: inference-model-pvc
-    accessModes:
-      - ReadWriteOnce
-    storage: 3Gi
   name: inference-model-server
   replicaCount: 1
   labels:
@@ -85,13 +80,6 @@ inferenceCapability:
     pullPolicy: IfNotPresent
   containerPorts:
     server: 9000
-  volumeMounts:
-    - name: inference-model-storage
-      mountPath: /root/.cache
-  volumes:
-    - name: inference-model-storage
-      persistentVolumeClaim:
-        claimName: inference-model-pvc
   podLabels:
     - key: app
       value: inference-model-server
@@ -112,17 +100,6 @@ indexCapability:
   podAnnotations: {}
   containerPorts:
     server: 9000
-  volumeMounts:
-    - name: indexing-model-storage
-      mountPath: /root/.cache
-  volumes:
-    - name: indexing-model-storage
-      persistentVolumeClaim:
-        claimName: indexing-model-storage
-  indexingModelPVC:
-    name: indexing-model-storage
-    accessMode: "ReadWriteOnce"
-    storage: "3Gi"
   image:
     repository: onyxdotapp/onyx-model-server
     # Overrides the image tag whose default is the chart appVersion.
