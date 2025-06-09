@@ -155,8 +155,12 @@ def _download_and_extract_sections_basic(
 
     # Process based on mime type
     if mime_type == "text/plain":
-        text = response_call().decode("utf-8")
-        return [TextSection(link=link, text=text)]
+        try:
+            text = response_call().decode("utf-8")
+            return [TextSection(link=link, text=text)]
+        except UnicodeDecodeError as e:
+            logger.warning(f"Failed to extract text from {file_name}: {e}")
+            return []
 
     elif (
         mime_type
