@@ -1,6 +1,10 @@
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entity_type import KGEntityType
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import validate_kg_settings
 from onyx.kg.models import KGDefaultEntityDefinition
 from onyx.kg.models import KGGroundingType
 
@@ -321,3 +325,53 @@ class KGDefaultAccountEmployeeDefinitions(BaseModel):
         active=False,
         grounded_source_name=None,
     )
+
+
+def populate_default_entity_types() -> None:
+    with get_session_with_current_tenant() as db_session:
+        kg_config_settings = get_kg_config_settings(db_session)
+        validate_kg_settings(kg_config_settings)
+
+        # Get all existing entity types
+        existing_entity_types = {
+            et.id_name for et in db_session.query(KGEntityType).all()
+        }
+
+        # Create an instance of the default definitions
+        default_definitions = [
+            KGDefaultPrimaryGroundedEntityDefinitions(),
+            KGDefaultAccountEmployeeDefinitions(),
+        ]
+
+        # Iterate over all attributes in the default definitions
+        for default_definition in default_definitions:
+            for id_name, definition in default_definition.model_dump().items():
+                # Replace "__" with "-" for subtypes
+                id_name = id_name.replace("__", "-")
+
+                # Skip if this entity type already exists
+                if id_name in existing_entity_types:
+                    continue
+
+                # Create new entity type
+                description = definition["description"].replace(
+                    "---vendor_name---", kg_config_settings.KG_VENDOR
+                )
+                grounded_source_name = (
+                    definition["grounded_source_name"].value
+                    if definition["grounded_source_name"]
+                    else None
+                )
+                new_entity_type = KGEntityType(
+                    id_name=id_name,
+                    description=description,
+                    attributes=definition["attributes"],
+                    grounding=definition["grounding"],
+                    grounded_source_name=grounded_source_name,
+                    active=False,
+                )
+
+                # Add to session
+                db_session.add(new_entity_type)
+                existing_entity_types.add(id_name)
+        db_session.commit()

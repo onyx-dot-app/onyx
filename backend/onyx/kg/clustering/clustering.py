@@ -13,6 +13,7 @@ from onyx.db.entities import KGEntityExtractionStaging
 from onyx.db.entities import merge_entities
 from onyx.db.entities import transfer_entity
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import validate_kg_settings
 from onyx.db.models import Document
 from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationshipExtractionStaging
@@ -25,7 +26,6 @@ from onyx.document_index.vespa.kg_interactions import (
     get_kg_vespa_info_update_requests_for_document,
 )
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
-from onyx.kg.configuration import validate_kg_settings
 from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.utils.logger import setup_logger

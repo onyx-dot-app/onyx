@@ -2,12 +2,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import KGEntityType
-from onyx.kg.kg_default_entity_definitions import KGDefaultAccountEmployeeDefinitions
-from onyx.kg.kg_default_entity_definitions import (
-    KGDefaultPrimaryGroundedEntityDefinitions,
-)
 from onyx.kg.models import KGGroundingType
 
 
@@ -102,123 +97,6 @@ def get_entity_types(
             .order_by(KGEntityType.id_name)
             .all()
         )
-
-
-def populate_default_primary_grounded_entity_type_information(
-    db_session: Session,
-) -> None:
-    """Populate the entity type information for the KG.
-
-    Args:
-        db_session: SQLAlchemy session
-    """
-
-    # get kg config information
-    kg_config_settings = get_kg_config_settings(db_session)
-
-    if not kg_config_settings.KG_ENABLED:
-        raise ValueError("KG is not enabled")
-    if not kg_config_settings.KG_VENDOR:
-        raise ValueError("KG_VENDOR is not set")
-    if not kg_config_settings.KG_VENDOR_DOMAINS:
-        raise ValueError("KG_VENDOR_DOMAINS is not set")
-
-    # Get all existing entity types
-    existing_entity_types = {et.id_name for et in db_session.query(KGEntityType).all()}
-
-    # Create an instance of the default definitions
-    default_definitions = KGDefaultPrimaryGroundedEntityDefinitions()
-
-    # Iterate over all attributes in the default definitions
-    for id_name, definition in default_definitions.model_dump().items():
-        # Replace "__" with "-" for subtypes
-        id_name = id_name.replace("__", "-")
-
-        # Skip if this entity type already exists
-        if id_name in existing_entity_types:
-            continue
-
-        # Create new entity type
-
-        description = definition["description"].replace(
-            "---vendor_name---", kg_config_settings.KG_VENDOR
-        )
-        grounded_source_name = (
-            definition["grounded_source_name"].value
-            if definition["grounded_source_name"]
-            else None
-        )
-        new_entity_type = KGEntityType(
-            id_name=id_name,
-            description=description,
-            attributes=definition["attributes"],
-            grounding=definition["grounding"],
-            grounded_source_name=grounded_source_name,
-            active=False,
-        )
-
-        # Add to session
-        db_session.add(new_entity_type)
-
-    # Commit changes
-    db_session.flush()
-
-
-def populate_default_employee_account_information(db_session: Session) -> None:
-    """Populate the entity type information for the KG.
-
-    Args:
-        db_session: SQLAlchemy session
-    """
-
-    # get kg config information
-    kg_config_settings = get_kg_config_settings(db_session)
-
-    if not kg_config_settings.KG_ENABLED:
-        raise ValueError("KG is not enabled")
-    if not kg_config_settings.KG_VENDOR:
-        raise ValueError("KG_VENDOR is not set")
-    if not kg_config_settings.KG_VENDOR_DOMAINS:
-        raise ValueError("KG_VENDOR_DOMAINS is not set")
-
-    # Get all existing entity types
-    existing_entity_types = {et.id_name for et in db_session.query(KGEntityType).all()}
-
-    # Create an instance of the default definitions
-    default_definitions = KGDefaultAccountEmployeeDefinitions()
-
-    # Iterate over all attributes in the default definitions
-    for id_name, definition in default_definitions.model_dump().items():
-        # Replace "__" with "-" for subtypes
-        id_name = id_name.replace("__", "-")
-
-        # Skip if this entity type already exists
-        if id_name in existing_entity_types:
-            continue
-
-        # Create new entity type
-        description = definition["description"].replace(
-            "---vendor_name---", kg_config_settings.KG_VENDOR
-        )
-        grounded_source_name = (
-            definition["grounded_source_name"].value
-            if definition["grounded_source_name"]
-            else None
-        )
-        new_entity_type = KGEntityType(
-            id_name=id_name,
-            description=description,
-            attributes=definition["attributes"],
-            grounding=definition["grounding"],
-            grounded_source_name=grounded_source_name,
-            active=definition["active"],
-        )
-
-        # Add to session
-        db_session.add(new_entity_type)
-
-    # Commit changes
-    db_session.flush()
 
 
 def get_grounded_entity_types_with_null_grounded_source(
