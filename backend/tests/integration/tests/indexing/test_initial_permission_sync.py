@@ -1,6 +1,8 @@
+import os
 import uuid
 
 import httpx
+import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import EXTERNAL_USER_EMAILS
@@ -21,6 +23,10 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission sync is enterprise only",
+)
 def test_mock_connector_initial_permission_sync(
     mock_server_client: httpx.Client,
     vespa_client: vespa_fixture,
