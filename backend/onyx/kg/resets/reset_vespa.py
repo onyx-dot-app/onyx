@@ -42,7 +42,8 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
     chunks = _get_chunks_via_visit_api(
         VespaChunkRequest(document_id=document_id),
         index_name,
-        IndexFilters(access_control_list=None),
+        IndexFilters(access_control_list=None, 
+                     tenant_id=tenant_id),
         ["chunk_id"],
         False,
     )
