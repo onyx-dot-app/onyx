@@ -1,5 +1,6 @@
 import copy
 import os
+import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
@@ -16,7 +17,6 @@ from office365.teams.team import Team  # type: ignore
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -493,19 +493,54 @@ def _collect_documents_for_channel(
             continue
 
         try:
-            # Rate limit parameters obtained from:
-            # https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/rate-limit
-            #
-            # "Get Conversation" goes from (14req per 1sec) to (3600req per 3600sec) [aka, (14 req/s) down to (1 req/s)].
-            # I elected to choose something in the middle (120 req per 30 sec) [4 req/s].
-            MAX_CALLS = 120
-            PERIOD = 30
+            MAX_RETRIES = 10
+            retries = 0
+            replies: list[ChatMessage] | None = None
+            cre: ClientRequestException | None = None
 
-            @rate_limit_builder(max_calls=MAX_CALLS, period=PERIOD)
-            def fetch_replies() -> list[ChatMessage]:
-                return list(message.replies.get_all().execute_query())
+            while True:
+                if retries == MAX_RETRIES:
+                    break
 
-            replies = fetch_replies()
+                try:
+                    replies = list(message.replies.get_all().execute_query())
+                    cre = None
+                    break
+                except ClientRequestException as e:
+                    cre = e
+
+                    if not cre.response:
+                        continue
+                    if cre.response.status_code != 429:
+                        continue
+
+                    retry_after = int(cre.response.headers.get("Retry-After", 10))
+                    time.sleep(retry_after)
+                    retries += 1
+
+            if cre:
+                failure_message = f"Retrieval of message and its replies failed; {channel.id=} {message.id}"
+                if cre.response:
+                    failure_message = f"{failure_message}; {cre.response.status_code=}"
+
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=message.id,
+                    ),
+                    failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
+                    exception=cre,
+                )
+
+            if not replies:
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=message.id,
+                    ),
+                    failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
+                    exception=cre,
+                )
+                continue
+
             thread = [message]
             thread.extend(replies[::-1])
 
