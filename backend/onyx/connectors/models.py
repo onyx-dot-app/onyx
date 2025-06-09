@@ -36,10 +36,11 @@ class Section(BaseModel):
 
 
 class TextSection(Section):
-    """Section containing text content"""
+    """Section containing text content with optional page number information for PDFs"""
 
     text: str
     link: str | None = None
+    page_number: int | None = None 
 
 
 class ImageSection(Section):
