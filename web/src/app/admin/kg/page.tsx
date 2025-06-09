@@ -78,6 +78,14 @@ function KGConfiguration({
   onSubmitSuccess?: () => void;
   setPopup?: (spec: PopupSpec | null) => void;
 }) {
+  const initialValues: KGConfig = {
+    enabled: kgConfig.enabled,
+    vendor: kgConfig.vendor ?? "",
+    vendor_domains: kgConfig.vendor_domains ?? [""],
+    ignore_domains: kgConfig.ignore_domains ?? [],
+    coverage_start: kgConfig.coverage_start,
+  };
+
   const enabledSchema = Yup.object({
     enabled: Yup.boolean().required(),
     vendor: Yup.string().required("Vendor is required."),
@@ -140,7 +148,7 @@ function KGConfiguration({
 
   return (
     <Formik
-      initialValues={kgConfig}
+      initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={onSubmit}
     >
@@ -329,6 +337,47 @@ function KGEntityType({
   );
 }
 
+function ResetActionButtons({
+  setPopup,
+}: {
+  setPopup?: (spec: PopupSpec | null) => void;
+}) {
+  const reset = async () => {
+    const result = await fetch("/api/admin/kg/reset", { method: "PUT" });
+
+    if (!result.ok) {
+      setPopup?.({
+        message: "Failed to reset Knowledge Graph.",
+        type: "error",
+      });
+      return;
+    }
+
+    setPopup?.({
+      message: "Successfully reset Knowledge Graph.",
+      type: "success",
+    });
+  };
+
+  return (
+    <div className="border border-red-700 p-8 rounded-md flex flex-col">
+      <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
+        Danger
+      </p>
+      <div className="flex flex-col gap-y-4">
+        <p>
+          Resetting the Knowledge Graph will restore all of the defaults back to
+          their original values. It will also perform unfathomable voodoo magic,
+          turning water to wine and flesh to gold.
+        </p>
+        <Button variant="destructive" className="w-min" onClick={reset}>
+          Reset Knowledge Graph
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Main() {
   const [configureModalShown, setConfigureModalShown] = useState(false);
   const { data, isLoading, mutate } = useSWR<KGConfigRaw>(
@@ -374,12 +423,13 @@ function Main() {
         </div>
       </CardSection>
       {kgConfig.enabled && (
-        <div>
+        <>
           <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
             Entity Types
           </p>
           <KGEntityType setPopup={setPopup} />
-        </div>
+          <ResetActionButtons />
+        </>
       )}
       {configureModalShown && (
         <Modal
