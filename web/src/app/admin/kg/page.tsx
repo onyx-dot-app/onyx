@@ -78,16 +78,6 @@ function KGConfiguration({
   onSubmitSuccess?: () => void;
   setPopup?: (spec: PopupSpec | null) => void;
 }) {
-  const disabledInitialValues: KGConfig = {
-    enabled: false,
-    vendor: "",
-    vendor_domains: [""],
-    ignore_domains: [],
-    coverage_start: new Date(),
-  };
-
-  const initialValues = kgConfig.enabled ? kgConfig : disabledInitialValues;
-
   const enabledSchema = Yup.object({
     enabled: Yup.boolean().required(),
     vendor: Yup.string().required("Vendor is required."),
@@ -150,7 +140,7 @@ function KGConfiguration({
 
   return (
     <Formik
-      initialValues={initialValues}
+      initialValues={kgConfig}
       validationSchema={validationSchema}
       onSubmit={onSubmit}
     >
