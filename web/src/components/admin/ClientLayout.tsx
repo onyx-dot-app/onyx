@@ -40,6 +40,8 @@ import {
 } from "@/app/admin/settings/interfaces";
 import Link from "next/link";
 import { Button } from "../ui/button";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 const connectors_items = () => [
   {
@@ -150,7 +152,8 @@ const collections = (
   isCurator: boolean,
   enableCloud: boolean,
   enableEnterprise: boolean,
-  settings: CombinedSettings | null
+  settings: CombinedSettings | null,
+  kgExposed?: boolean | null
 ) => [
   {
     name: "Connectors",
@@ -215,15 +218,19 @@ const collections = (
               ),
               link: "/admin/configuration/document-processing",
             },
-            {
-              name: (
-                <div className="flex">
-                  <BrainIcon className="text-text-700" />
-                  <div className="ml-1">Knowledge Graph</div>
-                </div>
-              ),
-              link: "/admin/kg",
-            },
+            ...(kgExposed
+              ? [
+                  {
+                    name: (
+                      <div className="flex">
+                        <BrainIcon className="text-text-700" />
+                        <div className="ml-1">Knowledge Graph</div>
+                      </div>
+                    ),
+                    link: "/admin/kg",
+                  },
+                ]
+              : []),
           ],
         },
         {
@@ -385,6 +392,11 @@ export function ClientLayout({
   enableEnterprise: boolean;
   enableCloud: boolean;
 }) {
+  const { data: kgExposed, isLoading } = useSWR<boolean>(
+    "/api/admin/kg/exposed",
+    errorHandlingFetcher
+  );
+
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
   const pathname = usePathname();
@@ -395,6 +407,11 @@ export function ClientLayout({
   };
   const { llmProviders } = useChatContext();
   const { popup, setPopup } = usePopup();
+
+  if (isLoading) {
+    return <></>;
+  }
+
   if (
     (pathname && pathname.startsWith("/admin/connectors")) ||
     (pathname && pathname.startsWith("/admin/embeddings"))
@@ -439,7 +456,8 @@ export function ClientLayout({
             isCurator,
             enableCloud,
             enableEnterprise,
-            settings
+            settings,
+            kgExposed
           )}
         />
       </div>
