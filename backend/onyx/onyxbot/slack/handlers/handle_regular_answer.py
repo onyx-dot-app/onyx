@@ -419,6 +419,11 @@ def handle_regular_answer(
         skip_ai_feedback=skip_ai_feedback,
     )
 
+    # NOTE(rkuo): Slack has a maximum block list size of 50.
+    # we should modify build_slack_response_blocks to respect the max
+    # but enforcing the hard limit here is the last resort.
+    all_blocks = all_blocks[:50]
+
     try:
         respond_in_thread_or_channel(
             client=client,

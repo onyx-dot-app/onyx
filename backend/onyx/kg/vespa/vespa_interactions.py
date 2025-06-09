@@ -98,6 +98,7 @@ def get_document_chunks_for_kg_processing(
     document_id: str,
     deep_extraction: bool,
     index_name: str,
+    tenant_id: str,
     batch_size: int = 8,
 ) -> Generator[list[KGChunkFormat], None, None]:
     """
@@ -107,6 +108,7 @@ def get_document_chunks_for_kg_processing(
         document_id (str): ID of the document to fetch chunks for
         deep_extraction (bool): Whether to perform deep extraction
         index_name (str): Name of the Vespa index
+        tenant_id (str): ID of the tenant
         batch_size (int): Number of chunks to fetch per batch
 
     Yields:
@@ -119,7 +121,7 @@ def get_document_chunks_for_kg_processing(
     chunks = _get_chunks_via_visit_api(
         chunk_request=VespaChunkRequest(document_id=document_id),
         index_name=index_name,
-        filters=IndexFilters(access_control_list=None),
+        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
         field_names=[
             "document_id",
             "chunk_id",

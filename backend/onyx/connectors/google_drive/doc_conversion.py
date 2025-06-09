@@ -62,6 +62,10 @@ GOOGLE_MIME_TYPES = {
 }
 
 
+def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
+    return file[WEB_VIEW_LINK_KEY]
+
+
 def _summarize_drive_image(
     image_data: bytes, image_name: str, image_analysis_llm: LLM | None
 ) -> str:
@@ -380,7 +384,6 @@ def _convert_drive_item_to_document(
     """
     Main entry point for converting a Google Drive file => Document object.
     """
-    doc_id = file.get(WEB_VIEW_LINK_KEY, "")
     sections: list[TextSection | ImageSection] = []
     # Only construct these services when needed
     drive_service = lazy_eval(
@@ -389,6 +392,7 @@ def _convert_drive_item_to_document(
     docs_service = lazy_eval(
         lambda: get_google_docs_service(creds, user_email=retriever_email)
     )
+    doc_id = "unknown"
 
     try:
         # skip shortcuts or folders
@@ -441,7 +445,7 @@ def _convert_drive_item_to_document(
             logger.warning(f"No content extracted from {file.get('name')}. Skipping.")
             return None
 
-        doc_id = file[WEB_VIEW_LINK_KEY]
+        doc_id = onyx_document_id_from_drive_file(file)
 
         # Create the document
         return Document(
@@ -488,7 +492,7 @@ def build_slim_document(file: GoogleDriveFileType) -> SlimDocument | None:
     if file.get("mimeType") in [DRIVE_FOLDER_TYPE, DRIVE_SHORTCUT_TYPE]:
         return None
     return SlimDocument(
-        id=file[WEB_VIEW_LINK_KEY],
+        id=onyx_document_id_from_drive_file(file),
         perm_sync_data={
             "doc_id": file.get("id"),
             "drive_id": file.get("driveId"),

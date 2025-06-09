@@ -34,6 +34,7 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
             email = obj.emailAddress
         else:
             email = obj.get("emailAddress")
+
     except Exception:
         return None
 

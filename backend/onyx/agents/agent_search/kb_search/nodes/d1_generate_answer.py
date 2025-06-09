@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_close_main_answer,
@@ -28,14 +29,15 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import ExtendedToolResponse
 from onyx.configs.kg_configs import KG_ANSWER_GENERATION_TIMEOUT
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
+from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
 from onyx.tools.tool_implementations.search.search_tool import IndexFilters
 from onyx.tools.tool_implementations.search.search_tool import SearchQueryInfo
-from onyx.tools.tool_implementations.search.search_tool import SearchType
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -65,6 +67,15 @@ def generate_answer(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.prompt_builder.raw_user_query
+
+    user = (
+        graph_config.tooling.search_tool.user
+        if graph_config.tooling.search_tool
+        else None
+    )
+
+    if not user:
+        raise ValueError("User is not set")
 
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
@@ -116,6 +127,9 @@ def generate_answer(
 
     assert graph_config.tooling.search_tool is not None
 
+    with get_session_with_current_tenant() as graph_db_session:
+        user_acl = list(get_acl_for_user(user, graph_db_session))
+
     for tool_response in yield_search_responses(
         query=question,
         get_retrieved_sections=lambda: answer_generation_documents.context_documents,
@@ -124,7 +138,7 @@ def generate_answer(
             predicted_search=SearchType.KEYWORD,
             # acl here is empty, because the searach alrady happened and
             # we are streaming out the results.
-            final_filters=IndexFilters(access_control_list=[]),
+            final_filters=IndexFilters(access_control_list=user_acl),
             recency_bias_multiplier=1.0,
         ),
         get_section_relevance=lambda: relevance_list,

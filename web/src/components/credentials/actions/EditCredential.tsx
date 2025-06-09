@@ -81,6 +81,7 @@ const EditCredential = ({
                     ? "password"
                     : "text"
                 }
+                disabled={key === "authentication_method"}
               />
             ))}
             <div className="flex justify-between w-full">

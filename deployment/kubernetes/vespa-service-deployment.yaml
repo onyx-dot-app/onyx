@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
       - name: vespa
-        image: vespaengine/vespa:8.277.17
+        image: vespaengine/vespa:8.526.15
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
@@ -51,6 +51,9 @@ spec:
         volumeMounts:
         - name: vespa-volume
           mountPath: /opt/vespa/var/
+        env:
+          - name: VESPA_SKIP_UPGRADE_CHECK
+            value: "true"
   volumeClaimTemplates:
   - metadata:
       name: vespa-volume

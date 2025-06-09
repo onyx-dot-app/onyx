@@ -36,6 +36,8 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
     # TODO (raunakab):
     # Cleanup.
 
+    # TODO (joachim-danswer): restructure togethert with KGConfig redesign
+
     results = db_session.query(KGConfig).all()
 
     kg_config_settings = KGConfigSettings()
@@ -103,10 +105,11 @@ def set_kg_processing_in_progress_status(
     """
     # Convert boolean to string and wrap in list as required by the model
     value = [str(in_progress).lower()]
-    kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"  # Default value
+
+    kg_variable_name = KGConfigVars.KG_EXTRACTION_IN_PROGRESS.value  # Default value
 
     if processing_type == KGProcessingType.CLUSTERING:
-        kg_variable_name = "KG_CLUSTERING_IN_PROGRESS"
+        kg_variable_name = KGConfigVars.KG_CLUSTERING_IN_PROGRESS.value
 
     # Use PostgreSQL's upsert functionality
     stmt = (
@@ -133,9 +136,9 @@ def get_kg_processing_in_progress_status(
         bool: True if KG processing is in progress, False otherwise
     """
 
-    kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"  # Default value
+    kg_variable_name = KGConfigVars.KG_EXTRACTION_IN_PROGRESS.value  # Default value
     if processing_type == KGProcessingType.CLUSTERING:
-        kg_variable_name = "KG_CLUSTERING_IN_PROGRESS"
+        kg_variable_name = KGConfigVars.KG_CLUSTERING_IN_PROGRESS.value
 
     config = (
         db_session.query(KGConfig)

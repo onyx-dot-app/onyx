@@ -33,7 +33,8 @@ export function ProviderCreationModal({
   isProxy?: boolean;
   isAzure?: boolean;
 }) {
-  const useFileUpload = selectedProvider.provider_type == "Google";
+  const useFileUpload =
+    selectedProvider.provider_type == EmbeddingProvider.GOOGLE;
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");

@@ -3,8 +3,6 @@ from typing import Any
 from typing import List
 from urllib.parse import urlparse
 
-from shared_configs.model_server_models import SupportedEmbeddingModel
-
 # Used for logging
 SLACK_CHANNEL_ID = "channel_id"
 
@@ -170,120 +168,6 @@ IGNORED_SYNCING_TENANT_LIST = (
     else None
 )
 
-SUPPORTED_EMBEDDING_MODELS = [
-    # Cloud-based models
-    SupportedEmbeddingModel(
-        name="cohere/embed-english-v3.0",
-        dim=1024,
-        index_name="danswer_chunk_cohere_embed_english_v3_0",
-    ),
-    SupportedEmbeddingModel(
-        name="cohere/embed-english-v3.0",
-        dim=1024,
-        index_name="danswer_chunk_embed_english_v3_0",
-    ),
-    SupportedEmbeddingModel(
-        name="cohere/embed-english-light-v3.0",
-        dim=384,
-        index_name="danswer_chunk_cohere_embed_english_light_v3_0",
-    ),
-    SupportedEmbeddingModel(
-        name="cohere/embed-english-light-v3.0",
-        dim=384,
-        index_name="danswer_chunk_embed_english_light_v3_0",
-    ),
-    SupportedEmbeddingModel(
-        name="openai/text-embedding-3-large",
-        dim=3072,
-        index_name="danswer_chunk_openai_text_embedding_3_large",
-    ),
-    SupportedEmbeddingModel(
-        name="openai/text-embedding-3-large",
-        dim=3072,
-        index_name="danswer_chunk_text_embedding_3_large",
-    ),
-    SupportedEmbeddingModel(
-        name="openai/text-embedding-3-small",
-        dim=1536,
-        index_name="danswer_chunk_openai_text_embedding_3_small",
-    ),
-    SupportedEmbeddingModel(
-        name="openai/text-embedding-3-small",
-        dim=1536,
-        index_name="danswer_chunk_text_embedding_3_small",
-    ),
-    SupportedEmbeddingModel(
-        name="google/text-embedding-005",
-        dim=768,
-        index_name="danswer_chunk_google_text_embedding_004",
-    ),
-    SupportedEmbeddingModel(
-        name="google/text-embedding-005",
-        dim=768,
-        index_name="danswer_chunk_text_embedding_004",
-    ),
-    SupportedEmbeddingModel(
-        name="google/textembedding-gecko@003",
-        dim=768,
-        index_name="danswer_chunk_google_textembedding_gecko_003",
-    ),
-    SupportedEmbeddingModel(
-        name="google/textembedding-gecko@003",
-        dim=768,
-        index_name="danswer_chunk_textembedding_gecko_003",
-    ),
-    SupportedEmbeddingModel(
-        name="voyage/voyage-large-2-instruct",
-        dim=1024,
-        index_name="danswer_chunk_voyage_large_2_instruct",
-    ),
-    SupportedEmbeddingModel(
-        name="voyage/voyage-large-2-instruct",
-        dim=1024,
-        index_name="danswer_chunk_large_2_instruct",
-    ),
-    SupportedEmbeddingModel(
-        name="voyage/voyage-light-2-instruct",
-        dim=384,
-        index_name="danswer_chunk_voyage_light_2_instruct",
-    ),
-    SupportedEmbeddingModel(
-        name="voyage/voyage-light-2-instruct",
-        dim=384,
-        index_name="danswer_chunk_light_2_instruct",
-    ),
-    # Self-hosted models
-    SupportedEmbeddingModel(
-        name="nomic-ai/nomic-embed-text-v1",
-        dim=768,
-        index_name="danswer_chunk_nomic_ai_nomic_embed_text_v1",
-    ),
-    SupportedEmbeddingModel(
-        name="nomic-ai/nomic-embed-text-v1",
-        dim=768,
-        index_name="danswer_chunk_nomic_embed_text_v1",
-    ),
-    SupportedEmbeddingModel(
-        name="intfloat/e5-base-v2",
-        dim=768,
-        index_name="danswer_chunk_intfloat_e5_base_v2",
-    ),
-    SupportedEmbeddingModel(
-        name="intfloat/e5-small-v2",
-        dim=384,
-        index_name="danswer_chunk_intfloat_e5_small_v2",
-    ),
-    SupportedEmbeddingModel(
-        name="intfloat/multilingual-e5-base",
-        dim=768,
-        index_name="danswer_chunk_intfloat_multilingual_e5_base",
-    ),
-    SupportedEmbeddingModel(
-        name="intfloat/multilingual-e5-small",
-        dim=384,
-        index_name="danswer_chunk_intfloat_multilingual_e5_small",
-    ),
-]
 # Maximum (least severe) downgrade factor for chunks above the cutoff
 INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
     os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX") or 1.0

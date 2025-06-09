@@ -520,6 +520,9 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
                 cursor = dbapi_connection.cursor()
                 try:
                     cursor.execute('SET search_path TO "$user", public')
+                except Exception as e:
+                    logger.warning(f"Failed to reset search path: {e}")
+                    connection.rollback()
                 finally:
                     cursor.close()
 
@@ -678,5 +681,8 @@ def get_db_readonly_user_session_with_current_tenant() -> (
                     cursor = dbapi_connection.cursor()
                     try:
                         cursor.execute('SET search_path TO "$user", public')
+                    except Exception as e:
+                        logger.warning(f"Failed to reset search path: {e}")
+                        connection.rollback()
                     finally:
                         cursor.close()

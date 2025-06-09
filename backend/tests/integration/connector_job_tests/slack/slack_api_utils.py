@@ -17,8 +17,7 @@ from slack_sdk.errors import SlackApiError
 
 from onyx.connectors.slack.connector import default_msg_filter
 from onyx.connectors.slack.connector import get_channel_messages
-from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
-from onyx.connectors.slack.utils import make_slack_api_call_w_retries
+from onyx.connectors.slack.utils import make_paginated_slack_api_call
 
 
 def _get_slack_channel_id(channel: dict[str, Any]) -> str:
@@ -40,7 +39,7 @@ def _get_non_general_channels(
         channel_types.append("public_channel")
 
     conversations: list[dict[str, Any]] = []
-    for result in make_paginated_slack_api_call_w_retries(
+    for result in make_paginated_slack_api_call(
         slack_client.conversations_list,
         exclude_archived=False,
         types=channel_types,
@@ -64,7 +63,7 @@ def _clear_slack_conversation_members(
 ) -> None:
     channel_id = _get_slack_channel_id(channel)
     member_ids: list[str] = []
-    for result in make_paginated_slack_api_call_w_retries(
+    for result in make_paginated_slack_api_call(
         slack_client.conversations_members,
         channel=channel_id,
     ):
@@ -140,15 +139,13 @@ def _build_slack_channel_from_name(
     if channel:
         # If channel is provided, we rename it
         channel_id = _get_slack_channel_id(channel)
-        channel_response = make_slack_api_call_w_retries(
-            slack_client.conversations_rename,
+        channel_response = slack_client.conversations_rename(
             channel=channel_id,
             name=channel_name,
         )
     else:
         # Otherwise, we create a new channel
-        channel_response = make_slack_api_call_w_retries(
-            slack_client.conversations_create,
+        channel_response = slack_client.conversations_create(
             name=channel_name,
             is_private=is_private,
         )
@@ -219,10 +216,13 @@ class SlackManager:
 
     @staticmethod
     def build_slack_user_email_id_map(slack_client: WebClient) -> dict[str, str]:
-        users_results = make_slack_api_call_w_retries(
+        users: list[dict[str, Any]] = []
+
+        for users_results in make_paginated_slack_api_call(
             slack_client.users_list,
-        )
-        users: list[dict[str, Any]] = users_results.get("members", [])
+        ):
+            users.extend(users_results.get("members", []))
+
         user_email_id_map = {}
         for user in users:
             if not (email := user.get("profile", {}).get("email")):
@@ -253,8 +253,7 @@ class SlackManager:
         slack_client: WebClient, channel: dict[str, Any], message: str
     ) -> None:
         channel_id = _get_slack_channel_id(channel)
-        make_slack_api_call_w_retries(
-            slack_client.chat_postMessage,
+        slack_client.chat_postMessage(
             channel=channel_id,
             text=message,
         )
@@ -274,7 +273,7 @@ class SlackManager:
     ) -> None:
         channel_types = ["private_channel", "public_channel"]
         channels: list[dict[str, Any]] = []
-        for result in make_paginated_slack_api_call_w_retries(
+        for result in make_paginated_slack_api_call(
             slack_client.conversations_list,
             exclude_archived=False,
             types=channel_types,

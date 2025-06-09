@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
-import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
+import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
@@ -582,7 +582,9 @@ export function ChatInputBar({
             </div>
           )}
 
-          <UnconfiguredProviderText showConfigureAPIKey={showConfigureAPIKey} />
+          <UnconfiguredLlmProviderText
+            showConfigureAPIKey={showConfigureAPIKey}
+          />
           <div className="w-full h-[10px]"></div>
           <div
             className="

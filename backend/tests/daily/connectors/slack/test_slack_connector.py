@@ -31,6 +31,7 @@ def slack_connector(
     connector = SlackConnector(
         channels=[channel] if channel else None,
         channel_regex_enabled=False,
+        use_redis=False,
     )
     connector.client = mock_slack_client
     connector.set_credentials_provider(credentials_provider=slack_credentials_provider)

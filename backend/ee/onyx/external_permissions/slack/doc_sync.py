@@ -8,7 +8,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.slack.connector import get_channels
-from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
+from onyx.connectors.slack.connector import make_paginated_slack_api_call
 from onyx.connectors.slack.connector import SlackConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -64,7 +64,7 @@ def _fetch_channel_permissions(
     for channel_id in private_channel_ids:
         # Collect all member ids for the channel pagination calls
         member_ids = []
-        for result in make_paginated_slack_api_call_w_retries(
+        for result in make_paginated_slack_api_call(
             slack_client.conversations_members,
             channel=channel_id,
         ):
@@ -92,7 +92,7 @@ def _fetch_channel_permissions(
             external_user_emails=member_emails,
             # No group<->document mapping for slack
             external_user_group_ids=set(),
-            # No way to determine if slack is invite only without enterprise liscense
+            # No way to determine if slack is invite only without enterprise license
             is_public=False,
         )
 

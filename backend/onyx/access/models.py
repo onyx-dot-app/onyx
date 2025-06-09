@@ -11,7 +11,7 @@ class ExternalAccess:
 
     # arbitrary limit to prevent excessively large permissions sets
     # not internally enforced ... the caller can check this before using the instance
-    MAX_NUM_ENTRIES = 1000
+    MAX_NUM_ENTRIES = 5000
 
     # Emails of external users with access to the doc externally
     external_user_emails: set[str]

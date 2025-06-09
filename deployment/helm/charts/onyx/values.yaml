@@ -7,6 +7,9 @@ postgresql:
     persistence:
       storageClass: ""
       size: 5Gi
+    shmVolume:
+      enabled: true
+      sizeLimit: 1Gi
   enabled: true
   auth:
     existingSecret: onyx-secrets
@@ -33,7 +36,7 @@ vespa:
   image:
     repository: vespa
     pullPolicy: IfNotPresent
-    tag: "8.277.17"
+    tag: "8.526.15"
   podAnnotations: {}
   podLabels:
     app: vespa

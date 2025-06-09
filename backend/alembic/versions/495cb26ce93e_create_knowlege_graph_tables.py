@@ -1,7 +1,7 @@
 """create knowledge graph tables
 
 Revision ID: 495cb26ce93e
-Revises: 238b84885828
+Revises: ca04500b9ee8
 Create Date: 2025-03-19 08:51:14.341989
 
 """
@@ -15,11 +15,12 @@ from datetime import datetime, timedelta
 from onyx.configs.app_configs import DB_READONLY_USER
 from onyx.configs.app_configs import DB_READONLY_PASSWORD
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 # revision identifiers, used by Alembic.
 revision = "495cb26ce93e"
-down_revision = "238b84885828"
+down_revision = "ca04500b9ee8"
 branch_labels = None
 depends_on = None
 
@@ -63,6 +64,21 @@ def upgrade() -> None:
                 """
             )
         )
+
+    # Grant usage on current schema to readonly user
+    op.execute(
+        text(
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                    EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', current_schema(), '{DB_READONLY_USER}');
+                END IF;
+            END
+            $$;
+            """
+        )
+    )
 
     op.create_table(
         "kg_config",
@@ -452,7 +468,7 @@ def upgrade() -> None:
     # Create GIN index for clustering and normalization
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
-        "ON kg_entity USING GIN (name gin_trgm_ops)"
+        f"ON kg_entity USING GIN (name {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.gin_trgm_ops)"
     )
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_normalization_trigrams "
@@ -492,7 +508,7 @@ def upgrade() -> None:
 
                 -- Set name and name trigrams
                 NEW.name = name;
-                NEW.name_trigrams = show_trgm(cleaned_name);
+                NEW.name_trigrams = {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.show_trgm(cleaned_name);
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
@@ -537,7 +553,7 @@ def upgrade() -> None:
                 UPDATE kg_entity
                 SET
                     name = doc_name,
-                    name_trigrams = show_trgm(cleaned_name)
+                    name_trigrams = {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.show_trgm(cleaned_name)
                 WHERE document_id = NEW.id;
                 RETURN NEW;
             END;
@@ -628,6 +644,21 @@ def downgrade() -> None:
     op.drop_column("document", "kg_processing_time")
     op.drop_table("kg_config")
 
+    # Revoke usage on current schema for the readonly user
+    op.execute(
+        text(
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                    EXECUTE format('REVOKE ALL ON SCHEMA %I FROM %I', current_schema(), '{DB_READONLY_USER}');
+                END IF;
+            END
+            $$;
+            """
+        )
+    )
+
     if not MULTI_TENANT:
         # Drop read-only db user here only in single tenant mode. For multi-tenant mode,
         # the user is dropped in the alembic_tenants migration.
@@ -640,8 +671,6 @@ def downgrade() -> None:
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
                     -- First revoke all privileges from the database
                     EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
-                    -- Then revoke all privileges from the public schema
-                    EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', '{DB_READONLY_USER}');
                     -- Then drop the user
                     EXECUTE format('DROP USER %I', '{DB_READONLY_USER}');
                 END IF;
@@ -650,3 +679,4 @@ def downgrade() -> None:
         """
             )
         )
+        op.execute(text("DROP EXTENSION IF EXISTS pg_trgm"))

@@ -35,8 +35,7 @@ logger = setup_logger()
     bind=True,
 )
 def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
-    """a lightweight task used to kick off indexing tasks.
-    Occcasionally does some validation of existing state to clear up error conditions"""
+    """a lightweight task used to kick off kg processing tasks."""
 
     time_start = time.monotonic()
     task_logger.warning("check_for_kg_processing - Starting")
@@ -120,7 +119,7 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
                 redis_lock_dump(lock_beat, redis_client)
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
+    task_logger.info(f"check_for_kg_processing finished: elapsed={time_elapsed:.2f}")
     return tasks_created
 
 
@@ -132,8 +131,7 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
 def check_for_kg_processing_clustering_only(
     self: Task, *, tenant_id: str
 ) -> int | None:
-    """a lightweight task used to kick off indexing tasks.
-    Occcasionally does some validation of existing state to clear up error conditions"""
+    """a lightweight task used to kick off kg clustering tasks."""
 
     time_start = time.monotonic()
     task_logger.warning("check_for_kg_processing_clustering_only - Starting")
@@ -205,7 +203,9 @@ def check_for_kg_processing_clustering_only(
                 redis_lock_dump(lock_beat, redis_client)
 
     time_elapsed = time.monotonic() - time_start
-    task_logger.info(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
+    task_logger.info(
+        f"check_for_kg_processing_clustering_only finished: elapsed={time_elapsed:.2f}"
+    )
     return tasks_created
 
 
@@ -215,11 +215,10 @@ def check_for_kg_processing_clustering_only(
     bind=True,
 )
 def kg_processing(self: Task, *, tenant_id: str) -> int | None:
-    """a lightweight task used to kick off indexing tasks.
-    Occcasionally does some validation of existing state to clear up error conditions"""
+    """a task for doing kg extraction and clustering."""
 
     time.monotonic()
-    task_logger.warning(f"check_for_kg_processing - Starting for tenant {tenant_id}")
+    task_logger.warning(f"kg_processing - Starting for tenant {tenant_id}")
 
     task_logger.debug("Starting kg processing task!")
 
@@ -282,8 +281,7 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
     bind=True,
 )
 def kg_clustering_only(self: Task, *, tenant_id: str) -> int | None:
-    """a lightweight task used to kick off indexing tasks.
-    Occcasionally does some validation of existing state to clear up error conditions"""
+    """a task for doing kg clustering only."""
 
     time.monotonic()
     with get_session_with_current_tenant() as db_session:

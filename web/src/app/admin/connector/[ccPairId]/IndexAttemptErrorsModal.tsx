@@ -114,8 +114,8 @@ export default function IndexAttemptErrorsModal({
             <div className="flex-1 flex justify-center mb-2">
               <PageSelector
                 totalPages={totalPages}
-                currentPage={currentPage + 1}
-                onPageChange={(page) => onPageChange(page - 1)}
+                currentPage={currentPage}
+                onPageChange={(page) => onPageChange(page)}
               />
             </div>
           )}

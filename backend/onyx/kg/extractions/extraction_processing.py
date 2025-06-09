@@ -41,6 +41,7 @@ from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
+from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
 from onyx.kg.utils.extraction_utils import is_email
 from onyx.kg.utils.extraction_utils import (
     kg_document_entities_relationships_attribute_generation,
@@ -100,10 +101,9 @@ def _get_classification_extraction_instructions() -> (
 
         classification_options = ", ".join(classification_attributes.keys())
 
-        if len(classification_options) > 0 and len(classification_attributes) > 0:
-            classification_enabled = True
-        else:
-            classification_enabled = False
+        classification_enabled = (
+            len(classification_options) > 0 and len(classification_attributes) > 0
+        )
 
         filter_instructions = cast(
             dict[str, Any] | None,
@@ -161,7 +161,7 @@ def get_entity_types_str(active: bool | None = None) -> str:
                         entity_type_attribute_list.append(f"{attribute}: {values}")
                     else:
                         entity_type_attribute_list.append(
-                            f"{attribute}: (can take any suitable value)"
+                            f"{attribute}: any suitable value"
                         )
 
             if entity_type.attributes.get("classification_attributes"):
@@ -384,6 +384,10 @@ def kg_extraction(
         _get_classification_extraction_instructions()
     )
 
+    # Track which metadata attributes are possible for each entity type
+    metadata_tracker = EntityTypeMetadataTracker()
+    metadata_tracker.import_typeinfo()
+
     # Iterate over connectors that are enabled for KG extraction
 
     for kg_enabled_connector in kg_enabled_connectors:
@@ -408,6 +412,8 @@ def kg_extraction(
 
         # iterate over un-kg-processed documents in connector
         while True:
+
+            # TODO: restructure using various functions
 
             # get a batch of unprocessed documents
             with get_session_with_current_tenant() as db_session:
@@ -622,6 +628,7 @@ def kg_extraction(
                         unprocessed_document.id
                     ].deep_extraction,
                     index_name=index_name,
+                    tenant_id=tenant_id,
                     batch_size=1,
                 )
 
@@ -811,7 +818,7 @@ def kg_extraction(
                                         }
                                     )
 
-                            upsert_staging_entity(
+                            upserted_entity = upsert_staging_entity(
                                 db_session=db_session,
                                 name=entity_name,
                                 entity_type=entity_type,
@@ -819,6 +826,9 @@ def kg_extraction(
                                 occurrences=extraction_count,
                                 attributes=entity_attributes,
                                 event_time=event_time,
+                            )
+                            metadata_tracker.track_metadata(
+                                entity_type, upserted_entity.attributes
                             )
 
                         db_session.commit()
@@ -947,22 +957,18 @@ def kg_extraction(
                 classification_result = classification_outcome[1]
                 if classification_result.classification_decision:
                     document_id = classification_result.document_id
+                    kg_stage = KGStage.EXTRACTED
 
-                    with get_session_with_current_tenant() as db_session:
-                        update_document_kg_stage(
-                            db_session,
-                            document_id,
-                            KGStage.EXTRACTED,
-                        )
-                        db_session.commit()
                 else:
-                    with get_session_with_current_tenant() as db_session:
-                        update_document_kg_stage(
-                            db_session,
-                            document_id,
-                            KGStage.SKIPPED,
-                        )
-                        db_session.commit()
+                    kg_stage = KGStage.SKIPPED
+
+                with get_session_with_current_tenant() as db_session:
+                    update_document_kg_stage(
+                        db_session,
+                        document_id,
+                        kg_stage,
+                    )
+                    db_session.commit()
 
         # Update the the Skipped Docs back to Not Started in
 
@@ -976,6 +982,7 @@ def kg_extraction(
                 )
                 db_session.commit()
 
+    metadata_tracker.export_typeinfo()
     return connector_extraction_stats
 
 
@@ -1026,6 +1033,7 @@ def _kg_chunk_batch_extraction(
 
         kg_attributes: dict[str, str | list[str]] = {}
 
+        # TODO: wrap into a function
         if chunk.metadata:
             for attribute, value in chunk.metadata.items():
                 if isinstance(value, str):
@@ -1201,21 +1209,17 @@ def _kg_chunk_batch_extraction(
 
     # Sort results into succeeded and failed
     for success, chunk_results in results:
+
+        chunk_structure = KGChunkId(
+            document_id=chunk_results.document_id,
+            chunk_id=chunk_results.chunk_id,
+        )
+
         if success:
-            succeeded_chunk_id.append(
-                KGChunkId(
-                    document_id=chunk_results.document_id,
-                    chunk_id=chunk_results.chunk_id,
-                )
-            )
+            succeeded_chunk_id.append(chunk_structure)
             succeeded_chunk_extraction.append(chunk_results)
         else:
-            failed_chunk_id.append(
-                KGChunkId(
-                    document_id=chunk_results.document_id,
-                    chunk_id=chunk_results.chunk_id,
-                )
-            )
+            failed_chunk_id.append(chunk_structure)
 
     # Collect data for postgres later on
 

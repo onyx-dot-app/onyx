@@ -12,6 +12,9 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    is_atlassian_date_error,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -39,6 +42,8 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+ONE_HOUR = 3600
 
 JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
 _JIRA_SLIM_PAGE_SIZE = 500
@@ -129,9 +134,6 @@ def process_jira_issue(
 
     metadata_dict: dict[str, str | list[str]] = {}
     people = set()
-
-    if "KAN-2" in page_url:
-        pass
 
     creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
     if creator is not None and (
@@ -270,7 +272,17 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         checkpoint: JiraConnectorCheckpoint,
     ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._get_jql_query(start, end)
+        try:
+            return self._load_from_checkpoint(jql, checkpoint)
+        except Exception as e:
+            if is_atlassian_date_error(e):
+                jql = self._get_jql_query(start - ONE_HOUR, end)
+                return self._load_from_checkpoint(jql, checkpoint)
+            raise e
 
+    def _load_from_checkpoint(
+        self, jql: str, checkpoint: JiraConnectorCheckpoint
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         # Get the current offset from checkpoint or start at 0
         starting_offset = checkpoint.offset or 0
         current_offset = starting_offset

@@ -1,3 +1,5 @@
+from retry import retry
+
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import RefreshableDriveObject
@@ -6,6 +8,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+@retry(tries=3, delay=2, backoff=2)
 def get_permissions_by_ids(
     drive_service: RefreshableDriveObject,
     doc_id: str,

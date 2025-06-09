@@ -380,6 +380,7 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
+    shm_size: 1g
     command: -c 'max_connections=250'
     restart: always
     environment:
@@ -394,8 +395,10 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.277.17
+    image: vespaengine/vespa:8.526.15
     restart: always
+    environment:
+      - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
       - "19071:19071"
       - "8081:8081"

@@ -40,6 +40,8 @@ from onyx.db.models import Credential
 from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import KGEntity
+from onyx.db.models import KGRelationship
 from onyx.db.models import User
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import (
@@ -989,29 +991,6 @@ def update_document_kg_stage(
     db_session.flush()
 
 
-def get_document_kg_info(
-    db_session: Session,
-    document_id: str,
-) -> KGStage | None:
-    """Retrieves the knowledge graph processing status and data for a document.
-    Args:
-        db_session (Session): The database session to use
-        document_id (str): The ID of the document to query
-    Returns:
-        Optional[Tuple[bool, dict]]: A tuple containing:
-            - bool: Whether the document has been KG processed
-            - dict: The KG data containing 'entities', 'relationships', and 'terms'
-            Returns None if the document is not found
-    """
-    stmt = select(DbDocument.kg_stage).where(DbDocument.id == document_id)
-    result = db_session.execute(stmt).one_or_none()
-
-    if result is None:
-        return None
-
-    return result.kg_stage or KGStage.NOT_STARTED
-
-
 def get_all_kg_extracted_documents_info(
     db_session: Session,
 ) -> list[str]:
@@ -1260,3 +1239,30 @@ def check_for_documents_needing_kg_clustering(db_session: Session) -> bool:
     )
 
     return db_session.execute(select(stmt)).scalar() or False
+
+
+def get_document_kg_entities_and_relationships(
+    db_session: Session, document_id: str
+) -> tuple[list[KGEntity], list[KGRelationship]]:
+    """
+    Get the KG entities and relationships that references the document.
+    """
+    entities = (
+        db_session.query(KGEntity).filter(KGEntity.document_id == document_id).all()
+    )
+    if not entities:
+        return [], []
+    entity_id_names = [entity.id_name for entity in entities]
+
+    relationships = (
+        db_session.query(KGRelationship)
+        .filter(
+            or_(
+                KGRelationship.source_node.in_(entity_id_names),
+                KGRelationship.target_node.in_(entity_id_names),
+                KGRelationship.source_document == document_id,
+            )
+        )
+        .all()
+    )
+    return entities, relationships

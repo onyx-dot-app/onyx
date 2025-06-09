@@ -26,9 +26,12 @@ def mock_issue_small() -> MagicMock:
         MagicMock(body="Small comment 1"),
         MagicMock(body="Small comment 2"),
     ]
-    fields.creator = MagicMock()
-    fields.creator.displayName = "John Doe"
-    fields.creator.emailAddress = "john@example.com"
+    fields.reporter = MagicMock()
+    fields.reporter.displayName = "John Doe"
+    fields.reporter.emailAddress = "john@example.com"
+    fields.assignee = MagicMock()
+    fields.assignee.displayName = "John Doe"
+    fields.assignee.emailAddress = "john@example.com"
     fields.summary = "Small Issue"
     fields.updated = "2023-01-01T00:00:00+0000"
     fields.labels = []
@@ -48,9 +51,12 @@ def mock_issue_large() -> MagicMock:
         MagicMock(body="Large comment " * 1000),
         MagicMock(body="Another large comment " * 1000),
     ]
-    fields.creator = MagicMock()
-    fields.creator.displayName = "Jane Doe"
-    fields.creator.emailAddress = "jane@example.com"
+    fields.reporter = MagicMock()
+    fields.reporter.displayName = "Jane Doe"
+    fields.reporter.emailAddress = "jane@example.com"
+    fields.assignee = MagicMock()
+    fields.assignee.displayName = "Jane Doe"
+    fields.assignee.emailAddress = "jane@example.com"
     fields.summary = "Large Issue"
     fields.updated = "2023-01-02T00:00:00+0000"
     fields.labels = []

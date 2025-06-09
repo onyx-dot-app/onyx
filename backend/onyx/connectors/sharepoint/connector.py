@@ -1,5 +1,6 @@
 import io
 import os
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -8,6 +9,8 @@ from urllib.parse import unquote
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
+from office365.onedrive.sites.site import Site  # type: ignore
+from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -227,14 +230,29 @@ class SharepointConnector(LoadConnector, PollConnector):
 
         return final_driveitems
 
+    def _handle_paginated_sites(
+        self, sites: SitesWithRoot
+    ) -> Generator[Site, None, None]:
+        while sites:
+            if sites.current_page:
+                yield from sites.current_page
+            if not sites.has_next:
+                break
+            sites = sites._get_next().execute_query()
+
     def _fetch_sites(self) -> list[SiteDescriptor]:
-        sites = self.graph_client.sites.get_all().execute_query()
+        sites = self.graph_client.sites.get_all_sites().execute_query()
+
+        if not sites:
+            raise RuntimeError("No sites found in the tenant")
+
         site_descriptors = [
             SiteDescriptor(
-                url=sites.resource_url,
+                url=site.web_url,
                 drive_name=None,
                 folder_path=None,
             )
+            for site in self._handle_paginated_sites(sites)
         ]
         return site_descriptors
 

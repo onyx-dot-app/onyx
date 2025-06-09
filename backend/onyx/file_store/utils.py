@@ -2,6 +2,7 @@ import base64
 from collections.abc import Callable
 from io import BytesIO
 from typing import cast
+from uuid import UUID
 from uuid import uuid4
 
 import requests
@@ -242,6 +243,26 @@ def get_user_files(
         )
 
     # 3. Return the combined list of UserFile database objects
+    return user_files
+
+
+def get_user_files_as_user(
+    user_file_ids: list[int],
+    user_folder_ids: list[int],
+    user_id: UUID | None,
+    db_session: Session,
+) -> list[UserFile]:
+    """
+    Fetches all UserFile database records for a given user.
+    """
+    user_files = get_user_files(user_file_ids, user_folder_ids, db_session)
+    for user_file in user_files:
+        # Note: if user_id is None, then all files should be None as well
+        # (since auth must be disabled in this case)
+        if user_file.user_id != user_id:
+            raise ValueError(
+                f"User {user_id} does not have access to file {user_file.id}"
+            )
     return user_files
 
 

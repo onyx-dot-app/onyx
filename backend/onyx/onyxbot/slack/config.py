@@ -64,7 +64,7 @@ TENANT_HEARTBEAT_INTERVAL = (
     15  # How often pods send heartbeats to indicate they are still processing a tenant
 )
 TENANT_HEARTBEAT_EXPIRATION = (
-    30  # How long before a tenant's heartbeat expires, allowing other pods to take over
+    60  # How long before a tenant's heartbeat expires, allowing other pods to take over
 )
 TENANT_ACQUISITION_INTERVAL = 60  # How often pods attempt to acquire unprocessed tenants and checks for new tokens
 

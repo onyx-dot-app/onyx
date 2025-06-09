@@ -136,6 +136,7 @@ import {
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -1451,9 +1452,7 @@ export function ChatPage({
           filterManager.selectedSources,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
-          filterManager.selectedTags,
-          selectedFiles.map((file) => file.id)
-          // selectedFolders.map((folder) => folder.id)
+          filterManager.selectedTags
         ),
         selectedDocumentIds: selectedDocuments
           .filter(
@@ -2329,6 +2328,8 @@ export function ChatPage({
         />
       )}
 
+      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
       {popup}
@@ -2881,10 +2882,6 @@ export function ChatPage({
                                             selectedMessageForDocDisplay ==
                                               secondLevelMessage?.messageId)
                                         }
-                                        isImprovement={
-                                          message.isImprovement ||
-                                          nextMessage?.isImprovement
-                                        }
                                         secondLevelGenerating={
                                           (message.second_level_generating &&
                                             currentSessionChatState !==
@@ -2912,21 +2909,6 @@ export function ChatPage({
                                         agenticDocs={
                                           message.agentic_docs || agenticDocs
                                         }
-                                        toggleDocDisplay={(
-                                          agentic: boolean
-                                        ) => {
-                                          if (agentic) {
-                                            setSelectedMessageForDocDisplay(
-                                              message.messageId
-                                            );
-                                          } else {
-                                            setSelectedMessageForDocDisplay(
-                                              secondLevelMessage
-                                                ? secondLevelMessage.messageId
-                                                : null
-                                            );
-                                          }
-                                        }}
                                         docs={
                                           message?.documents &&
                                           message?.documents.length > 0
@@ -2977,7 +2959,6 @@ export function ChatPage({
                                           messageHistory.length - 1 == i ||
                                           messageHistory.length - 2 == i
                                         }
-                                        selectedDocuments={selectedDocuments}
                                         toggleDocumentSelection={(
                                           second: boolean
                                         ) => {

@@ -103,12 +103,11 @@ def _get_source_documents(
         sql_statement = sql_statement.split("</sql>")[0].strip()
 
     except Exception as e:
-        if cleaned_response is not None:
-            logger.error(
-                f"Could not generate source documents SQL: {e}. Original model response: {cleaned_response}"
-            )
-        else:
-            logger.error(f"Could not generate source documents SQL: {e}")
+        error_msg = f"Could not generate source documents SQL: {e}"
+        if cleaned_response:
+            error_msg += f". Original model response: {cleaned_response}"
+
+        logger.error(error_msg)
 
         return None
 
@@ -186,9 +185,14 @@ def generate_simple_sql(
         # First, create string of contextualized entities to avoid the model not
         # being aware of what eg ACCOUNT::SF_8254Hs means as a normalized entity
 
+        # TODO: restructure with broader node rework
+
         entity_explanation_str = _build_entity_explanation_str(
             state.entity_normalization_map
         )
+
+        doc_temp_view = state.kg_doc_temp_view_name
+        rel_temp_view = state.kg_rel_temp_view_name
 
         simple_sql_prompt = (
             SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
@@ -233,9 +237,7 @@ def generate_simple_sql(
             )
             sql_statement = sql_statement.split(";")[0].strip() + ";"
             sql_statement = sql_statement.replace("sql", "").strip()
-            sql_statement = sql_statement.replace(
-                "kg_relationship", state.kg_rel_temp_view_name
-            )
+            sql_statement = sql_statement.replace("kg_relationship", rel_temp_view)
 
             reasoning = (
                 cleaned_response.split("<reasoning>")[1]
@@ -244,11 +246,12 @@ def generate_simple_sql(
             )
 
         except Exception as e:
-            logger.error(f"Error in strategy generation: {e}")
+            # TODO: restructure with broader node rework
+            logger.error(f"Error in SQL generation: {e}")
 
             _drop_temp_views(
-                allowed_docs_view_name=state.kg_doc_temp_view_name,
-                kg_relationships_view_name=state.kg_rel_temp_view_name,
+                allowed_docs_view_name=doc_temp_view,
+                kg_relationships_view_name=rel_temp_view,
             )
             raise e
 
@@ -291,8 +294,8 @@ def generate_simple_sql(
             )
 
             _drop_temp_views(
-                allowed_docs_view_name=state.kg_doc_temp_view_name,
-                kg_relationships_view_name=state.kg_rel_temp_view_name,
+                allowed_docs_view_name=doc_temp_view,
+                kg_relationships_view_name=rel_temp_view,
             )
 
             raise e
@@ -304,8 +307,8 @@ def generate_simple_sql(
         source_documents_sql = _get_source_documents(
             sql_statement,
             llm=primary_llm,
-            allowed_docs_view_name=state.kg_doc_temp_view_name,
-            kg_relationships_view_name=state.kg_rel_temp_view_name,
+            allowed_docs_view_name=doc_temp_view,
+            kg_relationships_view_name=rel_temp_view,
         )
 
         logger.info(f"A3 source_documents_sql: {source_documents_sql}")
@@ -353,8 +356,8 @@ def generate_simple_sql(
             source_document_results = None
 
         _drop_temp_views(
-            allowed_docs_view_name=state.kg_doc_temp_view_name,
-            kg_relationships_view_name=state.kg_rel_temp_view_name,
+            allowed_docs_view_name=doc_temp_view,
+            kg_relationships_view_name=rel_temp_view,
         )
 
         logger.info(f"A3 - Number of query_results: {len(query_results)}")

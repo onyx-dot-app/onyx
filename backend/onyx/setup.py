@@ -7,6 +7,8 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
+from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
+from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
@@ -59,8 +61,6 @@ from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import SUPPORTED_EMBEDDING_MODELS
-from shared_configs.model_server_models import SupportedEmbeddingModel
 
 
 logger = setup_logger()

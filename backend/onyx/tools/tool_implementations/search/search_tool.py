@@ -1,6 +1,4 @@
-import copy
 import json
-import time
 from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
@@ -25,13 +23,13 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import QueryFlow
-from onyx.context.search.enums import SearchType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import UserFileFilters
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
 from onyx.db.models import Persona
@@ -295,7 +293,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         skip_query_analysis = False
         user_file_ids = None
         user_folder_ids = None
-        ordering_only = False
         document_sources = None
         time_cutoff = None
         expanded_queries = None
@@ -313,7 +310,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
             user_file_ids = override_kwargs.user_file_ids
             user_folder_ids = override_kwargs.user_folder_ids
-            ordering_only = use_alt_not_None(override_kwargs.ordering_only, False)
             document_sources = override_kwargs.document_sources
             time_cutoff = override_kwargs.time_cutoff
             expanded_queries = override_kwargs.expanded_queries
@@ -322,41 +318,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             kg_terms = override_kwargs.kg_terms
             kg_sources = override_kwargs.kg_sources
             kg_chunk_id_zero_only = override_kwargs.kg_chunk_id_zero_only or False
-        # Fast path for ordering-only search
-        if ordering_only:
-            yield from self._run_ordering_only_search(
-                query, user_file_ids, user_folder_ids
-            )
-            return
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
             return
 
-        # Create a copy of the retrieval options with user_file_ids if provided
-        retrieval_options = copy.deepcopy(self.retrieval_options)
-        if (user_file_ids or user_folder_ids) and retrieval_options:
-            # Create a copy to avoid modifying the original
-            filters = (
-                retrieval_options.filters.model_copy()
-                if retrieval_options.filters
-                else BaseFilters()
-            )
-            filters.user_file_ids = user_file_ids
-            retrieval_options = retrieval_options.model_copy(
-                update={"filters": filters}
-            )
-        elif user_file_ids or user_folder_ids:
-            # Create new retrieval options with user_file_ids
-            filters = BaseFilters(
-                user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
-            )
-            retrieval_options = RetrievalDetails(filters=filters)
-
+        retrieval_options = self.retrieval_options or RetrievalDetails()
         if document_sources or time_cutoff:
-            # Get retrieval_options and filters, or create if they don't exist
-            retrieval_options = retrieval_options or RetrievalDetails()
-            retrieval_options.filters = retrieval_options.filters or BaseFilters()
+            # if empty, just start with an empty filters object
+            if not retrieval_options.filters:
+                retrieval_options.filters = BaseFilters()
 
             # Handle document sources
             if document_sources:
@@ -391,6 +362,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 ),
                 human_selected_filters=(
                     retrieval_options.filters if retrieval_options else None
+                ),
+                user_file_filters=UserFileFilters(
+                    user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
                 ),
                 persona=self.persona,
                 offset=(retrieval_options.offset if retrieval_options else None),
@@ -473,105 +447,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             prompt_config=self.prompt_config,
         )
 
-    def _run_ordering_only_search(
-        self,
-        query: str,
-        user_file_ids: list[int] | None,
-        user_folder_ids: list[int] | None,
-    ) -> Generator[ToolResponse, None, None]:
-        """Optimized search that only retrieves document order with minimal processing."""
-        start_time = time.time()
-
-        logger.info("Fast path: Starting optimized ordering-only search")
-
-        # Create temporary search pipeline for optimized retrieval
-        search_pipeline = SearchPipeline(
-            search_request=SearchRequest(
-                query=query,
-                evaluation_type=LLMEvaluationType.SKIP,  # Force skip evaluation
-                persona=self.persona,
-                # Minimal configuration needed
-                chunks_above=0,
-                chunks_below=0,
-            ),
-            user=self.user,
-            llm=self.llm,
-            fast_llm=self.fast_llm,
-            skip_query_analysis=True,  # Skip unnecessary analysis
-            db_session=self.db_session,
-            bypass_acl=self.bypass_acl,
-            prompt_config=self.prompt_config,
-            contextual_pruning_config=self.contextual_pruning_config,
-        )
-
-        # Log what we're doing
-        logger.info(
-            f"Fast path: Using {len(user_file_ids or [])} files and {len(user_folder_ids or [])} folders"
-        )
-
-        # Get chunks using the optimized method in SearchPipeline
-        retrieval_start = time.time()
-        retrieved_chunks = search_pipeline.get_ordering_only_chunks(
-            query=query, user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
-        )
-        retrieval_time = time.time() - retrieval_start
-
-        logger.info(
-            f"Fast path: Retrieved {len(retrieved_chunks)} chunks in {retrieval_time:.2f}s"
-        )
-
-        # Convert chunks to minimal sections (we don't need full content)
-        minimal_sections = []
-        for chunk in retrieved_chunks:
-            # Create a minimal section with just center_chunk
-            minimal_section = InferenceSection(
-                center_chunk=chunk,
-                chunks=[chunk],
-                combined_content=chunk.content,  # Use the chunk content as combined content
-            )
-            minimal_sections.append(minimal_section)
-
-        # Log document IDs found for debugging
-        doc_ids = [chunk.document_id for chunk in retrieved_chunks]
-        logger.info(
-            f"Fast path: Document IDs in order: {doc_ids[:5]}{'...' if len(doc_ids) > 5 else ''}"
-        )
-
-        # Yield just the required responses for document ordering
-        yield ToolResponse(
-            id=SEARCH_RESPONSE_SUMMARY_ID,
-            response=SearchResponseSummary(
-                rephrased_query=query,
-                top_sections=minimal_sections,
-                predicted_flow=QueryFlow.QUESTION_ANSWER,
-                predicted_search=SearchType.SEMANTIC,
-                final_filters=IndexFilters(
-                    user_file_ids=user_file_ids or [],
-                    user_folder_ids=user_folder_ids or [],
-                    access_control_list=None,
-                ),
-                recency_bias_multiplier=1.0,
-            ),
-        )
-
-        # For fast path, don't trigger any LLM evaluation for relevance
-        logger.info(
-            "Fast path: Skipping section relevance evaluation to optimize performance"
-        )
-        yield ToolResponse(
-            id=SECTION_RELEVANCE_LIST_ID,
-            response=None,
-        )
-
-        # We need to yield this for the caller to extract document order
-        minimal_docs = [
-            llm_doc_from_inference_section(section) for section in minimal_sections
-        ]
-        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=minimal_docs)
-
-        total_time = time.time() - start_time
-        logger.info(f"Fast path: Completed ordering-only search in {total_time:.2f}s")
-
 
 # Allows yielding the same responses as a SearchTool without being a SearchTool.
 # SearchTool passed in to allow for access to SearchTool properties.
@@ -590,10 +465,6 @@ def yield_search_responses(
     get_section_relevance: Callable[[], list[SectionRelevancePiece] | None],
     search_tool: SearchTool,
 ) -> Generator[ToolResponse, None, None]:
-    # Get the search query to check if we're in ordering-only mode
-    # We can infer this from the reranked_sections not containing any relevance scoring
-    is_ordering_only = search_tool.evaluation_type == LLMEvaluationType.SKIP
-
     yield ToolResponse(
         id=SEARCH_RESPONSE_SUMMARY_ID,
         response=SearchResponseSummary(
@@ -606,48 +477,26 @@ def yield_search_responses(
         ),
     )
 
-    section_relevance: list[SectionRelevancePiece] | None = None
-
-    # Skip section relevance in ordering-only mode
-    if is_ordering_only:
-        logger.info(
-            "Fast path: Skipping section relevance evaluation in yield_search_responses"
-        )
-        yield ToolResponse(
-            id=SECTION_RELEVANCE_LIST_ID,
-            response=None,
-        )
-    else:
-        section_relevance = get_section_relevance()
-        yield ToolResponse(
-            id=SECTION_RELEVANCE_LIST_ID,
-            response=section_relevance,
-        )
+    section_relevance = get_section_relevance()
+    yield ToolResponse(
+        id=SECTION_RELEVANCE_LIST_ID,
+        response=section_relevance,
+    )
 
     final_context_sections = get_final_context_sections()
 
-    # Skip pruning sections in ordering-only mode
-    if is_ordering_only:
-        logger.info("Fast path: Skipping section pruning in ordering-only mode")
-        llm_docs = [
-            llm_doc_from_inference_section(section)
-            for section in final_context_sections
-        ]
-    else:
-        # Use the section_relevance we already computed above
-        pruned_sections = prune_sections(
-            sections=final_context_sections,
-            section_relevance_list=section_relevance_list_impl(
-                section_relevance, final_context_sections
-            ),
-            prompt_config=search_tool.prompt_config,
-            llm_config=search_tool.llm.config,
-            question=query,
-            contextual_pruning_config=search_tool.contextual_pruning_config,
-        )
-        llm_docs = [
-            llm_doc_from_inference_section(section) for section in pruned_sections
-        ]
+    # Use the section_relevance we already computed above
+    pruned_sections = prune_sections(
+        sections=final_context_sections,
+        section_relevance_list=section_relevance_list_impl(
+            section_relevance, final_context_sections
+        ),
+        prompt_config=search_tool.prompt_config,
+        llm_config=search_tool.llm.config,
+        question=query,
+        contextual_pruning_config=search_tool.contextual_pruning_config,
+    )
+    llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
 
     yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
 
