@@ -131,6 +131,9 @@ def populate_default_primary_grounded_entity_type_information(
 
     # Iterate over all attributes in the default definitions
     for id_name, definition in default_definitions.model_dump().items():
+        # Replace "__" with "-" for subtypes
+        id_name = id_name.replace("__", "-")
+
         # Skip if this entity type already exists
         if id_name in existing_entity_types:
             continue
@@ -140,12 +143,17 @@ def populate_default_primary_grounded_entity_type_information(
         description = definition["description"].replace(
             "---vendor_name---", kg_config_settings.KG_VENDOR
         )
-
+        grounded_source_name = (
+            definition["grounded_source_name"].value
+            if definition["grounded_source_name"]
+            else None
+        )
         new_entity_type = KGEntityType(
             id_name=id_name,
             description=description,
+            attributes=definition["attributes"],
             grounding=definition["grounding"],
-            grounded_source_name=definition["grounded_source_name"],
+            grounded_source_name=grounded_source_name,
             active=False,
         )
 
@@ -181,6 +189,9 @@ def populate_default_employee_account_information(db_session: Session) -> None:
 
     # Iterate over all attributes in the default definitions
     for id_name, definition in default_definitions.model_dump().items():
+        # Replace "__" with "-" for subtypes
+        id_name = id_name.replace("__", "-")
+
         # Skip if this entity type already exists
         if id_name in existing_entity_types:
             continue
@@ -189,11 +200,17 @@ def populate_default_employee_account_information(db_session: Session) -> None:
         description = definition["description"].replace(
             "---vendor_name---", kg_config_settings.KG_VENDOR
         )
+        grounded_source_name = (
+            definition["grounded_source_name"].value
+            if definition["grounded_source_name"]
+            else None
+        )
         new_entity_type = KGEntityType(
             id_name=id_name,
             description=description,
+            attributes=definition["attributes"],
             grounding=definition["grounding"],
-            grounded_source_name=definition["grounded_source_name"],
+            grounded_source_name=grounded_source_name,
             active=definition["active"],
         )
 
