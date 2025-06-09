@@ -559,7 +559,7 @@ INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 # Enable multi-threaded embedding model calls for parallel processing
 # Note: only applies for API-based embedding models
 INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
-    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 1
+    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
 
 # During an indexing attempt, specifies the number of batches which are allowed to
