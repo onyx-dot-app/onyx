@@ -7,6 +7,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from pydantic import BaseModel
+from google_auth_oauthlib.flow import Flow
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import CredentialsProviderInterface
@@ -18,6 +19,8 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
 )
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.exceptions import TranscriptsDisabled, NoTranscriptFound
 
 
 class YouTubeCheckpoint(ConnectorCheckpoint):
@@ -54,6 +57,24 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
         self.youtube = None
         self._credentials_provider = None
 
+    def _create_credentials_from_dict(self, creds_dict: Dict[str, Any]) -> Credentials:
+        """Create Credentials object from dictionary.
+        
+        Args:
+            creds_dict: Dictionary containing credential data.
+            
+        Returns:
+            Credentials: The created credentials object.
+        """
+        return Credentials(
+            token=creds_dict["token"],
+            refresh_token=creds_dict["refresh_token"],
+            token_uri=creds_dict["token_uri"],
+            client_id=creds_dict["client_id"],
+            client_secret=creds_dict["client_secret"],
+            scopes=creds_dict["scopes"]
+        )
+
     def set_credentials_provider(self, credentials_provider: CredentialsProviderInterface) -> None:
         """Set the credentials provider for the connector.
         
@@ -62,17 +83,9 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
         """
         self._credentials_provider = credentials_provider
         if not self.youtube:
-            creds_str = self._credentials_provider.get_credentials()
-            creds_dict = json.loads(creds_str)
-            credentials = Credentials(
-                token=creds_dict["token"],
-                refresh_token=creds_dict["refresh_token"],
-                token_uri=creds_dict["token_uri"],
-                client_id=creds_dict["client_id"],
-                client_secret=creds_dict["client_secret"],
-                scopes=creds_dict["scopes"]
-            )
-            self.youtube = build("youtube", "v3", credentials=credentials)
+            creds = self.load_credentials()
+            if creds:
+                self.youtube = build("youtube", "v3", credentials=creds)
 
     def load_credentials(self) -> Optional[Credentials]:
         """Load credentials from the provider.
@@ -86,14 +99,7 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
         if not creds_str:
             return None
         creds_dict = json.loads(creds_str)
-        return Credentials(
-            token=creds_dict["token"],
-            refresh_token=creds_dict["refresh_token"],
-            token_uri=creds_dict["token_uri"],
-            client_id=creds_dict["client_id"],
-            client_secret=creds_dict["client_secret"],
-            scopes=creds_dict["scopes"]
-        )
+        return self._create_credentials_from_dict(creds_dict)
 
     @classmethod
     def oauth_id(cls) -> str:
@@ -148,19 +154,22 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
         """
         if not self._credentials_provider:
             raise ValueError("Credentials provider not set")
+
+        client_config = self._credentials_provider.get_client_config()
+        if not client_config:
+            raise ValueError("No client configuration available")
+
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=self.oauth_scopes,
+            redirect_uri=self.oauth_redirect_uri
+        )
         
-        credentials = self._credentials_provider.get_credentials()
-        if not credentials:
-            raise ValueError("No credentials available")
-        
-        return {
-            "access_token": credentials.token,
-            "refresh_token": credentials.refresh_token,
-            "token_uri": credentials.token_uri,
-            "client_id": credentials.client_id,
-            "client_secret": credentials.client_secret,
-            "scopes": credentials.scopes
-        }
+        try:
+            flow.fetch_token(code=code)
+            return flow.credentials.to_json()
+        except Exception as e:
+            raise ValueError(f"Failed to exchange code for token: {str(e)}")
 
     def validate_connector_settings(self) -> None:
         """Validate the connector settings.
@@ -196,6 +205,23 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
         for field in required_fields:
             if field not in checkpoint_json:
                 raise ValueError(f"Missing required field in checkpoint: {field}")
+
+    def _get_video_transcript(self, video_id: str) -> Optional[str]:
+        """Get the transcript for a video.
+        
+        Args:
+            video_id: The ID of the video.
+            
+        Returns:
+            Optional[str]: The transcript text if available, None otherwise.
+        """
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            return " ".join([entry["text"] for entry in transcript])
+        except (TranscriptsDisabled, NoTranscriptFound):
+            return None
+        except Exception as e:
+            raise ValueError(f"Failed to fetch transcript: {str(e)}")
 
     def load_from_checkpoint(
         self,
@@ -234,7 +260,7 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
                 if video_id in checkpoint.processed_videos:
                     continue
 
-                #video infor
+                #video info
                 video_response = self.youtube.videos().list(
                     part="snippet,contentDetails,statistics",
                     id=video_id
@@ -246,6 +272,9 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
                 video = video_response["items"][0]
                 snippet = video["snippet"]
                 stats = video["statistics"]
+
+                # Get transcript
+                transcript = self._get_video_transcript(video_id)
 
                 # doc sections
                 sections: List[Section] = [
@@ -260,6 +289,9 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
                     )
                 ]
 
+                if transcript:
+                    sections.append(TextSection(text=transcript, name="transcript"))
+
                 doc = Document(
                     id=video_id,
                     sections=sections,
@@ -270,16 +302,17 @@ class YouTubeConnector(OAuthConnector, PollConnector, CheckpointedConnector[YouT
                         "published_at": snippet["publishedAt"],
                         "views": stats.get("viewCount", "0"),
                         "likes": stats.get("likeCount", "0"),
-                        "comments": stats.get("commentCount", "0")
+                        "comments": stats.get("commentCount", "0"),
+                        "has_transcript": transcript is not None
                     }
                 )
 
                 checkpoint.processed_videos.append(video_id)
-                checkpoint.has_more = len(search_response.get("items", [])) > len(checkpoint.processed_videos)
+                checkpoint.has_more = "nextPageToken" in search_response
 
                 yield doc, None, checkpoint
 
-            # if all videos are processes -> set has_more to False
+            # if all videos are processed -> set has_more to False
             if len(checkpoint.processed_videos) >= len(search_response.get("items", [])):
                 checkpoint.has_more = False
 
