@@ -35,6 +35,7 @@ def _build_connector(
 
 def test_gdrive_perm_sync_with_real_data(
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+    set_ee_on: None,
 ) -> None:
     """
     Test gdrive_doc_sync and gdrive_group_sync with real data from the test drive.
