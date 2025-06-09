@@ -17,6 +17,7 @@ from onyx.connectors.google_utils.google_utils import (
 )
 from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.google_utils import ORDER_BY_KEY
+from onyx.connectors.google_utils.google_utils import PAGE_TOKEN_KEY
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
@@ -187,10 +188,14 @@ def get_files_in_shared_drive(
     cache_folders: bool = True,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[GoogleDriveFileType | None]:
+    page_token: str | None = None,
+) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {}
     if not is_slim:
         kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    if page_token:
+        logger.info(f"Using page token: {page_token}")
+        kwargs[PAGE_TOKEN_KEY] = page_token
 
     if cache_folders:
         # If we know we are going to folder crawl later, we can cache the folders here
@@ -247,10 +252,14 @@ def get_all_files_in_my_drive_and_shared(
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
     cache_folders: bool = True,
-) -> Iterator[GoogleDriveFileType | None]:
+    page_token: str | None = None,
+) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {}
     if not is_slim:
         kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    if page_token:
+        logger.info(f"Using page token: {page_token}")
+        kwargs[PAGE_TOKEN_KEY] = page_token
 
     if cache_folders:
         # If we know we are going to folder crawl later, we can cache the folders here
@@ -300,10 +309,14 @@ def get_all_files_for_oauth(
     max_num_pages: int,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[GoogleDriveFileType | None]:
+    page_token: str | None = None,
+) -> Iterator[GoogleDriveFileType | str]:
     kwargs = {}
     if not is_slim:
         kwargs[ORDER_BY_KEY] = GoogleFields.MODIFIED_TIME.value
+    if page_token:
+        logger.info(f"Using page token: {page_token}")
+        kwargs[PAGE_TOKEN_KEY] = page_token
 
     should_get_all = (
         include_shared_drives and include_my_drives and include_files_shared_with_me

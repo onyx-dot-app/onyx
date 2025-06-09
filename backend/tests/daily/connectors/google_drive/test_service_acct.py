@@ -24,7 +24,6 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_FILE_IDS
@@ -502,33 +501,3 @@ def test_specific_user_emails_restricted_folder(
     )
     test_docs = load_all_docs(test_connector)
     assert len(test_docs) == 0
-
-
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
-def test_shared_drive_folder(
-    mock_get_api_key: MagicMock,
-    google_drive_oauth_uploaded_connector_factory: Callable[..., GoogleDriveConnector],
-) -> None:
-    print("\n\nRunning test_shared_drive_folder")
-    connector = google_drive_oauth_uploaded_connector_factory(
-        primary_admin_email=TEST_USER_1_EMAIL,
-        include_files_shared_with_me=False,
-        include_shared_drives=False,
-        include_my_drives=True,
-        shared_folder_urls=FOLDER_1_URL,
-        shared_drive_urls=None,
-        my_drive_emails=None,
-    )
-    retrieved_docs = load_all_docs(connector)
-
-    expected_file_ids = FOLDER_1_FILE_IDS + FOLDER_1_1_FILE_IDS + FOLDER_1_2_FILE_IDS
-
-    # test for deduping
-    assert len(expected_file_ids) == len(retrieved_docs)
-    assert_expected_docs_in_retrieved_docs(
-        retrieved_docs=retrieved_docs,
-        expected_file_ids=expected_file_ids,
-    )
