@@ -46,8 +46,8 @@ def get_kg_vespa_info_update_requests_for_document(
         )
 
     # create the kg vespa info
-    kg_entities = [entity.id_name for entity in entities]
-    kg_relationships = [relationship.id_name for relationship in relationships]
+    kg_entities = {entity.id_name for entity in entities}
+    kg_relationships = {relationship.id_name for relationship in relationships}
 
     # get chunks in the document
     chunks = _get_chunks_via_visit_api(
