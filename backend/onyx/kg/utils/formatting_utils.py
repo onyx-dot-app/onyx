@@ -21,6 +21,10 @@ def get_entity_type(entity_id_name: str) -> str:
     return entity_id_name.split("::", 1)[0].upper()
 
 
+def split_entity_type(entity_type: str) -> list[str]:
+    return entity_type.split("-")
+
+
 def format_entity_id_for_models(entity_id_name: str) -> str:
     entity_split = entity_id_name.split("::")
     if len(entity_split) == 2:

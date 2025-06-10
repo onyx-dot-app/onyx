@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 import onyx.db.document as dbdocument
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
+from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationship
 from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipType
@@ -18,6 +19,7 @@ from onyx.kg.utils.formatting_utils import format_relationship_id
 from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import make_relationship_type_id
+from onyx.kg.utils.formatting_utils import split_entity_type
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 
@@ -493,14 +495,35 @@ def get_allowed_relationship_type_pairs(
         List of id_names from KGRelationshipType where both source and target entity types
         are in the provided entities list
     """
-    entity_types = list({get_entity_type(entity) for entity in entities})
+    allowed_entity_types: set[str] = set()
+
+    for entity in entities:
+        entity_type = get_entity_type(entity)
+        entity_type_split = split_entity_type(entity_type)
+
+        # only subtype is allowed
+        if len(entity_type_split) == 2:
+            allowed_entity_types.add(entity_type)
+            continue
+
+        # all subtypes of the entity class are allowed
+        if entity_type not in allowed_entity_types:
+            allowed_entity_types.add(entity_type)
+            subtypes = (
+                db_session.query(KGEntityType)
+                .filter(KGEntityType.id_name.like(f"{entity_type}-%"))
+                .all()
+            )
+            allowed_entity_types.update(subtype.id_name for subtype in subtypes)
 
     return [
         row[0]
         for row in (
             db_session.query(KGRelationshipType.id_name)
-            .filter(KGRelationshipType.source_entity_type_id_name.in_(entity_types))
-            .filter(KGRelationshipType.target_entity_type_id_name.in_(entity_types))
+            .filter(
+                KGRelationshipType.source_entity_type_id_name.in_(allowed_entity_types),
+                KGRelationshipType.target_entity_type_id_name.in_(allowed_entity_types),
+            )
             .distinct()
             .all()
         )

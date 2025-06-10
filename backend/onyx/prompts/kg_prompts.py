@@ -286,6 +286,10 @@ You can ONLY extract entities of these types:
 
 The list above here is the exclusive, only list of entities you can choose from!
 
+Note that some entity types may have a dash in them, indicating that they are a subtype of an entity class. \
+For example, the types PERSON-EMPLOYEE and PERSON-CUSTOMER are subtypes of the PERSON entity class. \
+The entity class is an implied entity type and are valid entity types to use in the extraction.
+
 Also, note that there are fixed relationship types between these entities. Please consider those \
 as well so to make sure that you are not missing implicit entities! Implicit entities are often \
 in verbs ('emailed to', 'talked to', ...). Also, they may be used to connect entities that are \
@@ -330,6 +334,8 @@ Example 3:
    -  you should only extract entities belonging to the entity types above - but do extract all that you \
 can reliably identify in the text
    - if you refer to all/any/an unspecified entity of an entity type listed above, use '*' as the entity name
+   - if the specific entity subtype is unclear, or you would like to refer to all subtypes, you can use the entity class \
+in place of the entity type (e.g., PERSON::John or PERSON::*)
    - keep the terms high-level
    - similarly, if a specific entity type is referred to in general, you should use '*' as the entity name
    - you MUST only use the initial list of entities provided! Ignore the entities in the examples unless \
@@ -370,6 +376,9 @@ First off as background, here are the entity types that are known to the system:
 ---entity_types---
 {SEPARATOR_LINE}
 
+Note that some entity types may have a dash in them, indicating that they are a subtype of an entity class. \
+For example, the types PERSON-EMPLOYEE and PERSON-CUSTOMER are subtypes of the PERSON entity class. \
+The entity class is an implied entity type and are valid entity types to use in the extraction.
 
 Here are the entities you have identified earlier:
 {SEPARATOR_LINE}
@@ -407,6 +416,8 @@ is just assumed for these examples, but you MUST use only the entities above for
 
 - You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
 * if the entity type is referred to in general, you would use '*' as the entity name in the extraction.
+* if the specific entity subtype is unclear, or you would like to refer to all subtypes, you can use the entity class \
+in place of the entity type (e.g., PERSON::John or PERSON::*)
 
 As an example, if the question would say:
 
@@ -435,6 +446,7 @@ relationships.
    - you can only extract the relationships that match the listed relationship types
    - if in doubt and there are multiple relationships between the same two entities, you can extract \
 all of those that may fit with the question.
+   - use the entity class as the entity type where appropriate.
    - be really thinking through the question which type of relationships should be extracted and which should not.
 
 {SEPARATOR_LINE}
