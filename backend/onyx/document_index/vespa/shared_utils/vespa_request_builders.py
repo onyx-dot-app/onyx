@@ -69,6 +69,9 @@ def build_vespa_filters(
     ) -> str:
         if not kg_entities and not kg_relationships and not kg_terms:
             return ""
+        kg_entities = kg_entities or []
+        kg_relationships = kg_relationships or []
+        kg_terms = kg_terms or []
 
         combined_filter_parts = []
 
