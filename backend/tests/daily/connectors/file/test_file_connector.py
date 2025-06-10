@@ -100,6 +100,7 @@ def test_two_text_files_with_zip_metadata(
     # All metadata in zip_metadata
     zip_metadata = {
         "file1.txt": {
+            "filename": "file1.txt",
             "file_display_name": "display 1",
             "link": "https://onyx.app/1",
             "primary_owners": ["alice@onyx.app"],
@@ -107,6 +108,7 @@ def test_two_text_files_with_zip_metadata(
             "doc_updated_at": "2022-02-02T00:00:00Z",
         },
         "file2.txt": {
+            "filename": "file2.txt",
             "file_display_name": "display 2",
             "link": "https://onyx.app/2",
             "primary_owners": ["carol@onyx.app"],
