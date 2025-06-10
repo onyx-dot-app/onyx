@@ -128,6 +128,14 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
           background-color: #f9fafb;
         }
 
+        /* Dark mode table styles */
+        .dark .editor-content table td,
+        .dark .editor-content table th {
+          border: 1px solid #374151;
+          background-color: #000000;
+          color: #ffffff;
+        }
+
         /* Blockquote styles */
         .editor-content blockquote {
           border-left: 3px solid #e5e7eb;
@@ -203,7 +211,7 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
       {editor && <CitationBubbleMenu editor={editor} />}
       <EditorContent
         editor={editor}
-        className="editor-content prose prose-sm max-w-none [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-3 [&_p]:mb-2 [&_ul]:ml-4"
+        className="editor-content prose dark:prose-invert prose-sm max-w-none [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-4 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-3 [&_p]:mb-2 [&_ul]:ml-4"
       />
     </div>
   );

@@ -79,6 +79,13 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
     },
   }); // Remove content dependency to prevent re-initialization during typing
 
+  // Update editor content when it changes externally
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content || '');
+    }
+  }, [content, editor]);
+
   // Call enableClickableLinks when the editor is ready
   useEffect(() => {
     if (editor) {
@@ -116,12 +123,20 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
         
         /* Remove old citation link styles - now using bubble menu */
         /* Citation styling is now handled by the CitationMark extension */
+        
+        /* Dark mode table styles - consistent black background with white text */
+        .dark .ProseMirror table td,
+        .dark .ProseMirror table th {
+          background-color: #000000 !important;
+          color: #ffffff !important;
+          border-color: #374151 !important;
+        }
       `}</style>
       {editor && <FormattingToolbar editor={editor} />}
       {editor && <CitationBubbleMenu editor={editor} />}
       <EditorContent 
         editor={editor} 
-        className="prose prose-sm max-w-none focus:outline-none min-h-[300px] [&_table]:border-collapse [&_table]:border-2 [&_table]:border-border [&_th]:border-2 [&_th]:border-border [&_th]:bg-accent [&_th]:p-2 [&_td]:border-2 [&_td]:border-border [&_td]:p-2 [&_td]:bg-background [&_a]:text-blue-500 [&_a]:underline [&_a:hover]:text-blue-700"
+        className="prose dark:prose-invert prose-sm max-w-none focus:outline-none min-h-[300px] [&_table]:border-collapse [&_table]:border-2 [&_table]:border-border [&_th]:border-2 [&_th]:border-border [&_th]:bg-accent [&_th]:p-2 [&_td]:border-2 [&_td]:border-border [&_td]:p-2 [&_td]:bg-background dark:[&_th]:bg-black dark:[&_th]:text-white dark:[&_td]:bg-black dark:[&_td]:text-white [&_a]:text-link [&_a]:underline [&_a:hover]:text-link-hover"
       />
     </div>
   );
