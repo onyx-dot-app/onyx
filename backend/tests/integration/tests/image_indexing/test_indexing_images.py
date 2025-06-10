@@ -1,6 +1,5 @@
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -16,8 +15,7 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestSettings
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestSettings, DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "Sample.pdf"

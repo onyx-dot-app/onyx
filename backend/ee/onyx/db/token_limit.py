@@ -1,20 +1,18 @@
 from collections.abc import Sequence
 
-from sqlalchemy import exists
-from sqlalchemy import Row
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import Row, Select, exists, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.constants import TokenRateLimitScope
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserRole
+from onyx.db.models import (
+    TokenRateLimit,
+    TokenRateLimit__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserRole,
+)
 from onyx.server.token_rate_limits.models import TokenRateLimitArgs
 
 

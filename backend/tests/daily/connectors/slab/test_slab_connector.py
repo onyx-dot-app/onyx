@@ -12,7 +12,7 @@ from onyx.connectors.slab.connector import SlabConnector
 
 def load_test_data(file_name: str = "test_slab_data.json") -> dict[str, str]:
     current_dir = Path(__file__).parent
-    with open(current_dir / file_name, "r") as f:
+    with open(current_dir / file_name) as f:
         return json.load(f)
 
 

@@ -1,53 +1,50 @@
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-from functools import wraps
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial, wraps
 from typing import Any
 
 import requests
 from httpx import HTTPError
-from requests import JSONDecodeError
-from requests import RequestException
-from requests import Response
+from requests import JSONDecodeError, RequestException, Response
 from retry import retry
 
-from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
-from onyx.configs.app_configs import LARGE_CHUNK_RATIO
-from onyx.configs.app_configs import SKIP_WARM_UP
-from onyx.configs.model_configs import BATCH_SIZE_ENCODE_CHUNKS
-from onyx.configs.model_configs import (
-    BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
+from onyx.configs.app_configs import (
+    INDEXING_EMBEDDING_MODEL_NUM_THREADS,
+    LARGE_CHUNK_RATIO,
+    SKIP_WARM_UP,
 )
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
+from onyx.configs.model_configs import (
+    BATCH_SIZE_ENCODE_CHUNKS,
+    BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
+    DOC_EMBEDDING_CONTEXT_SIZE,
+)
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.natural_language_processing.exceptions import (
-    ModelServerRateLimitError,
-)
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.natural_language_processing.utils import tokenizer_trim_content
+from onyx.natural_language_processing.exceptions import ModelServerRateLimitError
+from onyx.natural_language_processing.utils import get_tokenizer, tokenizer_trim_content
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.enums import RerankerProvider
-from shared_configs.model_server_models import ConnectorClassificationRequest
-from shared_configs.model_server_models import ConnectorClassificationResponse
-from shared_configs.model_server_models import ContentClassificationPrediction
-from shared_configs.model_server_models import Embedding
-from shared_configs.model_server_models import EmbedRequest
-from shared_configs.model_server_models import EmbedResponse
-from shared_configs.model_server_models import InformationContentClassificationResponses
-from shared_configs.model_server_models import IntentRequest
-from shared_configs.model_server_models import IntentResponse
-from shared_configs.model_server_models import RerankRequest
-from shared_configs.model_server_models import RerankResponse
+from shared_configs.configs import (
+    INDEXING_MODEL_SERVER_HOST,
+    INDEXING_MODEL_SERVER_PORT,
+    MODEL_SERVER_HOST,
+    MODEL_SERVER_PORT,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
+from shared_configs.model_server_models import (
+    ConnectorClassificationRequest,
+    ConnectorClassificationResponse,
+    ContentClassificationPrediction,
+    Embedding,
+    EmbedRequest,
+    EmbedResponse,
+    InformationContentClassificationResponses,
+    IntentRequest,
+    IntentResponse,
+    RerankRequest,
+    RerankResponse,
+)
 from shared_configs.utils import batch_list
 
 logger = setup_logger()
@@ -198,9 +195,8 @@ class EmbeddingModel:
             tenant_id: str | None = None,
             request_id: str | None = None,
         ) -> tuple[int, list[Embedding]]:
-            if self.callback:
-                if self.callback.should_stop():
-                    raise RuntimeError("_batch_encode_texts detected stop signal")
+            if self.callback and self.callback.should_stop():
+                raise RuntimeError("_batch_encode_texts detected stop signal")
 
             embed_request = EmbedRequest(
                 model_name=self.model_name,

@@ -2,9 +2,9 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import cast
 
-from langchain_core.runnables.schema import CustomStreamEvent
-from langchain_core.runnables.schema import StreamEvent
+from langchain_core.runnables.schema import CustomStreamEvent, StreamEvent
 from langgraph.graph.state import CompiledStateGraph
+from pydantic import BaseModel
 
 from onyx.agents.agent_search.basic.graph_builder import basic_graph_builder
 from onyx.agents.agent_search.basic.states import BasicInput
@@ -15,29 +15,30 @@ from onyx.agents.agent_search.dc_search_analysis.states import MainInput as DCMa
 from onyx.agents.agent_search.deep_search.main.graph_builder import (
     main_graph_builder as main_graph_builder_a,
 )
-from onyx.agents.agent_search.deep_search.main.states import (
-    MainInput as MainInput,
-)
+from onyx.agents.agent_search.deep_search.main.states import MainInput as MainInput
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
-from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import AnswerPacket
-from onyx.chat.models import AnswerStream
-from onyx.chat.models import ExtendedToolResponse
-from onyx.chat.models import RefinedAnswerImprovement
-from onyx.chat.models import StreamingError
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import SubQueryPiece
-from onyx.chat.models import SubQuestionPiece
-from onyx.chat.models import ToolResponse
-from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
-from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
+from onyx.chat.models import (
+    AgentAnswerPiece,
+    AnswerPacket,
+    AnswerStream,
+    ExtendedToolResponse,
+    RefinedAnswerImprovement,
+    StreamingError,
+    StreamStopInfo,
+    SubQueryPiece,
+    SubQuestionPiece,
+    ToolResponse,
+)
+from onyx.configs.agent_configs import (
+    AGENT_ALLOW_REFINEMENT,
+    INITIAL_SEARCH_DECOMPOSITION_ENABLED,
+)
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
-from pydantic import BaseModel
 
 logger = setup_logger()
 
@@ -165,31 +166,35 @@ def run_dc_graph(
 def run_document_chat_graph(
     config: GraphConfig,
     query: str,
-    document_ids: list[str] = [],
+    document_ids: list[str] = None,
 ) -> AnswerStream:
     # Add search_tool and document_editor tool in Config (chat_backend.py)
-    from onyx.agents.agent_search.document_chat.graph_builder import document_chat_graph_builder
+    if document_ids is None:
+        document_ids = []
+    from onyx.agents.agent_search.document_chat.graph_builder import (
+        document_chat_graph_builder,
+    )
     from onyx.agents.agent_search.document_chat.states import DocumentChatInput
     from onyx.tools.models import SearchToolOverrideKwargs
-    
+
     user_file_ids = [int(doc_id) for doc_id in document_ids if doc_id.isdigit()] if document_ids else None
-    
+
     # If document IDs are provided, configure search tool to use them
     if user_file_ids:
-        config.tooling.search_tool_override_kwargs = SearchToolOverrideKwargs(user_file_ids=user_file_ids) 
-    
+        config.tooling.search_tool_override_kwargs = SearchToolOverrideKwargs(user_file_ids=user_file_ids)
+
     graph = document_chat_graph_builder()
     compiled_graph = graph.compile()
     input = DocumentChatInput(
-        query=query, 
-        document_ids=document_ids, 
+        query=query,
+        document_ids=document_ids,
     )
-    
+
     yield ToolCallKickoff(
         tool_name="document_chat",
         tool_args={
-            "query": query, 
-            "document_ids": document_ids, 
+            "query": query,
+            "document_ids": document_ids,
         },
     )
     yield from run_graph(compiled_graph, config, input)

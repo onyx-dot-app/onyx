@@ -4,116 +4,113 @@ import secrets
 import string
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Protocol
-from typing import Tuple
-from typing import TypeVar
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Protocol, Tuple, TypeVar, cast
 
 import jwt
-from email_validator import EmailNotValidError
-from email_validator import EmailUndeliverableError
-from email_validator import validate_email
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import status
+from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi_users import BaseUserManager
-from fastapi_users import exceptions
-from fastapi_users import FastAPIUsers
-from fastapi_users import models
-from fastapi_users import schemas
-from fastapi_users import UUIDIDMixin
-from fastapi_users.authentication import AuthenticationBackend
-from fastapi_users.authentication import CookieTransport
-from fastapi_users.authentication import RedisStrategy
-from fastapi_users.authentication import Strategy
-from fastapi_users.authentication.strategy.db import AccessTokenDatabase
-from fastapi_users.authentication.strategy.db import DatabaseStrategy
+from fastapi_users import (
+    BaseUserManager,
+    FastAPIUsers,
+    UUIDIDMixin,
+    exceptions,
+    models,
+    schemas,
+)
+from fastapi_users.authentication import (
+    AuthenticationBackend,
+    CookieTransport,
+    RedisStrategy,
+    Strategy,
+)
+from fastapi_users.authentication.strategy.db import (
+    AccessTokenDatabase,
+    DatabaseStrategy,
+)
 from fastapi_users.exceptions import UserAlreadyExists
-from fastapi_users.jwt import decode_jwt
-from fastapi_users.jwt import generate_jwt
-from fastapi_users.jwt import SecretType
+from fastapi_users.jwt import SecretType, decode_jwt, generate_jwt
 from fastapi_users.manager import UserManagerDependency
 from fastapi_users.openapi import OpenAPIResponseType
-from fastapi_users.router.common import ErrorCode
-from fastapi_users.router.common import ErrorModel
+from fastapi_users.router.common import ErrorCode, ErrorModel
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
-from httpx_oauth.oauth2 import BaseOAuth2
-from httpx_oauth.oauth2 import OAuth2Token
+from httpx_oauth.oauth2 import BaseOAuth2, OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
-from onyx.auth.email_utils import send_forgot_password_email
-from onyx.auth.email_utils import send_user_verification_email
+from onyx.auth.email_utils import (
+    send_forgot_password_email,
+    send_user_verification_email,
+)
 from onyx.auth.invited_users import get_invited_users
-from onyx.auth.schemas import AuthBackend
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
-from onyx.auth.schemas import UserUpdateWithRole
-from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISABLE_AUTH
-from onyx.configs.app_configs import EMAIL_CONFIGURED
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import DANSWER_API_KEY_PREFIX
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import PASSWORD_SPECIAL_CHARS
-from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
+from onyx.auth.schemas import AuthBackend, UserCreate, UserRole, UserUpdateWithRole
+from onyx.configs.app_configs import (
+    AUTH_BACKEND,
+    AUTH_COOKIE_EXPIRE_TIME_SECONDS,
+    AUTH_TYPE,
+    DISABLE_AUTH,
+    EMAIL_CONFIGURED,
+    REDIS_AUTH_KEY_PREFIX,
+    REQUIRE_EMAIL_VERIFICATION,
+    SESSION_EXPIRE_TIME_SECONDS,
+    TRACK_EXTERNAL_IDP_EXPIRY,
+    USER_AUTH_SECRET,
+    VALID_EMAIL_DOMAINS,
+    WEB_DOMAIN,
+)
+from onyx.configs.constants import (
+    ANONYMOUS_USER_COOKIE_NAME,
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    DANSWER_API_KEY_PREFIX,
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    PASSWORD_SPECIAL_CHARS,
+    UNNAMED_KEY_PLACEHOLDER,
+    AuthType,
+    MilestoneRecordType,
+    OnyxRedisLocks,
+)
 from onyx.db.api_key import fetch_user_for_api_key
-from onyx.db.auth import get_access_token_db
-from onyx.db.auth import get_default_admin_user_emails
-from onyx.db.auth import get_user_count
-from onyx.db.auth import get_user_db
-from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_context_manager
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.models import AccessToken
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.db.auth import (
+    SQLAlchemyUserAdminDB,
+    get_access_token_db,
+    get_default_admin_user_emails,
+    get_user_count,
+    get_user_db,
+)
+from onyx.db.engine import (
+    get_async_session,
+    get_async_session_context_manager,
+    get_session_with_tenant,
+)
+from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.users import get_user_by_email
-from onyx.redis.redis_pool import get_async_redis_connection
-from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_pool import get_async_redis_connection, get_redis_client
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import create_milestone_and_report
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import (
+    RecordType,
+    create_milestone_and_report,
+    optional_telemetry,
+)
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from shared_configs.configs import async_return_default_schema
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    fetch_versioned_implementation,
+)
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    async_return_default_schema,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 
@@ -962,12 +959,12 @@ class FastAPIUserWithLogoutRouter(FastAPIUsers[models.UP, models.ID]):
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
-                    getattr(strategy, "refresh_token")
+                    strategy.refresh_token
                 )
 
                 if supports_refresh:
                     try:
-                        refresh_method = getattr(strategy, "refresh_token")
+                        refresh_method = strategy.refresh_token
                         new_token = await refresh_method(token, user)
                         logger.info(
                             f"Successfully refreshed session token for user {user.email}"

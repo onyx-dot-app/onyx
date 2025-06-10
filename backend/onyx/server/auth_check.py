@@ -4,16 +4,17 @@ from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
 from starlette.routing import BaseRoute
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_limited_user
-from onyx.auth.users import current_user
-from onyx.auth.users import current_user_with_expired_token
+from onyx.auth.users import (
+    current_admin_user,
+    current_chat_accessible_user,
+    current_curator_or_admin_user,
+    current_limited_user,
+    current_user,
+    current_user_with_expired_token,
+)
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.server.onyx_api.ingestion import api_key_dep
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-
 
 PUBLIC_ENDPOINT_SPECS = [
     # built-in documentation functions
@@ -108,15 +109,7 @@ def check_router_auth(
             for dependency in route_dependant_obj.dependencies:
                 depends_fn = dependency.cache_key[0]
                 if (
-                    depends_fn == current_limited_user
-                    or depends_fn == current_user
-                    or depends_fn == current_admin_user
-                    or depends_fn == current_curator_or_admin_user
-                    or depends_fn == api_key_dep
-                    or depends_fn == current_user_with_expired_token
-                    or depends_fn == current_chat_accessible_user
-                    or depends_fn == control_plane_dep
-                    or depends_fn == current_cloud_superuser
+                    depends_fn in (current_limited_user, current_user, current_admin_user, current_curator_or_admin_user, api_key_dep, current_user_with_expired_token, current_chat_accessible_user, control_plane_dep, current_cloud_superuser)
                 ):
                     found_auth = True
                     break

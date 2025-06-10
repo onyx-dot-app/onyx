@@ -6,36 +6,39 @@ import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download  # type: ignore
 from setfit import SetFitModel  # type: ignore[import]
-from transformers import AutoTokenizer  # type: ignore
-from transformers import BatchEncoding  # type: ignore
-from transformers import PreTrainedTokenizer  # type: ignore
+from transformers import (
+    AutoTokenizer,  # type: ignore
+    BatchEncoding,  # type: ignore
+    PreTrainedTokenizer,  # type: ignore
+)
 
-from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
-from model_server.constants import MODEL_WARM_UP_STRING
-from model_server.onyx_torch_model import ConnectorClassifier
-from model_server.onyx_torch_model import HybridClassifier
+from model_server.constants import (
+    INFORMATION_CONTENT_MODEL_WARM_UP_STRING,
+    MODEL_WARM_UP_STRING,
+)
+from model_server.onyx_torch_model import ConnectorClassifier, HybridClassifier
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
-from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
 from shared_configs.configs import (
+    CONNECTOR_CLASSIFIER_MODEL_REPO,
+    CONNECTOR_CLASSIFIER_MODEL_TAG,
     INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
-)
-from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
-from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
-from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX,
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN,
     INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
+    INDEXING_ONLY,
+    INFORMATION_CONTENT_MODEL_TAG,
+    INFORMATION_CONTENT_MODEL_VERSION,
+    INTENT_MODEL_TAG,
+    INTENT_MODEL_VERSION,
 )
-from shared_configs.configs import INDEXING_ONLY
-from shared_configs.configs import INFORMATION_CONTENT_MODEL_TAG
-from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
-from shared_configs.configs import INTENT_MODEL_TAG
-from shared_configs.configs import INTENT_MODEL_VERSION
-from shared_configs.model_server_models import ConnectorClassificationRequest
-from shared_configs.model_server_models import ConnectorClassificationResponse
-from shared_configs.model_server_models import ContentClassificationPrediction
-from shared_configs.model_server_models import IntentRequest
-from shared_configs.model_server_models import IntentResponse
+from shared_configs.model_server_models import (
+    ConnectorClassificationRequest,
+    ConnectorClassificationResponse,
+    ContentClassificationPrediction,
+    IntentRequest,
+    IntentResponse,
+)
 
 logger = setup_logger()
 

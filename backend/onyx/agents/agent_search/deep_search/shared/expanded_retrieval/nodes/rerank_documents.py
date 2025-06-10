@@ -8,8 +8,6 @@ from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.operations i
 )
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     DocRerankingUpdate,
-)
-from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalState,
 )
 from onyx.agents.agent_search.models import GraphConfig
@@ -18,12 +16,15 @@ from onyx.agents.agent_search.shared_graph_utils.models import RetrievalFitStats
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.configs.agent_configs import AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS
-from onyx.configs.agent_configs import AGENT_RERANKING_STATS
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.postprocessing.postprocessing import rerank_sections
-from onyx.context.search.postprocessing.postprocessing import should_rerank
+from onyx.configs.agent_configs import (
+    AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS,
+    AGENT_RERANKING_STATS,
+)
+from onyx.context.search.models import InferenceSection, RerankingDetails
+from onyx.context.search.postprocessing.postprocessing import (
+    rerank_sections,
+    should_rerank,
+)
 from onyx.db.engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
 from onyx.utils.timing import log_function_time

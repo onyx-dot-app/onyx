@@ -1,28 +1,24 @@
 from collections.abc import Generator
 
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import ToolCall
+from langchain_core.messages import AIMessageChunk, BaseMessage, ToolCall
 
 from onyx.chat.models import ResponsePart
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
-from onyx.chat.prompt_builder.answer_prompt_builder import PromptSnapshot
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    AnswerPromptBuilder,
+    LLMCall,
+    PromptSnapshot,
+)
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
-from onyx.tools.message import build_tool_message
-from onyx.tools.message import ToolCallSummary
-from onyx.tools.models import ToolCallFinalResult
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.message import ToolCallSummary, build_tool_message
+from onyx.tools.models import ToolCallFinalResult, ToolCallKickoff, ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_runner import (
+    ToolRunner,
     check_which_tools_should_run_for_non_tool_calling_llm,
 )
-from onyx.tools.tool_runner import ToolRunner
 from onyx.tools.tool_selection import select_single_tool_for_non_tool_calling_llm
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

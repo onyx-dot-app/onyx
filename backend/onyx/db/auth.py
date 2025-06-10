@@ -1,27 +1,19 @@
-from collections.abc import AsyncGenerator
-from collections.abc import Callable
-from typing import Any
-from typing import Dict
-from typing import TypeVar
+from collections.abc import AsyncGenerator, Callable
+from typing import Any, Dict, TypeVar
 
 from fastapi import Depends
-from fastapi_users.models import ID
-from fastapi_users.models import UP
+from fastapi_users.models import ID, UP
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyAccessTokenDatabase
-from sqlalchemy import func
-from sqlalchemy import Select
+from sqlalchemy import Select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.api_key import get_api_key_email_pattern
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_context_manager
-from onyx.db.models import AccessToken
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.db.engine import get_async_session, get_async_session_context_manager
+from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )

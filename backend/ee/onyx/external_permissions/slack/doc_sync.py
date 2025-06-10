@@ -4,17 +4,17 @@ from slack_sdk import WebClient
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
+from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
-from onyx.connectors.slack.connector import get_channels
-from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
-from onyx.connectors.slack.connector import SlackConnector
+from onyx.connectors.slack.connector import (
+    SlackConnector,
+    get_channels,
+    make_paginated_slack_api_call_w_retries,
+)
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
-
 
 logger = setup_logger()
 

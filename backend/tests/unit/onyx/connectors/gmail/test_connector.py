@@ -4,14 +4,13 @@ import os
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.gmail.connector import _build_time_range_query
-from onyx.connectors.gmail.connector import thread_to_document
+from onyx.connectors.gmail.connector import _build_time_range_query, thread_to_document
 from onyx.connectors.models import Document
 
 
 def test_thread_to_document() -> None:
     json_path = os.path.join(os.path.dirname(__file__), "thread.json")
-    with open(json_path, "r") as f:
+    with open(json_path) as f:
         full_email_thread = json.load(f)
 
     doc = thread_to_document(full_email_thread)

@@ -1,9 +1,18 @@
 from langgraph.graph import END, START, StateGraph
-from onyx.agents.agent_search.document_chat.states import DocumentChatInput, DocumentChatOutput, DocumentChatState
+
+from onyx.agents.agent_search.document_chat.states import (
+    DocumentChatInput,
+    DocumentChatOutput,
+    DocumentChatState,
+)
 from onyx.agents.agent_search.orchestration.nodes.call_tool import call_tool
 from onyx.agents.agent_search.orchestration.nodes.choose_tool import choose_tool
-from onyx.agents.agent_search.orchestration.nodes.prepare_tool_input import prepare_tool_input
-from onyx.agents.agent_search.orchestration.nodes.use_tool_response import basic_use_tool_response
+from onyx.agents.agent_search.orchestration.nodes.prepare_tool_input import (
+    prepare_tool_input,
+)
+from onyx.agents.agent_search.orchestration.nodes.use_tool_response import (
+    basic_use_tool_response,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

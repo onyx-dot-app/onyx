@@ -1,79 +1,77 @@
 import datetime
 import json
-from typing import Any
-from typing import Literal
-from typing import NotRequired
-from typing import Optional
-from uuid import uuid4
+from typing import Any, Literal, NotRequired, Optional
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel
-from sqlalchemy.orm import validates
-from typing_extensions import TypedDict  # noreorder
-from uuid import UUID
-
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
-
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
-from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
+from fastapi_users_db_sqlalchemy import (
+    SQLAlchemyBaseOAuthAccountTableUUID,
+    SQLAlchemyBaseUserTableUUID,
+)
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from sqlalchemy import Boolean
-from sqlalchemy import DateTime
-from sqlalchemy import desc
-from sqlalchemy import Enum
-from sqlalchemy import Float
-from sqlalchemy import ForeignKey
-from sqlalchemy import func
-from sqlalchemy import Index
-from sqlalchemy import Integer
-
-from sqlalchemy import Sequence
-from sqlalchemy import String
-from sqlalchemy import Text
-from sqlalchemy import UniqueConstraint
+from pydantic import BaseModel
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Sequence,
+    String,
+    Text,
+    UniqueConstraint,
+    desc,
+    func,
+)
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine.interfaces import Dialect
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import Mapped
-from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
-from sqlalchemy.types import LargeBinary
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    validates,
+)
+from sqlalchemy.types import LargeBinary, TypeDecorator
+from typing_extensions import TypedDict  # noreorder
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
-from onyx.configs.constants import DEFAULT_BOOST, MilestoneRecordType
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
+from onyx.configs.constants import (
+    DEFAULT_BOOST,
+    DocumentSource,
+    FileOrigin,
+    MessageType,
+    MilestoneRecordType,
+    NotificationType,
+    SearchFeedbackType,
+    TokenRateLimitScope,
+)
+from onyx.connectors.models import InputType
+from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.enums import (
     AccessType,
+    ChatSessionSharedStatus,
+    ConnectorCredentialPairStatus,
     EmbeddingPrecision,
     IndexingMode,
-    SyncType,
+    IndexingStatus,
+    IndexModelStatus,
     SyncStatus,
+    SyncType,
+    TaskStatus,
 )
-from onyx.configs.constants import NotificationType
-from onyx.configs.constants import SearchFeedbackType
-from onyx.configs.constants import TokenRateLimitScope
-from onyx.connectors.models import InputType
-from onyx.db.enums import ChatSessionSharedStatus
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
+from onyx.file_store.models import FileDescriptor
+from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
+from onyx.utils.headers import HeaderItemDict
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
-from onyx.file_store.models import FileDescriptor
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
-from onyx.context.search.enums import RecencyBiasSetting
-from onyx.utils.encryption import decrypt_bytes_to_string
-from onyx.utils.encryption import encrypt_string_to_bytes
-from onyx.utils.headers import HeaderItemDict
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import RerankerProvider
+from shared_configs.enums import EmbeddingProvider, RerankerProvider
 
 logger = setup_logger()
 
@@ -719,18 +717,16 @@ class Connector(Base):
     # TODO(rkuo): experiment with SQLAlchemy validators rather than manual checks
     # https://docs.sqlalchemy.org/en/20/orm/mapped_attributes.html
     def validate_refresh_freq(self) -> None:
-        if self.refresh_freq is not None:
-            if self.refresh_freq < 60:
-                raise ValueError(
-                    "refresh_freq must be greater than or equal to 60 seconds."
-                )
+        if self.refresh_freq is not None and self.refresh_freq < 60:
+            raise ValueError(
+                "refresh_freq must be greater than or equal to 60 seconds."
+            )
 
     def validate_prune_freq(self) -> None:
-        if self.prune_freq is not None:
-            if self.prune_freq < 86400:
-                raise ValueError(
-                    "prune_freq must be greater than or equal to 86400 seconds."
-                )
+        if self.prune_freq is not None and self.prune_freq < 86400:
+            raise ValueError(
+                "prune_freq must be greater than or equal to 86400 seconds."
+            )
 
 
 class Credential(Base):

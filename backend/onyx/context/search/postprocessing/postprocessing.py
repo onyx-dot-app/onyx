@@ -1,42 +1,36 @@
 import base64
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import cast
 
 import numpy
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
-from onyx.configs.app_configs import BLURB_SIZE
-from onyx.configs.app_configs import IMAGE_ANALYSIS_SYSTEM_PROMPT
+from onyx.configs.app_configs import BLURB_SIZE, IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.llm_configs import get_search_time_image_analysis_enabled
-from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
-from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MIN
+from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX, CROSS_ENCODER_RANGE_MIN
 from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.models import ChunkMetric
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import MAX_METRICS_CONTENT
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RerankMetricsContainer
-from onyx.context.search.models import SearchQuery
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.document_index.document_index_utils import (
-    translate_boost_count_to_multiplier,
+from onyx.context.search.models import (
+    MAX_METRICS_CONTENT,
+    ChunkMetric,
+    InferenceChunk,
+    InferenceChunkUncleaned,
+    InferenceSection,
+    RerankingDetails,
+    RerankMetricsContainer,
+    SearchQuery,
 )
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.document_index.document_index_utils import translate_boost_count_to_multiplier
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
+from onyx.utils.threadpool_concurrency import FunctionCall, run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 
 

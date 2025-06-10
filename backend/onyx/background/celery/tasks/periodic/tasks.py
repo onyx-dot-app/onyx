@@ -7,14 +7,12 @@ from typing import Any
 from celery import shared_task
 from celery.contrib.abortable import AbortableTask  # type: ignore
 from celery.exceptions import TaskRevokedError
-from sqlalchemy import inspect
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import PostgresAdvisoryLocks
+from onyx.configs.constants import OnyxCeleryTask, PostgresAdvisoryLocks
 from onyx.db.engine import get_session_with_current_tenant
 
 

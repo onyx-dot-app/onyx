@@ -1,14 +1,13 @@
 import os
 from typing import Type
-from typing_extensions import TypedDict  # noreorder
 
-from sqlalchemy import not_
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import not_, or_, select
 from sqlalchemy.orm import Session
+from typing_extensions import TypedDict  # noreorder
 
 from onyx.db.models import Persona
 from onyx.db.models import Tool as ToolDBModel
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -16,7 +15,6 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
     InternetSearchTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

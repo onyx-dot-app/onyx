@@ -2,17 +2,14 @@ import multiprocessing
 import os
 import time
 import traceback
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import Enum
 from http import HTTPStatus
 from time import sleep
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import sentry_sdk
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.result import AsyncResult
 from celery.states import READY_STATES
@@ -24,64 +21,82 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
-from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
-from onyx.background.celery.tasks.indexing.utils import IndexingCallback
-from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_state
-from onyx.background.celery.tasks.indexing.utils import should_index
-from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
-from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
-from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
+from onyx.background.celery.tasks.indexing.utils import (
+    IndexingCallback,
+    get_unfenced_index_attempt_ids,
+    is_in_repeated_error_state,
+    should_index,
+    try_creating_indexing_task,
+    validate_indexing_fences,
+)
 from onyx.background.indexing.checkpointing_utils import (
+    cleanup_checkpoint,
     get_index_attempts_with_old_checkpoints,
 )
-from onyx.background.indexing.job_client import SimpleJob
-from onyx.background.indexing.job_client import SimpleJobClient
-from onyx.background.indexing.job_client import SimpleJobException
+from onyx.background.indexing.job_client import (
+    SimpleJob,
+    SimpleJobClient,
+    SimpleJobException,
+)
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
+from onyx.configs.app_configs import (
+    MANAGED_VESPA,
+    VESPA_CLOUD_CERT_PATH,
+    VESPA_CLOUD_KEY_PATH,
+)
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEXING_LOCK_TIMEOUT,
+    CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT,
+    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
+from onyx.db.connector_credential_pair import (
+    fetch_connector_credential_pairs,
+    get_connector_credential_pair_from_id,
+    set_cc_pair_repeated_error_state,
+)
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingMode
-from onyx.db.enums import IndexingStatus
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.search_settings import get_active_search_settings_list
-from onyx.db.search_settings import get_current_search_settings
+from onyx.db.enums import ConnectorCredentialPairStatus, IndexingMode, IndexingStatus
+from onyx.db.index_attempt import (
+    get_index_attempt,
+    mark_attempt_canceled,
+    mark_attempt_failed,
+)
+from onyx.db.search_settings import (
+    get_active_search_settings_list,
+    get_current_search_settings,
+)
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
+from onyx.natural_language_processing.search_nlp_models import (
+    EmbeddingModel,
+    warm_up_bi_encoder,
+)
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
-from onyx.redis.redis_pool import redis_lock_dump
-from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.redis.redis_pool import (
+    SCAN_ITER_COUNT_DEFAULT,
+    get_redis_client,
+    get_redis_replica_client,
+    redis_lock_dump,
+)
 from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import SENTRY_DSN
+from shared_configs.configs import (
+    INDEXING_MODEL_SERVER_HOST,
+    INDEXING_MODEL_SERVER_PORT,
+    MULTI_TENANT,
+    SENTRY_DSN,
+)
 
 logger = setup_logger()
 
@@ -316,16 +331,15 @@ def monitor_ccpair_indexing_taskset(
                     index_attempt = get_index_attempt(
                         db_session, payload.index_attempt_id
                     )
-                    if index_attempt:
-                        if (
-                            index_attempt.status != IndexingStatus.CANCELED
-                            and index_attempt.status != IndexingStatus.FAILED
-                        ):
-                            mark_attempt_failed(
-                                index_attempt_id=payload.index_attempt_id,
-                                db_session=db_session,
-                                failure_reason=msg,
-                            )
+                    if index_attempt and (
+                        index_attempt.status != IndexingStatus.CANCELED
+                        and index_attempt.status != IndexingStatus.FAILED
+                    ):
+                        mark_attempt_failed(
+                            index_attempt_id=payload.index_attempt_id,
+                            db_session=db_session,
+                            failure_reason=msg,
+                        )
                 except Exception:
                     task_logger.exception(
                         "Connector indexing - Transient exception marking index attempt as failed: "

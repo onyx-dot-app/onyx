@@ -1,26 +1,22 @@
-from langchain.schema import AIMessage
-from langchain.schema import HumanMessage
-from langchain.schema import SystemMessage
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages.tool import ToolMessage
 
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.models import (
     AgentPromptEnrichmentComponents,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import (
+    format_docs,
     get_persona_agent_prompt_expressions,
+    remove_document_citations,
+    summarize_history,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import remove_document_citations
-from onyx.agents.agent_search.shared_graph_utils.utils import summarize_history
 from onyx.configs.agent_configs import AGENT_MAX_STATIC_HISTORY_WORD_LENGTH
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLMConfig
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.natural_language_processing.utils import tokenizer_trim_content
-from onyx.prompts.agent_search import HISTORY_FRAMING_PROMPT
-from onyx.prompts.agent_search import SUB_QUESTION_RAG_PROMPT
+from onyx.natural_language_processing.utils import get_tokenizer, tokenizer_trim_content
+from onyx.prompts.agent_search import HISTORY_FRAMING_PROMPT, SUB_QUESTION_RAG_PROMPT
 from onyx.prompts.prompt_utils import build_date_time_string
 from onyx.utils.logger import setup_logger
 

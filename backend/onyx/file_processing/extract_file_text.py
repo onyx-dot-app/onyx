@@ -4,17 +4,12 @@ import os
 import re
 import uuid
 import zipfile
-from collections.abc import Callable
-from collections.abc import Iterator
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
-from enum import auto
-from enum import IntFlag
+from enum import IntFlag, auto
 from io import BytesIO
 from pathlib import Path
-from typing import Any
-from typing import IO
-from typing import NamedTuple
+from typing import IO, Any, NamedTuple
 from zipfile import BadZipFile
 
 import chardet
@@ -27,11 +22,12 @@ from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import ONYX_METADATA_FILENAME
+from onyx.configs.constants import ONYX_METADATA_FILENAME, FileOrigin
 from onyx.file_processing.html_utils import parse_html_page_basic
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import unstructured_to_text
+from onyx.file_processing.unstructured import (
+    get_unstructured_api_key,
+    unstructured_to_text,
+)
 from onyx.file_store.file_store import FileStore
 from onyx.utils.logger import setup_logger
 
@@ -321,7 +317,7 @@ def docx_to_text_and_images(
     # For large docs, a more robust approach is needed.
     # This is a simplified example.
 
-    for rel_id, rel in doc.part.rels.items():
+    for _rel_id, rel in doc.part.rels.items():
         if "image" in rel.reltype:
             # image is typically in rel.target_part.blob
             image_bytes = rel.target_part.blob

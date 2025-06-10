@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_MULTIPASS_INDEXING
 from onyx.db.models import SearchSettings
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_secondary_search_settings,
+)
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import MultipassConfig
+from onyx.indexing.models import DocMetadataAwareIndexChunk, MultipassConfig
 from shared_configs.configs import MULTI_TENANT
 
 DEFAULT_BATCH_SIZE = 30
@@ -162,8 +163,10 @@ def get_uuid_from_chunk_info(
 
 
 def get_uuid_from_chunk_info_old(
-    *, document_id: str, chunk_id: int, large_chunk_reference_ids: list[int] = []
+    *, document_id: str, chunk_id: int, large_chunk_reference_ids: list[int] = None
 ) -> UUID:
+    if large_chunk_reference_ids is None:
+        large_chunk_reference_ids = []
     doc_str = document_id
 
     # Web parsing URL duplicate catching
@@ -190,8 +193,10 @@ def get_uuid_from_chunk(chunk: DocMetadataAwareIndexChunk) -> uuid.UUID:
 
 
 def get_uuid_from_chunk_old(
-    chunk: DocMetadataAwareIndexChunk, large_chunk_reference_ids: list[int] = []
+    chunk: DocMetadataAwareIndexChunk, large_chunk_reference_ids: list[int] = None
 ) -> UUID:
+    if large_chunk_reference_ids is None:
+        large_chunk_reference_ids = []
     return get_uuid_from_chunk_info_old(
         document_id=chunk.source_document.id,
         chunk_id=chunk.chunk_id,

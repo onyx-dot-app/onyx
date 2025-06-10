@@ -1,39 +1,42 @@
 from typing import cast
 from uuid import uuid4
 
-from langchain_core.messages import AIMessage
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import ToolCall
+from langchain_core.messages import AIMessage, HumanMessage, ToolCall
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.orchestration.states import ToolChoice
-from onyx.agents.agent_search.orchestration.states import ToolChoiceState
-from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.orchestration.states import (
+    ToolChoice,
+    ToolChoiceState,
+    ToolChoiceUpdate,
+)
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
+    get_tool_by_name,
     get_tool_call_for_non_tool_calling_llm_impl,
 )
 from onyx.configs.chat_configs import USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
 from onyx.llm.factory import get_default_llms
-from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
-from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
-from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
-from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
-from onyx.tools.models import QueryExpansions
-from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.prompts.chat_prompts import (
+    QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT,
+    QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT,
+    QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT,
+    QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT,
+)
+from onyx.tools.models import QueryExpansions, SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_in_background
-from onyx.utils.threadpool_concurrency import TimeoutThread
-from onyx.utils.threadpool_concurrency import wait_on_background
+from onyx.utils.threadpool_concurrency import (
+    TimeoutThread,
+    run_in_background,
+    wait_on_background,
+)
 from onyx.utils.timing import log_function_time
 from shared_configs.model_server_models import Embedding
 

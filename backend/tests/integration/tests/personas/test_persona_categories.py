@@ -3,12 +3,9 @@ from uuid import uuid4
 import pytest
 from requests.exceptions import HTTPError
 
-from tests.integration.common_utils.managers.persona import (
-    PersonaLabelManager,
-)
+from tests.integration.common_utils.managers.persona import PersonaLabelManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestPersonaLabel
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestPersonaLabel, DATestUser
 
 
 def test_persona_label_management(reset: None) -> None:

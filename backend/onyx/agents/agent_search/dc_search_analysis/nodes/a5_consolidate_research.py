@@ -6,16 +6,17 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dc_search_analysis.ops import extract_section
-from onyx.agents.agent_search.dc_search_analysis.states import MainState
-from onyx.agents.agent_search.dc_search_analysis.states import ResearchUpdate
+from onyx.agents.agent_search.dc_search_analysis.states import MainState, ResearchUpdate
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
-from onyx.prompts.agents.dc_prompts import DC_FORMATTING_NO_BASE_DATA_PROMPT
-from onyx.prompts.agents.dc_prompts import DC_FORMATTING_WITH_BASE_DATA_PROMPT
+from onyx.prompts.agents.dc_prompts import (
+    DC_FORMATTING_NO_BASE_DATA_PROMPT,
+    DC_FORMATTING_WITH_BASE_DATA_PROMPT,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 

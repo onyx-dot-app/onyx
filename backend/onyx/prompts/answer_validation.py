@@ -1,8 +1,7 @@
 # The following prompts are used for verifying the LLM answer after it is already produced.
 # Reflexion flow essentially. This feature can be toggled on/off
 from onyx.configs.app_configs import CUSTOM_ANSWER_VALIDITY_CONDITIONS
-from onyx.prompts.constants import ANSWER_PAT
-from onyx.prompts.constants import QUESTION_PAT
+from onyx.prompts.constants import ANSWER_PAT, QUESTION_PAT
 
 ANSWER_VALIDITY_CONDITIONS = (
     """

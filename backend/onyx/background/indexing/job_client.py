@@ -11,15 +11,12 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing.context import SpawnProcess
-from typing import Any
-from typing import Literal
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA, TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()

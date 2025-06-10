@@ -1,10 +1,7 @@
 import re
-from collections.abc import Callable
-from collections.abc import Generator
-from functools import lru_cache
-from functools import wraps
-from typing import Any
-from typing import cast
+from collections.abc import Callable, Generator
+from functools import lru_cache, wraps
+from typing import Any, cast
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -22,7 +19,7 @@ basic_retry_wrapper = retry_builder(tries=7)
 _SLACK_LIMIT = 900
 
 
-@lru_cache()
+@lru_cache
 def get_base_url(token: str) -> str:
     """Retrieve and cache the base URL of the Slack workspace based on the client token."""
     client = WebClient(token=token)

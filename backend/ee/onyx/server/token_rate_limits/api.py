@@ -1,21 +1,25 @@
 from collections import defaultdict
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.token_limit import fetch_all_user_group_token_rate_limits_by_group
-from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
-from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_curator_or_admin_user
+from ee.onyx.db.token_limit import (
+    fetch_all_user_group_token_rate_limits_by_group,
+    fetch_user_group_token_rate_limits_for_user,
+    insert_user_group_token_rate_limit,
+)
+from onyx.auth.users import current_admin_user, current_curator_or_admin_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.db.token_limit import fetch_all_user_token_rate_limits
-from onyx.db.token_limit import insert_user_token_rate_limit
+from onyx.db.token_limit import (
+    fetch_all_user_token_rate_limits,
+    insert_user_token_rate_limit,
+)
 from onyx.server.query_and_chat.token_limit import any_rate_limit_exists
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
-from onyx.server.token_rate_limits.models import TokenRateLimitDisplay
+from onyx.server.token_rate_limits.models import (
+    TokenRateLimitArgs,
+    TokenRateLimitDisplay,
+)
 
 router = APIRouter(prefix="/admin/token-rate-limits")
 

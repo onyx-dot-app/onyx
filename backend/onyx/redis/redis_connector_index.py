@@ -1,13 +1,14 @@
 from datetime import datetime
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 import redis
 from pydantic import BaseModel
 
-from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
-from onyx.configs.constants import OnyxRedisConstants
+from onyx.configs.constants import (
+    CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT,
+    OnyxRedisConstants,
+)
 
 
 class RedisConnectorIndexPayload(BaseModel):

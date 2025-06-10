@@ -1,14 +1,15 @@
 from collections.abc import Callable
 from typing import List
 
-from fastapi import Depends
-from fastapi import Request
+from fastapi import Depends, Request
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
-from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
-from onyx.configs.app_configs import RATE_LIMIT_MAX_REQUESTS
-from onyx.configs.app_configs import RATE_LIMIT_WINDOW_SECONDS
+from onyx.configs.app_configs import (
+    AUTH_RATE_LIMITING_ENABLED,
+    RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS,
+)
 from onyx.redis.redis_pool import get_async_redis_connection
 
 

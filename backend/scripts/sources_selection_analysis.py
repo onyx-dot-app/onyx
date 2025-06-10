@@ -5,8 +5,7 @@ import sys
 import time
 from datetime import datetime
 from os import listdir
-from os.path import isfile
-from os.path import join
+from os.path import isfile, join
 from typing import Optional
 
 import requests
@@ -257,10 +256,10 @@ class CompareAnalysis:
             for change in diff:
                 color_output("-" * 100)
                 color_output(
-                    (
+
                         f"The document '{change['document_id']}' (rank: {change['previous_rank']}) "
                         f"score has a changed of {change['score_change_pct']}%"
-                    )
+
                 )
                 color_output(f"previous score: {change['previous_score']}")
                 color_output(f"current score:  {change['new_score']}")
@@ -272,7 +271,7 @@ class CompareAnalysis:
             color_output("No change detected", model="valid")
         color_output("Documents Score check completed.", model="info")
 
-        return False if diff else True
+        return not diff
 
     def check_documents_order(self) -> bool:
         """Check if the selected documents are the same and in the same order.
@@ -287,10 +286,10 @@ class CompareAnalysis:
             for change in diff:
                 color_output("-" * 100)
                 color_output(
-                    (
+
                         f"The document '{change['document_id']}' was at a rank "
                         f"'{change['previous_rank']}' but now is at rank '{change['new_rank']}'"
-                    )
+
                 )
                 color_output(f"previous score: {change['previous_score']}")
                 color_output(f"current score:  {change['new_score']}")
@@ -302,7 +301,7 @@ class CompareAnalysis:
             color_output("No change detected", model="valid")
         color_output("Documents order check completed.", model="info")
 
-        return False if diff else True
+        return not diff
 
     def __call__(self) -> None:
         """Manage the analysis process"""
@@ -319,8 +318,8 @@ class SelectionAnalysis:
     def __init__(
         self,
         exectype: str,
-        analysisfiles: list = [],
-        queries: list = [],
+        analysisfiles: list = None,
+        queries: list = None,
         threshold: float = 0.0,
         web_port: int = 3000,
         auth_cookie: str = "",
@@ -340,6 +339,10 @@ class SelectionAnalysis:
             wait (int, optional): The waiting time (in seconds) to respect between queries.
                                     It is helpful to avoid hitting the Generative AI rate limiting.
         """
+        if queries is None:
+            queries = []
+        if analysisfiles is None:
+            analysisfiles = []
         self._exectype = exectype
         self._analysisfiles = analysisfiles
         self._queries = queries
@@ -433,7 +436,7 @@ class SelectionAnalysis:
         Returns:
             list[dict]: Content of the selected file
         """
-        with open(f"{ANALYSIS_FOLDER}{filename}", "r") as f:
+        with open(f"{ANALYSIS_FOLDER}{filename}") as f:
             return json.load(f)
 
     def extract_content(self, contents: dict) -> dict:

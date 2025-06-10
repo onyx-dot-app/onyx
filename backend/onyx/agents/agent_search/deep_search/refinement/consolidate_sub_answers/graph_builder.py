@@ -1,6 +1,4 @@
-from langgraph.graph import END
-from langgraph.graph import START
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.nodes.check_sub_answer import (
     check_sub_answer,
@@ -16,11 +14,7 @@ from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer
 )
 from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     AnswerQuestionOutput,
-)
-from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     AnswerQuestionState,
-)
-from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     SubQuestionAnsweringInput,
 )
 from onyx.agents.agent_search.deep_search.refinement.consolidate_sub_answers.edges import (
@@ -109,9 +103,9 @@ def answer_refined_query_graph_builder() -> StateGraph:
 
 
 if __name__ == "__main__":
+    from onyx.context.search.models import SearchRequest
     from onyx.db.engine import get_session_context_manager
     from onyx.llm.factory import get_default_llms
-    from onyx.context.search.models import SearchRequest
 
     graph = answer_refined_query_graph_builder()
     compiled_graph = graph.compile()

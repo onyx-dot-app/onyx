@@ -1,10 +1,6 @@
-from langgraph.graph import END
-from langgraph.graph import START
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
-from onyx.agents.agent_search.basic.states import BasicInput
-from onyx.agents.agent_search.basic.states import BasicOutput
-from onyx.agents.agent_search.basic.states import BasicState
+from onyx.agents.agent_search.basic.states import BasicInput, BasicOutput, BasicState
 from onyx.agents.agent_search.orchestration.nodes.call_tool import call_tool
 from onyx.agents.agent_search.orchestration.nodes.choose_tool import choose_tool
 from onyx.agents.agent_search.orchestration.nodes.prepare_tool_input import (
@@ -78,10 +74,10 @@ def should_continue(state: BasicState) -> str:
 
 
 if __name__ == "__main__":
-    from onyx.db.engine import get_session_context_manager
-    from onyx.context.search.models import SearchRequest
-    from onyx.llm.factory import get_default_llms
     from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
+    from onyx.context.search.models import SearchRequest
+    from onyx.db.engine import get_session_context_manager
+    from onyx.llm.factory import get_default_llms
 
     graph = basic_graph_builder()
     compiled_graph = graph.compile()

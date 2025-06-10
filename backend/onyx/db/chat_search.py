@@ -1,18 +1,11 @@
-from typing import List
-from typing import Optional
-from typing import Tuple
+from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import column
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import select
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy import column, desc, func, select
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.sql.expression import ColumnClause
 
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
+from onyx.db.models import ChatMessage, ChatSession
 
 
 def search_chat_sessions(

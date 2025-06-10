@@ -2,12 +2,13 @@
 # It is used also for the one shot direct QA flow
 import json
 
-from onyx.prompts.constants import DEFAULT_IGNORE_STATEMENT
-from onyx.prompts.constants import FINAL_QUERY_PAT
-from onyx.prompts.constants import GENERAL_SEP_PAT
-from onyx.prompts.constants import QUESTION_PAT
-from onyx.prompts.constants import THOUGHT_PAT
-
+from onyx.prompts.constants import (
+    DEFAULT_IGNORE_STATEMENT,
+    FINAL_QUERY_PAT,
+    GENERAL_SEP_PAT,
+    QUESTION_PAT,
+    THOUGHT_PAT,
+)
 
 ONE_SHOT_SYSTEM_PROMPT = """
 You are a question answering system that is constantly learning and improving.

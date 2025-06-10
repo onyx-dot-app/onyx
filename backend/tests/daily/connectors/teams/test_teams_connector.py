@@ -4,9 +4,11 @@ import time
 import pytest
 
 from onyx.connectors.teams.connector import TeamsConnector
-from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
-from tests.daily.connectors.utils import to_sections
-from tests.daily.connectors.utils import to_text_sections
+from tests.daily.connectors.utils import (
+    load_everything_from_checkpoint_connector,
+    to_sections,
+    to_text_sections,
+)
 
 
 @pytest.fixture

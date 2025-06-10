@@ -5,15 +5,12 @@ from pydantic import BaseModel
 
 from onyx.agents.agent_search.deep_search.main.models import (
     AgentAdditionalMetrics,
-)
-from onyx.agents.agent_search.deep_search.main.models import AgentBaseMetrics
-from onyx.agents.agent_search.deep_search.main.models import (
+    AgentBaseMetrics,
     AgentRefinedMetrics,
+    AgentTimings,
 )
-from onyx.agents.agent_search.deep_search.main.models import AgentTimings
 from onyx.context.search.models import InferenceSection
 from onyx.tools.models import SearchQueryInfo
-
 
 # Pydantic models for structured outputs
 # class RewrittenQueries(BaseModel):

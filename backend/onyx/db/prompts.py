@@ -2,11 +2,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
-from onyx.db.models import Persona
-from onyx.db.models import Prompt
-from onyx.db.models import User
+from onyx.db.models import Persona, Prompt, User
 from onyx.utils.logger import setup_logger
-
 
 # Note: As prompts are fairly innocuous/harmless, there are no protections
 # to prevent users from messing with prompts of other users.

@@ -1,28 +1,28 @@
 import asyncio
-from collections.abc import AsyncIterable
-from collections.abc import Iterable
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from collections.abc import AsyncIterable, Iterable
+from datetime import datetime, timezone
+from typing import Any, cast
 
 from discord import Client
-from discord.channel import TextChannel
-from discord.channel import Thread
+from discord.channel import TextChannel, Thread
 from discord.enums import MessageType
 from discord.flags import Intents
 from discord.message import Message as DiscordMessage
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    ImageSection,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -239,12 +239,16 @@ def _manage_async_retrieval(
 class DiscordConnector(PollConnector, LoadConnector):
     def __init__(
         self,
-        server_ids: list[str] = [],
-        channel_names: list[str] = [],
+        server_ids: list[str] = None,
+        channel_names: list[str] = None,
         # YYYY-MM-DD
         start_date: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ):
+        if channel_names is None:
+            channel_names = []
+        if server_ids is None:
+            server_ids = []
         self.batch_size = batch_size
         self.channel_names: list[str] = channel_names if channel_names else []
         self.server_ids: list[int] = (

@@ -1,23 +1,26 @@
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 
 from googleapiclient.discovery import Resource  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.models import DriveRetrievalStage
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.models import RetrievedDriveFile
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.google_utils.google_utils import ORDER_BY_KEY
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GoogleDriveFileType,
+    RetrievedDriveFile,
+)
+from onyx.connectors.google_utils.google_utils import (
+    ORDER_BY_KEY,
+    GoogleFields,
+    execute_paginated_retrieval,
+)
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -62,7 +65,7 @@ def _get_folders_in_parent(
     if parent_id:
         query += f" and '{parent_id}' in parents"
 
-    for file in execute_paginated_retrieval(
+    yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         continue_on_404_or_403=True,
@@ -71,8 +74,7 @@ def _get_folders_in_parent(
         includeItemsFromAllDrives=True,
         fields=FOLDER_FIELDS,
         q=query,
-    ):
-        yield file
+    )
 
 
 def _get_files_in_parent(
@@ -86,7 +88,7 @@ def _get_files_in_parent(
     query += " and trashed = false"
     query += generate_time_range_filter(start, end)
 
-    for file in execute_paginated_retrieval(
+    yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         continue_on_404_or_403=True,
@@ -96,8 +98,7 @@ def _get_files_in_parent(
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
         q=query,
         **({} if is_slim else {ORDER_BY_KEY: GoogleFields.MODIFIED_TIME.value}),
-    ):
-        yield file
+    )
 
 
 def crawl_folders_for_files(

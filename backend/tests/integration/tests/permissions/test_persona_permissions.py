@@ -11,8 +11,7 @@ import pytest
 from requests.exceptions import HTTPError
 
 from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.managers.user import DATestUser
-from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.common_utils.managers.user import DATestUser, UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 

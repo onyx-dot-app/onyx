@@ -1,8 +1,7 @@
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import IO
-from typing import Optional
+from typing import IO, Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
 from sqlalchemy import cast
@@ -10,12 +9,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
-from ee.onyx.server.reporting.usage_export_models import ChatMessageSkeleton
-from ee.onyx.server.reporting.usage_export_models import FlowType
-from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
+from ee.onyx.server.reporting.usage_export_models import (
+    ChatMessageSkeleton,
+    FlowType,
+    UsageReportMetadata,
+)
 from onyx.configs.constants import MessageType
-from onyx.db.models import UsageReport
-from onyx.db.models import User
+from onyx.db.models import UsageReport, User
 from onyx.file_store.file_store import get_default_file_store
 
 

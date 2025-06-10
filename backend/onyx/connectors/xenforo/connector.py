@@ -11,25 +11,20 @@ The `load_from_state` method is used to load documents from the forum. It takes 
 can be used to specify a state from which to start loading documents.
 """
 
+import contextlib
 import re
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 import pytz
 import requests
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import datetime_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
+from onyx.connectors.models import BasicExpertInfo, Document, TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -152,15 +147,13 @@ class XenforoConnector(LoadConnector):
         matches = ("threads/", "boards/", "forums/")
         for each in matches:
             if each in self.base_url:
-                try:
+                with contextlib.suppress(ValueError):
                     self.base_url = self.base_url[
                         0 : self.base_url.index(
                             "/", self.base_url.index(each) + len(each)
                         )
                         + 1
                     ]
-                except ValueError:
-                    pass
 
         doc_batch: list[Document] = []
         all_threads = []
@@ -206,7 +199,7 @@ class XenforoConnector(LoadConnector):
     def get_threads(self, url: str) -> list[str]:
         soup = self.requestsite(url)
         thread_tags = soup.find_all(class_="structItem-title")
-        base_url = "{uri.scheme}://{uri.netloc}".format(uri=urlparse(url))
+        base_url = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
         threads = []
         for x in thread_tags:
             y = x.find_all(href=True)

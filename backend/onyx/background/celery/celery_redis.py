@@ -1,7 +1,6 @@
 # These are helper objects for tracking the keys we need to write in redis
 import json
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from celery import Celery
 from redis import Redis

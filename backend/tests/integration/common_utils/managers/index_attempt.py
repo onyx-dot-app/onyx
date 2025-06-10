@@ -1,6 +1,5 @@
 import time
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import requests
@@ -8,16 +7,15 @@ import requests
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import IndexModelStatus
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
+from onyx.db.models import IndexAttempt, IndexingStatus
 from onyx.db.search_settings import get_current_search_settings
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import PaginatedReturn
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.constants import MAX_DELAY
-from tests.integration.common_utils.test_models import DATestIndexAttempt
-from tests.integration.common_utils.test_models import DATestUser
+from onyx.server.documents.models import IndexAttemptSnapshot, PaginatedReturn
+from tests.integration.common_utils.constants import (
+    API_SERVER_URL,
+    GENERAL_HEADERS,
+    MAX_DELAY,
+)
+from tests.integration.common_utils.test_models import DATestIndexAttempt, DATestUser
 
 
 class IndexAttemptManager:

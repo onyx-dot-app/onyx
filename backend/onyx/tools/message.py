@@ -2,8 +2,7 @@ import json
 from typing import Any
 
 from langchain_core.messages.ai import AIMessage
-from langchain_core.messages.tool import ToolCall
-from langchain_core.messages.tool import ToolMessage
+from langchain_core.messages.tool import ToolCall, ToolMessage
 from pydantic import BaseModel
 
 from onyx.natural_language_processing.utils import BaseTokenizer

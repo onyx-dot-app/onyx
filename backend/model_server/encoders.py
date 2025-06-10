@@ -2,8 +2,7 @@ import asyncio
 import json
 import time
 from types import TracebackType
-from typing import cast
-from typing import Optional
+from typing import Optional, cast
 
 import aioboto3  # type: ignore
 import httpx
@@ -11,40 +10,45 @@ import openai
 import vertexai  # type: ignore
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
-from fastapi import APIRouter
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import APIRouter, HTTPException, Request
 from google.oauth2 import service_account  # type: ignore
 from litellm import aembedding
 from litellm.exceptions import RateLimitError
 from retry import retry
-from sentence_transformers import CrossEncoder  # type: ignore
-from sentence_transformers import SentenceTransformer  # type: ignore
-from vertexai.language_models import TextEmbeddingInput  # type: ignore
-from vertexai.language_models import TextEmbeddingModel  # type: ignore
+from sentence_transformers import (
+    CrossEncoder,  # type: ignore
+    SentenceTransformer,  # type: ignore
+)
+from vertexai.language_models import (
+    TextEmbeddingInput,  # type: ignore
+    TextEmbeddingModel,  # type: ignore
+)
 
-from model_server.constants import DEFAULT_COHERE_MODEL
-from model_server.constants import DEFAULT_OPENAI_MODEL
-from model_server.constants import DEFAULT_VERTEX_MODEL
-from model_server.constants import DEFAULT_VOYAGE_MODEL
-from model_server.constants import EmbeddingModelTextType
-from model_server.constants import EmbeddingProvider
-from model_server.utils import pass_aws_key
-from model_server.utils import simple_log_function_time
+from model_server.constants import (
+    DEFAULT_COHERE_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    DEFAULT_VERTEX_MODEL,
+    DEFAULT_VOYAGE_MODEL,
+    EmbeddingModelTextType,
+    EmbeddingProvider,
+)
+from model_server.utils import pass_aws_key, simple_log_function_time
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
-from shared_configs.configs import INDEXING_ONLY
-from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
-from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
-from shared_configs.enums import EmbedTextType
-from shared_configs.enums import RerankerProvider
-from shared_configs.model_server_models import Embedding
-from shared_configs.model_server_models import EmbedRequest
-from shared_configs.model_server_models import EmbedResponse
-from shared_configs.model_server_models import RerankRequest
-from shared_configs.model_server_models import RerankResponse
+from shared_configs.configs import (
+    API_BASED_EMBEDDING_TIMEOUT,
+    INDEXING_ONLY,
+    OPENAI_EMBEDDING_TIMEOUT,
+    VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE,
+)
+from shared_configs.enums import EmbedTextType, RerankerProvider
+from shared_configs.model_server_models import (
+    Embedding,
+    EmbedRequest,
+    EmbedResponse,
+    RerankRequest,
+    RerankResponse,
+)
 from shared_configs.utils import batch_list
-
 
 logger = setup_logger()
 

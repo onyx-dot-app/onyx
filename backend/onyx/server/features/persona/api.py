@@ -1,57 +1,54 @@
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_limited_user
-from onyx.auth.users import current_user
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import NotificationType
+from onyx.auth.users import (
+    current_admin_user,
+    current_chat_accessible_user,
+    current_curator_or_admin_user,
+    current_limited_user,
+    current_user,
+)
+from onyx.configs.constants import FileOrigin, MilestoneRecordType, NotificationType
 from onyx.db.engine import get_session
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
 from onyx.db.notification import create_notification
-from onyx.db.persona import create_assistant_label
-from onyx.db.persona import create_update_persona
-from onyx.db.persona import delete_persona_label
-from onyx.db.persona import get_assistant_labels
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas_for_user
-from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.persona import update_all_personas_display_priority
-from onyx.db.persona import update_persona_is_default
-from onyx.db.persona import update_persona_label
-from onyx.db.persona import update_persona_public_status
-from onyx.db.persona import update_persona_shared_users
-from onyx.db.persona import update_persona_visibility
-from onyx.db.prompts import build_prompt_name_from_persona_name
-from onyx.db.prompts import upsert_prompt
+from onyx.db.persona import (
+    create_assistant_label,
+    create_update_persona,
+    delete_persona_label,
+    get_assistant_labels,
+    get_persona_by_id,
+    get_personas_for_user,
+    mark_persona_as_deleted,
+    mark_persona_as_not_deleted,
+    update_all_personas_display_priority,
+    update_persona_is_default,
+    update_persona_label,
+    update_persona_public_status,
+    update_persona_shared_users,
+    update_persona_visibility,
+)
+from onyx.db.prompts import build_prompt_name_from_persona_name, upsert_prompt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
-from onyx.secondary_llm_flows.starter_message_creation import (
-    generate_starter_messages,
+from onyx.secondary_llm_flows.starter_message_creation import generate_starter_messages
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    GenerateStarterMessageRequest,
+    ImageGenerationToolStatus,
+    PersonaLabelCreate,
+    PersonaLabelResponse,
+    PersonaSharedNotificationData,
+    PersonaSnapshot,
+    PersonaUpsertRequest,
+    PromptSnapshot,
 )
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import GenerateStarterMessageRequest
-from onyx.server.features.persona.models import ImageGenerationToolStatus
-from onyx.server.features.persona.models import PersonaLabelCreate
-from onyx.server.features.persona.models import PersonaLabelResponse
-from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
-from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger

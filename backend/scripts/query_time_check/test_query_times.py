@@ -13,8 +13,10 @@ from onyx.db.engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import VespaIndex
-from scripts.query_time_check.seed_dummy_docs import TOTAL_ACL_ENTRIES_PER_CATEGORY
-from scripts.query_time_check.seed_dummy_docs import TOTAL_DOC_SETS
+from scripts.query_time_check.seed_dummy_docs import (
+    TOTAL_ACL_ENTRIES_PER_CATEGORY,
+    TOTAL_DOC_SETS,
+)
 from shared_configs.model_server_models import Embedding
 
 # make sure these are smaller than TOTAL_ACL_ENTRIES_PER_CATEGORY and TOTAL_DOC_SETS, respectively

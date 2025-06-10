@@ -5,14 +5,12 @@ import os
 import pkgutil
 import sys
 from types import ModuleType
-from typing import List
-from typing import Type
 from typing import TypeVar
 
 T = TypeVar("T")
 
 
-def import_all_modules_from_dir(dir_path: str) -> List[ModuleType]:
+def import_all_modules_from_dir(dir_path: str) -> list[ModuleType]:
     """
     Imports all modules found in the given directory and its subdirectories,
     returning a list of imported module objects.
@@ -22,7 +20,7 @@ def import_all_modules_from_dir(dir_path: str) -> List[ModuleType]:
     if dir_path not in sys.path:
         sys.path.insert(0, dir_path)
 
-    imported_modules: List[ModuleType] = []
+    imported_modules: list[ModuleType] = []
 
     for _, package_name, _ in pkgutil.walk_packages([dir_path]):
         try:
@@ -35,12 +33,12 @@ def import_all_modules_from_dir(dir_path: str) -> List[ModuleType]:
     return imported_modules
 
 
-def all_subclasses(cls: Type[T]) -> List[Type[T]]:
+def all_subclasses(cls: type[T]) -> list[type[T]]:
     """
     Recursively find all subclasses of the given class.
     """
     direct_subs = cls.__subclasses__()
-    result: List[Type[T]] = []
+    result: list[type[T]] = []
     for subclass in direct_subs:
         result.append(subclass)
         # Extend the result by recursively calling all_subclasses
@@ -48,7 +46,7 @@ def all_subclasses(cls: Type[T]) -> List[Type[T]]:
     return result
 
 
-def find_all_subclasses_in_dir(parent_class: Type[T], directory: str) -> List[Type[T]]:
+def find_all_subclasses_in_dir(parent_class: type[T], directory: str) -> list[type[T]]:
     """
     Imports all modules from the given directory (and subdirectories),
     then returns all classes that are subclasses of parent_class.

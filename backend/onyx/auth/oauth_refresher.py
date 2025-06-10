@@ -1,20 +1,16 @@
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from fastapi_users.manager import BaseUserManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
-from onyx.db.models import OAuthAccount
-from onyx.db.models import User
+from onyx.configs.app_configs import (
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    TRACK_EXTERNAL_IDP_EXPIRY,
+)
+from onyx.db.models import OAuthAccount, User
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -41,7 +37,7 @@ async def _test_expire_oauth_token(
     """
     try:
         new_expires_at = int(
-            (datetime.now(timezone.utc).timestamp() + expire_in_seconds)
+            datetime.now(timezone.utc).timestamp() + expire_in_seconds
         )
 
         updated_data: Dict[str, Any] = {"expires_at": new_expires_at}
@@ -110,7 +106,7 @@ async def refresh_oauth_token(
             new_expires_at: Optional[int] = None
             if expires_in:
                 new_expires_at = int(
-                    (datetime.now(timezone.utc).timestamp() + expires_in)
+                    datetime.now(timezone.utc).timestamp() + expires_in
                 )
 
             # Update the OAuth account

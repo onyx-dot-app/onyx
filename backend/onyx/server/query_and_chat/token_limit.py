@@ -1,26 +1,18 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
 from dateutil import tz
-from fastapi import Depends
-from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy import select
+from fastapi import Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.db.engine import get_session_context_manager
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import User
+from onyx.db.models import ChatMessage, ChatSession, TokenRateLimit, User
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
-
 
 logger = setup_logger()
 
@@ -119,7 +111,7 @@ def _is_rate_limited(
     return False
 
 
-@lru_cache()
+@lru_cache
 def any_rate_limit_exists() -> bool:
     """Checks if any rate limit exists in the database. Is cached, so that if no rate limits
     are setup, we don't have any effect on average query latency."""

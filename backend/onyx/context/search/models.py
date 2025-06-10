@@ -1,23 +1,19 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.enums import SearchType
-from onyx.db.models import Persona
-from onyx.db.models import SearchSettings
-from onyx.indexing.models import BaseChunk
-from onyx.indexing.models import IndexingSetting
+from onyx.context.search.enums import (
+    LLMEvaluationType,
+    OptionalSearchSetting,
+    SearchType,
+)
+from onyx.db.models import Persona, SearchSettings
+from onyx.indexing.models import BaseChunk, IndexingSetting
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
-
 
 MAX_METRICS_CONTENT = (
     200  # Just need enough characters to identify where in the doc the chunk is

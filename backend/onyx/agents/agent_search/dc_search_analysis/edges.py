@@ -4,12 +4,10 @@ from typing import cast
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import Send
 
-from onyx.agents.agent_search.dc_search_analysis.states import ObjectInformationInput
 from onyx.agents.agent_search.dc_search_analysis.states import (
+    ObjectInformationInput,
     ObjectResearchInformationUpdate,
-)
-from onyx.agents.agent_search.dc_search_analysis.states import ObjectSourceInput
-from onyx.agents.agent_search.dc_search_analysis.states import (
+    ObjectSourceInput,
     SearchSourcesObjectsUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig

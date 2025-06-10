@@ -3,10 +3,7 @@ from collections.abc import Generator
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import CitationInfo
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import ResponsePart
+from onyx.chat.models import CitationInfo, LlmDoc, OnyxAnswerPiece, ResponsePart
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.utils.logger import setup_logger

@@ -3,12 +3,7 @@ import secrets
 import string
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import Response
-from fastapi import status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi_users import exceptions
 from onelogin.saml2.auth import OneLogin_Saml2_Auth  # type: ignore
 from pydantic import BaseModel
@@ -16,23 +11,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import SAML_CONF_DIR
-from ee.onyx.db.saml import expire_saml_account
-from ee.onyx.db.saml import get_saml_account
-from ee.onyx.db.saml import upsert_saml_account
-from ee.onyx.utils.secrets import encrypt_string
-from ee.onyx.utils.secrets import extract_hashed_cookie
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRole
+from ee.onyx.db.saml import expire_saml_account, get_saml_account, upsert_saml_account
+from ee.onyx.utils.secrets import encrypt_string, extract_hashed_cookie
+from onyx.auth.schemas import UserCreate, UserRole
 from onyx.auth.users import get_user_manager
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.db.auth import get_user_count
-from onyx.db.auth import get_user_db
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_context_manager
-from onyx.db.engine import get_session
+from onyx.db.auth import get_user_count, get_user_db
+from onyx.db.engine import (
+    get_async_session,
+    get_async_session_context_manager,
+    get_session,
+)
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
@@ -159,8 +150,7 @@ async def saml_login_callback(
     errors = auth.get_errors()
     if len(errors) != 0:
         logger.error(
-            "Error when processing SAML Response: %s %s"
-            % (", ".join(errors), auth.get_last_error_reason())
+            "Error when processing SAML Response: {} {}".format(", ".join(errors), auth.get_last_error_reason())
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

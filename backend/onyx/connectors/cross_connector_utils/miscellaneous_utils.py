@@ -1,8 +1,6 @@
 import re
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from typing import TypeVar
 
 from dateutil.parser import parse
@@ -11,7 +9,6 @@ from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.text_processing import is_valid_email
-
 
 T = TypeVar("T")
 U = TypeVar("U")

@@ -1,26 +1,26 @@
-from sqlalchemy import delete
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.constants import AuthType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
-from onyx.db.models import DocumentSet
+from onyx.db.models import (
+    DocumentSet,
+    LLMProvider__UserGroup,
+    ModelConfiguration,
+    SearchSettings,
+    User,
+    User__UserGroup,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import LLMProvider__UserGroup
-from onyx.db.models import ModelConfiguration
-from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
 from onyx.llm.utils import model_supports_image_input
-from onyx.server.manage.embedding.models import CloudEmbeddingProvider
-from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.embedding.models import (
+    CloudEmbeddingProvider,
+    CloudEmbeddingProviderCreationRequest,
+)
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest, LLMProviderView
 from shared_configs.enums import EmbeddingProvider
 
 

@@ -2,32 +2,30 @@ from collections.abc import Sequence
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, delete, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DISABLE_AUTH
-from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.connector_credential_pair import (
+    get_cc_pair_groups_for_ids,
+    get_connector_credential_pairs,
+)
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+    DocumentSet__ConnectorCredentialPair,
+    DocumentSet__UserGroup,
+    User,
+    User__UserGroup,
+    UserRole,
+)
 from onyx.db.models import DocumentSet as DocumentSetDBModel
-from onyx.db.models import DocumentSet__ConnectorCredentialPair
-from onyx.db.models import DocumentSet__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserRole
-from onyx.server.features.document_set.models import DocumentSetCreationRequest
-from onyx.server.features.document_set.models import DocumentSetUpdateRequest
+from onyx.server.features.document_set.models import (
+    DocumentSetCreationRequest,
+    DocumentSetUpdateRequest,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 

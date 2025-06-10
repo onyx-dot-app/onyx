@@ -8,8 +8,7 @@ from pytest_mock import MockerFixture
 from sqlalchemy.orm import Session
 
 from onyx.chat.answer import Answer
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import PromptConfig
+from onyx.chat.models import AnswerStyleConfig, PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.context.search.models import SearchRequest
 from onyx.llm.interfaces import LLM

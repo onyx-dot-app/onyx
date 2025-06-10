@@ -3,16 +3,15 @@ import os
 import pytest
 
 from onyx.auth.schemas import UserRole
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import SqlEngine
+from onyx.db.engine import SqlEngine, get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
-from tests.integration.common_utils.constants import ADMIN_USER_NAME
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.managers.user import build_email
-from tests.integration.common_utils.managers.user import DEFAULT_PASSWORD
-from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.reset import reset_all
-from tests.integration.common_utils.reset import reset_all_multitenant
+from tests.integration.common_utils.constants import ADMIN_USER_NAME, GENERAL_HEADERS
+from tests.integration.common_utils.managers.user import (
+    DEFAULT_PASSWORD,
+    UserManager,
+    build_email,
+)
+from tests.integration.common_utils.reset import reset_all, reset_all_multitenant
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
@@ -21,7 +20,7 @@ def load_env_vars(env_file: str = ".env") -> None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = os.path.join(current_dir, env_file)
     try:
-        with open(env_path, "r") as f:
+        with open(env_path) as f:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith("#"):

@@ -1,6 +1,4 @@
-from langchain.schema import BaseMessage
-from langchain.schema import HumanMessage
-from langchain.schema import SystemMessage
+from langchain.schema import BaseMessage, HumanMessage, SystemMessage
 
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.utils import translate_onyx_msg_to_langchain
@@ -9,15 +7,15 @@ from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.models import ChatMessage
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
-from onyx.prompts.chat_prompts import AGGRESSIVE_SEARCH_TEMPLATE
-from onyx.prompts.chat_prompts import NO_SEARCH
-from onyx.prompts.chat_prompts import REQUIRE_SEARCH_HINT
-from onyx.prompts.chat_prompts import REQUIRE_SEARCH_SYSTEM_MSG
-from onyx.prompts.chat_prompts import SKIP_SEARCH
+from onyx.llm.utils import dict_based_prompt_to_langchain_prompt, message_to_string
+from onyx.prompts.chat_prompts import (
+    AGGRESSIVE_SEARCH_TEMPLATE,
+    NO_SEARCH,
+    REQUIRE_SEARCH_HINT,
+    REQUIRE_SEARCH_SYSTEM_MSG,
+    SKIP_SEARCH,
+)
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

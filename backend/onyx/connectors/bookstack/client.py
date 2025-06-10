@@ -8,9 +8,7 @@ class BookStackClientRequestFailedError(ConnectionError):
         self.status_code = status
         self.error = error
         super().__init__(
-            "BookStack Client request failed with status {status}: {error}".format(
-                status=status, error=error
-            )
+            f"BookStack Client request failed with status {status}: {error}"
         )
 
 

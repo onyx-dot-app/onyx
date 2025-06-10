@@ -3,48 +3,48 @@ import time
 from collections.abc import Callable
 from datetime import timedelta
 from itertools import islice
-from typing import Any
-from typing import cast
-from typing import Literal
+from typing import Any, Literal, cast
 
 import psutil
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
-from sqlalchemy import select
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_get_queue_length,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.memory_monitoring import emit_process_memory
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_shared_schema
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentSet
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SyncRecord
-from onyx.db.models import UserGroup
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    ONYX_CLOUD_TENANT_ID,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
+from onyx.db.engine import (
+    get_all_tenant_ids,
+    get_db_current_time,
+    get_session_with_current_tenant,
+    get_session_with_shared_schema,
+)
+from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentSet,
+    IndexAttempt,
+    SyncRecord,
+    UserGroup,
+)
 from onyx.db.search_settings import get_active_search_settings_list
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_pool import get_redis_client, redis_lock_dump
 from onyx.utils.logger import is_running_in_container
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 

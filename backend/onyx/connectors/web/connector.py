@@ -3,38 +3,34 @@ import ipaddress
 import random
 import socket
 import time
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
-from typing import cast
-from typing import Tuple
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import Any, Tuple, cast
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from oauthlib.oauth2 import BackendApplicationClient
-from playwright.sync_api import BrowserContext
-from playwright.sync_api import Playwright
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import BrowserContext, Playwright, sync_playwright
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_ID
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
-from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    WEB_CONNECTOR_OAUTH_CLIENT_ID,
+    WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
+    WEB_CONNECTOR_OAUTH_TOKEN_URL,
+    WEB_CONNECTOR_VALIDATE_URLS,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
+from onyx.connectors.models import Document, TextSection
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
@@ -373,7 +369,7 @@ def _ensure_valid_url(url: str) -> str:
 
 
 def _read_urls_file(location: str) -> list[str]:
-    with open(location, "r") as f:
+    with open(location) as f:
         urls = [_ensure_valid_url(line.strip()) for line in f if line.strip()]
     return urls
 

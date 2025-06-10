@@ -83,10 +83,9 @@ class AsanaAPI:
 
         logger.info(f"Found {len(projects_list)} projects to process")
         for project_gid in projects_list:
-            for task in self._get_tasks_for_project(
+            yield from self._get_tasks_for_project(
                 project_gid, start_date, start_seconds
-            ):
-                yield task
+            )
         logger.info(f"Completed fetching {self.task_count} tasks from Asana")
         if self.api_error_count > 0:
             logger.warning(

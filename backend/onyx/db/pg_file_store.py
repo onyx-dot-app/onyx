@@ -4,15 +4,12 @@ from typing import IO
 
 from psycopg2.extensions import connection
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import and_
-from sqlalchemy.sql import select
+from sqlalchemy.sql import and_, select
 
 from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import FileType
+from onyx.configs.constants import FileOrigin, FileType
 from onyx.db.models import PGFileStore
-from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
-from onyx.file_store.constants import STANDARD_CHUNK_SIZE
+from onyx.file_store.constants import MAX_IN_MEMORY_SIZE, STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

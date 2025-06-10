@@ -4,19 +4,20 @@ from uuid import UUID
 import requests
 from requests.models import Response
 
-from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.models import RetrievalDetails, SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.test_models import DATestChatMessage
-from tests.integration.common_utils.test_models import DATestChatSession
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import StreamedResponse
+from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+    CreateChatMessageRequest,
+)
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
+from tests.integration.common_utils.test_models import (
+    DATestChatMessage,
+    DATestChatSession,
+    DATestUser,
+    StreamedResponse,
+)
 
 
 class ChatSessionManager:
@@ -50,7 +51,7 @@ class ChatSessionManager:
         message: str,
         parent_message_id: int | None = None,
         user_performing_action: DATestUser | None = None,
-        file_descriptors: list[FileDescriptor] = [],
+        file_descriptors: list[FileDescriptor] = None,
         prompt_id: int | None = None,
         search_doc_ids: list[int] | None = None,
         retrieval_options: RetrievalDetails | None = None,
@@ -61,6 +62,8 @@ class ChatSessionManager:
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
     ) -> StreamedResponse:
+        if file_descriptors is None:
+            file_descriptors = []
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
             parent_message_id=parent_message_id,

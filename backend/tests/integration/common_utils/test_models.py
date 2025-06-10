@@ -4,18 +4,19 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.enums import AccessType
-from onyx.server.documents.models import DocumentSource
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import IndexingStatus
-from onyx.server.documents.models import InputType
+from onyx.server.documents.models import (
+    DocumentSource,
+    IndexAttemptSnapshot,
+    IndexingStatus,
+    InputType,
+)
 
 """
 These data models are used to represent the data on the testing side of things.

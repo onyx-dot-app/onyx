@@ -1,19 +1,16 @@
 from datetime import datetime
 from typing import cast
 
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import merge_content
+from langchain_core.messages import HumanMessage, merge_content
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.deep_search.initial.generate_initial_answer.states import (
     SubQuestionRetrievalState,
 )
-from onyx.agents.agent_search.deep_search.main.models import (
-    AgentRefinedMetrics,
-)
-from onyx.agents.agent_search.deep_search.main.operations import dispatch_subquestion
+from onyx.agents.agent_search.deep_search.main.models import AgentRefinedMetrics
 from onyx.agents.agent_search.deep_search.main.operations import (
+    dispatch_subquestion,
     dispatch_subquestion_sep,
 )
 from onyx.agents.agent_search.deep_search.main.states import (
@@ -23,31 +20,30 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     build_history_prompt,
 )
-from onyx.agents.agent_search.shared_graph_utils.models import BaseMessage_Content
-from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
-from onyx.agents.agent_search.shared_graph_utils.utils import dispatch_separated
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    BaseMessage_Content,
+    LLMNodeErrorStrings,
+)
 from onyx.agents.agent_search.shared_graph_utils.utils import (
+    dispatch_separated,
     get_langgraph_node_log_string,
+    write_custom_event,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import StreamStopReason
-from onyx.chat.models import StreamType
-from onyx.chat.models import SubQuestionPiece
-from onyx.configs.agent_configs import AGENT_MAX_TOKENS_SUBQUESTION_GENERATION
-from onyx.configs.agent_configs import AGENT_NUM_DOCS_FOR_DECOMPOSITION
+from onyx.chat.models import (
+    StreamStopInfo,
+    StreamStopReason,
+    StreamType,
+    SubQuestionPiece,
+)
 from onyx.configs.agent_configs import (
+    AGENT_MAX_TOKENS_SUBQUESTION_GENERATION,
+    AGENT_NUM_DOCS_FOR_DECOMPOSITION,
     AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION,
-)
-from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_LLM_SUBQUESTION_GENERATION,
 )
-from onyx.llm.chat_llm import LLMRateLimitError
-from onyx.llm.chat_llm import LLMTimeoutError
+from onyx.llm.chat_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.prompts.agent_search import (
     INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH_ASSUMING_REFINEMENT,
-)
-from onyx.prompts.agent_search import (
     INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT,
 )
 from onyx.utils.logger import setup_logger

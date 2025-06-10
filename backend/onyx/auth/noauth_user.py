@@ -1,15 +1,14 @@
 from collections.abc import Mapping
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from onyx.auth.schemas import UserRole
-from onyx.configs.constants import KV_NO_AUTH_USER_PREFERENCES_KEY
-from onyx.configs.constants import NO_AUTH_USER_EMAIL
-from onyx.configs.constants import NO_AUTH_USER_ID
-from onyx.key_value_store.store import KeyValueStore
-from onyx.key_value_store.store import KvKeyNotFoundError
-from onyx.server.manage.models import UserInfo
-from onyx.server.manage.models import UserPreferences
+from onyx.configs.constants import (
+    KV_NO_AUTH_USER_PREFERENCES_KEY,
+    NO_AUTH_USER_EMAIL,
+    NO_AUTH_USER_ID,
+)
+from onyx.key_value_store.store import KeyValueStore, KvKeyNotFoundError
+from onyx.server.manage.models import UserInfo, UserPreferences
 
 
 def set_no_auth_user_preferences(

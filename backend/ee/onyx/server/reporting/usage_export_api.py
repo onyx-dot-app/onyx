@@ -1,17 +1,16 @@
 from collections.abc import Generator
 from datetime import datetime
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.usage_export import get_all_usage_reports
-from ee.onyx.db.usage_export import get_usage_report_data
-from ee.onyx.db.usage_export import UsageReportMetadata
+from ee.onyx.db.usage_export import (
+    UsageReportMetadata,
+    get_all_usage_reports,
+    get_usage_report_data,
+)
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.auth.users import current_admin_user
 from onyx.db.engine import get_session

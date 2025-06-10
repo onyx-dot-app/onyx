@@ -1,17 +1,11 @@
-from langgraph.graph import END
-from langgraph.graph import START
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from onyx.agents.agent_search.deep_search.initial.generate_initial_answer.graph_builder import (
     generate_initial_answer_graph_builder,
 )
 from onyx.agents.agent_search.deep_search.main.edges import (
     continue_to_refined_answer_or_end,
-)
-from onyx.agents.agent_search.deep_search.main.edges import (
     parallelize_refined_sub_question_answering,
-)
-from onyx.agents.agent_search.deep_search.main.edges import (
     route_initial_tool_choice,
 )
 from onyx.agents.agent_search.deep_search.main.nodes.compare_answers import (
@@ -38,8 +32,7 @@ from onyx.agents.agent_search.deep_search.main.nodes.persist_agent_results impor
 from onyx.agents.agent_search.deep_search.main.nodes.start_agent_search import (
     start_agent_search,
 )
-from onyx.agents.agent_search.deep_search.main.states import MainInput
-from onyx.agents.agent_search.deep_search.main.states import MainState
+from onyx.agents.agent_search.deep_search.main.states import MainInput, MainState
 from onyx.agents.agent_search.deep_search.refinement.consolidate_sub_answers.graph_builder import (
     answer_refined_query_graph_builder,
 )
@@ -238,9 +231,9 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 if __name__ == "__main__":
     pass
 
+    from onyx.context.search.models import SearchRequest
     from onyx.db.engine import get_session_context_manager
     from onyx.llm.factory import get_default_llms
-    from onyx.context.search.models import SearchRequest
 
     graph = main_graph_builder()
     compiled_graph = graph.compile()

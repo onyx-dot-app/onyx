@@ -1,19 +1,18 @@
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import BytesIO
 
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import BaseConnector, CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine import get_db_current_time
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
+from onyx.db.index_attempt import (
+    get_index_attempt,
+    get_recent_completed_attempts_for_cc_pair,
+)
+from onyx.db.models import IndexAttempt, IndexingStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 from onyx.utils.object_size_check import deep_getsizeof

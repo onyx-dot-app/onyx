@@ -3,8 +3,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
+from onyx.db.models import Persona__User, Persona__UserGroup
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 

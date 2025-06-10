@@ -3,8 +3,7 @@ from sqlalchemy.orm import Session
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
-from onyx.db.document import get_access_info_for_document
-from onyx.db.document import get_access_info_for_documents
+from onyx.db.document import get_access_info_for_document, get_access_info_for_documents
 from onyx.db.models import User
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 

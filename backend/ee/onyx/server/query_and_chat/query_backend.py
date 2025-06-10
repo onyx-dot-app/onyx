@@ -1,9 +1,7 @@
 import json
 from collections.abc import Generator
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -12,36 +10,37 @@ from ee.onyx.chat.process_message import gather_stream_for_answer_api
 from ee.onyx.onyxbot.slack.handlers.handle_standard_answers import (
     oneoff_standard_answers,
 )
-from ee.onyx.server.query_and_chat.models import DocumentSearchRequest
-from ee.onyx.server.query_and_chat.models import OneShotQARequest
-from ee.onyx.server.query_and_chat.models import OneShotQAResponse
-from ee.onyx.server.query_and_chat.models import StandardAnswerRequest
-from ee.onyx.server.query_and_chat.models import StandardAnswerResponse
+from ee.onyx.server.query_and_chat.models import (
+    DocumentSearchRequest,
+    OneShotQARequest,
+    OneShotQAResponse,
+    StandardAnswerRequest,
+    StandardAnswerResponse,
+)
 from onyx.auth.users import current_user
-from onyx.chat.chat_utils import combine_message_thread
-from onyx.chat.chat_utils import prepare_chat_message_request
+from onyx.chat.chat_utils import combine_message_thread, prepare_chat_message_request
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.process_message import ChatPacketStream
-from onyx.chat.process_message import stream_chat_message_objects
+from onyx.chat.process_message import ChatPacketStream, stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
-from onyx.context.search.models import SavedSearchDocWithContent
-from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import SavedSearchDocWithContent, SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
-from onyx.context.search.utils import dedupe_documents
-from onyx.context.search.utils import drop_llm_indices
-from onyx.context.search.utils import relevant_sections_to_indices
+from onyx.context.search.utils import (
+    dedupe_documents,
+    drop_llm_indices,
+    relevant_sections_to_indices,
+)
 from onyx.db.chat import get_prompt_by_id
 from onyx.db.engine import get_session
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.models import Persona, User
 from onyx.db.persona import get_persona_by_id
-from onyx.llm.factory import get_default_llms
-from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.factory import get_main_llm_from_tuple
+from onyx.llm.factory import (
+    get_default_llms,
+    get_llms_for_persona,
+    get_main_llm_from_tuple,
+)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 basic_router = APIRouter(prefix="/query")

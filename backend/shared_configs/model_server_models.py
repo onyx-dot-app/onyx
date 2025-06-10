@@ -1,9 +1,6 @@
 from pydantic import BaseModel
 
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-from shared_configs.enums import RerankerProvider
-
+from shared_configs.enums import EmbeddingProvider, EmbedTextType, RerankerProvider
 
 Embedding = list[float]
 

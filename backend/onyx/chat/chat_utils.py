@@ -7,24 +7,16 @@ from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import is_user_admin
-from onyx.chat.models import CitationInfo
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.models import ThreadMessage
-from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.llm import fetch_existing_doc_sets
-from onyx.db.llm import fetch_existing_tools
-from onyx.db.models import ChatMessage
-from onyx.db.models import Persona
-from onyx.db.models import Prompt
-from onyx.db.models import Tool
-from onyx.db.models import User
+from onyx.chat.models import CitationInfo, LlmDoc, PersonaOverrideConfig, ThreadMessage
+from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
+from onyx.context.search.models import (
+    InferenceSection,
+    RerankingDetails,
+    RetrievalDetails,
+)
+from onyx.db.chat import create_chat_session, get_chat_messages_by_session
+from onyx.db.llm import fetch_existing_doc_sets, fetch_existing_tools
+from onyx.db.models import ChatMessage, Persona, Prompt, Tool, User
 from onyx.db.prompts import get_prompts_by_ids
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import BaseTokenizer

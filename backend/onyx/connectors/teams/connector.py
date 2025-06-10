@@ -1,37 +1,44 @@
 import copy
 import os
 from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timezone
+from typing import Any, cast
 
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
-from office365.runtime.client_request_exception import ClientRequestException  # type: ignore
-from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
+from office365.runtime.client_request_exception import (
+    ClientRequestException,  # type: ignore
+)
+from office365.runtime.http.request_options import (
+    RequestOptions,  # type: ignore[import-untyped]
+)
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from office365.teams.team import Team  # type: ignore
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    ConnectorMissingCredentialError,
+    Document,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import parallel_yield
-from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import parallel_yield, run_with_timeout
 
 logger = setup_logger()
 
@@ -50,9 +57,11 @@ class TeamsConnector(
         self,
         # TODO: (chris) move from "Display Names" to IDs, since display names
         # are NOT guaranteed to be unique
-        teams: list[str] = [],
+        teams: list[str] = None,
         max_workers: int = MAX_WORKERS,
     ) -> None:
+        if teams is None:
+            teams = []
         self.graph_client: GraphClient | None = None
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.max_workers = max_workers
@@ -292,17 +301,16 @@ def _convert_thread_to_document(
             top_message = message
 
         # check to make sure there is a valid display name
-        if message.properties["from"]:
-            if message.properties["from"]["user"]:
-                if message.properties["from"]["user"]["displayName"]:
-                    message_sender = message.properties["from"]["user"]["displayName"]
-                    # if its not a duplicate, add it to the list
-                    if message_sender not in [
-                        member.display_name for member in post_members_list
-                    ]:
-                        post_members_list.append(
-                            BasicExpertInfo(display_name=message_sender)
-                        )
+        if message.properties["from"] and message.properties["from"]["user"]:
+            if message.properties["from"]["user"]["displayName"]:
+                message_sender = message.properties["from"]["user"]["displayName"]
+                # if its not a duplicate, add it to the list
+                if message_sender not in [
+                    member.display_name for member in post_members_list
+                ]:
+                    post_members_list.append(
+                        BasicExpertInfo(display_name=message_sender)
+                    )
 
     if not thread_text:
         return None
@@ -518,9 +526,8 @@ def _filter_message(
         if isinstance(modified_at, str):
             return compare(modified_at)
 
-    if created_at := props.get("createdDateTime"):
-        if isinstance(created_at, str):
-            return compare(created_at)
+    if (created_at := props.get("createdDateTime")) and isinstance(created_at, str):
+        return compare(created_at)
 
     logger.warn(
         "No `lastModifiedDateTime` or `createdDateTime` fields found in `message.properties`"

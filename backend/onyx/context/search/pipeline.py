@@ -1,36 +1,41 @@
 from collections import defaultdict
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import cast
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import ContextualPruningConfig
-from onyx.chat.models import PromptConfig
-from onyx.chat.models import SectionRelevancePiece
-from onyx.chat.prune_and_merge import _merge_sections
-from onyx.chat.prune_and_merge import ChunkRange
-from onyx.chat.prune_and_merge import merge_chunk_intervals
-from onyx.chat.prune_and_merge import prune_and_merge_sections
-from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import QueryFlow
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RerankMetricsContainer
-from onyx.context.search.models import RetrievalMetricsContainer
-from onyx.context.search.models import SearchQuery
-from onyx.context.search.models import SearchRequest
-from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
-from onyx.context.search.postprocessing.postprocessing import search_postprocessing
-from onyx.context.search.preprocessing.preprocessing import retrieval_preprocessing
-from onyx.context.search.retrieval.search_runner import (
-    retrieve_chunks,
+from onyx.chat.models import (
+    ContextualPruningConfig,
+    PromptConfig,
+    SectionRelevancePiece,
 )
-from onyx.context.search.utils import inference_section_from_chunks
-from onyx.context.search.utils import relevant_sections_to_indices
+from onyx.chat.prune_and_merge import (
+    ChunkRange,
+    _merge_sections,
+    merge_chunk_intervals,
+    prune_and_merge_sections,
+)
+from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
+from onyx.context.search.enums import LLMEvaluationType, QueryFlow, SearchType
+from onyx.context.search.models import (
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+    RerankMetricsContainer,
+    RetrievalMetricsContainer,
+    SearchQuery,
+    SearchRequest,
+)
+from onyx.context.search.postprocessing.postprocessing import (
+    cleanup_chunks,
+    search_postprocessing,
+)
+from onyx.context.search.preprocessing.preprocessing import retrieval_preprocessing
+from onyx.context.search.retrieval.search_runner import retrieve_chunks
+from onyx.context.search.utils import (
+    inference_section_from_chunks,
+    relevant_sections_to_indices,
+)
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
@@ -38,8 +43,7 @@ from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.agentic_evaluation import evaluate_inference_section
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
+from onyx.utils.threadpool_concurrency import FunctionCall, run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 

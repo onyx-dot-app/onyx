@@ -1,11 +1,9 @@
 import concurrent.futures
 import json
 import uuid
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from http import HTTPStatus
 
 import httpx
@@ -14,48 +12,51 @@ from retry import retry
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
-from onyx.document_index.document_index_utils import get_uuid_from_chunk
-from onyx.document_index.document_index_utils import get_uuid_from_chunk_info_old
+from onyx.document_index.document_index_utils import (
+    get_uuid_from_chunk,
+    get_uuid_from_chunk_info_old,
+)
 from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.vespa.shared_utils.utils import remove_invalid_unicode_chars
 from onyx.document_index.vespa.shared_utils.utils import (
+    remove_invalid_unicode_chars,
     replace_invalid_doc_id_characters,
 )
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
-from onyx.document_index.vespa_constants import AGGREGATED_CHUNK_BOOST_FACTOR
-from onyx.document_index.vespa_constants import BLURB
-from onyx.document_index.vespa_constants import BOOST
-from onyx.document_index.vespa_constants import CHUNK_CONTEXT
-from onyx.document_index.vespa_constants import CHUNK_ID
-from onyx.document_index.vespa_constants import CONTENT
-from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DOC_SUMMARY
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_ID
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import EMBEDDINGS
-from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
-from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
-from onyx.document_index.vespa_constants import METADATA
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import METADATA_SUFFIX
-from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import PRIMARY_OWNERS
-from onyx.document_index.vespa_constants import SECONDARY_OWNERS
-from onyx.document_index.vespa_constants import SECTION_CONTINUATION
-from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
-from onyx.document_index.vespa_constants import SKIP_TITLE_EMBEDDING
-from onyx.document_index.vespa_constants import SOURCE_LINKS
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import TITLE
-from onyx.document_index.vespa_constants import TITLE_EMBEDDING
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
+from onyx.document_index.vespa_constants import (
+    ACCESS_CONTROL_LIST,
+    AGGREGATED_CHUNK_BOOST_FACTOR,
+    BLURB,
+    BOOST,
+    CHUNK_CONTEXT,
+    CHUNK_ID,
+    CONTENT,
+    CONTENT_SUMMARY,
+    DOC_SUMMARY,
+    DOC_UPDATED_AT,
+    DOCUMENT_ID,
+    DOCUMENT_ID_ENDPOINT,
+    DOCUMENT_SETS,
+    EMBEDDINGS,
+    IMAGE_FILE_NAME,
+    LARGE_CHUNK_REFERENCE_IDS,
+    METADATA,
+    METADATA_LIST,
+    METADATA_SUFFIX,
+    NUM_THREADS,
+    PRIMARY_OWNERS,
+    SECONDARY_OWNERS,
+    SECTION_CONTINUATION,
+    SEMANTIC_IDENTIFIER,
+    SKIP_TITLE_EMBEDDING,
+    SOURCE_LINKS,
+    SOURCE_TYPE,
+    TENANT_ID,
+    TITLE,
+    TITLE_EMBEDDING,
+    USER_FILE,
+    USER_FOLDER,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -213,9 +214,8 @@ def _index_vespa_chunk(
         AGGREGATED_CHUNK_BOOST_FACTOR: chunk.aggregated_chunk_boost_factor,
     }
 
-    if multitenant:
-        if chunk.tenant_id:
-            vespa_document_fields[TENANT_ID] = chunk.tenant_id
+    if multitenant and chunk.tenant_id:
+        vespa_document_fields[TENANT_ID] = chunk.tenant_id
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
     logger.debug(f'Indexing to URL "{vespa_url}"')
     res = http_client.post(

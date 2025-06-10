@@ -1,15 +1,12 @@
 from datetime import datetime
 
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import delete
 
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine import get_db_current_time
-from onyx.db.models import TaskQueueState
-from onyx.db.models import TaskStatus
+from onyx.db.models import TaskQueueState, TaskStatus
 
 
 def get_latest_task(

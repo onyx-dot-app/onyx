@@ -6,12 +6,11 @@ Create Date: 2024-03-22 21:34:27.629444
 
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
+from onyx.context.search.enums import RecencyBiasSetting, SearchType
 from onyx.db.models import IndexModelStatus
-from onyx.context.search.enums import RecencyBiasSetting
-from onyx.context.search.enums import SearchType
 
 # revision identifiers, used by Alembic.
 revision = "776b3bbe9092"

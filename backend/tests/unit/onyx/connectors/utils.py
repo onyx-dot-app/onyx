@@ -1,15 +1,10 @@
-from typing import cast
-from typing import Generic
-from typing import TypeVar
+from typing import Generic, TypeVar, cast
 
 from pydantic import BaseModel
 
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
+from onyx.connectors.interfaces import CheckpointedConnector, SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorCheckpoint, ConnectorFailure, Document
 
 _ITERATION_LIMIT = 100_000
 

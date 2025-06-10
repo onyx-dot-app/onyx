@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
-from onyx.access.utils import prefix_external_group
-from onyx.access.utils import prefix_user_email
-from onyx.access.utils import prefix_user_group
+from onyx.access.utils import (
+    prefix_external_group,
+    prefix_user_email,
+    prefix_user_group,
+)
 from onyx.configs.constants import PUBLIC_DOC_PAT
 
 

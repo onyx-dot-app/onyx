@@ -4,14 +4,13 @@ import httpx
 from pydantic import BaseModel
 from typing_extensions import override
 
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import ConnectorCheckpoint, ConnectorFailure, Document
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -82,11 +81,9 @@ class MockConnector(CheckpointedConnector[MockConnectorCheckpoint]):
             raise RuntimeError(current_yield.unhandled_exception)
 
         # yield all documents
-        for document in current_yield.documents:
-            yield document
+        yield from current_yield.documents
 
-        for failure in current_yield.failures:
-            yield failure
+        yield from current_yield.failures
 
         return current_yield.checkpoint
 

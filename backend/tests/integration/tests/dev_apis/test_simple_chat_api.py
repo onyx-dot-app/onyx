@@ -5,17 +5,21 @@ import pytest
 import requests
 
 from onyx.configs.constants import MessageType
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.constants import NUM_DOCS
+from tests.integration.common_utils.constants import (
+    API_SERVER_URL,
+    GENERAL_HEADERS,
+    NUM_DOCS,
+)
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestAPIKey
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestAPIKey,
+    DATestCCPair,
+    DATestUser,
+)
 
 
 @pytest.mark.skipif(
@@ -230,9 +234,7 @@ def test_send_message_simple_with_history_strict_json(
         for president in parsed_answer["presidents"]:
             assert isinstance(president, str)
     except json.JSONDecodeError:
-        assert (
-            False
-        ), f"The answer is not a valid JSON object - '{response_json['answer']}'"
+        raise AssertionError(f"The answer is not a valid JSON object - '{response_json['answer']}'")
 
     # Check that the answer_citationless is also valid JSON
     assert "answer_citationless" in response_json
@@ -244,4 +246,4 @@ def test_send_message_simple_with_history_strict_json(
         parsed_answer_citationless = json.loads(clean_answer_citationless)
         assert isinstance(parsed_answer_citationless, dict)
     except json.JSONDecodeError:
-        assert False, "The answer_citationless is not a valid JSON object"
+        raise AssertionError("The answer_citationless is not a valid JSON object")

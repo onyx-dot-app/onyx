@@ -1,38 +1,48 @@
 import io
 from datetime import datetime
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 from googleapiclient.errors import HttpError  # type: ignore
 from googleapiclient.http import MediaIoBaseDownload  # type: ignore
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.models import GDriveMimeType
-from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_drive.section_extraction import get_document_sections
-from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
-from onyx.connectors.google_drive.google_sheets import read_spreadsheet, get_sheet_metadata
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_google_docs_service
-from onyx.connectors.google_utils.resources import get_sheets_service
-from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.configs.constants import DocumentSource, FileOrigin
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
+from onyx.connectors.google_drive.google_sheets import (
+    get_sheet_metadata,
+    read_spreadsheet,
+)
+from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
+from onyx.connectors.google_drive.section_extraction import (
+    HEADING_DELIMITER,
+    get_document_sections,
+)
+from onyx.connectors.google_utils.resources import (
+    GoogleDriveService,
+    get_drive_service,
+    get_google_docs_service,
+    get_sheets_service,
+)
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    ImageSection,
+    SlimDocument,
+    TextSection,
+)
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import docx_to_text_and_images
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import pptx_to_text
-from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_processing.extract_file_text import xlsx_to_text
+from onyx.file_processing.extract_file_text import (
+    ALL_ACCEPTED_FILE_EXTENSIONS,
+    docx_to_text_and_images,
+    extract_file_text,
+    get_file_ext,
+    pptx_to_text,
+    read_pdf_file,
+    xlsx_to_text,
+)
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_processing.image_utils import store_image_and_create_section
@@ -107,7 +117,7 @@ def download_request(service: GoogleDriveService, file_id: str) -> bytes:
     response = response_bytes.getvalue()
     if not response:
         logger.warning(f"Failed to download {file_id}")
-        return bytes()
+        return b""
     return response
 
 
@@ -424,10 +434,10 @@ def _convert_drive_item_to_document(
                 logger.warning(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."
                 )
-        
+
         if file.get("mimeType") == GDriveMimeType.SPREADSHEET.value:
             # Handle Google Spreadsheets more gracefully and extract everything we can
-            try:    
+            try:
                 sheet_metadata = get_sheet_metadata(sheets_service(), file.get("id", ""))
                 if not sheet_metadata.get('sheets'):
                     raise ValueError(f"No sheets found in spreadsheet {file.get('id', '')}")
@@ -437,7 +447,7 @@ def _convert_drive_item_to_document(
                     # Skip hidden sheets
                     if sheet['properties'].get('hidden', False):
                         continue
-                        
+
                     sheet_name = sheet['properties']['title']
                     sheet_values = read_spreadsheet(
                         creds,

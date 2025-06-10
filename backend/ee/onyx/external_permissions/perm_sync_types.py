@@ -1,8 +1,5 @@
-from collections.abc import Callable
-from collections.abc import Generator
-from typing import Optional
-from typing import Protocol
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Generator
+from typing import TYPE_CHECKING, Optional, Protocol
 
 # Avoid circular imports
 if TYPE_CHECKING:

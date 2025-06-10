@@ -1,77 +1,71 @@
 import re
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 import jwt
-from email_validator import EmailNotValidError
-from email_validator import EmailUndeliverableError
-from email_validator import validate_email
-from fastapi import APIRouter
-from fastapi import Body
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
+from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import Column
-from sqlalchemy import desc
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Column, desc, select, update
 from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_user_email_invite
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import write_invited_users
-from onyx.auth.noauth_user import fetch_no_auth_user
-from onyx.auth.noauth_user import set_no_auth_user_preferences
+from onyx.auth.invited_users import get_invited_users, write_invited_users
+from onyx.auth.noauth_user import fetch_no_auth_user, set_no_auth_user_preferences
 from onyx.auth.schemas import UserRole
-from onyx.auth.users import anonymous_user_enabled
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
-from onyx.auth.users import optional_user
-from onyx.configs.app_configs import AUTH_BACKEND
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import AuthBackend
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import ENABLE_EMAIL_INVITES
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
-from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.auth.users import (
+    anonymous_user_enabled,
+    current_admin_user,
+    current_curator_or_admin_user,
+    current_user,
+    optional_user,
+)
+from onyx.configs.app_configs import (
+    AUTH_BACKEND,
+    AUTH_TYPE,
+    DEV_MODE,
+    ENABLE_EMAIL_INVITES,
+    REDIS_AUTH_KEY_PREFIX,
+    SESSION_EXPIRE_TIME_SECONDS,
+    VALID_EMAIL_DOMAINS,
+    AuthBackend,
+)
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthType
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine import get_session
-from onyx.db.models import AccessToken
-from onyx.db.models import User
-from onyx.db.users import delete_user_from_db
-from onyx.db.users import get_all_users
-from onyx.db.users import get_page_of_filtered_users
-from onyx.db.users import get_total_filtered_users_count
-from onyx.db.users import get_user_by_email
-from onyx.db.users import validate_user_role_update
+from onyx.db.models import AccessToken, User
+from onyx.db.users import (
+    delete_user_from_db,
+    get_all_users,
+    get_page_of_filtered_users,
+    get_total_filtered_users_count,
+    get_user_by_email,
+    validate_user_role_update,
+)
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
-from onyx.server.manage.models import AllUsersResponse
-from onyx.server.manage.models import AutoScrollRequest
-from onyx.server.manage.models import TenantInfo
-from onyx.server.manage.models import TenantSnapshot
-from onyx.server.manage.models import UserByEmail
-from onyx.server.manage.models import UserInfo
-from onyx.server.manage.models import UserPreferences
-from onyx.server.manage.models import UserRoleResponse
-from onyx.server.manage.models import UserRoleUpdateRequest
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
-from onyx.server.models import MinimalUserSnapshot
+from onyx.server.manage.models import (
+    AllUsersResponse,
+    AutoScrollRequest,
+    TenantInfo,
+    TenantSnapshot,
+    UserByEmail,
+    UserInfo,
+    UserPreferences,
+    UserRoleResponse,
+    UserRoleUpdateRequest,
+)
+from onyx.server.models import (
+    FullUserSnapshot,
+    InvitedUserSnapshot,
+    MinimalUserSnapshot,
+)
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
     fetch_versioned_implementation_with_fallback,
 )
 from shared_configs.configs import MULTI_TENANT
@@ -215,7 +209,7 @@ def list_all_users(
     invited_emails = get_invited_users()
     if q:
         invited_emails = [
-            email for email in invited_emails if re.search(r"{}".format(q), email, re.I)
+            email for email in invited_emails if re.search(fr"{q}", email, re.I)
         ]
 
     accepted_count = len(accepted_emails)
@@ -414,7 +408,7 @@ def deactivate_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_deactivate.is_active is False:
-        logger.warning("{} is already deactivated".format(user_to_deactivate.email))
+        logger.warning(f"{user_to_deactivate.email} is already deactivated")
 
     user_to_deactivate.is_active = False
     db_session.add(user_to_deactivate)
@@ -435,7 +429,7 @@ async def delete_user(
 
     if user_to_delete.is_active is True:
         logger.warning(
-            "{} must be deactivated before deleting".format(user_to_delete.email)
+            f"{user_to_delete.email} must be deactivated before deleting"
         )
         raise HTTPException(
             status_code=400, detail="User must be deactivated before deleting"
@@ -471,7 +465,7 @@ def activate_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_to_activate.is_active is True:
-        logger.warning("{} is already activated".format(user_to_activate.email))
+        logger.warning(f"{user_to_activate.email} is already activated")
 
     user_to_activate.is_active = True
     db_session.add(user_to_activate)

@@ -1,28 +1,23 @@
 from typing import cast
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
-from onyx.auth.users import is_user_admin
-from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.configs.constants import NotificationType
+from onyx.auth.users import current_admin_user, current_user, is_user_admin
+from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.db.notification import create_notification
-from onyx.db.notification import dismiss_all_notifications
-from onyx.db.notification import get_notifications
-from onyx.db.notification import update_notification_last_shown
+from onyx.db.notification import (
+    create_notification,
+    dismiss_all_notifications,
+    get_notifications,
+    update_notification_last_shown,
+)
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.server.settings.models import Notification
-from onyx.server.settings.models import Settings
-from onyx.server.settings.models import UserSettings
-from onyx.server.settings.store import load_settings
-from onyx.server.settings.store import store_settings
+from onyx.server.settings.models import Notification, Settings, UserSettings
+from onyx.server.settings.store import load_settings, store_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

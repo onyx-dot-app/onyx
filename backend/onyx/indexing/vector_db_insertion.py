@@ -4,14 +4,14 @@ from http import HTTPStatus
 
 import httpx
 
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import DocumentFailure
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord
-from onyx.document_index.interfaces import IndexBatchParams
+from onyx.connectors.models import ConnectorFailure, DocumentFailure
+from onyx.document_index.interfaces import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    IndexBatchParams,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

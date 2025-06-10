@@ -2,11 +2,8 @@ from unittest.mock import patch
 
 import litellm
 import pytest
-from langchain_core.messages import AIMessage
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import HumanMessage
-from litellm.types.utils import ChatCompletionDeltaToolCall
-from litellm.types.utils import Delta
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
 from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE

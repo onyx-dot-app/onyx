@@ -2,16 +2,13 @@ import json
 from collections.abc import Generator
 from typing import Any, Dict, Optional, cast
 
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import PromptConfig
+from onyx.chat.models import AnswerStyleConfig, PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.models import Persona, User
 from onyx.llm.interfaces import LLM
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from langchain_core.messages import BaseMessage
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -132,21 +129,21 @@ class DocumentEditorTool(Tool):
     ) -> Dict[str, Any]:
         """
         Edit text based on instructions.
-        
+
         Args:
             text: The original text content to edit
             instructions: Detailed instructions on what changes to make
-            
+
         Returns:
             Dict containing the result of the edit operation including the edited text
         """
         logger.info(f"Editing text with instructions: {instructions}")
-        
+
         # Create a prompt for the LLM to edit the text
         document_editor_prompt = f"""
         You are a document editor assistant. Your task is to edit the provided HTML text according to the instructions.
         Do not add any newlines in the HTML edited_text output. The edited_text should be a valid HTML string.
-        
+
         IMPORTANT: You must return a diff representation of the changes made to the text with the following format:
         - Text that is being deleted should be wrapped in <deletion-mark> tags
         - Text that is being added should be wrapped in <addition-mark> tags
@@ -155,32 +152,32 @@ class DocumentEditorTool(Tool):
         - Maintain the original structure of the HTML document
         - You must add <deletion-mark> tags around sections that are no longer included
         - You must add <addition-mark> tags around text / sections that are newly included
-        
+
         YOU MUST RETURN ALL OF THE ORIGINAL HTML IN THE OUTPUT, NOT JUST THE CHANGES.
 
         Example of a diff representation:
         Original: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a sample text.</p> </div>"
         Edited with diff: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a <deletion-mark>sample</deletion-mark><addition-mark>modified</addition-mark> text.</p> </div>"
-        
+
         INSTRUCTIONS:
         {instructions}
 
         Here are the results of our Agentic Search tool to provide context (possibly null):
         SEARCH RESULTS:
         {search_results}
-        
+
         TEXT TO EDIT:
         {self.document_content}
         """
-        
+
         # Use the LLM to edit the text
         if not self.llm:
             raise ValueError("LLM is required for document editing")
-        
+
         from langchain_core.messages import HumanMessage
-        
+
         msg = [HumanMessage(content=document_editor_prompt)]
-        
+
         structured_response_format = {
                 "type": "json_schema",
                 "json_schema": {
@@ -203,24 +200,24 @@ class DocumentEditorTool(Tool):
                     "strict": True,
                 }
         }
-        
+
         try:
             # Call the LLM to get the edited text with structured response format
             llm_response = self.llm.invoke(
                 msg,
                 structured_response_format=structured_response_format
             )
-            
+
             # Get the structured response directly
             edit_result_str = llm_response.content
-            
+
             edit_result = json.loads(edit_result_str)
 
             # When using structured_response_format, the content is already a dict
             # Ensure the required fields are present
             if "edited_text" not in edit_result or "summary" not in edit_result:
                 raise ValueError("LLM response missing required fields: edited_text and/or summary")
-            
+
             # Return the result with required fields
             return {
                 "success": True,
@@ -229,7 +226,7 @@ class DocumentEditorTool(Tool):
                 "message": edit_result.get("summary", ""),
                 "edited": self.document_content != edit_result.get("edited_text", ""),
             }
-            
+
         except Exception as e:
             logger.error(f"Error in document editing: {e}")
             return {
@@ -247,10 +244,10 @@ class DocumentEditorTool(Tool):
         search_results = cast(str, llm_kwargs.get(SEARCH_RESULTS_FIELD, ""))
 
         logger.info(f"Running document editor with instructions: {instructions}")
-        
+
         # Execute the document editing logic
         edit_result = self._run(search_results=search_results, instructions=instructions)
-        
+
         # Yield the response
         yield ToolResponse(
             id=DOCUMENT_EDITOR_RESPONSE_ID,

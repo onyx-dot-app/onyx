@@ -6,8 +6,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-from onyx.connectors.salesforce.utils import SalesforceObject
-from onyx.connectors.salesforce.utils import validate_salesforce_id
+from onyx.connectors.salesforce.utils import SalesforceObject, validate_salesforce_id
 from onyx.utils.logger import setup_logger
 from shared_configs.utils import batch_list
 
@@ -359,7 +358,7 @@ class OnyxSalesforceSQLite:
         with self._conn:
             cursor = self._conn.cursor()
 
-            with open(csv_download_path, "r", newline="", encoding="utf-8") as f:
+            with open(csv_download_path, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 uncommitted_rows = 0
                 for row in reader:

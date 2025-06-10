@@ -1,8 +1,7 @@
 import base64
 import uuid
 
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from ee.onyx.server.oauth.api_router import router

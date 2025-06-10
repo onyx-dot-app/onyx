@@ -1,40 +1,29 @@
 import contextlib
 import time
-from collections.abc import Generator
-from collections.abc import Iterable
-from collections.abc import Sequence
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Generator, Iterable, Sequence
+from datetime import datetime, timezone
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import or_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import tuple_
-from sqlalchemy import update
+from sqlalchemy import Select, and_, delete, exists, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
-from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    DocumentByConnectorCredentialPair,
+    User,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import User
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata

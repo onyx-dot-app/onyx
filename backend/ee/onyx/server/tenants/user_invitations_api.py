@@ -1,18 +1,18 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from ee.onyx.server.tenants.models import ApproveUserRequest
-from ee.onyx.server.tenants.models import PendingUserSnapshot
-from ee.onyx.server.tenants.models import RequestInviteRequest
-from ee.onyx.server.tenants.user_mapping import accept_user_invite
-from ee.onyx.server.tenants.user_mapping import approve_user_invite
-from ee.onyx.server.tenants.user_mapping import deny_user_invite
-from ee.onyx.server.tenants.user_mapping import invite_self_to_tenant
+from ee.onyx.server.tenants.models import (
+    ApproveUserRequest,
+    PendingUserSnapshot,
+    RequestInviteRequest,
+)
+from ee.onyx.server.tenants.user_mapping import (
+    accept_user_invite,
+    approve_user_invite,
+    deny_user_invite,
+    invite_self_to_tenant,
+)
 from onyx.auth.invited_users import get_pending_users
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
-from onyx.auth.users import User
+from onyx.auth.users import User, current_admin_user, current_user
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

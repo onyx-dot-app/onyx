@@ -6,8 +6,7 @@ from sqlalchemy.sql import func
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification
-from onyx.db.models import User
+from onyx.db.models import Notification, User
 
 
 def create_notification(

@@ -1,21 +1,20 @@
 from uuid import uuid4
 
 import requests
-from sqlalchemy import and_
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentByConnectorCredentialPair
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.constants import NUM_DOCS
+from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
+from tests.integration.common_utils.constants import (
+    API_SERVER_URL,
+    GENERAL_HEADERS,
+    NUM_DOCS,
+)
 from tests.integration.common_utils.managers.api_key import DATestAPIKey
 from tests.integration.common_utils.managers.cc_pair import DATestCCPair
-from tests.integration.common_utils.test_models import DATestUser
-from tests.integration.common_utils.test_models import SimpleTestDocument
+from tests.integration.common_utils.test_models import DATestUser, SimpleTestDocument
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
@@ -29,12 +28,11 @@ def _verify_document_permissions(
     acl_keys = set(retrieved_doc.get("access_control_list", {}).keys())
     print(f"ACL keys: {acl_keys}")
 
-    if cc_pair.access_type == AccessType.PUBLIC:
-        if "PUBLIC" not in acl_keys:
-            raise ValueError(
-                f"Document {retrieved_doc['document_id']} is public but"
-                " does not have the PUBLIC ACL key"
-            )
+    if cc_pair.access_type == AccessType.PUBLIC and "PUBLIC" not in acl_keys:
+        raise ValueError(
+            f"Document {retrieved_doc['document_id']} is public but"
+            " does not have the PUBLIC ACL key"
+        )
 
     if doc_creating_user is not None:
         if f"user_email:{doc_creating_user.email}" not in acl_keys:

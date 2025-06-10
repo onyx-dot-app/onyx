@@ -1,6 +1,4 @@
-from langgraph.graph import END
-from langgraph.graph import START
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.graph_builder import (
     answer_query_graph_builder,
@@ -16,8 +14,6 @@ from onyx.agents.agent_search.deep_search.initial.generate_sub_answers.nodes.for
 )
 from onyx.agents.agent_search.deep_search.initial.generate_sub_answers.states import (
     SubQuestionAnsweringInput,
-)
-from onyx.agents.agent_search.deep_search.initial.generate_sub_answers.states import (
     SubQuestionAnsweringState,
 )
 from onyx.utils.logger import setup_logger

@@ -3,15 +3,15 @@ from collections.abc import Iterator
 from typing import Literal
 
 from langchain.schema.language_model import LanguageModelInput
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
-from onyx.configs.app_configs import LOG_INDIVIDUAL_MODEL_TOKENS
+from onyx.configs.app_configs import (
+    DISABLE_GENERATIVE_AI,
+    LOG_DANSWER_MODEL_INTERACTIONS,
+    LOG_INDIVIDUAL_MODEL_TOKENS,
+)
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

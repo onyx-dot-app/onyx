@@ -1,8 +1,10 @@
 import numpy as np
 
-from onyx.agents.agent_search.shared_graph_utils.models import AnswerGenerationDocuments
-from onyx.agents.agent_search.shared_graph_utils.models import RetrievalFitScoreMetrics
-from onyx.agents.agent_search.shared_graph_utils.models import RetrievalFitStats
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    AnswerGenerationDocuments,
+    RetrievalFitScoreMetrics,
+    RetrievalFitStats,
+)
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
@@ -131,7 +133,7 @@ def get_answer_generation_documents(
 
     # Combine additional documents to check in one iteration
     additional_docs = context_documents + original_question_docs
-    for doc_idx, doc in enumerate(additional_docs):
+    for _doc_idx, doc in enumerate(additional_docs):
         doc_id = doc.center_chunk.document_id
         if doc_id not in seen_doc_ids:
             streaming_documents.append(doc)

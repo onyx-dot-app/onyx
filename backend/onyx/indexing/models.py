@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.access.models import DocumentAccess
 from onyx.connectors.models import Document

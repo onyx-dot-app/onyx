@@ -1,16 +1,13 @@
 from typing import Any
 
 import requests
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
+from onyx.configs.app_configs import JOB_TIMEOUT, LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import LLMProvider
-from onyx.db.models import ModelConfiguration
+from onyx.db.models import LLMProvider, ModelConfiguration
 
 
 def _process_model_list_response(model_list_json: Any) -> list[str]:

@@ -1,26 +1,24 @@
-from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
-from onyx.configs.app_configs import BLURB_SIZE
-from onyx.configs.app_configs import LARGE_CHUNK_RATIO
-from onyx.configs.app_configs import MINI_CHUNK_SIZE
-from onyx.configs.app_configs import SKIP_METADATA_IN_CHUNK
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import RETURN_SEPARATOR
-from onyx.configs.constants import SECTION_SEPARATOR
+from onyx.configs.app_configs import (
+    AVERAGE_SUMMARY_EMBEDDINGS,
+    BLURB_SIZE,
+    LARGE_CHUNK_RATIO,
+    MINI_CHUNK_SIZE,
+    SKIP_METADATA_IN_CHUNK,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
+from onyx.configs.constants import RETURN_SEPARATOR, SECTION_SEPARATOR, DocumentSource
 from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
+from onyx.connectors.models import IndexingDocument, Section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import clean_text
-from onyx.utils.text_processing import shared_precompare_cleanup
+from onyx.utils.text_processing import clean_text, shared_precompare_cleanup
 from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
 
 # Not supporting overlaps, we need a clean combination of chunks and it is unclear if overlaps

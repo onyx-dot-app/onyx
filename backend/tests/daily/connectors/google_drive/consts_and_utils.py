@@ -2,11 +2,11 @@ import time
 from collections.abc import Sequence
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
-from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
+from onyx.connectors.models import ConnectorFailure, Document, TextSection
+from tests.daily.connectors.utils import (
+    load_all_docs_from_checkpoint_connector,
+    load_everything_from_checkpoint_connector,
+)
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))

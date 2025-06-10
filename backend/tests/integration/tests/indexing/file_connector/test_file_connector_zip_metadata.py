@@ -1,7 +1,6 @@
 import json
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -17,7 +16,6 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
-
 
 # This is a placeholder - you'll need to create this zip file with actual test files
 TEST_FILES_BASE = "tests/integration/tests/indexing/file_connector/test_files"
@@ -104,7 +102,7 @@ def test_zip_metadata_handling(
         documents = get_documents_for_cc_pair(db_session, cc_pair.id)
 
     # Expected metadata from the .onyx_metadata.json file
-    with open(TEST_METADATA_FILE, "r") as f:
+    with open(TEST_METADATA_FILE) as f:
         expected_metadata = json.load(f)
 
     # Verify each document has the correct metadata

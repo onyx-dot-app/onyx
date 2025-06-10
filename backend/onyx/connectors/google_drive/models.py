@@ -1,13 +1,9 @@
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import field_serializer
-from pydantic import field_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 
@@ -153,7 +149,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     @field_validator("completion_map", mode="before")
     def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
-        assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
+        assert isinstance(v, (dict, ThreadSafeDict))
         return ThreadSafeDict(
             {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )

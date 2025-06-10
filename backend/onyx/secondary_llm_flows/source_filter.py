@@ -8,15 +8,16 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import dict_based_prompt_to_langchain_prompt, message_to_string
 from onyx.natural_language_processing.search_nlp_models import (
     ConnectorClassificationModel,
 )
 from onyx.prompts.constants import SOURCES_KEY
-from onyx.prompts.filter_extration import FILE_SOURCE_WARNING
-from onyx.prompts.filter_extration import SOURCE_FILTER_PROMPT
-from onyx.prompts.filter_extration import WEB_SOURCE_WARNING
+from onyx.prompts.filter_extration import (
+    FILE_SOURCE_WARNING,
+    SOURCE_FILTER_PROMPT,
+    WEB_SOURCE_WARNING,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import extract_embedded_json
 

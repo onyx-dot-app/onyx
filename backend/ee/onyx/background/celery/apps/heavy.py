@@ -1,31 +1,33 @@
 import csv
 import io
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
 from ee.onyx.background.task_name_builders import query_history_task_name
-from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
-from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
+from ee.onyx.server.query_history.api import (
+    ONYX_ANONYMIZED_EMAIL,
+    fetch_and_process_chat_session_history,
+)
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.background.celery.apps.heavy import celery_app
 from onyx.background.task_utils import construct_query_history_report_name
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import FileType
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.app_configs import JOB_TIMEOUT, ONYX_QUERY_HISTORY_TYPE
+from onyx.configs.constants import (
+    FileOrigin,
+    FileType,
+    OnyxCeleryTask,
+    QueryHistoryType,
+)
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import TaskStatus
-from onyx.db.tasks import delete_task_with_id
-from onyx.db.tasks import mark_task_as_finished_with_id
-from onyx.db.tasks import register_task
+from onyx.db.tasks import (
+    delete_task_with_id,
+    mark_task_as_finished_with_id,
+    register_task,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

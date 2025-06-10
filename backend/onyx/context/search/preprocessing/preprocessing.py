@@ -1,28 +1,28 @@
 from sqlalchemy.orm import Session
 
-from onyx.configs.chat_configs import BASE_RECENCY_DECAY
-from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
-from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
-from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
-from onyx.configs.chat_configs import FAVOR_RECENT_DECAY_MULTIPLIER
-from onyx.configs.chat_configs import HYBRID_ALPHA
-from onyx.configs.chat_configs import HYBRID_ALPHA_KEYWORD
-from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import RecencyBiasSetting
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import SearchQuery
-from onyx.context.search.models import SearchRequest
+from onyx.configs.chat_configs import (
+    BASE_RECENCY_DECAY,
+    CONTEXT_CHUNKS_ABOVE,
+    CONTEXT_CHUNKS_BELOW,
+    DISABLE_LLM_DOC_RELEVANCE,
+    FAVOR_RECENT_DECAY_MULTIPLIER,
+    HYBRID_ALPHA,
+    HYBRID_ALPHA_KEYWORD,
+    NUM_POSTPROCESSED_RESULTS,
+    NUM_RETURNED_HITS,
+)
+from onyx.context.search.enums import LLMEvaluationType, RecencyBiasSetting, SearchType
+from onyx.context.search.models import (
+    BaseFilters,
+    IndexFilters,
+    RerankingDetails,
+    SearchQuery,
+    SearchRequest,
+)
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.utils import (
-    remove_stop_words_and_punctuation,
-)
+from onyx.context.search.utils import remove_stop_words_and_punctuation
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.llm.interfaces import LLM
@@ -30,8 +30,7 @@ from onyx.natural_language_processing.search_nlp_models import QueryAnalysisMode
 from onyx.secondary_llm_flows.source_filter import extract_source_filter
 from onyx.secondary_llm_flows.time_filter import extract_time_filter
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
+from onyx.utils.threadpool_concurrency import FunctionCall, run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id

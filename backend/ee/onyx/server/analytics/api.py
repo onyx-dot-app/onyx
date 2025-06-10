@@ -2,23 +2,22 @@ import datetime
 from collections import defaultdict
 from typing import List
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.analytics import fetch_assistant_message_analytics
-from ee.onyx.db.analytics import fetch_assistant_unique_users
-from ee.onyx.db.analytics import fetch_assistant_unique_users_total
-from ee.onyx.db.analytics import fetch_onyxbot_analytics
-from ee.onyx.db.analytics import fetch_per_user_query_analytics
-from ee.onyx.db.analytics import fetch_persona_message_analytics
-from ee.onyx.db.analytics import fetch_persona_unique_users
-from ee.onyx.db.analytics import fetch_query_analytics
-from ee.onyx.db.analytics import user_can_view_assistant_stats
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from ee.onyx.db.analytics import (
+    fetch_assistant_message_analytics,
+    fetch_assistant_unique_users,
+    fetch_assistant_unique_users_total,
+    fetch_onyxbot_analytics,
+    fetch_per_user_query_analytics,
+    fetch_persona_message_analytics,
+    fetch_persona_unique_users,
+    fetch_query_analytics,
+    user_can_view_assistant_stats,
+)
+from onyx.auth.users import current_admin_user, current_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
 

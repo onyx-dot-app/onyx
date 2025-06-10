@@ -29,7 +29,7 @@ def _get_heading_level(paragraph: dict[str, Any]) -> int:
     """Extract heading level from paragraph style"""
     if not ("paragraphStyle" in paragraph and "namedStyleType" in paragraph["paragraphStyle"]):
         return 0
-    
+
     style = paragraph["paragraphStyle"]["namedStyleType"]
     if style == "TITLE":
         return 1
@@ -51,12 +51,12 @@ def _extract_formatted_text_from_paragraph(paragraph: dict[str, Any]) -> tuple[s
         "has_links": False,
         "links": []
     }
-    
+
     for element in paragraph.get("elements", []):
         if "textRun" in element:
             text_content = element["textRun"].get("content", "")
             text_elements.append(text_content)
-            
+
             text_style = element["textRun"].get("textStyle", {})
             if text_style.get("bold"):
                 formatting_info["has_bold"] = True
@@ -110,7 +110,7 @@ def _extract_formatted_text_from_table(table: dict[str, Any]) -> tuple[str, dict
         if row_idx == 0:
             table_metadata["columns"] = len(cells)
             table_metadata["has_header"] = True
-        
+
         cell_contents = []
         for cell in cells:
             child_elements = cell.get("content", [])
@@ -122,7 +122,7 @@ def _extract_formatted_text_from_table(table: dict[str, Any]) -> tuple[str, dict
                 cell_text_parts.append(text)
             cell_contents.append("".join(cell_text_parts))
         table_rows.append(cell_contents)
-    
+
     html_parts = ["<table>"]
     for row_idx, row in enumerate(table_rows):
         if row_idx == 0 and table_metadata["has_header"]:
@@ -137,11 +137,11 @@ def _extract_formatted_text_from_table(table: dict[str, Any]) -> tuple[str, dict
             for cell in row:
                 html_parts.append(f"<td>{cell}</td>")
             html_parts.append("</tr>")
-    
+
     if table_metadata["has_header"]:
         html_parts.append("</tbody>")
     html_parts.append("</table>")
-    
+
     table_html = "".join(html_parts)
     return table_html, table_metadata
 
@@ -186,12 +186,12 @@ def _get_list_metadata(paragraph: dict[str, Any]) -> dict[str, Any]:
     bullet = paragraph.get("bullet", {})
     list_id = bullet.get("listId")
     nesting_level = bullet.get("nestingLevel", 0)
-    
+
     glyph_type = bullet.get("glyph", {}).get("type", "")
     list_type = "unordered"  # default
     if glyph_type in ["DECIMAL", "ALPHA", "ROMAN"]:
         list_type = "ordered"
-    
+
     return {
         "list_id": list_id,
         "nesting_level": nesting_level,

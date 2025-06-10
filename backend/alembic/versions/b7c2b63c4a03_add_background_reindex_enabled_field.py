@@ -6,11 +6,10 @@ Create Date: 2024-03-26 12:34:56.789012
 
 """
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 from onyx.db.enums import EmbeddingPrecision
-
 
 # revision identifiers, used by Alembic.
 revision = "b7c2b63c4a03"

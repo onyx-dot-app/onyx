@@ -8,12 +8,14 @@ from types import SimpleNamespace
 
 import yaml
 
-from tests.regression.answer_quality.api_utils import check_indexing_status
-from tests.regression.answer_quality.api_utils import create_cc_pair
-from tests.regression.answer_quality.api_utils import create_connector
-from tests.regression.answer_quality.api_utils import create_credential
-from tests.regression.answer_quality.api_utils import run_cc_once
-from tests.regression.answer_quality.api_utils import upload_file
+from tests.regression.answer_quality.api_utils import (
+    check_indexing_status,
+    create_cc_pair,
+    create_connector,
+    create_credential,
+    run_cc_once,
+    upload_file,
+)
 
 
 def unzip_and_get_file_paths(zip_file_path: str) -> list[str]:
@@ -101,7 +103,7 @@ def manage_file_upload(zip_file_path: str, env_name: str) -> None:
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(current_dir, "search_test_config.yaml")
-    with open(config_path, "r") as file:
+    with open(config_path) as file:
         config = SimpleNamespace(**yaml.safe_load(file))
     file_location = config.zipped_documents_file
     env_name = config.environment_name

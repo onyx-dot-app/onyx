@@ -1,8 +1,7 @@
 import math
 import random
 import time
-from typing import cast
-from typing import Optional
+from typing import Optional, cast
 
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -90,7 +89,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         state.next_attempt_requested = True  # this signals the caller to retry
 
         # calculate wait duration based on retry-after + some jitter
-        for k in response.headers.keys():
+        for k in response.headers:
             if k.lower() == "retry-after":
                 retry_after_header_name = k
                 break

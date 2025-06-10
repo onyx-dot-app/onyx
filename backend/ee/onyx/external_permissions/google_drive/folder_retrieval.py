@@ -70,7 +70,7 @@ def get_modified_folders(
     query += generate_time_range_filter(start, end)
 
     # Retrieve and yield folders
-    for folder in execute_paginated_retrieval(
+    yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         continue_on_404_or_403=True,
@@ -80,5 +80,4 @@ def get_modified_folders(
         includePermissionsForView="published",
         fields=FOLDER_PERMISSION_FIELDS,
         q=query,
-    ):
-        yield folder
+    )

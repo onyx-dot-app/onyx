@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import threading
@@ -46,10 +47,8 @@ class LongTermLogger:
                 if not file.is_file():
                     logger.debug(f"File already deleted: {file}")
                     continue
-                try:
+                with contextlib.suppress(Exception):
                     file.unlink()
-                except Exception:
-                    pass
                     # logger.error(f"Error deleting old log file {file
                     # }: {e}")
         except Exception:

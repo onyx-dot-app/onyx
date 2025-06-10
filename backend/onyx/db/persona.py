@@ -3,42 +3,40 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists
-from sqlalchemy import func
-from sqlalchemy import not_
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, exists, func, not_, select, update
+from sqlalchemy.orm import Session, aliased, joinedload, selectinload
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import DISABLE_AUTH
-from onyx.configs.chat_configs import BING_API_KEY
-from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
-from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.chat_configs import (
+    BING_API_KEY,
+    CONTEXT_CHUNKS_ABOVE,
+    CONTEXT_CHUNKS_BELOW,
+)
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.models import DocumentSet
-from onyx.db.models import Persona
-from onyx.db.models import Persona__User
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import PersonaLabel
-from onyx.db.models import Prompt
-from onyx.db.models import StarterMessage
-from onyx.db.models import Tool
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    DocumentSet,
+    Persona,
+    Persona__User,
+    Persona__UserGroup,
+    PersonaLabel,
+    Prompt,
+    StarterMessage,
+    Tool,
+    User,
+    User__UserGroup,
+    UserFile,
+    UserFolder,
+    UserGroup,
+)
 from onyx.db.notification import create_notification
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    PersonaSharedNotificationData,
+    PersonaUpsertRequest,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 

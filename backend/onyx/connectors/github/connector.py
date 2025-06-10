@@ -1,17 +1,11 @@
 import copy
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from github import Github
-from github import RateLimitExceededException
-from github import Repository
+from github import Github, RateLimitExceededException, Repository
 from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
@@ -22,19 +16,25 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorCheckpoint
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+    UnexpectedValidationError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -186,7 +186,7 @@ def _get_batch_rate_limited(
         # this is needed to capture the rate limit exception here (if one occurs)
         for obj in objs:
             if hasattr(obj, "raw_data"):
-                getattr(obj, "raw_data")
+                obj.raw_data
         yield from objs
     except RateLimitExceededException:
         _sleep_after_rate_limit_exception(github_client)
@@ -799,6 +799,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
 if __name__ == "__main__":
     import os
+
     from onyx.connectors.connector_runner import ConnectorRunner
 
     # Initialize the connector

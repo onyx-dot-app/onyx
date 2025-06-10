@@ -5,12 +5,10 @@ from redis.client import Redis
 
 from onyx.db.engine import get_session_context_manager
 from onyx.db.models import KVStore
-from onyx.key_value_store.interface import KeyValueStore
-from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.key_value_store.interface import KeyValueStore, KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
-
 
 logger = setup_logger()
 

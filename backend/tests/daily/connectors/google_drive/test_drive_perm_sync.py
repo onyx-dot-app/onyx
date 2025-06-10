@@ -3,17 +3,18 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    ACCESS_MAPPING,
+    ADMIN_EMAIL,
+    PUBLIC_RANGE,
+)
 
 
 def _build_connector(
@@ -57,7 +58,7 @@ def test_gdrive_perm_sync_with_real_data(
 
     # Load drive_id_mapping.json
     with open(
-        os.path.join(os.path.dirname(__file__), "drive_id_mapping.json"), "r"
+        os.path.join(os.path.dirname(__file__), "drive_id_mapping.json")
     ) as f:
         drive_id_mapping = json.load(f)
 

@@ -5,16 +5,19 @@ from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-from shared_configs.configs import DEV_LOGGING_ENABLED
-from shared_configs.configs import LOG_FILE_NAME
-from shared_configs.configs import LOG_LEVEL
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SLACK_CHANNEL_ID
-from shared_configs.configs import TENANT_ID_PREFIX
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
-
+from shared_configs.configs import (
+    DEV_LOGGING_ENABLED,
+    LOG_FILE_NAME,
+    LOG_LEVEL,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SLACK_CHANNEL_ID,
+    TENANT_ID_PREFIX,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    ONYX_REQUEST_ID_CONTEXTVAR,
+)
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
 

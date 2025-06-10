@@ -1,44 +1,43 @@
 from datetime import datetime
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessageChunk, ToolMessage
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.basic.states import BasicState
-from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.models import GraphInputs
-from onyx.agents.agent_search.models import GraphPersistence
-from onyx.agents.agent_search.models import GraphSearchConfig
-from onyx.agents.agent_search.models import GraphTooling
+from onyx.agents.agent_search.models import (
+    GraphConfig,
+    GraphInputs,
+    GraphPersistence,
+    GraphSearchConfig,
+    GraphTooling,
+)
 from onyx.agents.agent_search.orchestration.nodes.use_tool_response import (
     basic_use_tool_response,
 )
-from onyx.agents.agent_search.orchestration.states import ToolCallOutput
-from onyx.agents.agent_search.orchestration.states import ToolChoice
-from onyx.chat.models import DocumentSource
-from onyx.chat.models import LlmDoc
+from onyx.agents.agent_search.orchestration.states import ToolCallOutput, ToolChoice
+from onyx.chat.models import DocumentSource, LlmDoc
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.context.search.enums import QueryFlow
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchRequest
+from onyx.context.search.enums import QueryFlow, SearchType
+from onyx.context.search.models import (
+    IndexFilters,
+    InferenceChunk,
+    InferenceSection,
+    SearchRequest,
+)
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
+    SearchResponseSummary,
+    SearchTool,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search.search_utils import section_to_llm_doc
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,

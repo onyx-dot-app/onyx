@@ -6,10 +6,10 @@ Create Date: 2025-04-10 15:00:35.984669
 
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 from onyx.llm.llm_provider_options import (
     fetch_model_names_for_provider_as_set,
     fetch_visible_model_names_for_provider_as_set,

@@ -6,8 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
+from onyx.db.models import UserFile, UserFolder
 from onyx.file_store.models import ChatFileType
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 

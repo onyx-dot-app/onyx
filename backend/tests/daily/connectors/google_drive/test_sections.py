@@ -1,11 +1,12 @@
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
-from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_URL
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
+    SECTIONS_FOLDER_URL,
+    load_all_docs,
+)
 
 
 @patch(

@@ -5,8 +5,6 @@ from langgraph.types import Send
 
 from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     AnswerQuestionOutput,
-)
-from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     SubQuestionAnsweringInput,
 )
 from onyx.agents.agent_search.deep_search.initial.generate_initial_answer.states import (

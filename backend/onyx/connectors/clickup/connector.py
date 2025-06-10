@@ -1,25 +1,24 @@
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
 )
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    TextSection,
+)
 from onyx.utils.retry_wrapper import retry_builder
-
 
 CLICKUP_API_BASE_URL = "https://api.clickup.com/api/v2"
 
@@ -206,8 +205,8 @@ if __name__ == "__main__":
 
     clickup_connector.load_credentials(
         {
-            "clickup_api_token": os.environ["clickup_api_token"],
-            "clickup_team_id": os.environ["clickup_team_id"],
+            "clickup_api_token": os.environ["CLICKUP_API_TOKEN"],
+            "clickup_team_id": os.environ["CLICKUP_TEAM_ID"],
         }
     )
 

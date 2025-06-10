@@ -3,12 +3,9 @@ from uuid import uuid4
 
 import requests
 
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.test_models import DATestLLMProvider
-from tests.integration.common_utils.test_models import DATestUser
+from onyx.server.manage.llm.models import LLMProviderUpsertRequest, LLMProviderView
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
+from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
 
 
 class LLMProviderManager:

@@ -1,9 +1,7 @@
 import pytest
 
-from onyx.auth.email_utils import build_user_email_invite
-from onyx.auth.email_utils import send_email
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from onyx.auth.email_utils import build_user_email_invite, send_email
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME, AuthType
 from onyx.db.engine import SqlEngine
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 

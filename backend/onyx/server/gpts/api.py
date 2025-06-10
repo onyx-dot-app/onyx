@@ -1,8 +1,7 @@
 import math
 from datetime import datetime
 
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -13,7 +12,6 @@ from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.server.onyx_api.ingestion import api_key_dep
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

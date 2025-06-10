@@ -4,52 +4,48 @@ import re
 import ssl
 import threading
 import time
-from collections.abc import AsyncGenerator
-from collections.abc import Generator
-from contextlib import asynccontextmanager
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
-from typing import Any
-from typing import AsyncContextManager
+from typing import Any, AsyncContextManager
 
 import asyncpg  # type: ignore
 import boto3
 from fastapi import HTTPException
-from sqlalchemy import event
-from sqlalchemy import pool
-from sqlalchemy import text
-from sqlalchemy.engine import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import event, pool, text
+from sqlalchemy.engine import Engine, create_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
-from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.app_configs import POSTGRES_DB
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_IDLE_SESSIONS_TIMEOUT
-from onyx.configs.app_configs import POSTGRES_PASSWORD
-from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
-from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USE_NULL_POOL
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME
-from onyx.configs.constants import SSL_CERT_FILE
+from onyx.configs.app_configs import (
+    AWS_REGION_NAME,
+    LOG_POSTGRES_CONN_COUNTS,
+    LOG_POSTGRES_LATENCY,
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+    POSTGRES_DB,
+    POSTGRES_HOST,
+    POSTGRES_IDLE_SESSIONS_TIMEOUT,
+    POSTGRES_PASSWORD,
+    POSTGRES_POOL_PRE_PING,
+    POSTGRES_POOL_RECYCLE,
+    POSTGRES_PORT,
+    POSTGRES_USE_NULL_POOL,
+    POSTGRES_USER,
+)
+from onyx.configs.constants import POSTGRES_UNKNOWN_APP_NAME, SSL_CERT_FILE
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.configs import TENANT_ID_PREFIX
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+    TENANT_ID_PREFIX,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 

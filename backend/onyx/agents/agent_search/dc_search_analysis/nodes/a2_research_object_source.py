@@ -1,16 +1,13 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dc_search_analysis.ops import extract_section
-from onyx.agents.agent_search.dc_search_analysis.ops import research
-from onyx.agents.agent_search.dc_search_analysis.states import ObjectSourceInput
+from onyx.agents.agent_search.dc_search_analysis.ops import extract_section, research
 from onyx.agents.agent_search.dc_search_analysis.states import (
+    ObjectSourceInput,
     ObjectSourceResearchUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig

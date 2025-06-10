@@ -3,22 +3,21 @@ from typing import cast
 
 from PIL import Image
 
-from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.beat_schedule import (
+    CLOUD_BEAT_MULTIPLIER_DEFAULT,
     CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
 )
-from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
-from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.configs.constants import ONYX_EMAILABLE_LOGO_MAX_DIM
+from onyx.configs.constants import (
+    CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT,
+    ONYX_CLOUD_REDIS_RUNTIME,
+    ONYX_CLOUD_TENANT_ID,
+    ONYX_EMAILABLE_LOGO_MAX_DIM,
+)
 from onyx.db.engine import get_session_with_shared_schema
 from onyx.file_store.file_store import PostgresBackedFileStore
 from onyx.redis.redis_pool import get_redis_replica_client
-from onyx.utils.file import FileWithMimeType
-from onyx.utils.file import OnyxStaticFileManager
-from onyx.utils.variable_functionality import (
-    fetch_ee_implementation_or_noop,
-)
+from onyx.utils.file import FileWithMimeType, OnyxStaticFileManager
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
 class OnyxRuntime:

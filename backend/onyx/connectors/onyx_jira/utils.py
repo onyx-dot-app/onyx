@@ -1,14 +1,11 @@
 """Module with custom fields processing functions"""
 
 import os
-from typing import Any
-from typing import List
+from typing import Any, List
 from urllib.parse import urlparse
 
 from jira import JIRA
-from jira.resources import CustomFieldOption
-from jira.resources import Issue
-from jira.resources import User
+from jira.resources import CustomFieldOption, Issue, User
 
 from onyx.connectors.models import BasicExpertInfo
 from onyx.utils.logger import setup_logger
@@ -169,7 +166,7 @@ class CustomFieldExtractor:
         issue_custom_fields = {
             custom_fields[key]: value
             for key, value in jira.fields.__dict__.items()
-            if value and key in custom_fields.keys()
+            if value and key in custom_fields
         }
 
         processed_fields = {}

@@ -1,13 +1,8 @@
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import or_
-from sqlalchemy import select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import Document
-from onyx.db.models import Document__Tag
-from onyx.db.models import Tag
+from onyx.db.models import Document, Document__Tag, Tag
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

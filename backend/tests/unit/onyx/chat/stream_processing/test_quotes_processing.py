@@ -2,8 +2,10 @@ import textwrap
 
 import pytest
 
-from onyx.chat.stream_processing.quotes_processing import match_quotes_to_docs
-from onyx.chat.stream_processing.quotes_processing import separate_answer_quotes
+from onyx.chat.stream_processing.quotes_processing import (
+    match_quotes_to_docs,
+    separate_answer_quotes,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 

@@ -1,17 +1,15 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
-from ee.onyx.server.tenants.user_mapping import remove_all_users_from_tenant
-from ee.onyx.server.tenants.user_mapping import remove_users_from_tenant
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import User
+from ee.onyx.server.tenants.user_mapping import (
+    remove_all_users_from_tenant,
+    remove_users_from_tenant,
+)
+from onyx.auth.users import User, current_admin_user
 from onyx.db.auth import get_user_count
 from onyx.db.engine import get_session
-from onyx.db.users import delete_user_from_db
-from onyx.db.users import get_user_by_email
+from onyx.db.users import delete_user_from_db, get_user_by_email
 from onyx.server.manage.models import UserByEmail
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id

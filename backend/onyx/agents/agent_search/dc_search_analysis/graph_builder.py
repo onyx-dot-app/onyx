@@ -1,11 +1,7 @@
-from langgraph.graph import END
-from langgraph.graph import START
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from onyx.agents.agent_search.dc_search_analysis.edges import (
     parallel_object_research_consolidation_edge,
-)
-from onyx.agents.agent_search.dc_search_analysis.edges import (
     parallel_object_source_research_edge,
 )
 from onyx.agents.agent_search.dc_search_analysis.nodes.a1_search_objects import (
@@ -23,8 +19,7 @@ from onyx.agents.agent_search.dc_search_analysis.nodes.a4_consolidate_object_res
 from onyx.agents.agent_search.dc_search_analysis.nodes.a5_consolidate_research import (
     consolidate_research,
 )
-from onyx.agents.agent_search.dc_search_analysis.states import MainInput
-from onyx.agents.agent_search.dc_search_analysis.states import MainState
+from onyx.agents.agent_search.dc_search_analysis.states import MainInput, MainState
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -1,14 +1,12 @@
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from jira.resources import Issue
 from pytest_mock import MockFixture
 
-from onyx.connectors.onyx_jira.connector import _perform_jql_search
-from onyx.connectors.onyx_jira.connector import process_jira_issue
+from onyx.connectors.onyx_jira.connector import _perform_jql_search, process_jira_issue
 
 
 @pytest.fixture

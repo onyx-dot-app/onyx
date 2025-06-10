@@ -1,47 +1,42 @@
 import json
 import os
 import traceback
-from collections.abc import Iterator
-from collections.abc import Sequence
-from typing import Any
-from typing import cast
+from collections.abc import Iterator, Sequence
+from typing import Any, cast
 
 import litellm  # type: ignore
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
-from langchain_core.messages import AIMessage
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import BaseMessageChunk
-from langchain_core.messages import ChatMessage
-from langchain_core.messages import ChatMessageChunk
-from langchain_core.messages import FunctionMessage
-from langchain_core.messages import FunctionMessageChunk
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import HumanMessageChunk
-from langchain_core.messages import SystemMessage
-from langchain_core.messages import SystemMessageChunk
-from langchain_core.messages.tool import ToolCallChunk
-from langchain_core.messages.tool import ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    BaseMessageChunk,
+    ChatMessage,
+    ChatMessageChunk,
+    FunctionMessage,
+    FunctionMessageChunk,
+    HumanMessage,
+    HumanMessageChunk,
+    SystemMessage,
+    SystemMessageChunk,
+)
+from langchain_core.messages.tool import ToolCallChunk, ToolMessage
 from langchain_core.prompt_values import PromptValue
 
-from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
-from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS, MOCK_LLM_RESPONSE
 from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
+    GEN_AI_TEMPERATURE,
+    LITELLM_EXTRA_BODY,
 )
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.configs.model_configs import LITELLM_EXTRA_BODY
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.interfaces import LLM, LLMConfig, ToolChoiceOptions
 from onyx.llm.llm_provider_options import CREDENTIALS_FILE_CUSTOM_CONFIG_KEY
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
-
 
 logger = setup_logger()
 
@@ -67,13 +62,13 @@ class LLMRateLimitError(Exception):
 
 
 def _base_msg_to_role(msg: BaseMessage) -> str:
-    if isinstance(msg, HumanMessage) or isinstance(msg, HumanMessageChunk):
+    if isinstance(msg, (HumanMessage, HumanMessageChunk)):
         return "user"
-    if isinstance(msg, AIMessage) or isinstance(msg, AIMessageChunk):
+    if isinstance(msg, (AIMessage, AIMessageChunk)):
         return "assistant"
-    if isinstance(msg, SystemMessage) or isinstance(msg, SystemMessageChunk):
+    if isinstance(msg, (SystemMessage, SystemMessageChunk)):
         return "system"
-    if isinstance(msg, FunctionMessage) or isinstance(msg, FunctionMessageChunk):
+    if isinstance(msg, (FunctionMessage, FunctionMessageChunk)):
         return "function"
     return "unknown"
 

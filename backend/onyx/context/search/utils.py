@@ -6,11 +6,13 @@ from nltk.corpus import stopwords  # type:ignore
 from nltk.tokenize import word_tokenize  # type:ignore
 
 from onyx.chat.models import SectionRelevancePiece
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SavedSearchDoc
-from onyx.context.search.models import SavedSearchDocWithContent
-from onyx.context.search.models import SearchDoc
+from onyx.context.search.models import (
+    InferenceChunk,
+    InferenceSection,
+    SavedSearchDoc,
+    SavedSearchDocWithContent,
+    SearchDoc,
+)
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.utils.logger import setup_logger
 

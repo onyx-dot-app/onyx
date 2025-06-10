@@ -1,9 +1,7 @@
 from langchain_core.messages import HumanMessage
 
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.llm.utils import build_content_with_imgs
-
 
 CUSTOM_IMG_GENERATION_SUMMARY_PROMPT = """
 You have just created the attached {file_type} file in response to the following query: "{query}".

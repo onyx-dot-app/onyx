@@ -3,8 +3,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,7 +15,7 @@ from onyx.connectors.models import Document
 def load_test_data(file_name: str = "test_highspot_data.json") -> dict:
     """Load test data from JSON file."""
     current_dir = Path(__file__).parent
-    with open(current_dir / file_name, "r") as f:
+    with open(current_dir / file_name) as f:
         return json.load(f)
 
 

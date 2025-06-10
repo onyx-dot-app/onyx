@@ -5,102 +5,104 @@ import json
 import os
 import time
 import uuid
-from collections.abc import Callable
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import timedelta
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from langchain_core.messages import SystemMessage
 
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_user
-from onyx.chat.chat_utils import create_chat_chain
-from onyx.chat.chat_utils import extract_headers
+from backend.onyx.tools.tool import Tool
+from onyx.auth.users import current_chat_accessible_user, current_user
+from onyx.chat.chat_utils import create_chat_chain, extract_headers
 from onyx.chat.process_message import stream_chat_message
 from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import (
+    DocumentSource,
+    FileOrigin,
+    MessageType,
+    MilestoneRecordType,
+)
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.connectors.models import InputType
-from onyx.db.chat import add_chats_to_session_from_slack_thread
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import delete_all_chat_sessions_for_user
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import duplicate_chat_session_for_user_from_slack
-from onyx.db.chat import get_chat_message
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.chat import get_or_create_root_message
-from onyx.db.chat import set_as_latest_chat_message
-from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import update_chat_session
+from onyx.db.chat import (
+    add_chats_to_session_from_slack_thread,
+    create_chat_session,
+    create_new_chat_message,
+    delete_all_chat_sessions_for_user,
+    delete_chat_session,
+    duplicate_chat_session_for_user_from_slack,
+    get_chat_message,
+    get_chat_messages_by_session,
+    get_chat_session_by_id,
+    get_chat_sessions_by_user,
+    get_or_create_root_message,
+    set_as_latest_chat_message,
+    translate_db_message_to_chat_message_detail,
+    update_chat_session,
+)
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
-from onyx.db.engine import get_session
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session, get_session_with_tenant
 from onyx.db.enums import AccessType
-from onyx.db.feedback import create_chat_message_feedback
-from onyx.db.feedback import create_doc_retrieval_feedback
+from onyx.db.feedback import create_chat_message_feedback, create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.user_documents import create_user_files
-from onyx.file_processing.extract_file_text import docx_to_txt_filename
-from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
-from onyx.llm.exceptions import GenAIDisabledException
-from onyx.llm.factory import get_default_llms
-from onyx.llm.factory import get_llms_for_persona
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.secondary_llm_flows.chat_session_naming import (
-    get_renamed_conversation_name,
+from onyx.file_processing.extract_file_text import (
+    docx_to_txt_filename,
+    extract_file_text,
 )
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import CredentialBase
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.llm.exceptions import GenAIDisabledException
+from onyx.llm.factory import get_default_llms, get_llms_for_persona
+from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.secondary_llm_flows.chat_session_naming import get_renamed_conversation_name
+from onyx.server.documents.models import ConnectorBase, CredentialBase
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
-from onyx.server.query_and_chat.models import ChatFeedbackRequest
-from onyx.server.query_and_chat.models import ChatMessageIdentifier
-from onyx.server.query_and_chat.models import ChatRenameRequest
-from onyx.server.query_and_chat.models import ChatSearchResponse
-from onyx.server.query_and_chat.models import ChatSessionCreationRequest
-from onyx.server.query_and_chat.models import ChatSessionDetailResponse
-from onyx.server.query_and_chat.models import ChatSessionDetails
-from onyx.server.query_and_chat.models import ChatSessionGroup
-from onyx.server.query_and_chat.models import ChatSessionsResponse
-from onyx.server.query_and_chat.models import ChatSessionSummary
-from onyx.server.query_and_chat.models import ChatSessionUpdateRequest
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
-from onyx.server.query_and_chat.models import CreateChatSessionID
-from onyx.server.query_and_chat.models import LLMOverride
-from onyx.server.query_and_chat.models import PromptOverride
-from onyx.server.query_and_chat.models import RenameChatSessionResponse
-from onyx.server.query_and_chat.models import SearchFeedbackRequest
-from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
-from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
-from onyx.server.query_and_chat.models import DocumentChatRequest
-
+from onyx.server.query_and_chat.models import (
+    ChatFeedbackRequest,
+    ChatMessageIdentifier,
+    ChatRenameRequest,
+    ChatSearchResponse,
+    ChatSessionCreationRequest,
+    ChatSessionDetailResponse,
+    ChatSessionDetails,
+    ChatSessionGroup,
+    ChatSessionsResponse,
+    ChatSessionSummary,
+    ChatSessionUpdateRequest,
+    CreateChatMessageRequest,
+    CreateChatSessionID,
+    DocumentChatRequest,
+    LLMOverride,
+    PromptOverride,
+    RenameChatSessionResponse,
+    SearchFeedbackRequest,
+    UpdateChatSessionTemperatureRequest,
+    UpdateChatSessionThreadRequest,
+)
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
-from onyx.tools.tool_implementations.document.document_editor_tool import DocumentEditorTool
+from onyx.tools.tool_implementations.document.document_editor_tool import (
+    DocumentEditorTool,
+)
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -173,12 +175,11 @@ def update_chat_session_temperature(
         if (
             chat_session.current_alternate_model
             and "anthropic" in chat_session.current_alternate_model.lower()
-        ):
-            if update_thread_req.temperature_override > 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Temperature for Anthropic models must be between 0 and 1",
-                )
+        ) and update_thread_req.temperature_override > 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Temperature for Anthropic models must be between 0 and 1",
+            )
 
     chat_session.temperature_override = update_thread_req.temperature_override
 
@@ -387,7 +388,7 @@ async def is_connected(request: Request) -> Callable[[], bool]:
         except Exception as e:
             error_msg = str(e)
             logger.critical(
-                f"An unexpected error occured with the disconnect check coroutine: {error_msg}"
+                f"An unexpected error occurred with the disconnect check coroutine: {error_msg}"
             )
             return True
 
@@ -443,7 +444,7 @@ def handle_new_chat_message(
 
     def stream_generator() -> Generator[str, None, None]:
         try:
-            for packet in stream_chat_message(
+            yield from stream_chat_message(
                 new_msg_req=chat_message_req,
                 user=user,
                 litellm_additional_headers=extract_headers(
@@ -453,8 +454,7 @@ def handle_new_chat_message(
                     request.headers
                 ),
                 is_connected=is_connected_func,
-            ):
-                yield packet
+            )
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
@@ -481,9 +481,7 @@ def set_message_as_latest(
     )
 
     set_as_latest_chat_message(
-        chat_message=chat_message,
-        user_id=user_id,
-        db_session=db_session,
+        chat_message=chat_message, user_id=user_id, db_session=db_session
     )
 
 
@@ -511,8 +509,10 @@ def create_search_feedback(
     _: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """This endpoint isn't protected - it does not check if the user has access to the document
-    Users could try changing boosts of arbitrary docs but this does not leak any data.
+    """
+    This endpoint isn't protected - it does not check if the user has
+    access to the document Users could try changing boosts of arbitrary
+    docs but this does not leak any data.
     """
     create_doc_retrieval_feedback(
         message_id=feedback.message_id,
@@ -536,19 +536,15 @@ def get_max_document_tokens(
 ) -> MaxSelectedDocumentTokens:
     try:
         persona = get_persona_by_id(
-            persona_id=persona_id,
-            user=user,
-            db_session=db_session,
-            is_for_edit=False,
+            persona_id=persona_id, user=user, db_session=db_session, is_for_edit=False
         )
     except ValueError:
         raise HTTPException(status_code=404, detail="Persona not found")
 
     return MaxSelectedDocumentTokens(
         max_tokens=compute_max_document_tokens_for_persona(
-            db_session=db_session,
-            persona=persona,
-        ),
+            db_session=db_session, persona=persona
+        )
     )
 
 
@@ -585,7 +581,7 @@ def seed_chat(
         new_chat_session = create_chat_session(
             db_session=db_session,
             description=chat_seed_request.description or "",
-            user_id=None,  # this chat session is "unassigned" until a user visits the web UI
+            user_id=None,  # chat session is "unassigned" until a user visits the web UI
             persona_id=chat_seed_request.persona_id,
             llm_override=chat_seed_request.llm_override,
             prompt_override=chat_seed_request.prompt_override,
@@ -601,8 +597,7 @@ def seed_chat(
         llm, fast_llm = get_llms_for_persona(persona=new_chat_session.persona)
 
         tokenizer = get_tokenizer(
-            model_name=llm.config.model_name,
-            provider_type=llm.config.model_provider,
+            model_name=llm.config.model_name, provider_type=llm.config.model_provider
         )
         token_count = len(tokenizer.encode(chat_seed_request.message))
 
@@ -642,9 +637,7 @@ def seed_chat_from_slack(
 ) -> SeedChatFromSlackResponse:
     slack_chat_session_id = chat_seed_request.chat_session_id
     new_chat_session = duplicate_chat_session_for_user_from_slack(
-        db_session=db_session,
-        user=user,
-        chat_session_id=slack_chat_session_id,
+        db_session=db_session, user=user, chat_session_id=slack_chat_session_id
     )
 
     add_chats_to_session_from_slack_thread(
@@ -667,36 +660,6 @@ def upload_files_for_chat(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> dict[str, list[FileDescriptor]]:
-
-    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
-    # image_content_types = {"image/jpeg", "image/png", "image/webp"}
-    # csv_content_types = {"text/csv"}
-    # text_content_types = {
-    #     "text/plain",
-    #     "text/markdown",
-    #     "text/x-markdown",
-    #     "text/x-config",
-    #     "text/tab-separated-values",
-    #     "application/json",
-    #     "application/xml",
-    #     "text/xml",
-    #     "application/x-yaml",
-    # }
-    # document_content_types = {
-    #     "application/pdf",
-    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    #     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    #     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    #     "message/rfc822",
-    #     "application/epub+zip",
-    # }
-
-    # allowed_content_types = (
-    #     image_content_types.union(text_content_types)
-    #     .union(document_content_types)
-    #     .union(csv_content_types)
-    # )
-
     for file in files:
         if not file.content_type:
             raise HTTPException(status_code=400, detail="File content type is required")
@@ -710,8 +673,7 @@ def upload_files_for_chat(
             and file.size > 20 * 1024 * 1024
         ):
             raise HTTPException(
-                status_code=400,
-                detail="File size must be less than 20MB",
+                status_code=400, detail="File size must be less than 20MB"
             )
 
     file_store = get_default_file_store(db_session)
@@ -780,8 +742,7 @@ def upload_files_for_chat(
                 indexing_start=None,
             )
             connector = create_connector(
-                db_session=db_session,
-                connector_data=connector_base,
+                db_session=db_session, connector_data=connector_base
             )
 
             # 7) Create credential
@@ -867,29 +828,45 @@ def handle_document_chat_message(
                     http_request.headers, LITELLM_PASS_THROUGH_HEADERS
                 )
             )
-            
-            from onyx.context.search.models import SearchRequest, RetrievalDetails
-            from onyx.agents.agent_search.models import GraphConfig, GraphInputs, GraphTooling, GraphPersistence, GraphSearchConfig
-            from onyx.tools.tool_implementations.search.search_tool import SearchTool
-            from onyx.db.persona import get_best_persona_id_for_user, get_persona_by_id
-            from onyx.chat.models import PromptConfig, DocumentPruningConfig, AnswerStyleConfig, CitationConfig
-            from onyx.context.search.enums import LLMEvaluationType
-            from onyx.tools.force import ForceUseTool
+
             from langchain_core.messages import HumanMessage
-            from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-            
+
+            from onyx.agents.agent_search.models import (
+                GraphConfig,
+                GraphInputs,
+                GraphPersistence,
+                GraphSearchConfig,
+                GraphTooling,
+            )
+            from onyx.chat.models import (
+                AnswerStyleConfig,
+                CitationConfig,
+                DocumentPruningConfig,
+                PromptConfig,
+            )
+            from onyx.chat.prompt_builder.answer_prompt_builder import (
+                AnswerPromptBuilder,
+            )
+            from onyx.context.search.enums import LLMEvaluationType
+            from onyx.context.search.models import RetrievalDetails, SearchRequest
+            from onyx.db.persona import get_best_persona_id_for_user, get_persona_by_id
+            from onyx.tools.force import ForceUseTool
+            from onyx.tools.tool_implementations.search.search_tool import SearchTool
+
             search_request = SearchRequest(query=request.message)
 
             original_message = "User message: " + request.message
-            
+
             tenant_id = get_current_tenant_id()
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 persona_id = get_best_persona_id_for_user(db_session, user)
                 if not persona_id:
                     raise ValueError("No persona available for document chat")
-                
-                persona = get_persona_by_id(persona_id, user, db_session, is_for_edit=False)
-                
+
+                persona = get_persona_by_id(
+                    persona_id, user, db_session, is_for_edit=False
+                )
+                tools: list[Tool] = []
                 search_tool = SearchTool(
                     db_session=db_session,
                     user=user,
@@ -899,11 +876,12 @@ def handle_document_chat_message(
                     llm=llm,
                     fast_llm=fast_llm,
                     pruning_config=DocumentPruningConfig(),
-                    answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                    answer_style_config=AnswerStyleConfig(
+                        citation_config=CitationConfig()
+                    ),
                     evaluation_type=LLMEvaluationType.BASIC,
                 )
-
-                tools = [search_tool]
+                tools.append(search_tool)
                 if request.document_content:
                     document_editor_tool = DocumentEditorTool(
                         db_session=db_session,
@@ -912,12 +890,13 @@ def handle_document_chat_message(
                         llm=llm,
                         fast_llm=fast_llm,
                         prompt_config=PromptConfig.from_model(persona.prompts[0]),
-                        answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                        answer_style_config=AnswerStyleConfig(
+                            citation_config=CitationConfig()
+                        ),
                         document_content=request.document_content,
                     )
                     tools.append(document_editor_tool)
-                    
-                
+
                 config = GraphConfig(
                     inputs=GraphInputs(
                         search_request=search_request,
@@ -927,27 +906,31 @@ def handle_document_chat_message(
                             llm_config=llm.config,
                             raw_user_query=request.message,
                             raw_user_uploaded_files=[],
-                            system_message=SystemMessage(content=persona.prompts[0].system_prompt),
+                            system_message=SystemMessage(
+                                content=persona.prompts[0].system_prompt
+                            ),
                         ),
                     ),
                     tooling=GraphTooling(
-                        primary_llm=llm, 
-                        fast_llm=fast_llm, 
+                        primary_llm=llm,
+                        fast_llm=fast_llm,
                         search_tool=search_tool,
                         tools=tools,
-                        force_use_tool=ForceUseTool(force_use=False, tool_name=search_tool.name),
-                        using_tool_calling_llm=True
+                        force_use_tool=ForceUseTool(
+                            force_use=False, tool_name=search_tool.name
+                        ),
+                        using_tool_calling_llm=True,
                     ),
                     persistence=GraphPersistence(
                         db_session=db_session,
-                        chat_session_id=UUID(request.session_id) if request.session_id else None,
+                        chat_session_id=UUID(request.session_id),
                         message_id=0,
                     ),
                     behavior=GraphSearchConfig(use_agentic_search=True),
                 )
-                
+
                 from onyx.agents.agent_search.run_graph import run_document_chat_graph
-                
+
                 for packet in run_document_chat_graph(
                     config=config,
                     query=request.message,
@@ -1041,7 +1024,5 @@ async def search_chats(
         groups.append(ChatSessionGroup(title="Older", chats=older_chats))
 
     return ChatSearchResponse(
-        groups=groups,
-        has_more=has_more,
-        next_page=page + 1 if has_more else None,
+        groups=groups, has_more=has_more, next_page=page + 1 if has_more else None
     )

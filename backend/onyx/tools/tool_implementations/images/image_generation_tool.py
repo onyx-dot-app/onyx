@@ -1,8 +1,7 @@
 import json
 from collections.abc import Generator
 from enum import Enum
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
 from litellm import image_generation  # type: ignore
@@ -14,9 +13,11 @@ from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
-from onyx.llm.utils import build_content_with_imgs
-from onyx.llm.utils import message_to_string
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import (
+    build_content_with_imgs,
+    message_to_string,
+    model_supports_image_input,
+)
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
@@ -28,7 +29,6 @@ from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-
 
 logger = setup_logger()
 

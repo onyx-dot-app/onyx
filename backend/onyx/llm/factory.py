@@ -2,21 +2,26 @@ from typing import Any
 
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.llm import fetch_default_provider
-from onyx.db.llm import fetch_default_vision_provider
-from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_llm_provider_view
+from onyx.configs.model_configs import (
+    GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+    GEN_AI_TEMPERATURE,
+)
+from onyx.db.engine import get_session_context_manager, get_session_with_current_tenant
+from onyx.db.llm import (
+    fetch_default_provider,
+    fetch_default_vision_provider,
+    fetch_existing_llm_providers,
+    fetch_llm_provider_view,
+)
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import get_max_input_tokens_from_llm_provider
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import (
+    get_max_input_tokens_from_llm_provider,
+    model_supports_image_input,
+)
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -213,7 +218,7 @@ def get_llm_for_contextual_rag(model_name: str, model_provider: str) -> LLM:
     with get_session_context_manager() as db_session:
         llm_provider = fetch_llm_provider_view(db_session, model_provider)
     if not llm_provider:
-        raise ValueError("No LLM provider with name {} found".format(model_provider))
+        raise ValueError(f"No LLM provider with name {model_provider} found")
     return llm_from_provider(
         model_name=model_name,
         llm_provider=llm_provider,

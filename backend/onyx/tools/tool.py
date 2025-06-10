@@ -1,14 +1,10 @@
 import abc
 from collections.abc import Generator
-from typing import Any
-from typing import Generic
-from typing import TYPE_CHECKING
-from typing import TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.utils.special_types import JSON_ro
-
 
 if TYPE_CHECKING:
     from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder

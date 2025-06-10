@@ -4,9 +4,7 @@ import json
 import ssl
 import threading
 from collections.abc import Callable
-from typing import Any
-from typing import cast
-from typing import Optional
+from typing import Any, Optional, cast
 
 import redis
 from fastapi import Request
@@ -14,19 +12,23 @@ from redis import asyncio as aioredis
 from redis.client import Redis
 from redis.lock import Lock as RedisLock
 
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import REDIS_DB_NUMBER
-from onyx.configs.app_configs import REDIS_HEALTH_CHECK_INTERVAL
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PASSWORD
-from onyx.configs.app_configs import REDIS_POOL_MAX_CONNECTIONS
-from onyx.configs.app_configs import REDIS_PORT
-from onyx.configs.app_configs import REDIS_REPLICA_HOST
-from onyx.configs.app_configs import REDIS_SSL
-from onyx.configs.app_configs import REDIS_SSL_CA_CERTS
-from onyx.configs.app_configs import REDIS_SSL_CERT_REQS
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.configs.constants import REDIS_SOCKET_KEEPALIVE_OPTIONS
+from onyx.configs.app_configs import (
+    REDIS_AUTH_KEY_PREFIX,
+    REDIS_DB_NUMBER,
+    REDIS_HEALTH_CHECK_INTERVAL,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_POOL_MAX_CONNECTIONS,
+    REDIS_PORT,
+    REDIS_REPLICA_HOST,
+    REDIS_SSL,
+    REDIS_SSL_CA_CERTS,
+    REDIS_SSL_CERT_REQS,
+)
+from onyx.configs.constants import (
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    REDIS_SOCKET_KEEPALIVE_OPTIONS,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
 from shared_configs.contextvars import get_current_tenant_id
@@ -145,7 +147,7 @@ class RedisPool:
         if not cls._instance:
             with cls._lock:
                 if not cls._instance:
-                    cls._instance = super(RedisPool, cls).__new__(cls)
+                    cls._instance = super().__new__(cls)
                     cls._instance._init_pools()
         return cls._instance
 

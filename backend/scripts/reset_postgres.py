@@ -10,11 +10,7 @@ from onyx.db.engine import get_sqlalchemy_engine
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from onyx.configs.app_configs import POSTGRES_DB  # noqa: E402
-from onyx.configs.app_configs import POSTGRES_HOST  # noqa: E402
-from onyx.configs.app_configs import POSTGRES_PASSWORD  # noqa: E402
-from onyx.configs.app_configs import POSTGRES_PORT  # noqa: E402
-from onyx.configs.app_configs import POSTGRES_USER  # noqa: E402
+from onyx.configs.app_configs import POSTGRES_DB, POSTGRES_HOST, POSTGRES_PASSWORD, POSTGRES_PORT, POSTGRES_USER  # noqa: E402
 from onyx.db.credentials import create_initial_public_credential  # noqa: E402
 
 

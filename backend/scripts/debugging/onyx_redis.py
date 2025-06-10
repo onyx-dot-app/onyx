@@ -11,23 +11,25 @@ from uuid import UUID
 from redis import Redis
 
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import write_invited_users
-from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
-from onyx.configs.app_configs import REDIS_DB_NUMBER
-from onyx.configs.app_configs import REDIS_HOST
-from onyx.configs.app_configs import REDIS_PASSWORD
-from onyx.configs.app_configs import REDIS_PORT
-from onyx.configs.app_configs import REDIS_SSL
+from onyx.auth.invited_users import get_invited_users, write_invited_users
+from onyx.configs.app_configs import (
+    REDIS_AUTH_KEY_PREFIX,
+    REDIS_DB_NUMBER,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    REDIS_SSL,
+)
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_pool import RedisPool
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 # Tool to run helpful operations on Redis in production
 # This is targeted for internal usage and may not have all the necessary parameters

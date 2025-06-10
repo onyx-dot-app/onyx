@@ -1,21 +1,24 @@
-from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY
-from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import (
+    CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY,
+    CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
+)
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
-from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
-from ee.onyx.external_permissions.perm_sync_types import GroupSyncFuncType
+from ee.onyx.external_permissions.perm_sync_types import (
+    DocSyncFuncType,
+    GroupSyncFuncType,
+)
 from ee.onyx.external_permissions.post_query_censoring import (
     DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
 )
 from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
 from ee.onyx.external_permissions.slack.group_sync import slack_group_sync
 from onyx.configs.constants import DocumentSource
-
 
 # These functions update:
 # - the user_email <-> document mapping

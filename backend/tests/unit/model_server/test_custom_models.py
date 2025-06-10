@@ -1,6 +1,5 @@
 from typing import Any
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import numpy.typing as npt
@@ -9,9 +8,9 @@ import pytest
 from model_server.custom_models import run_content_classification_inference
 from shared_configs.configs import (
     INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX,
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN,
 )
-from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
-from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
 from shared_configs.model_server_models import ContentClassificationPrediction
 
 

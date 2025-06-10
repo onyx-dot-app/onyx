@@ -1,104 +1,72 @@
 from datetime import datetime
 from typing import cast
 
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import merge_content
+from langchain_core.messages import HumanMessage, merge_content
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.deep_search.main.models import (
-    AgentRefinedMetrics,
-)
+from onyx.agents.agent_search.deep_search.main.models import AgentRefinedMetrics
 from onyx.agents.agent_search.deep_search.main.operations import get_query_info
-from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.deep_search.main.states import (
+    MainState,
     RefinedAnswerUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     binary_string_test_after_answer_separator,
-)
-from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     get_prompt_enrichment_components,
-)
-from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
 from onyx.agents.agent_search.shared_graph_utils.calculations import (
     get_answer_generation_documents,
 )
-from onyx.agents.agent_search.shared_graph_utils.constants import AGENT_ANSWER_SEPARATOR
 from onyx.agents.agent_search.shared_graph_utils.constants import (
+    AGENT_ANSWER_SEPARATOR,
     AGENT_LLM_RATELIMIT_MESSAGE,
-)
-from onyx.agents.agent_search.shared_graph_utils.constants import (
     AGENT_LLM_TIMEOUT_MESSAGE,
-)
-from onyx.agents.agent_search.shared_graph_utils.constants import (
     AGENT_POSITIVE_VALUE_STR,
-)
-from onyx.agents.agent_search.shared_graph_utils.constants import (
     AgentLLMErrorType,
 )
-from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
-from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
-from onyx.agents.agent_search.shared_graph_utils.models import RefinedAgentStats
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    AgentErrorLog,
+    LLMNodeErrorStrings,
+    RefinedAgentStats,
+)
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import _should_restrict_tokens
 from onyx.agents.agent_search.shared_graph_utils.utils import (
+    _should_restrict_tokens,
     dispatch_main_answer_stop_info,
-)
-from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
-from onyx.agents.agent_search.shared_graph_utils.utils import (
+    format_docs,
     get_deduplicated_structured_subquestion_documents,
-)
-from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
-)
-from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
-from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
-from onyx.agents.agent_search.shared_graph_utils.utils import (
+    parse_question_id,
+    relevance_from_docs,
     remove_document_citations,
+    write_custom_event,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import ExtendedToolResponse
-from onyx.chat.models import StreamingError
-from onyx.configs.agent_configs import AGENT_ANSWER_GENERATION_BY_FAST_LLM
-from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
-from onyx.configs.agent_configs import AGENT_MAX_STREAMED_DOCS_FOR_REFINED_ANSWER
-from onyx.configs.agent_configs import AGENT_MAX_TOKENS_ANSWER_GENERATION
-from onyx.configs.agent_configs import AGENT_MAX_TOKENS_VALIDATION
-from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
+from onyx.chat.models import AgentAnswerPiece, ExtendedToolResponse, StreamingError
 from onyx.configs.agent_configs import (
+    AGENT_ANSWER_GENERATION_BY_FAST_LLM,
+    AGENT_MAX_ANSWER_CONTEXT_DOCS,
+    AGENT_MAX_STREAMED_DOCS_FOR_REFINED_ANSWER,
+    AGENT_MAX_TOKENS_ANSWER_GENERATION,
+    AGENT_MAX_TOKENS_VALIDATION,
+    AGENT_MIN_ORIG_QUESTION_DOCS,
     AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
-)
-from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_VALIDATION,
-)
-from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_LLM_REFINED_ANSWER_GENERATION,
-)
-from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_LLM_REFINED_ANSWER_VALIDATION,
 )
-from onyx.llm.chat_llm import LLMRateLimitError
-from onyx.llm.chat_llm import LLMTimeoutError
+from onyx.llm.chat_llm import LLMRateLimitError, LLMTimeoutError
 from onyx.prompts.agent_search import (
     REFINED_ANSWER_PROMPT_W_SUB_QUESTIONS,
-)
-from onyx.prompts.agent_search import (
     REFINED_ANSWER_PROMPT_WO_SUB_QUESTIONS,
-)
-from onyx.prompts.agent_search import (
     REFINED_ANSWER_VALIDATION_PROMPT,
-)
-from onyx.prompts.agent_search import (
     SUB_QUESTION_ANSWER_TEMPLATE_REFINED,
+    UNKNOWN_ANSWER,
 )
-from onyx.prompts.agent_search import UNKNOWN_ANSWER
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -147,15 +115,14 @@ def generate_validate_refined_answer(
 
     counter = 0
     for original_doc in original_question_verified_documents:
-        if original_doc not in structured_subquestion_docs.cited_documents:
-            if (
-                counter <= AGENT_MIN_ORIG_QUESTION_DOCS
-                or len(consolidated_context_docs)
-                < 1.5
-                * AGENT_MAX_ANSWER_CONTEXT_DOCS  # allow for larger context in refinement
-            ):
-                consolidated_context_docs.append(original_doc)
-                counter += 1
+        if original_doc not in structured_subquestion_docs.cited_documents and (
+            counter <= AGENT_MIN_ORIG_QUESTION_DOCS
+            or len(consolidated_context_docs)
+            < 1.5
+            * AGENT_MAX_ANSWER_CONTEXT_DOCS  # allow for larger context in refinement
+        ):
+            consolidated_context_docs.append(original_doc)
+            counter += 1
 
     # sort docs by their scores - though the scores refer to different questions
     relevant_docs = dedup_inference_section_list(consolidated_context_docs)

@@ -3,35 +3,30 @@ from functools import lru_cache
 
 import jwt
 import requests
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import status
+from fastapi import Depends, HTTPException, Request, status
+from jwt import InvalidTokenError, PyJWTError
 from jwt import decode as jwt_decode
-from jwt import InvalidTokenError
-from jwt import PyJWTError
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ee.onyx.configs.app_configs import JWT_PUBLIC_KEY_URL
-from ee.onyx.configs.app_configs import SUPER_CLOUD_API_KEY
-from ee.onyx.configs.app_configs import SUPER_USERS
+from ee.onyx.configs.app_configs import (
+    JWT_PUBLIC_KEY_URL,
+    SUPER_CLOUD_API_KEY,
+    SUPER_USERS,
+)
 from ee.onyx.db.saml import get_saml_account
 from ee.onyx.server.seeding import get_seed_config
 from ee.onyx.utils.secrets import extract_hashed_cookie
 from onyx.auth.users import current_admin_user
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import USER_AUTH_SECRET
+from onyx.configs.app_configs import AUTH_TYPE, USER_AUTH_SECRET
 from onyx.configs.constants import AuthType
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
-@lru_cache()
+@lru_cache
 def get_public_key() -> str | None:
     if JWT_PUBLIC_KEY_URL is None:
         logger.error("JWT_PUBLIC_KEY_URL is not set")

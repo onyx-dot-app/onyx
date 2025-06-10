@@ -1,35 +1,33 @@
 import os
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from typing import Any, List, Dict, Optional
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, Depends, HTTPException
 
 from onyx.auth.users import current_user
+from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.google_utils.resources import get_google_docs_service, get_drive_service
-from onyx.connectors.google_drive.models import GDriveMimeType
-from onyx.connectors.google_drive.section_extraction import get_document_sections
-from onyx.connectors.google_drive.formatted_section_extraction import get_formatted_document_sections
-from onyx.connectors.google_drive.doc_conversion import _download_and_extract_sections_basic
-from onyx.connectors.google_utils.resources import get_sheets_service
-from onyx.connectors.google_drive.google_sheets import get_sheet_metadata
-from onyx.connectors.google_drive.google_sheets import read_spreadsheet
 from onyx.connectors.google_drive.doc_conversion import convert_drive_item_to_document
-from onyx.db.models import User
-from onyx.utils.logger import setup_logger
+from onyx.connectors.google_drive.formatted_section_extraction import (
+    get_formatted_document_sections,
+)
+from onyx.connectors.google_drive.google_sheets import (
+    get_sheet_metadata,
+    read_spreadsheet,
+)
 from onyx.connectors.google_utils.google_auth import get_google_creds
+from onyx.connectors.google_utils.google_utils import _execute_single_retrieval
+from onyx.connectors.google_utils.resources import (
+    get_drive_service,
+    get_google_docs_service,
+    get_sheets_service,
+)
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
-from onyx.connectors.models import TextSection, ImageSection, FormattedTextSection
-from onyx.connectors.google_utils.google_utils import (
-    _execute_single_retrieval,
-)
-from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-
+from onyx.connectors.models import ConnectorFailure, Document, ImageSection, TextSection
+from onyx.db.models import User
+from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
@@ -45,12 +43,12 @@ def verify_user_domain(user: User | None) -> None:
     """
     if not user or not user.email:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     user_domain = user.email.split("@")[-1] if "@" in user.email else ""
-    
+
     if user_domain not in ALLOWED_DOMAINS:
         raise HTTPException(
-            status_code=403, 
+            status_code=403,
             detail=f"Access restricted to {', '.join(ALLOWED_DOMAINS)} domains"
         )
 
@@ -63,14 +61,14 @@ def get_google_credentials():
     primary_admin_email = os.getenv("OXOS_GOOGLE_PRIMARY_ADMIN_EMAIL")
     if not primary_admin_email:
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="OXOS_GOOGLE_PRIMARY_ADMIN_EMAIL environment variable not set"
         )
 
     service_account_json = os.getenv("OXOS_GOOGLE_SERVICE_ACCOUNT_JSON")
     if not service_account_json:
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="OXOS_GOOGLE_SERVICE_ACCOUNT_JSON environment variable not set"
         )
 
@@ -85,7 +83,7 @@ def get_google_credentials():
     except Exception as e:
         logger.error(f"Failed to load Google credentials: {e}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Failed to load Google credentials: {str(e)}"
         )
 
@@ -96,7 +94,7 @@ def format_for_tiptap(sections: List[TextSection | ImageSection]) -> List[Dict[s
     Returns a list of formatted sections.
     """
     formatted_sections = []
-    
+
     for section in sections:
         if isinstance(section, TextSection):
             formatted_section = {
@@ -113,7 +111,7 @@ def format_for_tiptap(sections: List[TextSection | ImageSection]) -> List[Dict[s
                 "link": section.link
             }
             formatted_sections.append(formatted_section)
-    
+
     return formatted_sections
 
 
@@ -127,11 +125,11 @@ def get_google_doc_content(
     Limited to users with @getvalkai.com and @oxos.com email domains.
     """
     verify_user_domain(user)
-    
+
     try:
         creds, primary_admin_email = get_google_credentials()
         drive_service = get_drive_service(creds, user_email=primary_admin_email)
-        
+
         # Use execute_single_retrieval for better error handling
         file = _execute_single_retrieval(
             retrieval_function=drive_service.files().get,
@@ -148,7 +146,7 @@ def get_google_doc_content(
     except Exception as e:
         logger.error(f"Failed to retrieve Google Doc {doc_id}: {e}")
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Failed to retrieve document: {str(e)}"
         )
 
@@ -163,12 +161,12 @@ def get_google_doc_formatted_content(
     Limited to users with @getvalkai.com and @oxos.com email domains.
     """
     verify_user_domain(user)
-    
+
     try:
         creds, primary_admin_email = get_google_credentials()
         drive_service = get_drive_service(creds, user_email=primary_admin_email)
         docs_service = get_google_docs_service(creds, user_email=primary_admin_email)
-        
+
         file = _execute_single_retrieval(
             retrieval_function=drive_service.files().get,
             fileId=doc_id,
@@ -206,7 +204,7 @@ def get_google_doc_formatted_content(
     except Exception as e:
         logger.error(f"Failed to retrieve formatted Google Doc {doc_id}: {e}")
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Failed to retrieve formatted document: {str(e)}"
         )
 

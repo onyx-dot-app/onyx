@@ -1,25 +1,29 @@
 import stripe
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ee.onyx.auth.users import current_admin_user
 from ee.onyx.configs.app_configs import STRIPE_SECRET_KEY
 from ee.onyx.server.tenants.access import control_plane_dep
-from ee.onyx.server.tenants.billing import fetch_billing_information
-from ee.onyx.server.tenants.billing import fetch_stripe_checkout_session
-from ee.onyx.server.tenants.billing import fetch_tenant_stripe_information
-from ee.onyx.server.tenants.models import BillingInformation
-from ee.onyx.server.tenants.models import ProductGatingRequest
-from ee.onyx.server.tenants.models import ProductGatingResponse
-from ee.onyx.server.tenants.models import SubscriptionSessionResponse
-from ee.onyx.server.tenants.models import SubscriptionStatusResponse
+from ee.onyx.server.tenants.billing import (
+    fetch_billing_information,
+    fetch_stripe_checkout_session,
+    fetch_tenant_stripe_information,
+)
+from ee.onyx.server.tenants.models import (
+    BillingInformation,
+    ProductGatingRequest,
+    ProductGatingResponse,
+    SubscriptionSessionResponse,
+    SubscriptionStatusResponse,
+)
 from ee.onyx.server.tenants.product_gating import store_product_gating
 from onyx.auth.users import User
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 stripe.api_key = STRIPE_SECRET_KEY
 logger = setup_logger()

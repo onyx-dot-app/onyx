@@ -12,8 +12,10 @@ from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import IndexingStatus
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
@@ -124,7 +126,7 @@ def test_repeated_error_state_detection_and_recovery(
                 break
 
         if time.monotonic() - start_time > 30:
-            assert False, "CC pair did not enter repeated error state within 30 seconds"
+            raise AssertionError("CC pair did not enter repeated error state within 30 seconds")
 
         time.sleep(2)
 

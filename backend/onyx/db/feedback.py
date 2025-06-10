@@ -1,32 +1,25 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import and_
-from sqlalchemy import asc
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import exists
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, asc, delete, desc, exists, select
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DISABLE_AUTH
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import SearchFeedbackType
+from onyx.configs.constants import MessageType, SearchFeedbackType
 from onyx.db.chat import get_chat_message
 from onyx.db.enums import AccessType
-from onyx.db.models import ChatMessageFeedback
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import (
+    ChatMessageFeedback,
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    DocumentRetrievalFeedback,
+    User,
+    User__UserGroup,
+    UserGroup__ConnectorCredentialPair,
+    UserRole,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import DocumentRetrievalFeedback
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

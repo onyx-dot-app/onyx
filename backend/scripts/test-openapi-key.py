@@ -1,6 +1,5 @@
 from openai import OpenAI
 
-
 VALID_MODEL_LIST = [
     "gpt-4o-mini",
     "gpt-4o",

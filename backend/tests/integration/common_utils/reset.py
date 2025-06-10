@@ -7,23 +7,25 @@ import requests
 
 from alembic import command
 from alembic.config import Config
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PASSWORD
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.db.engine import build_connection_string
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import SYNC_DB_API
+from onyx.configs.app_configs import (
+    POSTGRES_HOST,
+    POSTGRES_PASSWORD,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+)
+from onyx.db.engine import (
+    SYNC_DB_API,
+    build_connection_string,
+    get_all_tenant_ids,
+    get_session_context_manager,
+    get_session_with_tenant,
+)
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.document_index_utils import get_multipass_config
-from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa.index import VespaIndex
+from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT, VespaIndex
 from onyx.indexing.models import IndexingSetting
-from onyx.setup import setup_postgres
-from onyx.setup import setup_vespa
+from onyx.setup import setup_postgres, setup_vespa
 from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.timeout import run_with_timeout_multiproc
 

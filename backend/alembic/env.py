@@ -1,30 +1,33 @@
-from typing import Any, Literal
-from onyx.db.engine import get_iam_auth_token
-from onyx.configs.app_configs import USE_IAM_AUTH
-from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_PORT
-from onyx.configs.app_configs import POSTGRES_USER
-from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.db.engine import build_connection_string
-from onyx.db.engine import get_all_tenant_ids
-from sqlalchemy import event
-from sqlalchemy import pool
-from sqlalchemy import text
-from sqlalchemy.engine.base import Connection
-import os
-import ssl
 import asyncio
 import logging
+import os
+import ssl
 from logging.config import fileConfig
+from typing import Any, Literal
 
-from alembic import context
+from celery.backends.database.session import ResultModelBase  # type: ignore
+from sqlalchemy import event, pool, text
+from sqlalchemy.engine.base import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql.schema import SchemaItem
+
+from alembic import context
+from onyx.configs.app_configs import (
+    AWS_REGION_NAME,
+    POSTGRES_HOST,
+    POSTGRES_PORT,
+    POSTGRES_USER,
+    USE_IAM_AUTH,
+)
 from onyx.configs.constants import SSL_CERT_FILE
-from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
+from onyx.db.engine import (
+    SqlEngine,
+    build_connection_string,
+    get_all_tenant_ids,
+    get_iam_auth_token,
+)
 from onyx.db.models import Base
-from celery.backends.database.session import ResultModelBase  # type: ignore
-from onyx.db.engine import SqlEngine
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)

@@ -1,20 +1,20 @@
-from abc import ABC
-from abc import abstractmethod
-from typing import cast
-from typing import IO
+from abc import ABC, abstractmethod
+from typing import IO, cast
 
 import puremagic
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.models import PGFileStore
-from onyx.db.pg_file_store import create_populate_lobj
-from onyx.db.pg_file_store import delete_lobj_by_id
-from onyx.db.pg_file_store import delete_pgfilestore_by_file_name
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name_optional
-from onyx.db.pg_file_store import read_lobj
-from onyx.db.pg_file_store import upsert_pgfilestore
+from onyx.db.pg_file_store import (
+    create_populate_lobj,
+    delete_lobj_by_id,
+    delete_pgfilestore_by_file_name,
+    get_pgfilestore_by_file_name,
+    get_pgfilestore_by_file_name_optional,
+    read_lobj,
+    upsert_pgfilestore,
+)
 from onyx.utils.file import FileWithMimeType
 
 

@@ -1,29 +1,26 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.users import current_curator_or_admin_user, current_user
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.document_set import check_document_sets_are_public
-from onyx.db.document_set import fetch_all_document_sets_for_user
-from onyx.db.document_set import insert_document_set
-from onyx.db.document_set import mark_document_set_as_to_be_deleted
-from onyx.db.document_set import update_document_set
-from onyx.db.engine import get_current_tenant_id
-from onyx.db.engine import get_session
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.db.document_set import (
+    check_document_sets_are_public,
+    fetch_all_document_sets_for_user,
+    insert_document_set,
+    mark_document_set_as_to_be_deleted,
+    update_document_set,
+)
+from onyx.db.engine import get_current_tenant_id, get_session
 from onyx.db.models import User
-from onyx.server.features.document_set.models import CheckDocSetPublicRequest
-from onyx.server.features.document_set.models import CheckDocSetPublicResponse
-from onyx.server.features.document_set.models import DocumentSet
-from onyx.server.features.document_set.models import DocumentSetCreationRequest
-from onyx.server.features.document_set.models import DocumentSetUpdateRequest
+from onyx.server.features.document_set.models import (
+    CheckDocSetPublicRequest,
+    CheckDocSetPublicResponse,
+    DocumentSet,
+    DocumentSetCreationRequest,
+    DocumentSetUpdateRequest,
+)
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-
 
 router = APIRouter(prefix="/manage")
 

@@ -1,8 +1,7 @@
 from sqlalchemy.orm import Session
 
 from onyx.db.index_attempt import get_last_attempt
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexingStatus
+from onyx.db.models import ConnectorCredentialPair, IndexingStatus
 from onyx.db.search_settings import get_current_search_settings
 
 

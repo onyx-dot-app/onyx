@@ -3,16 +3,13 @@ from collections.abc import Iterator
 
 import requests
 from langchain.schema.language_model import LanguageModelInput
-from langchain_core.messages import AIMessage
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from requests import Timeout
 
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.interfaces import LLM, ToolChoiceOptions
 from onyx.llm.utils import convert_lm_input_to_basic_string
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

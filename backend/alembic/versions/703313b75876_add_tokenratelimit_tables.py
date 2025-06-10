@@ -8,8 +8,10 @@ Create Date: 2024-04-15 01:36:02.952809
 
 import json
 from typing import cast
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 from onyx.key_value_store.factory import get_kv_store
 
 # revision identifiers, used by Alembic.

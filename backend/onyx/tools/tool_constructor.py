@@ -1,30 +1,33 @@
 from typing import cast
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationConfig
-from onyx.chat.models import DocumentPruningConfig
-from onyx.chat.models import PromptConfig
-from onyx.configs.app_configs import AZURE_DALLE_API_BASE
-from onyx.configs.app_configs import AZURE_DALLE_API_KEY
-from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
-from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
+from onyx.chat.models import (
+    AnswerStyleConfig,
+    CitationConfig,
+    DocumentPruningConfig,
+    PromptConfig,
+)
+from onyx.configs.app_configs import (
+    AZURE_DALLE_API_BASE,
+    AZURE_DALLE_API_KEY,
+    AZURE_DALLE_API_VERSION,
+    AZURE_DALLE_DEPLOYMENT_NAME,
+)
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import (
+    InferenceSection,
+    RerankingDetails,
+    RetrievalDetails,
+)
 from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.models import Persona
-from onyx.db.models import User
+from onyx.db.models import Persona, User
 from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.interfaces import LLM
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
@@ -39,8 +42,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
     InternetSearchTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-from onyx.tools.utils import compute_all_tool_tokens
-from onyx.tools.utils import explicit_tool_calling_supported
+from onyx.tools.utils import compute_all_tool_tokens, explicit_tool_calling_supported
 from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 

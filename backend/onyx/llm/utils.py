@@ -1,12 +1,9 @@
 import copy
 import io
 import json
-from collections.abc import Callable
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import lru_cache
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import litellm  # type: ignore
 import tiktoken
@@ -14,44 +11,51 @@ from langchain.prompts.base import StringPromptValue
 from langchain.prompts.chat import ChatPromptValue
 from langchain.schema import PromptValue
 from langchain.schema.language_model import LanguageModelInput
-from langchain.schema.messages import AIMessage
-from langchain.schema.messages import BaseMessage
-from langchain.schema.messages import HumanMessage
-from langchain.schema.messages import SystemMessage
-from litellm.exceptions import APIConnectionError  # type: ignore
-from litellm.exceptions import APIError  # type: ignore
-from litellm.exceptions import AuthenticationError  # type: ignore
-from litellm.exceptions import BadRequestError  # type: ignore
-from litellm.exceptions import BudgetExceededError  # type: ignore
-from litellm.exceptions import ContentPolicyViolationError  # type: ignore
-from litellm.exceptions import ContextWindowExceededError  # type: ignore
-from litellm.exceptions import NotFoundError  # type: ignore
-from litellm.exceptions import PermissionDeniedError  # type: ignore
-from litellm.exceptions import RateLimitError  # type: ignore
-from litellm.exceptions import Timeout  # type: ignore
-from litellm.exceptions import UnprocessableEntityError  # type: ignore
+from langchain.schema.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from litellm.exceptions import (
+    APIConnectionError,  # type: ignore
+    APIError,  # type: ignore
+    AuthenticationError,  # type: ignore
+    BadRequestError,  # type: ignore
+    BudgetExceededError,  # type: ignore
+    ContentPolicyViolationError,  # type: ignore
+    ContextWindowExceededError,  # type: ignore
+    NotFoundError,  # type: ignore
+    PermissionDeniedError,  # type: ignore
+    RateLimitError,  # type: ignore
+    Timeout,  # type: ignore
+    UnprocessableEntityError,  # type: ignore
+)
 
-from onyx.configs.app_configs import LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import (
+    LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
 from onyx.configs.constants import MessageType
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
-from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.configs.model_configs import (
+    DOC_EMBEDDING_CONTEXT_SIZE,
+    GEN_AI_MAX_TOKENS,
+    GEN_AI_MODEL_FALLBACK_MAX_TOKENS,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
 from onyx.file_processing.extract_file_text import read_pdf_file
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.llm.interfaces import LLM
-from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_TOKEN_ESTIMATE
-from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
+from onyx.prompts.chat_prompts import (
+    CONTEXTUAL_RAG_TOKEN_ESTIMATE,
+    DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
+)
 from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.utils.b64 import get_image_type
-from onyx.utils.b64 import get_image_type_from_bytes
+from onyx.utils.b64 import get_image_type, get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
-
 
 if TYPE_CHECKING:
     from onyx.server.manage.llm.models import LLMProviderView

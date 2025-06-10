@@ -1,14 +1,17 @@
 import os
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from copy import copy
 
-from tokenizers import Encoding  # type: ignore
-from tokenizers import Tokenizer  # type: ignore
+from tokenizers import (
+    Encoding,  # type: ignore
+    Tokenizer,  # type: ignore
+)
 from transformers import logging as transformer_logging  # type:ignore
 
-from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
-from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
+from onyx.configs.model_configs import (
+    DOC_EMBEDDING_CONTEXT_SIZE,
+    DOCUMENT_ENCODER_MODEL,
+)
 from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
@@ -41,7 +44,7 @@ class TiktokenTokenizer(BaseTokenizer):
 
     def __new__(cls, model_name: str) -> "TiktokenTokenizer":
         if model_name not in cls._instances:
-            cls._instances[model_name] = super(TiktokenTokenizer, cls).__new__(cls)
+            cls._instances[model_name] = super().__new__(cls)
         return cls._instances[model_name]
 
     def __init__(self, model_name: str):

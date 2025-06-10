@@ -1,22 +1,19 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from typing import Any
-from typing import cast
-from unittest.mock import call
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from collections.abc import Callable, Generator
+from typing import Any, cast
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.models import Document
-from onyx.connectors.zendesk.connector import ZendeskClient
-from onyx.connectors.zendesk.connector import ZendeskConnector
+from onyx.connectors.zendesk.connector import ZendeskClient, ZendeskConnector
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 

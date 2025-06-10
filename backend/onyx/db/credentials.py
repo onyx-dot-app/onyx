@@ -1,12 +1,8 @@
 from typing import Any
 
-from sqlalchemy import exists
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Select, exists, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.expression import and_
-from sqlalchemy.sql.expression import or_
+from sqlalchemy.sql.expression import and_, or_
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import DISABLE_AUTH
@@ -15,15 +11,16 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
 from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
-from onyx.db.models import Credential__UserGroup
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Credential,
+    Credential__UserGroup,
+    DocumentByConnectorCredentialPair,
+    User,
+    User__UserGroup,
+)
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

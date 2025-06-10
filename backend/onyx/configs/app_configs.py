@@ -1,18 +1,18 @@
+import contextlib
 import json
 import os
 import urllib.parse
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import DocumentIndexType
-from onyx.configs.constants import QueryHistoryType
+from onyx.configs.constants import AuthType, DocumentIndexType, QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
+from onyx.prompts.image_analysis import (
+    DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
 
 #####
 # App Configs
@@ -228,18 +228,14 @@ REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
 _rate_limit_window_seconds_str = os.environ.get("RATE_LIMIT_WINDOW_SECONDS")
 if _rate_limit_window_seconds_str is not None:
-    try:
+    with contextlib.suppress(ValueError):
         RATE_LIMIT_WINDOW_SECONDS = int(_rate_limit_window_seconds_str)
-    except ValueError:
-        pass
 
 RATE_LIMIT_MAX_REQUESTS: int | None = None
 _rate_limit_max_requests_str = os.environ.get("RATE_LIMIT_MAX_REQUESTS")
 if _rate_limit_max_requests_str is not None:
-    try:
+    with contextlib.suppress(ValueError):
         RATE_LIMIT_MAX_REQUESTS = int(_rate_limit_max_requests_str)
-    except ValueError:
-        pass
 
 AUTH_RATE_LIMITING_ENABLED = RATE_LIMIT_MAX_REQUESTS and RATE_LIMIT_WINDOW_SECONDS
 # Used for general redis things
@@ -628,12 +624,10 @@ _LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = os.environ.get(
     "LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS", ""
 )
 LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS: dict[str, str] | None = None
-try:
+with contextlib.suppress(json.JSONDecodeError):
     LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS = cast(
         dict[str, str], json.loads(_LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS)
     )
-except json.JSONDecodeError:
-    pass
 
 # LLM Model Update API endpoint
 LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")

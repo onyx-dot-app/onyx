@@ -1,27 +1,28 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.db.engine import get_session
-from onyx.db.llm import fetch_existing_embedding_providers
-from onyx.db.llm import remove_embedding_provider
-from onyx.db.llm import upsert_cloud_embedding_provider
+from onyx.db.llm import (
+    fetch_existing_embedding_providers,
+    remove_embedding_provider,
+    upsert_cloud_embedding_provider,
+)
 from onyx.db.models import User
-from onyx.db.search_settings import get_all_search_settings
-from onyx.db.search_settings import get_current_db_embedding_provider
+from onyx.db.search_settings import (
+    get_all_search_settings,
+    get_current_db_embedding_provider,
+)
 from onyx.indexing.models import EmbeddingModelDetail
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.server.manage.embedding.models import CloudEmbeddingProvider
-from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.embedding.models import TestEmbeddingRequest
+from onyx.server.manage.embedding.models import (
+    CloudEmbeddingProvider,
+    CloudEmbeddingProviderCreationRequest,
+    TestEmbeddingRequest,
+)
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
-
+from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 logger = setup_logger()
 

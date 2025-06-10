@@ -6,20 +6,22 @@ from uuid import uuid4
 import requests
 
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.server.documents.models import CCPairFullInfo
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import ConnectorIndexingStatus
-from onyx.server.documents.models import DocumentSource
-from onyx.server.documents.models import DocumentSyncStatus
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.constants import MAX_DELAY
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.server.documents.models import (
+    CCPairFullInfo,
+    ConnectorCredentialPairIdentifier,
+    ConnectorIndexingStatus,
+    DocumentSource,
+    DocumentSyncStatus,
+)
+from tests.integration.common_utils.constants import (
+    API_SERVER_URL,
+    GENERAL_HEADERS,
+    MAX_DELAY,
+)
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
-from tests.integration.common_utils.test_models import DATestCCPair
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 
 
 def _cc_pair_creator(

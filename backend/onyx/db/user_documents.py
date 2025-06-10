@@ -4,10 +4,8 @@ from typing import List
 from uuid import UUID
 
 from fastapi import UploadFile
-from sqlalchemy import and_
-from sqlalchemy import func
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func
+from sqlalchemy.orm import Session, joinedload
 
 from onyx.auth.users import get_current_tenant_id
 from onyx.configs.constants import DocumentSource
@@ -16,18 +14,18 @@ from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
 from onyx.db.enums import AccessType
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import Persona
-from onyx.db.models import Persona__UserFile
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
-from onyx.server.documents.connector import trigger_indexing_for_cc_pair
-from onyx.server.documents.connector import upload_files
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import CredentialBase
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+    Persona,
+    Persona__UserFile,
+    User,
+    UserFile,
+    UserFolder,
+)
+from onyx.server.documents.connector import trigger_indexing_for_cc_pair, upload_files
+from onyx.server.documents.models import ConnectorBase, CredentialBase
 from onyx.server.models import StatusResponse
 
 USER_FILE_CONSTANT = "USER_FILE_CONNECTOR"

@@ -1,5 +1,4 @@
-from typing import Any
-from typing import Type
+from typing import Any, Type
 
 from sqlalchemy.orm import Session
 
@@ -33,12 +32,14 @@ from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CredentialsConnector
-from onyx.connectors.interfaces import EventConnector
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CredentialsConnector,
+    EventConnector,
+    LoadConnector,
+    PollConnector,
+)
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.loopio.connector import LoopioConnector
 from onyx.connectors.mediawiki.wiki import MediaWikiConnector
@@ -46,6 +47,8 @@ from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.onyx_jira.connector import JiraConnector
+from onyx.connectors.oxos_google_drive.connector import OxosGoogleDriveConnector
+from onyx.connectors.oxos_master_file.connector import OxosMasterFileConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
@@ -57,11 +60,8 @@ from onyx.connectors.wikipedia.connector import WikipediaConnector
 from onyx.connectors.xenforo.connector import XenforoConnector
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
-from onyx.connectors.oxos_google_drive.connector import OxosGoogleDriveConnector
-from onyx.connectors.oxos_master_file.connector import OxosMasterFileConnector
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import backend_update_credential_json
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
 from onyx.db.models import Credential
 from shared_configs.contextvars import get_current_tenant_id
 

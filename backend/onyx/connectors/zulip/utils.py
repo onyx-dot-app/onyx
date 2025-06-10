@@ -1,8 +1,6 @@
 import time
 from collections.abc import Callable
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
@@ -34,12 +32,11 @@ class ZulipHTTPError(ZulipAPIError):
 
 def __call_with_retry(fun: Callable, *args: Any, **kwargs: Any) -> Dict[str, Any]:
     result = fun(*args, **kwargs)
-    if result.get("result") == "error":
-        if result.get("code") == "RATE_LIMIT_HIT":
-            retry_after = float(result["retry-after"]) + 1
-            logger.warn(f"Rate limit hit, retrying after {retry_after} seconds")
-            time.sleep(retry_after)
-            return __call_with_retry(fun, *args)
+    if result.get("result") == "error" and result.get("code") == "RATE_LIMIT_HIT":
+        retry_after = float(result["retry-after"]) + 1
+        logger.warn(f"Rate limit hit, retrying after {retry_after} seconds")
+        time.sleep(retry_after)
+        return __call_with_retry(fun, *args)
     return result
 
 

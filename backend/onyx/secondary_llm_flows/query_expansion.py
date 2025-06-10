@@ -8,8 +8,7 @@ from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import dict_based_prompt_to_langchain_prompt, message_to_string
 from onyx.prompts.chat_prompts import HISTORY_QUERY_REPHRASE
 from onyx.prompts.miscellaneous_prompts import LANGUAGE_REPHRASE_PROMPT
 from onyx.utils.logger import setup_logger

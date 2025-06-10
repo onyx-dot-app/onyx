@@ -1,24 +1,26 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.standard_answer import fetch_standard_answer
-from ee.onyx.db.standard_answer import fetch_standard_answer_categories
-from ee.onyx.db.standard_answer import fetch_standard_answer_category
-from ee.onyx.db.standard_answer import fetch_standard_answers
-from ee.onyx.db.standard_answer import insert_standard_answer
-from ee.onyx.db.standard_answer import insert_standard_answer_category
-from ee.onyx.db.standard_answer import remove_standard_answer
-from ee.onyx.db.standard_answer import update_standard_answer
-from ee.onyx.db.standard_answer import update_standard_answer_category
+from ee.onyx.db.standard_answer import (
+    fetch_standard_answer,
+    fetch_standard_answer_categories,
+    fetch_standard_answer_category,
+    fetch_standard_answers,
+    insert_standard_answer,
+    insert_standard_answer_category,
+    remove_standard_answer,
+    update_standard_answer,
+    update_standard_answer_category,
+)
 from onyx.auth.users import current_admin_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.server.manage.models import StandardAnswer
-from onyx.server.manage.models import StandardAnswerCategory
-from onyx.server.manage.models import StandardAnswerCategoryCreationRequest
-from onyx.server.manage.models import StandardAnswerCreationRequest
+from onyx.server.manage.models import (
+    StandardAnswer,
+    StandardAnswerCategory,
+    StandardAnswerCategoryCreationRequest,
+    StandardAnswerCreationRequest,
+)
 
 router = APIRouter(prefix="/manage")
 

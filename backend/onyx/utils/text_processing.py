@@ -6,7 +6,6 @@ from urllib.parse import quote
 
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger(__name__)
 
 ESCAPE_SEQUENCE_RE = re.compile(
@@ -152,10 +151,7 @@ def is_valid_email(text: str) -> bool:
     """Can use a library instead if more detailed checks are needed"""
     regex = r"^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 
-    if re.match(regex, text):
-        return True
-    else:
-        return False
+    return bool(re.match(regex, text))
 
 
 def count_punctuation(text: str) -> int:

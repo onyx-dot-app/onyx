@@ -6,8 +6,6 @@ from langgraph.types import Send
 
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalState,
-)
-from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     RetrievalInput,
 )
 from onyx.agents.agent_search.models import GraphConfig

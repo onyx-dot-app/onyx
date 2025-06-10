@@ -1,23 +1,23 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.users import current_admin_user, current_user
 from onyx.db.engine import get_session
-from onyx.db.input_prompt import disable_input_prompt_for_user
-from onyx.db.input_prompt import fetch_input_prompt_by_id
-from onyx.db.input_prompt import fetch_input_prompts_by_user
-from onyx.db.input_prompt import insert_input_prompt
-from onyx.db.input_prompt import remove_input_prompt
-from onyx.db.input_prompt import remove_public_input_prompt
-from onyx.db.input_prompt import update_input_prompt
-from onyx.db.models import InputPrompt__User
-from onyx.db.models import User
-from onyx.server.features.input_prompt.models import CreateInputPromptRequest
-from onyx.server.features.input_prompt.models import InputPromptSnapshot
-from onyx.server.features.input_prompt.models import UpdateInputPromptRequest
+from onyx.db.input_prompt import (
+    disable_input_prompt_for_user,
+    fetch_input_prompt_by_id,
+    fetch_input_prompts_by_user,
+    insert_input_prompt,
+    remove_input_prompt,
+    remove_public_input_prompt,
+    update_input_prompt,
+)
+from onyx.db.models import InputPrompt__User, User
+from onyx.server.features.input_prompt.models import (
+    CreateInputPromptRequest,
+    InputPromptSnapshot,
+    UpdateInputPromptRequest,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

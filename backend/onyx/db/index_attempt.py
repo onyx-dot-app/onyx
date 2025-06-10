@@ -1,32 +1,22 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import TypeVarTuple
 
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
-from sqlalchemy.orm import contains_eager
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, delete, desc, func, select, update
+from sqlalchemy.orm import Session, contains_eager, joinedload
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
-from onyx.db.models import SearchSettings
+from onyx.db.enums import IndexingStatus, IndexModelStatus
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    SearchSettings,
+)
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import RecordType, optional_telemetry
 
 # Comment out unused imports that cause mypy errors
 # from onyx.auth.models import UserRole

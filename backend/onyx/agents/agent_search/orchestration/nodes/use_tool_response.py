@@ -4,16 +4,15 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.basic.states import BasicOutput
-from onyx.agents.agent_search.basic.states import BasicState
+from onyx.agents.agent_search.basic.states import BasicOutput, BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.chat.models import LlmDoc
 from onyx.context.search.utils import dedupe_documents
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
+    SearchResponseSummary,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.tools.tool_implementations.search.search_utils import section_to_llm_doc
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,

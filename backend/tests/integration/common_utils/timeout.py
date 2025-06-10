@@ -24,8 +24,7 @@ import multiprocessing
 import traceback
 from collections.abc import Callable
 from multiprocessing import Queue
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 

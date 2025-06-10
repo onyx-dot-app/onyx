@@ -1,9 +1,7 @@
 import re
 import time
-from collections.abc import Callable
-from collections.abc import Iterator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Iterator
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -150,8 +148,7 @@ def execute_single_retrieval(
         **request_kwargs,
     )
     if list_key:
-        for item in results.get(list_key, []):
-            yield item
+        yield from results.get(list_key, [])
     else:
         yield results
 
@@ -184,7 +181,6 @@ def execute_paginated_retrieval(
 
         next_page_token = results.get(NEXT_PAGE_TOKEN_KEY)
         if list_key:
-            for item in results.get(list_key, []):
-                yield item
+            yield from results.get(list_key, [])
         else:
             yield results

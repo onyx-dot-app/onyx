@@ -1,14 +1,11 @@
 import json
-from typing import Any
-from typing import cast
-from typing import List
+from typing import Any, List, cast
 
 from litellm import get_supported_openai_params
 from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import NUM_PERSONA_PROMPT_GENERATION_CHUNKS
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
@@ -19,11 +16,12 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.llm.factory import get_default_llms
-from onyx.prompts.starter_messages import format_persona_starter_message_prompt
-from onyx.prompts.starter_messages import PERSONA_CATEGORY_GENERATION_PROMPT
+from onyx.prompts.starter_messages import (
+    PERSONA_CATEGORY_GENERATION_PROMPT,
+    format_persona_starter_message_prompt,
+)
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
+from onyx.utils.threadpool_concurrency import FunctionCall, run_functions_in_parallel
 
 logger = setup_logger()
 

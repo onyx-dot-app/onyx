@@ -34,7 +34,7 @@ def main() -> None:
 
     jinja_env = jinja2.Environment()
 
-    with open(args.template, "r", encoding="utf-8") as f:
+    with open(args.template, encoding="utf-8") as f:
         template_str = f.read()
 
     template = jinja_env.from_string(template_str)

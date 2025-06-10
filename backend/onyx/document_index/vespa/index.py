@@ -8,11 +8,8 @@ import time
 import urllib
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime
-from datetime import timedelta
-from typing import BinaryIO
-from typing import cast
-from typing import List
+from datetime import datetime, timedelta
+from typing import BinaryIO, List, cast
 from uuid import UUID
 
 import httpx  # type: ignore
@@ -21,63 +18,69 @@ import requests  # type: ignore
 from retry import retry
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
-from onyx.configs.chat_configs import DOC_TIME_DECAY
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
-from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
-from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
+from onyx.configs.chat_configs import (
+    DOC_TIME_DECAY,
+    NUM_RETURNED_HITS,
+    TITLE_CONTENT_RATIO,
+    VESPA_SEARCHER_THREADS,
+)
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import IndexFilters, InferenceChunkUncleaned
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentInsertionRecord
-from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
-from onyx.document_index.interfaces import IndexBatchParams
-from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
-from onyx.document_index.interfaces import UpdateRequest
-from onyx.document_index.interfaces import VespaChunkRequest
-from onyx.document_index.interfaces import VespaDocumentFields
-from onyx.document_index.interfaces import VespaDocumentUserFields
-from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
-from onyx.document_index.vespa.chunk_retrieval import (
-    parallel_visit_api_retrieval,
+from onyx.document_index.interfaces import (
+    DocumentIndex,
+    DocumentInsertionRecord,
+    EnrichedDocumentIndexingInfo,
+    IndexBatchParams,
+    MinimalDocumentIndexingInfo,
+    UpdateRequest,
+    VespaChunkRequest,
+    VespaDocumentFields,
+    VespaDocumentUserFields,
 )
-from onyx.document_index.vespa.chunk_retrieval import query_vespa
+from onyx.document_index.vespa.chunk_retrieval import (
+    batch_search_api_retrieval,
+    parallel_visit_api_retrieval,
+    query_vespa,
+)
 from onyx.document_index.vespa.deletion import delete_vespa_chunks
-from onyx.document_index.vespa.indexing_utils import BaseHTTPXClientContext
-from onyx.document_index.vespa.indexing_utils import batch_index_vespa_chunks
-from onyx.document_index.vespa.indexing_utils import check_for_final_chunk_existence
-from onyx.document_index.vespa.indexing_utils import clean_chunk_id_copy
-from onyx.document_index.vespa.indexing_utils import GlobalHTTPXClientContext
-from onyx.document_index.vespa.indexing_utils import TemporaryHTTPXClientContext
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
+from onyx.document_index.vespa.indexing_utils import (
+    BaseHTTPXClientContext,
+    GlobalHTTPXClientContext,
+    TemporaryHTTPXClientContext,
+    batch_index_vespa_chunks,
+    check_for_final_chunk_existence,
+    clean_chunk_id_copy,
+)
 from onyx.document_index.vespa.shared_utils.utils import (
+    get_vespa_http_client,
     replace_invalid_doc_id_characters,
 )
 from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
     build_vespa_filters,
 )
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
-from onyx.document_index.vespa_constants import BATCH_SIZE
-from onyx.document_index.vespa_constants import BOOST
-from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
-from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
-from onyx.document_index.vespa_constants import VESPA_TIMEOUT
-from onyx.document_index.vespa_constants import YQL_BASE
+from onyx.document_index.vespa_constants import (
+    ACCESS_CONTROL_LIST,
+    BATCH_SIZE,
+    BOOST,
+    CONTENT_SUMMARY,
+    DOCUMENT_ID_ENDPOINT,
+    DOCUMENT_SETS,
+    HIDDEN,
+    NUM_THREADS,
+    USER_FILE,
+    USER_FOLDER,
+    VESPA_APPLICATION_ENDPOINT,
+    VESPA_TIMEOUT,
+    YQL_BASE,
+)
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.key_value_store.factory import get_shared_kv_store
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.model_server_models import Embedding
-
 
 logger = setup_logger()
 
@@ -192,7 +195,7 @@ class VespaIndex(DocumentIndex):
             vespa_schema_path, "validation-overrides.xml.jinja"
         )
 
-        with open(services_jinja_file, "r") as services_f:
+        with open(services_jinja_file) as services_f:
             schema_names = [self.index_name, self.secondary_index_name]
             doc_lines = _create_document_xml_lines(schema_names)
 
@@ -213,7 +216,7 @@ class VespaIndex(DocumentIndex):
 
         # Vespa requires an override to erase data including the indices we're no longer using
         # It also has a 30 day cap from current so we set it to 7 dynamically
-        with open(overrides_jinja_file, "r") as overrides_f:
+        with open(overrides_jinja_file) as overrides_f:
             overrides_template_str = overrides_f.read()
             overrides_template = jinja_env.from_string(overrides_template_str)
 
@@ -229,7 +232,7 @@ class VespaIndex(DocumentIndex):
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
 
-        with open(schema_jinja_file, "r") as schema_f:
+        with open(schema_jinja_file) as schema_f:
             template_str = schema_f.read()
 
         template = jinja_env.from_string(template_str)
@@ -296,7 +299,7 @@ class VespaIndex(DocumentIndex):
         jinja_env = jinja2.Environment()
 
         # Generate schema names from index settings
-        with open(services_jinja_file, "r") as services_f:
+        with open(services_jinja_file) as services_f:
             schema_names = [index_name for index_name in indices]
             doc_lines = _create_document_xml_lines(schema_names)
 
@@ -317,7 +320,7 @@ class VespaIndex(DocumentIndex):
 
         # Vespa requires an override to erase data including the indices we're no longer using
         # It also has a 30 day cap from current so we set it to 7 dynamically
-        with open(overrides_jinja_file, "r") as overrides_f:
+        with open(overrides_jinja_file) as overrides_f:
             overrides_template_str = overrides_f.read()
             overrides_template = jinja_env.from_string(overrides_template_str)
 
@@ -333,7 +336,7 @@ class VespaIndex(DocumentIndex):
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
 
-        with open(schema_jinja_file, "r") as schema_f:
+        with open(schema_jinja_file) as schema_f:
             schema_template_str = schema_f.read()
 
         schema_template = jinja_env.from_string(schema_template_str)
@@ -412,7 +415,7 @@ class VespaIndex(DocumentIndex):
                     previous_chunk_count=doc_id_to_previous_chunk_cnt.get(doc_id, 0),
                     new_chunk_count=doc_id_to_new_chunk_cnt.get(doc_id, 0),
                 )
-                for doc_id in doc_id_to_new_chunk_cnt.keys()
+                for doc_id in doc_id_to_new_chunk_cnt
             ]
 
             for cleaned_doc_info in enriched_doc_infos:

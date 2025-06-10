@@ -4,127 +4,125 @@ import os
 import uuid
 import zipfile
 from io import BytesIO
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import Request
-from fastapi import Response
-from fastapi import UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from google.oauth2.credentials import Credentials  # type: ignore
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accessible_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.users import (
+    current_admin_user,
+    current_chat_accessible_user,
+    current_curator_or_admin_user,
+    current_user,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
-from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import MilestoneRecordType
-from onyx.configs.constants import ONYX_METADATA_FILENAME
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES, MOCK_CONNECTOR_FILE_PATH
+from onyx.configs.constants import (
+    ONYX_METADATA_FILENAME,
+    DocumentSource,
+    FileOrigin,
+    MilestoneRecordType,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.connectors.google_utils.google_auth import (
-    get_google_oauth_creds,
-)
+from onyx.connectors.google_utils.google_auth import get_google_oauth_creds
 from onyx.connectors.google_utils.google_kv import (
     build_service_account_creds,
-)
-from onyx.connectors.google_utils.google_kv import (
     delete_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
     delete_service_account_key,
-)
-from onyx.connectors.google_utils.google_kv import get_auth_url
-from onyx.connectors.google_utils.google_kv import (
+    get_auth_url,
     get_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
     get_service_account_key,
-)
-from onyx.connectors.google_utils.google_kv import (
     update_credential_access_tokens,
-)
-from onyx.connectors.google_utils.google_kv import (
     upsert_google_app_cred,
-)
-from onyx.connectors.google_utils.google_kv import (
     upsert_service_account_key,
+    verify_csrf,
 )
-from onyx.connectors.google_utils.google_kv import verify_csrf
-from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_TOKEN_KEY,
     GoogleOAuthAuthenticationMethod,
 )
-from onyx.db.connector import create_connector
-from onyx.db.connector import delete_connector
-from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector import fetch_connectors
-from onyx.db.connector import get_connector_credential_ids
-from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector import update_connector
-from onyx.db.connector_credential_pair import add_credential_to_connector
-from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
-from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids_parallel
-from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
+from onyx.db.connector import (
+    create_connector,
+    delete_connector,
+    fetch_connector_by_id,
+    fetch_connectors,
+    get_connector_credential_ids,
+    mark_ccpair_with_indexing_trigger,
+    update_connector,
+)
 from onyx.db.connector_credential_pair import (
+    add_credential_to_connector,
+    get_cc_pair_groups_for_ids,
+    get_cc_pair_groups_for_ids_parallel,
+    get_connector_credential_pair,
+    get_connector_credential_pairs_for_user,
     get_connector_credential_pairs_for_user_parallel,
 )
-from onyx.db.credentials import cleanup_gmail_credentials
-from onyx.db.credentials import cleanup_google_drive_credentials
-from onyx.db.credentials import create_credential
-from onyx.db.credentials import delete_service_account_credentials
-from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.credentials import (
+    cleanup_gmail_credentials,
+    cleanup_google_drive_credentials,
+    create_credential,
+    delete_service_account_credentials,
+    fetch_credential_by_id_for_user,
+)
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_cc_pairs_parallel
-from onyx.db.engine import get_current_tenant_id
-from onyx.db.engine import get_session
-from onyx.db.enums import AccessType
-from onyx.db.enums import IndexingMode
-from onyx.db.index_attempt import get_index_attempts_for_cc_pair
-from onyx.db.index_attempt import get_latest_index_attempts_by_status
-from onyx.db.index_attempt import get_latest_index_attempts_parallel
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
-from onyx.db.models import User
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.engine import get_current_tenant_id, get_session
+from onyx.db.enums import AccessType, IndexingMode
+from onyx.db.index_attempt import (
+    get_index_attempts_for_cc_pair,
+    get_latest_index_attempts_by_status,
+    get_latest_index_attempts_parallel,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexingStatus,
+    User,
+    UserGroup__ConnectorCredentialPair,
+)
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_secondary_search_settings,
+)
 from onyx.file_processing.extract_file_text import convert_docx_to_txt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_connector import RedisConnector
-from onyx.server.documents.models import AuthStatus
-from onyx.server.documents.models import AuthUrl
-from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import ConnectorIndexingStatus
-from onyx.server.documents.models import ConnectorSnapshot
-from onyx.server.documents.models import ConnectorStatus
-from onyx.server.documents.models import ConnectorUpdateRequest
-from onyx.server.documents.models import CredentialBase
-from onyx.server.documents.models import CredentialSnapshot
-from onyx.server.documents.models import FailedConnectorIndexingStatus
-from onyx.server.documents.models import FileUploadResponse
-from onyx.server.documents.models import GDriveCallback
-from onyx.server.documents.models import GmailCallback
-from onyx.server.documents.models import GoogleAppCredentials
-from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
-from onyx.server.documents.models import GoogleServiceAccountKey
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.server.documents.models import ObjectCreationIdResponse
-from onyx.server.documents.models import RunConnectorRequest
+from onyx.server.documents.models import (
+    AuthStatus,
+    AuthUrl,
+    ConnectorCredentialPairIdentifier,
+    ConnectorIndexingStatus,
+    ConnectorSnapshot,
+    ConnectorStatus,
+    ConnectorUpdateRequest,
+    CredentialBase,
+    CredentialSnapshot,
+    FailedConnectorIndexingStatus,
+    FileUploadResponse,
+    GDriveCallback,
+    GmailCallback,
+    GoogleAppCredentials,
+    GoogleServiceAccountCredentialRequest,
+    GoogleServiceAccountKey,
+    IndexAttemptSnapshot,
+    ObjectCreationIdResponse,
+    RunConnectorRequest,
+)
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -670,7 +668,7 @@ def get_connector_indexing_status(
     if MOCK_CONNECTOR_FILE_PATH:
         import json
 
-        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
+        with open(MOCK_CONNECTOR_FILE_PATH) as f:
             raw_data = json.load(f)
             connector_indexing_statuses = [
                 ConnectorIndexingStatus(**status) for status in raw_data

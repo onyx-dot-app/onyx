@@ -15,10 +15,12 @@ module = "alembic_tenants.versions.*"
 disable_error_code = ["var-annotated"]
 
 [tool.ruff]
-ignore = []
-line-length = 130
-select = [
-    "E",
-    "F",
-    "W",
-]
+fix = true
+select = ["E", "F", "W"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
+[tool.ruff.isort]
+split-on-trailing-comma = false

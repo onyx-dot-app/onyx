@@ -4,23 +4,25 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.connector_credential_pair import resync_cc_pair
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pairs,
+    resync_cc_pair,
+)
 from onyx.db.document import delete_all_documents_for_connector_credential_pair
 from onyx.db.enums import IndexModelStatus
-from onyx.db.index_attempt import cancel_indexing_attempts_for_search_settings
 from onyx.db.index_attempt import (
+    cancel_indexing_attempts_for_search_settings,
     count_unique_cc_pairs_with_successful_index_attempts,
 )
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import SearchSettings
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
-from onyx.db.search_settings import update_search_settings_status
+from onyx.db.models import ConnectorCredentialPair, SearchSettings
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_secondary_search_settings,
+    update_search_settings_status,
+)
 from onyx.document_index.factory import get_default_document_index
 from onyx.key_value_store.factory import get_kv_store
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

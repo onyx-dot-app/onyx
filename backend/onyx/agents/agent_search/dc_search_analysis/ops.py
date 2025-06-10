@@ -8,8 +8,8 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
+    SearchTool,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 def research(

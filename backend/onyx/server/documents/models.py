@@ -1,26 +1,22 @@
-from datetime import datetime
-from datetime import timezone
-from datetime import UTC
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from datetime import UTC, datetime, timezone
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import Connector
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import (
+    Connector,
+    ConnectorCredentialPair,
+    Credential,
+    IndexAttempt,
+    IndexingStatus,
+    TaskStatus,
+)
 from onyx.db.models import Document as DbDocument
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexingStatus
-from onyx.db.models import TaskStatus
 from onyx.server.utils import mask_credential_dict
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 

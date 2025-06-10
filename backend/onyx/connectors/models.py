@@ -3,12 +3,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
 from onyx.utils.text_processing import make_url_compatible
 
 

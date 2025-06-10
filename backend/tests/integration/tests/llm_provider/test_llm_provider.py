@@ -5,8 +5,7 @@ import pytest
 import requests
 from requests.models import Response
 
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import get_max_input_tokens, model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager

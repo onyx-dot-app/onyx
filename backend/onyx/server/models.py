@@ -1,13 +1,10 @@
-from typing import Generic
-from typing import Optional
-from typing import TypeVar
+from typing import Generic, Optional, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from onyx.auth.schemas import UserRole
 from onyx.db.models import User
-
 
 DataT = TypeVar("DataT")
 

@@ -10,24 +10,27 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.chat_configs import DOC_TIME_DECAY
-from onyx.configs.chat_configs import HYBRID_ALPHA
-from onyx.configs.chat_configs import HYBRID_ALPHA_KEYWORD
-from onyx.configs.chat_configs import NUM_RETURNED_HITS
-from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import RerankingDetails
+from onyx.configs.app_configs import (
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+)
+from onyx.configs.chat_configs import (
+    DOC_TIME_DECAY,
+    HYBRID_ALPHA,
+    HYBRID_ALPHA_KEYWORD,
+    NUM_RETURNED_HITS,
+    TITLE_CONTENT_RATIO,
+)
+from onyx.context.search.models import IndexFilters, InferenceChunk, RerankingDetails
 from onyx.context.search.postprocessing.postprocessing import semantic_reranking
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
 from onyx.context.search.utils import remove_stop_words_and_punctuation
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import SqlEngine
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_multilingual_expansion
+from onyx.db.engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_multilingual_expansion,
+)
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.utils.logger import setup_logger

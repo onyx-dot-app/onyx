@@ -3,14 +3,11 @@ import shelve
 
 from onyx.connectors.salesforce.shelve_stuff.shelve_utils import (
     get_child_to_parent_shelf_path,
-)
-from onyx.connectors.salesforce.shelve_stuff.shelve_utils import get_id_type_shelf_path
-from onyx.connectors.salesforce.shelve_stuff.shelve_utils import get_object_shelf_path
-from onyx.connectors.salesforce.shelve_stuff.shelve_utils import (
+    get_id_type_shelf_path,
+    get_object_shelf_path,
     get_parent_to_child_shelf_path,
 )
-from onyx.connectors.salesforce.utils import SalesforceObject
-from onyx.connectors.salesforce.utils import validate_salesforce_id
+from onyx.connectors.salesforce.utils import SalesforceObject, validate_salesforce_id
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -97,7 +94,7 @@ def update_sf_db_with_csv(
     shelf_path = get_object_shelf_path(object_type)
 
     # First read the CSV to get all the data
-    with open(csv_download_path, "r", newline="", encoding="utf-8") as f:
+    with open(csv_download_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             id = row["Id"]
@@ -146,9 +143,8 @@ def get_record(
     Retrieve the record and return it as a SalesforceObject.
     The object type will be looked up from the ID-to-type mapping shelf.
     """
-    if object_type is None:
-        if not (object_type := get_type_from_id(object_id)):
-            return None
+    if object_type is None and not (object_type := get_type_from_id(object_id)):
+        return None
 
     shelf_path = get_object_shelf_path(object_type)
     with shelve.open(shelf_path) as db:

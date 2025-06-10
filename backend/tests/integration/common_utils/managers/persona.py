@@ -1,16 +1,18 @@
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import requests
 
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.server.features.persona.models import FullPersonaSnapshot
-from onyx.server.features.persona.models import PersonaUpsertRequest
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.test_models import DATestPersona
-from tests.integration.common_utils.test_models import DATestPersonaLabel
-from tests.integration.common_utils.test_models import DATestUser
+from onyx.server.features.persona.models import (
+    FullPersonaSnapshot,
+    PersonaUpsertRequest,
+)
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
+from tests.integration.common_utils.test_models import (
+    DATestPersona,
+    DATestPersonaLabel,
+    DATestUser,
+)
 
 
 class PersonaManager:

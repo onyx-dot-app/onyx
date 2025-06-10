@@ -1,17 +1,12 @@
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from onyx.llm.utils import get_max_input_tokens
-from onyx.llm.utils import model_supports_image_input
-
+from onyx.llm.utils import get_max_input_tokens, model_supports_image_input
 
 if TYPE_CHECKING:
-    from onyx.db.models import (
-        LLMProvider as LLMProviderModel,
-        ModelConfiguration as ModelConfigurationModel,
-    )
+    from onyx.db.models import LLMProvider as LLMProviderModel
+    from onyx.db.models import ModelConfiguration as ModelConfigurationModel
 
 
 class TestLLMRequest(BaseModel):

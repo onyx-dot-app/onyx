@@ -1,7 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import model_validator
+from pydantic import BaseModel, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder

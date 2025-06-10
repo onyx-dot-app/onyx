@@ -1,24 +1,24 @@
 import os
 from io import BytesIO
-from typing import Any
-from typing import cast
-from typing import IO
+from typing import IO, Any, cast
 
-from fastapi import HTTPException
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
-from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
-from onyx.configs.constants import FileOrigin
-from onyx.configs.constants import KV_CUSTOM_ANALYTICS_SCRIPT_KEY
-from onyx.configs.constants import KV_ENTERPRISE_SETTINGS_KEY
-from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from ee.onyx.server.enterprise_settings.models import (
+    AnalyticsScriptUpload,
+    EnterpriseSettings,
+)
+from onyx.configs.constants import (
+    KV_CUSTOM_ANALYTICS_SCRIPT_KEY,
+    KV_ENTERPRISE_SETTINGS_KEY,
+    ONYX_DEFAULT_APPLICATION_NAME,
+    FileOrigin,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

@@ -6,13 +6,13 @@ Create Date: 2025-02-24 11:24:54.396040
 
 """
 
-from alembic import op
-import sqlalchemy as sa
 import json
 
+import sqlalchemy as sa
+
+from alembic import op
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.onyx_jira.utils import extract_jira_project
-
 
 # revision identifiers, used by Alembic.
 revision = "da42808081e3"

@@ -1,19 +1,12 @@
 import io
 import time
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List
 
 import requests
 import sqlalchemy.exc
 from bs4 import BeautifulSoup
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import File
-from fastapi import Form
-from fastapi import HTTPException
-from fastapi import Query
-from fastapi import UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -24,28 +17,27 @@ from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
 from onyx.db.engine import get_session
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import User
-from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
-from onyx.db.user_documents import calculate_user_files_token_count
-from onyx.db.user_documents import create_user_files
-from onyx.db.user_documents import get_user_file_indexing_status
-from onyx.db.user_documents import share_file_with_assistant
-from onyx.db.user_documents import share_folder_with_assistant
-from onyx.db.user_documents import unshare_file_with_assistant
-from onyx.db.user_documents import unshare_folder_with_assistant
-from onyx.db.user_documents import upload_files_to_user_files_with_indexing
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import ConnectorCredentialPair, User, UserFile, UserFolder
+from onyx.db.user_documents import (
+    calculate_user_files_token_count,
+    create_user_files,
+    get_user_file_indexing_status,
+    share_file_with_assistant,
+    share_folder_with_assistant,
+    unshare_file_with_assistant,
+    unshare_folder_with_assistant,
+    upload_files_to_user_files_with_indexing,
+)
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
-from onyx.server.documents.models import ConnectorBase
-from onyx.server.documents.models import CredentialBase
+from onyx.server.documents.models import ConnectorBase, CredentialBase
 from onyx.server.query_and_chat.chat_backend import RECENT_DOCS_FOLDER_ID
-from onyx.server.user_documents.models import MessageResponse
-from onyx.server.user_documents.models import UserFileSnapshot
-from onyx.server.user_documents.models import UserFolderSnapshot
+from onyx.server.user_documents.models import (
+    MessageResponse,
+    UserFileSnapshot,
+    UserFolderSnapshot,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

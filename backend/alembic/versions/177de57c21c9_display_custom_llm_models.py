@@ -6,10 +6,11 @@ Create Date: 2024-11-21 11:49:04.488677
 
 """
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 from sqlalchemy import and_
+from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "177de57c21c9"
 down_revision = "4ee1287bd26a"

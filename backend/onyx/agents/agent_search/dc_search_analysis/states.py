@@ -1,14 +1,14 @@
 from operator import add
-from typing import Annotated
-from typing import Dict
-from typing import TypedDict
+from typing import Annotated, Dict, TypedDict
 
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.core_state import CoreState
-from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
-from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
-from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.orchestration.states import (
+    ToolCallUpdate,
+    ToolChoiceInput,
+    ToolChoiceUpdate,
+)
 from onyx.configs.constants import DocumentSource
 
 

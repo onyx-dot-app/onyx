@@ -3,11 +3,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
-from httpx_oauth.clients.openid import BASE_SCOPES
-from httpx_oauth.clients.openid import OpenID
+from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 
-from ee.onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
-from ee.onyx.configs.app_configs import OPENID_CONFIG_URL
+from ee.onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE, OPENID_CONFIG_URL
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
 from ee.onyx.server.documents.cc_pair import router as ee_document_cc_pair_router
@@ -22,12 +20,8 @@ from ee.onyx.server.middleware.tenant_tracking import (
     add_api_server_tenant_id_middleware,
 )
 from ee.onyx.server.oauth.api import router as ee_oauth_router
-from ee.onyx.server.query_and_chat.chat_backend import (
-    router as chat_router,
-)
-from ee.onyx.server.query_and_chat.query_backend import (
-    basic_router as query_router,
-)
+from ee.onyx.server.query_and_chat.chat_backend import router as chat_router
+from ee.onyx.server.query_and_chat.query_backend import basic_router as query_router
 from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.saml import router as saml_router
@@ -38,18 +32,20 @@ from ee.onyx.server.token_rate_limits.api import (
 )
 from ee.onyx.server.user_group.api import router as user_group_router
 from ee.onyx.utils.encryption import test_encryption
-from onyx.auth.users import auth_backend
-from onyx.auth.users import create_onyx_oauth_router
-from onyx.auth.users import fastapi_users
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.auth.users import auth_backend, create_onyx_oauth_router, fastapi_users
+from onyx.configs.app_configs import (
+    AUTH_TYPE,
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
 from onyx.configs.constants import AuthType
 from onyx.main import get_application as get_application_base
-from onyx.main import include_auth_router_with_prefix
-from onyx.main import include_router_with_global_prefix_prepended
+from onyx.main import (
+    include_auth_router_with_prefix,
+    include_router_with_global_prefix_prepended,
+)
 from onyx.main import lifespan as lifespan_base
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version

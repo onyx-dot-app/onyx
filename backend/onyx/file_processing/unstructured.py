@@ -1,17 +1,16 @@
-from typing import Any
-from typing import cast
-from typing import IO
+from typing import IO, Any, cast
 
 from unstructured.staging.base import dict_to_elements
 from unstructured_client import UnstructuredClient  # type: ignore
-from unstructured_client.models import operations  # type: ignore
-from unstructured_client.models import shared
+from unstructured_client.models import (
+    operations,  # type: ignore
+    shared,
+)
 
 from onyx.configs.constants import KV_UNSTRUCTURED_API_KEY
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

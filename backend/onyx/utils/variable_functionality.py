@@ -1,8 +1,7 @@
 import functools
 import importlib
 import inspect
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.utils.logger import setup_logger

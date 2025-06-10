@@ -1,11 +1,13 @@
 import yaml
 from sqlalchemy.orm import Session
 
-from onyx.configs.chat_configs import INPUT_PROMPT_YAML
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.chat_configs import PERSONAS_YAML
-from onyx.configs.chat_configs import PROMPTS_YAML
-from onyx.configs.chat_configs import USER_FOLDERS_YAML
+from onyx.configs.chat_configs import (
+    INPUT_PROMPT_YAML,
+    MAX_CHUNKS_FED_TO_CHAT,
+    PERSONAS_YAML,
+    PROMPTS_YAML,
+    USER_FOLDERS_YAML,
+)
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.document_set import get_or_create_document_set_by_name
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
@@ -14,8 +16,7 @@ from onyx.db.models import Persona
 from onyx.db.models import Prompt as PromptDBModel
 from onyx.db.models import Tool as ToolDBModel
 from onyx.db.persona import upsert_persona
-from onyx.db.prompts import get_prompt_by_name
-from onyx.db.prompts import upsert_prompt
+from onyx.db.prompts import get_prompt_by_name, upsert_prompt
 from onyx.db.user_documents import upsert_user_folder
 
 
@@ -23,7 +24,7 @@ def load_user_folders_from_yaml(
     db_session: Session,
     user_folders_yaml: str = USER_FOLDERS_YAML,
 ) -> None:
-    with open(user_folders_yaml, "r") as file:
+    with open(user_folders_yaml) as file:
         data = yaml.safe_load(file)
 
     all_user_folders = data.get("user_folders", [])
@@ -44,7 +45,7 @@ def load_user_folders_from_yaml(
 def load_prompts_from_yaml(
     db_session: Session, prompts_yaml: str = PROMPTS_YAML
 ) -> None:
-    with open(prompts_yaml, "r") as file:
+    with open(prompts_yaml) as file:
         data = yaml.safe_load(file)
 
     all_prompts = data.get("prompts", [])
@@ -68,7 +69,7 @@ def load_prompts_from_yaml(
 def load_input_prompts_from_yaml(
     db_session: Session, input_prompts_yaml: str = INPUT_PROMPT_YAML
 ) -> None:
-    with open(input_prompts_yaml, "r") as file:
+    with open(input_prompts_yaml) as file:
         data = yaml.safe_load(file)
 
     all_input_prompts = data.get("input_prompts", [])
@@ -93,7 +94,7 @@ def load_personas_from_yaml(
     personas_yaml: str = PERSONAS_YAML,
     default_chunks: float = MAX_CHUNKS_FED_TO_CHAT,
 ) -> None:
-    with open(personas_yaml, "r") as file:
+    with open(personas_yaml) as file:
         data = yaml.safe_load(file)
 
     all_personas = data.get("personas", [])
@@ -109,10 +110,7 @@ def load_personas_from_yaml(
         # to later attach document sets to the persona manually, therefore, don't overwrite/reset
         # the document sets for the persona
         doc_set_ids: list[int] | None = None
-        if doc_sets:
-            doc_set_ids = [doc_set.id for doc_set in doc_sets]
-        else:
-            doc_set_ids = None
+        doc_set_ids = [doc_set.id for doc_set in doc_sets] if doc_sets else None
 
         prompt_ids: list[int] | None = None
         prompt_set_names = persona["prompts"]

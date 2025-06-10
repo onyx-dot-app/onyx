@@ -3,26 +3,35 @@ from io import BytesIO
 from typing import Any
 
 from dropbox import Dropbox  # type: ignore
-from dropbox.exceptions import ApiError  # type:ignore
-from dropbox.exceptions import AuthError  # type:ignore
-from dropbox.files import FileMetadata  # type:ignore
-from dropbox.files import FolderMetadata  # type:ignore
+from dropbox.exceptions import (
+    ApiError,  # type:ignore
+    AuthError,  # type:ignore
+)
+from dropbox.files import (
+    FileMetadata,  # type:ignore
+    FolderMetadata,  # type:ignore
+)
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialInvalidError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialInvalidError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -140,8 +149,7 @@ class DropboxConnector(LoadConnector, PollConnector):
         if self.dropbox_client is None:
             raise ConnectorMissingCredentialError("Dropbox")
 
-        for batch in self._yield_files_recursive("", start, end):
-            yield batch
+        yield from self._yield_files_recursive("", start, end)
 
         return None
 

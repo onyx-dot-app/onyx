@@ -1,11 +1,8 @@
 import logging
 import time
-from collections.abc import Awaitable
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi import Response
+from fastapi import FastAPI, Request, Response
 
 
 def add_latency_logging_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> None:

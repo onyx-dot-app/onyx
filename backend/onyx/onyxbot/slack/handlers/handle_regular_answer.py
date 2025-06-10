@@ -1,8 +1,6 @@
 import functools
 from collections.abc import Callable
-from typing import Any
-from typing import Optional
-from typing import TypeVar
+from typing import Any, Optional, TypeVar
 
 from retry import retry
 from slack_sdk import WebClient
@@ -10,32 +8,37 @@ from slack_sdk.models.blocks import SectionBlock
 
 from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import ChatOnyxBotResponse
-from onyx.chat.process_message import gather_stream_for_slack
-from onyx.chat.process_message import stream_chat_message_objects
+from onyx.chat.process_message import (
+    gather_stream_for_slack,
+    stream_chat_message_objects,
+)
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
-from onyx.configs.onyxbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
-from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
-from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.configs.onyxbot_configs import (
+    DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER,
+    DANSWER_BOT_DISPLAY_ERROR_MSGS,
+    DANSWER_BOT_NUM_RETRIES,
+    DANSWER_FOLLOWUP_EMOJI,
+    DANSWER_REACT_EMOJI,
+    MAX_THREAD_CONTEXT_PERCENTAGE,
+)
 from onyx.context.search.enums import OptionalSearchSetting
-from onyx.context.search.models import BaseFilters
-from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import BaseFilters, RetrievalDetails
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import SlackChannelConfig
-from onyx.db.models import User
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import persona_has_search_tool
+from onyx.db.models import SlackChannelConfig, User
+from onyx.db.persona import get_persona_by_id, persona_has_search_tool
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
-from onyx.onyxbot.slack.handlers.utils import send_team_member_message
-from onyx.onyxbot.slack.handlers.utils import slackify_message_thread
+from onyx.onyxbot.slack.handlers.utils import (
+    send_team_member_message,
+    slackify_message_thread,
+)
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import SlackRateLimiter
-from onyx.onyxbot.slack.utils import update_emote_react
+from onyx.onyxbot.slack.utils import (
+    SlackRateLimiter,
+    respond_in_thread_or_channel,
+    update_emote_react,
+)
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.utils.logger import OnyxLoggingAdapter
 

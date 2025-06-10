@@ -6,35 +6,41 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.context.search.enums import SearchType
-from onyx.context.search.models import ChunkMetric
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceChunkUncleaned
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import MAX_METRICS_CONTENT
-from onyx.context.search.models import RetrievalMetricsContainer
-from onyx.context.search.models import SearchQuery
+from onyx.context.search.models import (
+    MAX_METRICS_CONTENT,
+    ChunkMetric,
+    IndexFilters,
+    InferenceChunk,
+    InferenceChunkUncleaned,
+    InferenceSection,
+    RetrievalMetricsContainer,
+    SearchQuery,
+)
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
-from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
-from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
+from onyx.context.search.preprocessing.preprocessing import (
+    HYBRID_ALPHA,
+    HYBRID_ALPHA_KEYWORD,
+)
 from onyx.context.search.utils import inference_section_from_chunks
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_multilingual_expansion
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.db.search_settings import (
+    get_current_search_settings,
+    get_multilingual_expansion,
+)
+from onyx.document_index.interfaces import DocumentIndex, VespaChunkRequest
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import run_in_background
-from onyx.utils.threadpool_concurrency import TimeoutThread
-from onyx.utils.threadpool_concurrency import wait_on_background
+from onyx.utils.threadpool_concurrency import (
+    TimeoutThread,
+    run_functions_tuples_in_parallel,
+    run_in_background,
+    wait_on_background,
+)
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import MODEL_SERVER_HOST, MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 
@@ -320,7 +326,7 @@ def doc_index_retrieval(
             )
 
     # Log any chunks that were not found in the retrieved chunks
-    for reference in referenced_chunk_scores.keys():
+    for reference in referenced_chunk_scores:
         logger.error(f"Chunk {reference} not found in retrieved chunks")
 
     unique_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {

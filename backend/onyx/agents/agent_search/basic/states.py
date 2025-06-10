@@ -3,9 +3,11 @@ from typing import TypedDict
 from langchain_core.messages import AIMessageChunk
 from pydantic import BaseModel
 
-from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
-from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
-from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.orchestration.states import (
+    ToolCallUpdate,
+    ToolChoiceInput,
+    ToolChoiceUpdate,
+)
 
 # States contain values that change over the course of graph execution,
 # Config is for values that are set at the start and never change.

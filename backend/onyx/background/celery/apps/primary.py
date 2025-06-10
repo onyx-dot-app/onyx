@@ -1,34 +1,30 @@
 import logging
 import os
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
-from celery import bootsteps  # type: ignore
-from celery import Celery
-from celery import signals
-from celery import Task
+from celery import (
+    Celery,
+    Task,
+    bootsteps,  # type: ignore
+    signals,
+)
 from celery.apps.worker import Worker
 from celery.exceptions import WorkerShutdown
-from celery.signals import celeryd_init
-from celery.signals import worker_init
-from celery.signals import worker_ready
-from celery.signals import worker_shutdown
+from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 from redis.lock import Lock as RedisLock
 
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
-from onyx.background.celery.tasks.indexing.utils import (
-    get_unfenced_index_attempt_ids,
+from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
+from onyx.configs.constants import (
+    CELERY_PRIMARY_WORKER_LOCK_TIMEOUT,
+    POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
 )
-from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import SqlEngine
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import mark_attempt_canceled
+from onyx.db.engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.index_attempt import get_index_attempt, mark_attempt_canceled
 from onyx.redis.redis_connector_credential_pair import (
     RedisGlobalConnectorCredentialPair,
 )
@@ -42,8 +38,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 

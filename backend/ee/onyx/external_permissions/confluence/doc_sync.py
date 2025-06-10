@@ -9,13 +9,12 @@ from typing import Any
 from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
+from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.onyx_confluence import (
+    OnyxConfluence,
     get_user_email_from_username__server,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.models import SlimDocument
 from onyx.db.models import ConnectorCredentialPair

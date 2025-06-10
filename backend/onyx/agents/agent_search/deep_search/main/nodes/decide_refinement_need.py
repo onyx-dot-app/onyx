@@ -3,8 +3,8 @@ from typing import cast
 
 from langchain_core.runnables import RunnableConfig
 
-from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.deep_search.main.states import (
+    MainState,
     RequireRefinemenEvalUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig

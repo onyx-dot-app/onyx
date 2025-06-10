@@ -4,10 +4,12 @@ import requests
 from retry import retry
 
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
-from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.configs import (
+    INDEXING_MODEL_SERVER_HOST,
+    INDEXING_MODEL_SERVER_PORT,
+    MODEL_SERVER_HOST,
+    MODEL_SERVER_PORT,
+)
 
 logger = setup_logger()
 

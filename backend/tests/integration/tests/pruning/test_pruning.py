@@ -5,8 +5,7 @@ import tempfile
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from time import sleep
 from typing import Any
 

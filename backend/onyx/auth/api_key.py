@@ -1,8 +1,7 @@
 import hashlib
 import secrets
 import uuid
-from urllib.parse import quote
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from fastapi import Request
 from passlib.hash import sha256_crypt
@@ -11,7 +10,6 @@ from pydantic import BaseModel
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS
 from shared_configs.configs import MULTI_TENANT
-
 
 _API_KEY_HEADER_NAME = "Authorization"
 # NOTE for others who are curious: In the context of a header, "X-" often refers

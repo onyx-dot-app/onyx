@@ -1,5 +1,4 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin
 
@@ -7,15 +6,18 @@ import requests
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -141,7 +143,7 @@ def _extract_text_from_document(document: dict[str, Any]) -> str:
                 records.items(), key=lambda x: x[1].get("orderIndex", "")
             )
 
-            for record_id, record_data in sorted_records:
+            for _record_id, record_data in sorted_records:
                 values = record_data.get("values", {})
                 row_cells = []
                 for col_id in columns:

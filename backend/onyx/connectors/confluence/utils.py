@@ -2,19 +2,11 @@ import io
 import math
 import time
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any
-from typing import cast
-from typing import TYPE_CHECKING
-from typing import TypeVar
-from urllib.parse import parse_qs
-from urllib.parse import quote
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 
 import requests
 from pydantic import BaseModel
@@ -22,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
+    CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
 )
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
 
 if TYPE_CHECKING:
@@ -31,9 +23,11 @@ if TYPE_CHECKING:
 
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import PGFileStore
-from onyx.db.pg_file_store import create_populate_lobj
-from onyx.db.pg_file_store import save_bytes_to_pgfilestore
-from onyx.db.pg_file_store import upsert_pgfilestore
+from onyx.db.pg_file_store import (
+    create_populate_lobj,
+    save_bytes_to_pgfilestore,
+    upsert_pgfilestore,
+)
 from onyx.file_processing.extract_file_text import (
     OnyxExtensionType,
     extract_file_text,

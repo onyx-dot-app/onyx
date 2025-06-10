@@ -1,10 +1,8 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 
 from ee.onyx.server.tenants.models import TenantByDomainResponse
 from ee.onyx.server.tenants.provisioning import get_tenant_by_domain_from_control_plane
-from onyx.auth.users import current_user
-from onyx.auth.users import User
+from onyx.auth.users import User, current_user
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

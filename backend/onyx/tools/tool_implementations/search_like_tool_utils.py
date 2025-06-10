@@ -2,18 +2,15 @@ from typing import cast
 
 from langchain_core.messages import HumanMessage
 
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
+from onyx.chat.models import AnswerStyleConfig, LlmDoc, PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.citations_prompt import (
     build_citations_system_message,
+    build_citations_user_message,
 )
-from onyx.chat.prompt_builder.citations_prompt import build_citations_user_message
 from onyx.llm.utils import build_content_with_imgs
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
-
 
 FINAL_CONTEXT_DOCUMENTS_ID = "final_context_documents"
 

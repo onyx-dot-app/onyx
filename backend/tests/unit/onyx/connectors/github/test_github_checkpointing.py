@@ -1,15 +1,11 @@
 import time
-from collections.abc import Callable
-from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-from github import Github
-from github import RateLimitExceededException
+from github import Github, RateLimitExceededException
 from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
@@ -18,15 +14,19 @@ from github.RateLimit import RateLimit
 from github.Repository import Repository
 from github.Requester import Requester
 
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.github.connector import GithubConnector
-from onyx.connectors.github.connector import GithubConnectorStage
-from onyx.connectors.github.connector import SerializedRepository
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.github.connector import (
+    GithubConnector,
+    GithubConnectorStage,
+    SerializedRepository,
+)
 from onyx.connectors.models import Document
-from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
 

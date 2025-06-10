@@ -2,7 +2,6 @@ from langchain_core.messages import HumanMessage
 
 from onyx.llm.utils import build_content_with_imgs
 
-
 IMG_GENERATION_SUMMARY_PROMPT = """
 You have just created the attached images in response to the following query: "{query}".
 

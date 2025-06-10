@@ -4,23 +4,22 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import expression
-from sqlalchemy.sql.elements import ColumnElement
-from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
 
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import write_invited_users
+from onyx.auth.invited_users import get_invited_users, write_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.db.api_key import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.db.models import DocumentSet__User
-from onyx.db.models import Persona__User
-from onyx.db.models import SamlAccount
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
+from onyx.db.models import (
+    DocumentSet__User,
+    Persona__User,
+    SamlAccount,
+    User,
+    User__UserGroup,
+)
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
@@ -125,7 +124,7 @@ def get_all_users(
 
 def _get_accepted_user_where_clause(
     email_filter_string: str | None = None,
-    roles_filter: list[UserRole] = [],
+    roles_filter: list[UserRole] = None,
     include_external: bool = False,
     is_active_filter: bool | None = None,
 ) -> list[ColumnElement[bool]]:
@@ -145,6 +144,8 @@ def _get_accepted_user_where_clause(
 
     # Access table columns directly via __table__.c to get proper SQLAlchemy column types
     # This ensures type checking works correctly for SQL operations like ilike, endswith, and is_
+    if roles_filter is None:
+        roles_filter = []
     email_col: KeyedColumnElement[Any] = User.__table__.c.email
     is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
 
@@ -173,9 +174,11 @@ def get_page_of_filtered_users(
     page_num: int,
     email_filter_string: str | None = None,
     is_active_filter: bool | None = None,
-    roles_filter: list[UserRole] = [],
+    roles_filter: list[UserRole] = None,
     include_external: bool = False,
 ) -> Sequence[User]:
+    if roles_filter is None:
+        roles_filter = []
     users_stmt = select(User)
 
     where_clause = _get_accepted_user_where_clause(
@@ -196,9 +199,11 @@ def get_total_filtered_users_count(
     db_session: Session,
     email_filter_string: str | None = None,
     is_active_filter: bool | None = None,
-    roles_filter: list[UserRole] = [],
+    roles_filter: list[UserRole] = None,
     include_external: bool = False,
 ) -> int:
+    if roles_filter is None:
+        roles_filter = []
     where_clause = _get_accepted_user_where_clause(
         email_filter_string=email_filter_string,
         roles_filter=roles_filter,

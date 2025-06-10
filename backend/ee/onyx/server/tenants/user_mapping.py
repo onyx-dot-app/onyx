@@ -1,17 +1,17 @@
 from fastapi_users import exceptions
 from sqlalchemy import select
 
-from onyx.auth.invited_users import get_invited_users
-from onyx.auth.invited_users import get_pending_users
-from onyx.auth.invited_users import write_invited_users
-from onyx.auth.invited_users import write_pending_users
-from onyx.db.engine import get_session_with_shared_schema
-from onyx.db.engine import get_session_with_tenant
+from onyx.auth.invited_users import (
+    get_invited_users,
+    get_pending_users,
+    write_invited_users,
+    write_pending_users,
+)
+from onyx.db.engine import get_session_with_shared_schema, get_session_with_tenant
 from onyx.db.models import UserTenantMapping
 from onyx.server.manage.models import TenantSnapshot
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -105,7 +105,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
                         UserTenantMapping(
                             email=email,
                             tenant_id=tenant_id,
-                            active=False if has_active_mapping else True,
+                            active=not has_active_mapping,
                         )
                     )
 

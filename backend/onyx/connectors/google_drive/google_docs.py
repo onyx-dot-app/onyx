@@ -1,18 +1,22 @@
 
 from typing import Any
 
-from onyx.connectors.google_utils.resources import get_google_docs_service
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
+from onyx.connectors.google_utils.resources import (
+    get_drive_service,
+    get_google_docs_service,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    MISSING_SCOPES_ERROR_STR,
+    ONYX_SCOPE_INSTRUCTIONS,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 def copy_google_doc(
-    creds: Any, 
+    creds: Any,
     primary_admin_email: str,
-    file_id_to_copy: str, 
+    file_id_to_copy: str,
     new_title: str | None = None
 ) -> dict[str, Any]:
     drive_service = get_drive_service(creds, primary_admin_email)
@@ -34,12 +38,12 @@ def read_document(
 ) -> dict[str, Any]:
     """
     Read a Google Doc and return its content.
-    
+
     Args:
         creds: The credentials to use for authentication
         primary_admin_email: The email of the primary admin
         doc_id: The ID of the Google Doc to read
-            
+
     Returns:
         dict: The document content and metadata
     """
@@ -61,13 +65,13 @@ def write_document(
 ) -> dict[str, Any]:
     """
     Write content to a Google Doc using batch update requests.
-    
+
     Args:
         creds: The credentials to use for authentication
         primary_admin_email: The email of the primary admin
         doc_id: The ID of the Google Doc to write to
         requests: List of update requests to apply to the document
-            
+
     Returns:
         dict: The response from the batch update operation
     """
@@ -87,12 +91,12 @@ def write_document(
 def create_replace_text_request(text_to_find, replacement_text, match_case=True) -> dict[str, Any]:
     """
     Create a request to replace text in a specific range.
-    
+
     Args:
         text_to_find: The text to find
         replacement_text: The text to replace
         match_case: Whether to match the case of the text to find
-            
+
     Returns:
         dict: The replace text request
     """
@@ -109,11 +113,11 @@ def create_replace_text_request(text_to_find, replacement_text, match_case=True)
 def create_insert_text_request(text: str, index: int) -> dict[str, Any]:
     """
     Create a request to insert text at a specific position.
-    
+
     Args:
         text: The text to insert
         index: The position to insert the text at
-            
+
     Returns:
         dict: The insert text request
     """
@@ -130,11 +134,11 @@ def create_insert_text_request(text: str, index: int) -> dict[str, Any]:
 def create_delete_text_request(start_index: int, end_index: int) -> dict[str, Any]:
     """
     Create a request to delete text in a specific range.
-    
+
     Args:
         start_index: The starting position of the text to delete
         end_index: The ending position of the text to delete
-            
+
     Returns:
         dict: The delete text request
     """
@@ -157,14 +161,14 @@ def insert_text(
 ) -> dict[str, Any]:
     """
     Insert text at a specific position in a Google Doc.
-    
+
     Args:
         creds: The credentials to use for authentication
         primary_admin_email: The email of the primary admin
         doc_id: The ID of the Google Doc to write to
         text: The text to insert
         index: The position to insert the text at
-            
+
     Returns:
         dict: The response from the batch update operation
     """
@@ -182,7 +186,7 @@ def replace_text(
 ) -> dict[str, Any]:
     """
     Replace text in a specific range from a Google Doc.
-    
+
     Args:
         creds: The credentials to use for authentication
         primary_admin_email: The email of the primary admin
@@ -190,7 +194,7 @@ def replace_text(
         text_to_find: The text to find
         replacement_text: The text to replace
         match_case: Whether to match the case of the text to find
-            
+
     Returns:
         dict: The response from the batch update operation
     """
@@ -210,7 +214,7 @@ def replace_text_batch(
     remembering the location of the text by the indices.
 
     Replace text in a specific range from a Google Doc.
-    
+
     Args:
         creds: The credentials to use for authentication
         primary_admin_email: The email of the primary admin
@@ -218,7 +222,7 @@ def replace_text_batch(
         text_to_find: The text to find
         replacement_text: The text to replace
         match_case: Whether to match the case of the text to find
-            
+
     Returns:
         dict: The response from the batch update operation
     """
@@ -240,16 +244,16 @@ def delete_text_range(
 ) -> dict[str, Any]:
     """
     Delete text in a specific range from a Google Doc.
-    
+
     Args:
         creds: The credentials to use for authentication
         primary_admin_email: The email of the primary admin
         doc_id: The ID of the Google Doc to write to
         start_index: The starting position of the text to delete
         end_index: The ending position of the text to delete
-            
+
     Returns:
         dict: The response from the batch update operation
     """
     request = create_delete_text_request(start_index, end_index)
-    return write_document(creds, primary_admin_email, doc_id, [request]) 
+    return write_document(creds, primary_admin_email, doc_id, [request])

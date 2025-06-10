@@ -1,28 +1,23 @@
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
-from typing import IO
+from typing import IO, Any
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
+from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.extract_file_text import (
+    OnyxExtensionType,
+    extract_text_and_images,
+    get_file_ext,
+    is_accepted_file_ext,
+)
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
@@ -235,7 +230,7 @@ def _process_file(
         )
 
     # Then any extracted images from docx, etc.
-    for idx, (img_data, img_name) in enumerate(
+    for idx, (img_data, _img_name) in enumerate(
         extraction_result.embedded_images, start=1
     ):
         # Store each embedded image as a separate file in PGFileStore

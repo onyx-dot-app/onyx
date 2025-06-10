@@ -1,7 +1,6 @@
 import io
 import os
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote
 
@@ -12,17 +11,20 @@ from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorMissingCredentialError,
+    Document,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -74,8 +76,10 @@ class SharepointConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        sites: list[str] = [],
+        sites: list[str] = None,
     ) -> None:
+        if sites is None:
+            sites = []
         self.batch_size = batch_size
         self._graph_client: GraphClient | None = None
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(

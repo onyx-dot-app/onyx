@@ -1,42 +1,50 @@
 import os
 from collections.abc import Iterable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from jira import JIRA
 from jira.resources import Issue
 from typing_extensions import override
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import JIRA_CONNECTOR_MAX_TICKET_SIZE
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    JIRA_CONNECTOR_LABELS_TO_SKIP,
+    JIRA_CONNECTOR_MAX_TICKET_SIZE,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.connectors.onyx_jira.utils import best_effort_basic_expert_info
-from onyx.connectors.onyx_jira.utils import best_effort_get_field_from_issue
-from onyx.connectors.onyx_jira.utils import build_jira_client
-from onyx.connectors.onyx_jira.utils import build_jira_url
-from onyx.connectors.onyx_jira.utils import extract_text_from_adf
-from onyx.connectors.onyx_jira.utils import get_comment_strs
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    ConnectorMissingCredentialError,
+    Document,
+    DocumentFailure,
+    SlimDocument,
+    TextSection,
+)
+from onyx.connectors.onyx_jira.utils import (
+    best_effort_basic_expert_info,
+    best_effort_get_field_from_issue,
+    build_jira_client,
+    build_jira_url,
+    extract_text_from_adf,
+    get_comment_strs,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -88,13 +96,12 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
 ) -> Document | None:
-    if labels_to_skip:
-        if any(label in issue.fields.labels for label in labels_to_skip):
-            logger.info(
-                f"Skipping {issue.key} because it has a label to skip. Found "
-                f"labels: {issue.fields.labels}. Labels to skip: {labels_to_skip}."
-            )
-            return None
+    if labels_to_skip and any(label in issue.fields.labels for label in labels_to_skip):
+        logger.info(
+            f"Skipping {issue.key} because it has a label to skip. Found "
+            f"labels: {issue.fields.labels}. Labels to skip: {labels_to_skip}."
+        )
+        return None
 
     description = (
         issue.fields.description

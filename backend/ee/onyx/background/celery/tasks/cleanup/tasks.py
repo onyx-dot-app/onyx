@@ -1,5 +1,4 @@
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from celery import shared_task
 
@@ -10,7 +9,6 @@ from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import TaskStatus
 from onyx.db.tasks import delete_task_with_id
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

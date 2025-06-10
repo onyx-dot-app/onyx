@@ -1,7 +1,6 @@
 import json
 import os
-from typing import cast
-from typing import List
+from typing import List, cast
 
 from cohere import Client
 

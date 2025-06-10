@@ -14,7 +14,7 @@ from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 def load_test_data(file_name: str = "test_zendesk_data.json") -> dict[str, dict]:
     current_dir = Path(__file__).parent
-    with open(current_dir / file_name, "r") as f:
+    with open(current_dir / file_name) as f:
         return json.load(f)
 
 

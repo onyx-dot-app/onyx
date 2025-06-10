@@ -1,24 +1,19 @@
-from typing import Any
-from typing import cast
-from typing import List
-from unittest.mock import Mock
-from unittest.mock import patch
+from typing import Any, List, cast
+from unittest.mock import Mock, patch
 
 import pytest
 
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentSource
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Document, DocumentSource, ImageSection, TextSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import _get_aggregated_chunk_boost_factor
-from onyx.indexing.indexing_pipeline import add_contextual_summaries
-from onyx.indexing.indexing_pipeline import filter_documents
-from onyx.indexing.indexing_pipeline import process_image_sections
-from onyx.indexing.models import ChunkEmbedding
-from onyx.indexing.models import IndexChunk
+from onyx.indexing.indexing_pipeline import (
+    _get_aggregated_chunk_boost_factor,
+    add_contextual_summaries,
+    filter_documents,
+    process_image_sections,
+)
+from onyx.indexing.models import ChunkEmbedding, IndexChunk
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.search_nlp_models import (
     ContentClassificationPrediction,

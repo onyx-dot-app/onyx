@@ -1,17 +1,11 @@
-from collections.abc import Callable
-from collections.abc import Generator
-from typing import Any
-from typing import Generic
-from typing import TypeVar
+from collections.abc import Callable, Generator
+from typing import Any, Generic, TypeVar
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
-from onyx.tools.models import ToolCallFinalResult
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallFinalResult, ToolCallKickoff, ToolResponse
 from onyx.tools.tool import Tool
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-
 
 R = TypeVar("R")
 

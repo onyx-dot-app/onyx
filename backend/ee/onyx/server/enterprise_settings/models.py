@@ -1,8 +1,6 @@
-from typing import Any
-from typing import List
+from typing import Any, List
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 
 class NavigationItem(BaseModel):

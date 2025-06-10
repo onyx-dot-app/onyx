@@ -1,12 +1,13 @@
 import random
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from logging import getLogger
 
 from onyx.configs.constants import MessageType
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_or_create_root_message,
+)
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChatSession
 

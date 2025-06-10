@@ -4,9 +4,11 @@ from typing import cast
 
 import torch
 import torch.nn as nn
-from transformers import DistilBertConfig  # type: ignore
-from transformers import DistilBertModel  # type: ignore
-from transformers import DistilBertTokenizer  # type: ignore
+from transformers import (
+    DistilBertConfig,  # type: ignore
+    DistilBertModel,  # type: ignore
+    DistilBertTokenizer,  # type: ignore
+)
 
 
 class HybridClassifier(nn.Module):
@@ -48,7 +50,7 @@ class HybridClassifier(nn.Module):
         model_path = os.path.join(load_directory, "pytorch_model.bin")
         config_path = os.path.join(load_directory, "config.json")
 
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = json.load(f)
         model = cls(**config)
 

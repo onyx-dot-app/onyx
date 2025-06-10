@@ -2,22 +2,23 @@ from collections import OrderedDict
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from onyx.chat.models import CitationInfo
-from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.models import QADocsResponse
-from onyx.chat.models import SubQuestionIdentifier
-from onyx.chat.models import ThreadMessage
+from onyx.chat.models import (
+    CitationInfo,
+    PersonaOverrideConfig,
+    QADocsResponse,
+    SubQuestionIdentifier,
+    ThreadMessage,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.enums import LLMEvaluationType
-from onyx.context.search.enums import SearchType
-from onyx.context.search.models import ChunkContext
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.enums import LLMEvaluationType, SearchType
+from onyx.context.search.models import (
+    ChunkContext,
+    RerankingDetails,
+    RetrievalDetails,
+    SavedSearchDoc,
+)
 from onyx.server.manage.models import StandardAnswer
 
 

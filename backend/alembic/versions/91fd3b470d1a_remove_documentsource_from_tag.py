@@ -6,8 +6,9 @@ Create Date: 2024-03-21 12:05:23.956734
 
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 from onyx.configs.constants import DocumentSource
 
 # revision identifiers, used by Alembic.

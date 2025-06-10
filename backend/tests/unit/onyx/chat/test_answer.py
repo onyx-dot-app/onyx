@@ -1,43 +1,44 @@
 import json
 from typing import cast
-from unittest.mock import MagicMock
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 from uuid import UUID
 
 import pytest
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
-from langchain_core.messages import ToolCall
-from langchain_core.messages import ToolCallChunk
+from langchain_core.messages import (
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolCall,
+    ToolCallChunk,
+)
 from pytest_mock import MockerFixture
 from sqlalchemy.orm import Session
 
 from onyx.chat.answer import Answer
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationInfo
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import PromptConfig
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import StreamStopReason
-from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
-from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
-from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import SearchRequest
+from onyx.chat.models import (
+    AnswerStyleConfig,
+    CitationInfo,
+    LlmDoc,
+    OnyxAnswerPiece,
+    PromptConfig,
+    StreamStopInfo,
+    StreamStopReason,
+)
+from onyx.chat.prompt_builder.answer_prompt_builder import (
+    AnswerPromptBuilder,
+    default_build_system_message,
+    default_build_user_message,
+)
+from onyx.context.search.models import RerankingDetails, SearchRequest
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
-from onyx.tools.models import ToolCallFinalResult
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallFinalResult, ToolCallKickoff, ToolResponse
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
 from shared_configs.enums import RerankerProvider
-from tests.unit.onyx.chat.conftest import DEFAULT_SEARCH_ARGS
-from tests.unit.onyx.chat.conftest import QUERY
+from tests.unit.onyx.chat.conftest import DEFAULT_SEARCH_ARGS, QUERY
 
 
 @pytest.fixture

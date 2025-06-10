@@ -3,18 +3,20 @@ import uuid
 from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from onyx.auth.api_key import ApiKeyDescriptor
-from onyx.auth.api_key import build_displayable_api_key
-from onyx.auth.api_key import generate_api_key
-from onyx.auth.api_key import hash_api_key
-from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
-from onyx.configs.constants import DANSWER_API_KEY_PREFIX
-from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
-from onyx.db.models import ApiKey
-from onyx.db.models import User
+from onyx.auth.api_key import (
+    ApiKeyDescriptor,
+    build_displayable_api_key,
+    generate_api_key,
+    hash_api_key,
+)
+from onyx.configs.constants import (
+    DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
+    DANSWER_API_KEY_PREFIX,
+    UNNAMED_KEY_PLACEHOLDER,
+)
+from onyx.db.models import ApiKey, User
 from onyx.server.api_key.models import APIKeyArgs
 from shared_configs.contextvars import get_current_tenant_id
 

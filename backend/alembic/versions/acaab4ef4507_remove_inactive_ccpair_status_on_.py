@@ -6,10 +6,11 @@ Create Date: 2025-02-16 18:21:41.330212
 
 """
 
-from alembic import op
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.enums import ConnectorCredentialPairStatus
 from sqlalchemy import update
+
+from alembic import op
+from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.models import ConnectorCredentialPair
 
 # revision identifiers, used by Alembic.
 revision = "acaab4ef4507"

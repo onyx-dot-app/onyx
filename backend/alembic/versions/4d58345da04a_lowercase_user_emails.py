@@ -8,10 +8,11 @@ Create Date: 2025-01-29 07:48:46.784041
 
 import logging
 from typing import cast
-from alembic import op
+
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql import text
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "4d58345da04a"

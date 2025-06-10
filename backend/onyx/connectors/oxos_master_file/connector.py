@@ -1,48 +1,40 @@
 import os
-from collections.abc import Iterator
-from datetime import datetime
-from functools import partial
-from typing import Any, Optional, List, Dict
+from typing import Any, List, Optional
 
-from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
+from google.oauth2.service_account import (
+    Credentials as ServiceAccountCredentials,  # type: ignore
+)
 from googleapiclient.errors import HttpError  # type: ignore
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
-from onyx.configs.app_configs import MAX_FILE_SIZE_BYTES
+from onyx.configs.app_configs import (
+    GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+)
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.exceptions import ConnectorValidationError, CredentialExpiredError, InsufficientPermissionsError
-from onyx.connectors.google_drive.doc_conversion import build_slim_document, convert_drive_item_to_document
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.google_drive.doc_conversion import (
+    build_slim_document,
+    convert_drive_item_to_document,
+)
 from onyx.connectors.google_drive.file_retrieval import (
     get_all_files_for_oauth,
-    get_all_files_in_my_drive_and_shared,
     get_files_in_shared_drive,
     get_root_folder_id,
-    generate_time_range_filter,
 )
-from onyx.connectors.google_drive.google_docs import read_document, write_document, insert_text, delete_text_range
 from onyx.connectors.google_drive.google_sheets import read_spreadsheet
-from onyx.connectors.google_drive.models import GoogleDriveFileType, DriveRetrievalStage, RetrievedDriveFile
 from onyx.connectors.google_utils.google_auth import get_google_creds
-from onyx.connectors.google_utils.google_utils import (
-    execute_paginated_retrieval,
-    execute_single_retrieval,
-    _execute_single_retrieval,
-    get_file_owners,
-    GoogleFields,
-)
-from onyx.connectors.google_utils.resources import get_admin_service, get_drive_service, get_google_docs_service, get_sheets_service, GoogleDriveService
+from onyx.connectors.google_utils.google_utils import _execute_single_retrieval
+from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
-    DB_CREDENTIALS_AUTHENTICATION_METHOD,
-    GoogleOAuthAuthenticationMethod,
     MISSING_SCOPES_ERROR_STR,
     ONYX_SCOPE_INSTRUCTIONS,
     SLIM_BATCH_SIZE,
-    USER_FIELDS,
 )
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -52,7 +44,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
 )
-from onyx.connectors.models import Document, ConnectorMissingCredentialError
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -89,7 +81,7 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
         if self._primary_admin_email is None:
             raise ValueError("Primary admin email not set")
         return self._primary_admin_email
-    
+
     def set_allow_images(self, value: bool) -> None:
         self._allow_images = value
 
@@ -153,8 +145,8 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
             )
 
     def poll_source(
-        self, 
-        start: SecondsSinceUnixEpoch, 
+        self,
+        start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         yield from self.load_from_state()
@@ -166,10 +158,10 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> GenerateSlimDocumentOutput:
         if self._creds is None:
             raise ConnectorMissingCredentialError("Google Drive credentials not loaded.")
-            
+
         drive_service = get_drive_service(self._creds, self._primary_admin_email)
         slim_batch = []
-        
+
         try:
             if self._include_shared_drives and self._shared_drive_ids:
                 for drive_id in self._shared_drive_ids:
@@ -185,7 +177,7 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
                             if len(slim_batch) >= SLIM_BATCH_SIZE:
                                 yield slim_batch
                                 slim_batch = []
-            
+
             for file in get_all_files_for_oauth(
                 service=drive_service,
                 include_files_shared_with_me=self._include_files_shared_with_me,
@@ -200,25 +192,25 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
                     if len(slim_batch) >= SLIM_BATCH_SIZE:
                         yield slim_batch
                         slim_batch = []
-                        
+
             if slim_batch:
                 yield slim_batch
-                
+
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
-            
+
     def load_from_state(self) -> GenerateDocumentsOutput:
         try:
             if self._creds is None:
                 raise ConnectorMissingCredentialError("Google Drive credentials not loaded.")
-            
+
             drive_service = get_drive_service(self._creds, self._primary_admin_email)
-            
+
             # TODO: Make this configurable
             spreadsheet_id = "1zUx2p5QgIqAQQY3h0txOHqhJQbReL3YTx5EsIg5wdqw"
-            
+
             result = read_spreadsheet(
                 self.creds,
                 self.primary_admin_email,
@@ -232,7 +224,7 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
                 fileId=spreadsheet_id,
                 fields="id,name,mimeType,owners,modifiedTime,createdTime,webViewLink,size",
                 supportsAllDrives=True
-            )            
+            )
             docs_to_process = [convert_drive_item_to_document(self._creds, self._allow_images, self._size_threshold, [self.primary_admin_email], file, sheet_extract_hyperlinks=False)]
             for row in values:
                 if len(row) >= 3:
@@ -244,10 +236,10 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
                         doc_url = rev_cell["hyperlink"]
                     elif isinstance(rev_cell, str) and (rev_cell.startswith("http") or "docs.google.com" in rev_cell):
                         doc_url = rev_cell
-                        
+
                     if not doc_url:
                         continue
-                        
+
                     try:
                         if "/d/" in doc_url:
                             doc_id = doc_url.split("/d/")[1].split("/")[0]
@@ -256,7 +248,7 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
                     except IndexError:
                         logger.error(f"Invalid document URL: {doc_url} for row: {row}")
                         continue
-                    
+
                     try:
                         file = _execute_single_retrieval(
                             retrieval_function=drive_service.files().get,
@@ -272,18 +264,18 @@ class OxosMasterFileConnector(LoadConnector, PollConnector, SlimConnector):
                         doc = convert_drive_item_to_document(self._creds, self._allow_images, self._size_threshold, [self.primary_admin_email], file)
                         if doc:
                             docs_to_process.append(doc)
-                            
+
                             if len(docs_to_process) >= INDEX_BATCH_SIZE:
                                 yield docs_to_process
                                 docs_to_process = []
-                                
+
                     except HttpError as e:
                         logger.error(f"Error fetching file {doc_id}: {str(e)}")
                         continue
-            
+
             if docs_to_process:
                 yield docs_to_process
-                
+
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
@@ -301,7 +293,7 @@ def main():
         service_account_json = os.getenv("OXOS_GOOGLE_SERVICE_ACCOUNT_JSON")
         if not service_account_json:
             raise ValueError("OXOS_GOOGLE_SERVICE_ACCOUNT_JSON environment variable not set")
-            
+
         primary_admin_email = os.getenv("OXOS_GOOGLE_PRIMARY_ADMIN_EMAIL")
         if not primary_admin_email:
             raise ValueError("OXOS_GOOGLE_PRIMARY_ADMIN_EMAIL environment variable not set")
@@ -312,18 +304,18 @@ def main():
             include_my_drives=True,
             include_files_shared_with_me=True
         )
-        
+
         connector.load_credentials({
             DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: service_account_json,
             DB_CREDENTIALS_PRIMARY_ADMIN_KEY: primary_admin_email,
         })
-        
+
         # Validate connector settings
         connector.validate_connector_settings()
 
         print("\n=== Processing linked documents from spreadsheet ===")
         print("-" * 50)
-        
+
         # Option 1: Load documents from spreadsheet
         print("\nOption 1: Loading documents from spreadsheet...")
         doc_count = 0
@@ -336,7 +328,7 @@ def main():
                     print(f"Content Preview: {preview}")
                 print("-" * 50)
         print(f"\nLoaded {doc_count} documents from spreadsheet")
-        
+
     except Exception as e:
         print(f"Error running connector: {str(e)}")
         raise e

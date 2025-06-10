@@ -2,17 +2,13 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import PublicExternalUserGroup
-from onyx.db.models import User
-from onyx.db.models import User__ExternalUserGroupId
-from onyx.db.users import batch_add_ext_perm_user_if_not_exists
-from onyx.db.users import get_user_by_email
+from onyx.db.models import PublicExternalUserGroup, User, User__ExternalUserGroupId
+from onyx.db.users import batch_add_ext_perm_user_if_not_exists, get_user_by_email
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

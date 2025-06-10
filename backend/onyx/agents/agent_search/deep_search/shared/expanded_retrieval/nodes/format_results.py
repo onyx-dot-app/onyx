@@ -12,15 +12,15 @@ from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.operations i
 )
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalState,
-)
-from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
-from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
-from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.agents.agent_search.shared_graph_utils.utils import (
+    parse_question_id,
+    relevance_from_docs,
+    write_custom_event,
+)
 from onyx.chat.models import ExtendedToolResponse
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 

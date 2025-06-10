@@ -7,32 +7,31 @@ from langchain_core.runnables import RunnableConfig
 from onyx.agents.agent_search.deep_search.main.operations import logger
 from onyx.agents.agent_search.deep_search.main.states import (
     EntityTermExtractionUpdate,
+    MainState,
 )
-from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
-from onyx.agents.agent_search.shared_graph_utils.models import EntityExtractionResult
 from onyx.agents.agent_search.shared_graph_utils.models import (
+    EntityExtractionResult,
     EntityRelationshipTermExtraction,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import (
+    format_docs,
     get_langgraph_node_log_string,
 )
-from onyx.configs.agent_configs import AGENT_MAX_TOKENS_ENTITY_TERM_EXTRACTION
 from onyx.configs.agent_configs import (
+    AGENT_MAX_TOKENS_ENTITY_TERM_EXTRACTION,
     AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
-)
-from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_LLM_ENTITY_TERM_EXTRACTION,
 )
 from onyx.configs.constants import NUM_EXPLORATORY_DOCS
-from onyx.llm.chat_llm import LLMRateLimitError
-from onyx.llm.chat_llm import LLMTimeoutError
-from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT
-from onyx.prompts.agent_search import ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE
+from onyx.llm.chat_llm import LLMRateLimitError, LLMTimeoutError
+from onyx.prompts.agent_search import (
+    ENTITY_TERM_EXTRACTION_PROMPT,
+    ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE,
+)
 from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
 

@@ -7,10 +7,12 @@ import bs4
 import trafilatura  # type: ignore
 from trafilatura.settings import use_config  # type: ignore
 
-from onyx.configs.app_configs import HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY
-from onyx.configs.app_configs import PARSE_WITH_TRAFILATURA
-from onyx.configs.app_configs import WEB_CONNECTOR_IGNORED_CLASSES
-from onyx.configs.app_configs import WEB_CONNECTOR_IGNORED_ELEMENTS
+from onyx.configs.app_configs import (
+    HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY,
+    PARSE_WITH_TRAFILATURA,
+    WEB_CONNECTOR_IGNORED_CLASSES,
+    WEB_CONNECTOR_IGNORED_ELEMENTS,
+)
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.utils.logger import setup_logger
 
@@ -155,9 +157,8 @@ def format_document_soup(
             elif e.name == "li":
                 text += "\n- "
                 list_element_start = True
-            elif e.name == "pre":
-                if verbatim_output <= 0:
-                    verbatim_output = len(list(e.childGenerator()))
+            elif e.name == "pre" and verbatim_output <= 0:
+                verbatim_output = len(list(e.childGenerator()))
     return strip_excessive_newlines_and_spaces(text)
 
 

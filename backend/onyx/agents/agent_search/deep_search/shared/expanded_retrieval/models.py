@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 
-from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
-from onyx.agents.agent_search.shared_graph_utils.models import QueryRetrievalResult
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    AgentChunkRetrievalStats,
+    QueryRetrievalResult,
+)
 from onyx.context.search.models import InferenceSection
 
 

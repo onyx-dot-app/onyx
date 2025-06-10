@@ -6,8 +6,9 @@ import os
 os.environ["MULTI_TENANT"] = "True"
 
 if True:  # noqa: E402
-    import csv
     import argparse
+    import csv
+    import heapq
 
     from pydantic import BaseModel
     from sqlalchemy import func
@@ -15,16 +16,14 @@ if True:  # noqa: E402
     from onyx.db.engine import (
         SYNC_DB_API,
         USE_IAM_AUTH,
+        SqlEngine,
         build_connection_string,
         get_all_tenant_ids,
+        get_session_with_tenant,
     )
-    from onyx.db.engine import get_session_with_tenant
-    from onyx.db.engine import SqlEngine
     from onyx.db.models import Document
     from onyx.utils.logger import setup_logger
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-
-    import heapq
 
     logger = setup_logger()
 

@@ -1,32 +1,35 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.users import current_admin_user, current_user
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
-from onyx.context.search.models import SavedSearchSettings
-from onyx.context.search.models import SearchSettingsCreationRequest
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.connector_credential_pair import resync_cc_pair
+from onyx.context.search.models import (
+    SavedSearchSettings,
+    SearchSettingsCreationRequest,
+)
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pairs,
+    resync_cc_pair,
+)
 from onyx.db.engine import get_session
 from onyx.db.index_attempt import expire_index_attempts
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import User
-from onyx.db.search_settings import create_search_settings
-from onyx.db.search_settings import delete_search_settings
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_embedding_provider_from_provider_type
-from onyx.db.search_settings import get_secondary_search_settings
-from onyx.db.search_settings import update_current_search_settings
-from onyx.db.search_settings import update_search_settings_status
+from onyx.db.models import IndexModelStatus, User
+from onyx.db.search_settings import (
+    create_search_settings,
+    delete_search_settings,
+    get_current_search_settings,
+    get_embedding_provider_from_provider_type,
+    get_secondary_search_settings,
+    update_current_search_settings,
+    update_search_settings_status,
+)
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
-from onyx.file_processing.unstructured import delete_unstructured_api_key
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import update_unstructured_api_key
+from onyx.file_processing.unstructured import (
+    delete_unstructured_api_key,
+    get_unstructured_api_key,
+    update_unstructured_api_key,
+)
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse

@@ -2,17 +2,19 @@ from collections.abc import Callable
 
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
-from onyx.agents.agent_search.shared_graph_utils.models import InitialAgentResultStats
-from onyx.agents.agent_search.shared_graph_utils.models import QueryRetrievalResult
 from onyx.agents.agent_search.shared_graph_utils.models import (
+    AgentChunkRetrievalStats,
+    InitialAgentResultStats,
+    QueryRetrievalResult,
     SubQuestionAnswerResults,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import StreamStopReason
-from onyx.chat.models import StreamType
-from onyx.chat.models import SubQuestionPiece
+from onyx.chat.models import (
+    StreamStopInfo,
+    StreamStopReason,
+    StreamType,
+    SubQuestionPiece,
+)
 from onyx.tools.models import SearchQueryInfo
 from onyx.utils.logger import setup_logger
 

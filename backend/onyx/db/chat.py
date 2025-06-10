@@ -1,60 +1,48 @@
 from collections.abc import Sequence
-from datetime import datetime
-from datetime import timedelta
-from typing import Any
-from typing import cast
-from typing import Tuple
+from datetime import datetime, timedelta
+from typing import Any, Tuple, cast
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import desc
-from sqlalchemy import func
-from sqlalchemy import nullsfirst
-from sqlalchemy import or_
-from sqlalchemy import Row
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Row, delete, desc, func, nullsfirst, or_, select, update
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
 from onyx.agents.agent_search.shared_graph_utils.models import (
+    CombinedAgentMetrics,
     SubQuestionAnswerResults,
 )
 from onyx.auth.schemas import UserRole
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import RetrievalDocs
-from onyx.context.search.models import SavedSearchDoc
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import InferenceSection, RetrievalDocs, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
-from onyx.db.models import AgentSearchMetrics
-from onyx.db.models import AgentSubQuery
-from onyx.db.models import AgentSubQuestion
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatMessage__SearchDoc
-from onyx.db.models import ChatSession
-from onyx.db.models import ChatSessionSharedStatus
-from onyx.db.models import Prompt
-from onyx.db.models import SearchDoc
+from onyx.db.models import (
+    AgentSearchMetrics,
+    AgentSubQuery,
+    AgentSubQuestion,
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatSession,
+    ChatSessionSharedStatus,
+    Prompt,
+    SearchDoc,
+    ToolCall,
+    User,
+    UserFile,
+)
 from onyx.db.models import SearchDoc as DBSearchDoc
-from onyx.db.models import ToolCall
-from onyx.db.models import User
-from onyx.db.models import UserFile
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.db.pg_file_store import delete_lobj_by_name
-from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.override_models import LLMOverride
-from onyx.llm.override_models import PromptOverride
-from onyx.server.query_and_chat.models import ChatMessageDetail
-from onyx.server.query_and_chat.models import SubQueryDetail
-from onyx.server.query_and_chat.models import SubQuestionDetail
+from onyx.file_store.models import FileDescriptor, InMemoryChatFile
+from onyx.llm.override_models import LLMOverride, PromptOverride
+from onyx.server.query_and_chat.models import (
+    ChatMessageDetail,
+    SubQueryDetail,
+    SubQuestionDetail,
+)
 from onyx.tools.tool_runner import ToolCallFinalResult
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -786,9 +774,8 @@ def get_doc_query_identifiers_from_model(
                 doc.chat_messages[0].chat_session_id != chat_session.id
                 for doc in search_docs
             ]
-        ):
-            if enforce_chat_session_id_for_search_docs:
-                raise ValueError("Invalid reference doc, not from this chat session.")
+        ) and enforce_chat_session_id_for_search_docs:
+            raise ValueError("Invalid reference doc, not from this chat session.")
     except IndexError:
         # This happens when the doc has no chat_messages associated with it.
         # which happens as an edge case where the chat message failed to save
@@ -1133,9 +1120,9 @@ def log_agent_sub_question_results(
     now = datetime.now()
 
     for sub_question_answer_result in sub_question_answer_results:
-        level, level_question_num = [
+        level, level_question_num = (
             int(x) for x in sub_question_answer_result.question_id.split("_")
-        ]
+        )
         sub_question = sub_question_answer_result.question
         sub_answer = sub_question_answer_result.answer
         sub_document_results = _create_citation_format_list(

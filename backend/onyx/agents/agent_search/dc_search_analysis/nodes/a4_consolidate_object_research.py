@@ -5,8 +5,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dc_search_analysis.ops import extract_section
-from onyx.agents.agent_search.dc_search_analysis.states import ObjectInformationInput
-from onyx.agents.agent_search.dc_search_analysis.states import ObjectResearchUpdate
+from onyx.agents.agent_search.dc_search_analysis.states import (
+    ObjectInformationInput,
+    ObjectResearchUpdate,
+)
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,

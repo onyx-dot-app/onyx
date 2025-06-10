@@ -9,23 +9,30 @@ from typing import Any
 from simple_salesforce import Salesforce
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.connectors.salesforce.doc_conversion import convert_sf_object_to_doc
-from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
-from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
-from onyx.connectors.salesforce.salesforce_calls import get_all_children_of_sf_type
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    SlimDocument,
+    TextSection,
+)
+from onyx.connectors.salesforce.doc_conversion import (
+    ID_PREFIX,
+    convert_sf_object_to_doc,
+)
+from onyx.connectors.salesforce.salesforce_calls import (
+    fetch_all_csvs_in_parallel,
+    get_all_children_of_sf_type,
+)
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
-from onyx.connectors.salesforce.utils import get_sqlite_db_path
+from onyx.connectors.salesforce.utils import BASE_DATA_PATH, get_sqlite_db_path
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -58,8 +65,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
-        requested_objects: list[str] = [],
+        requested_objects: list[str] = None,
     ) -> None:
+        if requested_objects is None:
+            requested_objects = []
         self.batch_size = batch_size
         self._sf_client: Salesforce | None = None
         self.parent_object_list = (

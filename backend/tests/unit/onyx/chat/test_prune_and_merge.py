@@ -2,10 +2,8 @@ import pytest
 
 from onyx.chat.prune_and_merge import _merge_sections
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import InferenceChunk, InferenceSection
 from onyx.context.search.utils import inference_section_from_chunks
-
 
 # This large test accounts for all of the following:
 # 1. Merging of adjacent sections

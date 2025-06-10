@@ -1,15 +1,16 @@
 from typing import TYPE_CHECKING
 
-from langchain.schema.messages import AIMessage
-from langchain.schema.messages import BaseMessage
-from langchain.schema.messages import HumanMessage
-from langchain.schema.messages import SystemMessage
+from langchain.schema.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
 from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import InMemoryChatFile
-from onyx.llm.utils import build_content_with_imgs
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import build_content_with_imgs, message_to_string
 from onyx.tools.models import ToolCallFinalResult
 
 if TYPE_CHECKING:

@@ -1,7 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
@@ -16,9 +13,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.prompt_utils import build_doc_context_str
-from onyx.server.documents.models import ChunkInfo
-from onyx.server.documents.models import DocumentInfo
-
+from onyx.server.documents.models import ChunkInfo, DocumentInfo
 
 router = APIRouter(prefix="/document")
 

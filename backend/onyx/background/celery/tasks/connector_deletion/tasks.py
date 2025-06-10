@@ -1,12 +1,8 @@
 import traceback
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timezone
+from typing import Any, cast
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -14,49 +10,52 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_queued_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_get_queue_length,
+    celery_get_queued_task_ids,
+)
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.connector_credential_pair import add_deletion_failure_message
 from onyx.db.connector_credential_pair import (
+    add_deletion_failure_message,
     delete_connector_credential_pair__no_commit,
-)
-from onyx.db.connector_credential_pair import (
     delete_userfiles_for_cc_pair__no_commit,
+    get_connector_credential_pair_from_id,
+    get_connector_credential_pairs,
 )
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import (
     delete_all_documents_by_connector_credential_pair__no_commit,
+    get_document_ids_for_connector_credential_pair,
 )
-from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
+from onyx.db.enums import ConnectorCredentialPairStatus, SyncStatus, SyncType
 from onyx.db.index_attempt import delete_index_attempts
 from onyx.db.search_settings import get_all_search_settings
-from onyx.db.sync_record import cleanup_sync_records
-from onyx.db.sync_record import insert_sync_record
-from onyx.db.sync_record import update_sync_record_status
+from onyx.db.sync_record import (
+    cleanup_sync_records,
+    insert_sync_record,
+    update_sync_record_status,
+)
 from onyx.db.tag import delete_orphan_tags__no_commit
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_delete import RedisConnectorDelete
-from onyx.redis.redis_connector_delete import RedisConnectorDeletePayload
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_connector_delete import (
+    RedisConnectorDelete,
+    RedisConnectorDeletePayload,
+)
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import noop_fallback
 
 
 class TaskDependencyError(RuntimeError):

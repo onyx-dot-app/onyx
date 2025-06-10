@@ -3,11 +3,12 @@ from uuid import uuid4
 
 import requests
 
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
-from tests.integration.common_utils.constants import MAX_DELAY
-from tests.integration.common_utils.test_models import DATestDocumentSet
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.constants import (
+    API_SERVER_URL,
+    GENERAL_HEADERS,
+    MAX_DELAY,
+)
+from tests.integration.common_utils.test_models import DATestDocumentSet, DATestUser
 
 
 class DocumentSetManager:

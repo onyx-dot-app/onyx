@@ -7,9 +7,11 @@ Create Date: 2024-07-24 21:29:31.784562
 """
 
 import random
-from alembic import op
+
 import sqlalchemy as sa
-from sqlalchemy.sql import table, column, select
+from sqlalchemy.sql import column, select, table
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "325975216eb3"

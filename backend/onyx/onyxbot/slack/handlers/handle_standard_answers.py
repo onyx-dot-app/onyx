@@ -1,11 +1,9 @@
 from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Prompt
-from onyx.db.models import SlackChannelConfig
+from onyx.db.models import Prompt, SlackChannelConfig
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.utils.logger import OnyxLoggingAdapter
-from onyx.utils.logger import setup_logger
+from onyx.utils.logger import OnyxLoggingAdapter, setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()

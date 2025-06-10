@@ -1,12 +1,14 @@
 import contextvars
 import time
 
-from onyx.utils.threadpool_concurrency import FunctionCall
-from onyx.utils.threadpool_concurrency import run_functions_in_parallel
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import run_in_background
-from onyx.utils.threadpool_concurrency import run_with_timeout
-from onyx.utils.threadpool_concurrency import wait_on_background
+from onyx.utils.threadpool_concurrency import (
+    FunctionCall,
+    run_functions_in_parallel,
+    run_functions_tuples_in_parallel,
+    run_in_background,
+    run_with_timeout,
+    wait_on_background,
+)
 
 # Create a test contextvar
 test_var = contextvars.ContextVar("test_var", default="default")
@@ -43,7 +45,7 @@ def test_run_functions_in_parallel_preserves_contextvar() -> None:
     # Run in parallel and verify all results have the correct value
     results = run_functions_in_parallel(function_calls)
 
-    for result_id, value in results.items():
+    for _result_id, value in results.items():
         assert value == "parallel_test"
 
 

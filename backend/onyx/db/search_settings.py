@@ -1,35 +1,38 @@
-from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session
 
-from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX
-from onyx.configs.model_configs import ASYM_QUERY_PREFIX
-from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
-from onyx.configs.model_configs import DOC_EMBEDDING_DIM
-from onyx.configs.model_configs import DOCUMENT_ENCODER_MODEL
-from onyx.configs.model_configs import NORMALIZE_EMBEDDINGS
-from onyx.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
-from onyx.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
-from onyx.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
+from onyx.configs.model_configs import (
+    ASYM_PASSAGE_PREFIX,
+    ASYM_QUERY_PREFIX,
+    DEFAULT_DOCUMENT_ENCODER_MODEL,
+    DOC_EMBEDDING_DIM,
+    DOCUMENT_ENCODER_MODEL,
+    NORMALIZE_EMBEDDINGS,
+    OLD_DEFAULT_DOCUMENT_ENCODER_MODEL,
+    OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM,
+    OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS,
+)
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import EmbeddingPrecision
 from onyx.db.llm import fetch_embedding_provider
-from onyx.db.models import CloudEmbeddingProvider
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
+from onyx.db.models import (
+    CloudEmbeddingProvider,
+    IndexAttempt,
+    IndexModelStatus,
+    SearchSettings,
+)
 from onyx.indexing.models import IndexingSetting
-from onyx.natural_language_processing.search_nlp_models import clean_model_name
-from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder
+from onyx.natural_language_processing.search_nlp_models import (
+    clean_model_name,
+    warm_up_cross_encoder,
+)
 from onyx.server.manage.embedding.models import (
     CloudEmbeddingProvider as ServerCloudEmbeddingProvider,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import PRESERVED_SEARCH_FIELDS
 from shared_configs.enums import EmbeddingProvider
-
 
 logger = setup_logger()
 

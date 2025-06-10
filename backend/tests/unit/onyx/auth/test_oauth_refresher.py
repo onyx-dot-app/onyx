@@ -1,17 +1,16 @@
-from datetime import datetime
-from datetime import timezone
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from onyx.auth.oauth_refresher import _test_expire_oauth_token
-from onyx.auth.oauth_refresher import check_and_refresh_oauth_tokens
-from onyx.auth.oauth_refresher import check_oauth_account_has_refresh_token
-from onyx.auth.oauth_refresher import get_oauth_accounts_requiring_refresh_token
-from onyx.auth.oauth_refresher import refresh_oauth_token
+from onyx.auth.oauth_refresher import (
+    _test_expire_oauth_token,
+    check_and_refresh_oauth_tokens,
+    check_oauth_account_has_refresh_token,
+    get_oauth_accounts_requiring_refresh_token,
+    refresh_oauth_token,
+)
 from onyx.db.models import OAuthAccount
 
 

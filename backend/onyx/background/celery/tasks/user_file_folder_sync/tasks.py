@@ -1,8 +1,7 @@
 import time
 from typing import List
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
@@ -10,24 +9,32 @@ from tenacity import RetryError
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
-from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
-from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
-from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
+from onyx.background.celery.tasks.shared.tasks import (
+    LIGHT_SOFT_TIME_LIMIT,
+    LIGHT_TIME_LIMIT,
+    OnyxCeleryTaskCompletionStatus,
+)
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import (
+    CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_with_user_files,
 )
 from onyx.db.document import get_document
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+)
 from onyx.db.search_settings import get_active_search_settings
-from onyx.db.user_documents import fetch_user_files_for_documents
-from onyx.db.user_documents import fetch_user_folders_for_documents
+from onyx.db.user_documents import (
+    fetch_user_files_for_documents,
+    fetch_user_folders_for_documents,
+)
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.httpx.httpx_pool import HttpxPool

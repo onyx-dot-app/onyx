@@ -6,18 +6,13 @@ Create Date: 2024-10-26 13:06:06.937969
 
 """
 
-from alembic import op
-from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from alembic import op
 
 # Import your models and constants
-from onyx.db.models import (
-    Connector,
-    ConnectorCredentialPair,
-    Credential,
-    IndexAttempt,
-)
-
+from onyx.db.models import Connector, ConnectorCredentialPair, Credential, IndexAttempt
 
 # revision identifiers, used by Alembic.
 revision = "949b4a92a401"

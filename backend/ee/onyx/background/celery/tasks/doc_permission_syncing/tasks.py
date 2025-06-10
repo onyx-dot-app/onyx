@@ -1,83 +1,91 @@
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from time import sleep
-from typing import Any
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
-from tenacity import retry
-from tenacity import retry_if_exception
-from tenacity import stop_after_delay
-from tenacity import wait_random_exponential
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_delay,
+    wait_random_exponential,
+)
 
 from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSION_SYNC_PERIODS
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
 from ee.onyx.external_permissions.sync_params import (
+    DOC_PERMISSION_SYNC_PERIODS,
+    DOC_PERMISSIONS_FUNC_MAP,
     DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
 )
 from onyx.access.models import DocExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_queued_task_ids
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_find_task,
+    celery_get_queue_length,
+    celery_get_queued_task_ids,
+    celery_get_unacked_task_ids,
+)
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
+    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.document import get_document_ids_for_connector_credential_pair
-from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
+from onyx.db.document import (
+    get_document_ids_for_connector_credential_pair,
+    upsert_document_by_connector_credential_pair,
+)
+from onyx.db.engine import get_session_with_current_tenant, get_session_with_tenant
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    SyncStatus,
+    SyncType,
+)
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.sync_record import insert_sync_record
-from onyx.db.sync_record import update_sync_record_status
+from onyx.db.sync_record import insert_sync_record, update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.db.utils import is_retryable_sqlalchemy_error
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
-from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSyncPayload
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
-from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_connector_doc_perm_sync import (
+    RedisConnectorPermissionSync,
+    RedisConnectorPermissionSyncPayload,
+)
+from onyx.redis.redis_pool import (
+    get_redis_client,
+    get_redis_replica_client,
+    redis_lock_dump,
+)
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
-from onyx.utils.logger import doc_permission_sync_ctx
-from onyx.utils.logger import format_error_for_logging
-from onyx.utils.logger import LoggerContextVars
-from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.logger import (
+    LoggerContextVars,
+    doc_permission_sync_ctx,
+    format_error_for_logging,
+    setup_logger,
+)
+from onyx.utils.telemetry import RecordType, optional_telemetry
 
 logger = setup_logger()
 

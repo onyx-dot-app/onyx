@@ -1,9 +1,7 @@
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
 from ee.onyx.background.task_name_builders import name_chat_ttl_task
@@ -11,12 +9,10 @@ from ee.onyx.server.reporting.usage_export_generation import create_new_usage_re
 from onyx.background.celery.apps.primary import celery_app
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import get_chat_sessions_older_than
+from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import TaskStatus
-from onyx.db.tasks import mark_task_as_finished_with_id
-from onyx.db.tasks import register_task
+from onyx.db.tasks import mark_task_as_finished_with_id, register_task
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 

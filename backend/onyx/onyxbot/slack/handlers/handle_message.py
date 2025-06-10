@@ -3,24 +3,24 @@ import datetime
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
-from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
+from onyx.configs.onyxbot_configs import (
+    DANSWER_BOT_FEEDBACK_REMINDER,
+    DANSWER_REACT_EMOJI,
+)
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
-from onyx.onyxbot.slack.handlers.handle_regular_answer import (
-    handle_regular_answer,
-)
-from onyx.onyxbot.slack.handlers.handle_standard_answers import (
-    handle_standard_answers,
-)
+from onyx.onyxbot.slack.handlers.handle_regular_answer import handle_regular_answer
+from onyx.onyxbot.slack.handlers.handle_standard_answers import handle_standard_answers
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
-from onyx.onyxbot.slack.utils import fetch_user_ids_from_groups
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import slack_usage_report
-from onyx.onyxbot.slack.utils import update_emote_react
+from onyx.onyxbot.slack.utils import (
+    fetch_slack_user_ids_from_emails,
+    fetch_user_ids_from_groups,
+    respond_in_thread_or_channel,
+    slack_usage_report,
+    update_emote_react,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import SLACK_CHANNEL_ID
 
@@ -151,15 +151,14 @@ def handle_message(
     channel_conf = None
     if slack_channel_config and slack_channel_config.channel_config:
         channel_conf = slack_channel_config.channel_config
-        if not bypass_filters and "answer_filters" in channel_conf:
-            if (
-                "questionmark_prefilter" in channel_conf["answer_filters"]
-                and "?" not in messages[-1].message
-            ):
-                logger.info(
-                    "Skipping message since it does not contain a question mark"
-                )
-                return False
+        if not bypass_filters and "answer_filters" in channel_conf and (
+            "questionmark_prefilter" in channel_conf["answer_filters"]
+            and "?" not in messages[-1].message
+        ):
+            logger.info(
+                "Skipping message since it does not contain a question mark"
+            )
+            return False
 
         logger.info(
             "Found slack bot config for channel. Restricting bot to use document "
@@ -201,15 +200,14 @@ def handle_message(
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
     # which would just respond to the sender
-    if send_to and is_bot_msg:
-        if sender_id:
-            respond_in_thread_or_channel(
-                client=client,
-                channel=channel,
-                receiver_ids=[sender_id],
-                text="The OnyxBot slash command is not enabled for this channel",
-                thread_ts=None,
-            )
+    if send_to and is_bot_msg and sender_id:
+        respond_in_thread_or_channel(
+            client=client,
+            channel=channel,
+            receiver_ids=[sender_id],
+            text="The OnyxBot slash command is not enabled for this channel",
+            thread_ts=None,
+        )
 
     try:
         send_msg_ack_to_user(message_info, client)

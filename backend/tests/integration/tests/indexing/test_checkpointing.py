@@ -1,24 +1,22 @@
 import uuid
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import InputType
+from onyx.connectors.models import ConnectorFailure, EntityFailure, InputType
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import IndexingStatus
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
-from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
+from tests.integration.common_utils.constants import (
+    MOCK_CONNECTOR_SERVER_HOST,
+    MOCK_CONNECTOR_SERVER_PORT,
+)
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.index_attempt import IndexAttemptManager
-from tests.integration.common_utils.test_document_utils import create_test_document
 from tests.integration.common_utils.test_document_utils import (
+    create_test_document,
     create_test_document_failure,
 )
 from tests.integration.common_utils.test_models import DATestUser

@@ -1,7 +1,6 @@
 from collections.abc import Generator
 from itertools import chain
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
 from bs4 import BeautifulSoup
@@ -11,14 +10,13 @@ from retry import retry
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+)
+from onyx.connectors.models import BasicExpertInfo, Document, TextSection
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -83,8 +81,7 @@ class ProductboardConnector(PollConnector):
         curr_link = initial_link
         while True:
             response_json = fetch(curr_link)
-            for entity in response_json["data"]:
-                yield entity
+            yield from response_json["data"]
 
             curr_link = response_json.get("links", {}).get("next")
             if not curr_link:

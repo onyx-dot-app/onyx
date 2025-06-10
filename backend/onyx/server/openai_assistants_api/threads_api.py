@@ -1,22 +1,21 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import delete_chat_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_chat_sessions_by_user
-from onyx.db.chat import update_chat_session
+from onyx.db.chat import (
+    create_chat_session,
+    delete_chat_session,
+    get_chat_session_by_id,
+    get_chat_sessions_by_user,
+    update_chat_session,
+)
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.server.query_and_chat.models import ChatSessionDetails
-from onyx.server.query_and_chat.models import ChatSessionsResponse
+from onyx.server.query_and_chat.models import ChatSessionDetails, ChatSessionsResponse
 
 router = APIRouter(prefix="/threads")
 

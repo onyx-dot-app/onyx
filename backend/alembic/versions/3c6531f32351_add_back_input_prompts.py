@@ -6,9 +6,10 @@ Create Date: 2025-01-13 12:49:51.705235
 
 """
 
-from alembic import op
-import sqlalchemy as sa
 import fastapi_users_db_sqlalchemy
+import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "3c6531f32351"

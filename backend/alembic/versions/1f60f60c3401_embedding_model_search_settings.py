@@ -6,10 +6,10 @@ Create Date: 2024-08-25 12:39:51.731632
 
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 
 # revision identifiers, used by Alembic.

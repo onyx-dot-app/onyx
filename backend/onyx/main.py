@@ -3,16 +3,11 @@ import sys
 import traceback
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import sentry_sdk
 import uvicorn
-from fastapi import APIRouter
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi import Request
-from fastapi import status
+from fastapi import APIRouter, FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,31 +18,26 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from starlette.types import Lifespan
 
 from onyx import __version__
-from onyx.auth.schemas import UserCreate
-from onyx.auth.schemas import UserRead
-from onyx.auth.schemas import UserUpdate
-from onyx.auth.users import auth_backend
-from onyx.auth.users import create_onyx_oauth_router
-from onyx.auth.users import fastapi_users
-from onyx.configs.app_configs import APP_API_PREFIX
-from onyx.configs.app_configs import APP_HOST
-from onyx.configs.app_configs import APP_PORT
-from onyx.configs.app_configs import AUTH_RATE_LIMITING_ENABLED
-from onyx.configs.app_configs import AUTH_TYPE
-from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.app_configs import LOG_ENDPOINT_LATENCY
-from onyx.configs.app_configs import OAUTH_CLIENT_ID
-from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
-from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
-from onyx.configs.app_configs import SYSTEM_RECURSION_LIMIT
-from onyx.configs.app_configs import USER_AUTH_SECRET
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import AuthType
-from onyx.configs.constants import POSTGRES_WEB_APP_NAME
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import SqlEngine
-from onyx.db.engine import warm_up_connections
+from onyx.auth.schemas import UserCreate, UserRead, UserUpdate
+from onyx.auth.users import auth_backend, create_onyx_oauth_router, fastapi_users
+from onyx.configs.app_configs import (
+    APP_API_PREFIX,
+    APP_HOST,
+    APP_PORT,
+    AUTH_RATE_LIMITING_ENABLED,
+    AUTH_TYPE,
+    DISABLE_GENERATIVE_AI,
+    LOG_ENDPOINT_LATENCY,
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    POSTGRES_API_SERVER_POOL_OVERFLOW,
+    POSTGRES_API_SERVER_POOL_SIZE,
+    SYSTEM_RECURSION_LIMIT,
+    USER_AUTH_SECRET,
+    WEB_DOMAIN,
+)
+from onyx.configs.constants import POSTGRES_WEB_APP_NAME, AuthType
+from onyx.db.engine import SqlEngine, get_session_context_manager, warm_up_connections
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
@@ -60,9 +50,7 @@ from onyx.server.features.folder.api import router as folder_router
 from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
-from onyx.server.features.input_prompt.api import (
-    basic_router as input_prompt_router,
-)
+from onyx.server.features.input_prompt.api import basic_router as input_prompt_router
 from onyx.server.features.notifications.api import router as notification_router
 from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
@@ -83,40 +71,38 @@ from onyx.server.manage.search_settings import router as search_settings_router
 from onyx.server.manage.slack_bot import router as slack_bot_management_router
 from onyx.server.manage.users import router as user_router
 from onyx.server.middleware.latency_logging import add_latency_logging_middleware
-from onyx.server.middleware.rate_limiting import close_auth_limiter
-from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
-from onyx.server.middleware.rate_limiting import setup_auth_limiter
+from onyx.server.middleware.rate_limiting import (
+    close_auth_limiter,
+    get_auth_rate_limiters,
+    setup_auth_limiter,
+)
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
 )
 from onyx.server.query_and_chat.chat_backend import router as chat_router
-from onyx.server.query_and_chat.query_backend import (
-    admin_router as admin_query_router,
-)
+from onyx.server.query_and_chat.query_backend import admin_router as admin_query_router
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
-from onyx.server.token_rate_limits.api import (
-    router as token_rate_limit_settings_router,
-)
+from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
 from onyx.server.user_documents.api import router as user_documents_router
 from onyx.server.utils import BasicAuthenticationError
-from onyx.setup import setup_multitenant_onyx
-from onyx.setup import setup_onyx
-from onyx.utils.logger import setup_logger
-from onyx.utils.logger import setup_uvicorn_logger
+from onyx.setup import setup_multitenant_onyx, setup_onyx
+from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
-from onyx.utils.telemetry import get_or_generate_uuid
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
-from onyx.utils.variable_functionality import fetch_versioned_implementation
-from onyx.utils.variable_functionality import global_version
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
-from shared_configs.configs import CORS_ALLOWED_ORIGIN
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SENTRY_DSN
+from onyx.utils.telemetry import RecordType, get_or_generate_uuid, optional_telemetry
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
+    global_version,
+    set_is_ee_based_on_env_variable,
+)
+from shared_configs.configs import (
+    CORS_ALLOWED_ORIGIN,
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SENTRY_DSN,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -327,10 +313,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_tool_router)
     include_router_with_global_prefix_prepended(application, state_router)
     include_router_with_global_prefix_prepended(application, onyx_api_router)
-    
+
     from onyx.server.onyx_api.google_docs import router as google_docs_router
     include_router_with_global_prefix_prepended(application, google_docs_router)
-    
+
     include_router_with_global_prefix_prepended(application, gpts_router)
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)

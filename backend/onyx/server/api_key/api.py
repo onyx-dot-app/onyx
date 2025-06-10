@@ -1,18 +1,18 @@
-from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
-from onyx.db.api_key import ApiKeyDescriptor
-from onyx.db.api_key import fetch_api_keys
-from onyx.db.api_key import insert_api_key
-from onyx.db.api_key import regenerate_api_key
-from onyx.db.api_key import remove_api_key
-from onyx.db.api_key import update_api_key
+from onyx.db.api_key import (
+    ApiKeyDescriptor,
+    fetch_api_keys,
+    insert_api_key,
+    regenerate_api_key,
+    remove_api_key,
+    update_api_key,
+)
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
-
 
 router = APIRouter(prefix="/admin/api-key")
 

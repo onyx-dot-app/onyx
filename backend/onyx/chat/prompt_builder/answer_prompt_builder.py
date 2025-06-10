@@ -1,9 +1,7 @@
 from collections.abc import Callable
 from typing import cast
 
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModel__v1
 
@@ -14,20 +12,21 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.llm.models import PreviousMessage
-from onyx.llm.utils import build_content_with_imgs
-from onyx.llm.utils import check_message_tokens
-from onyx.llm.utils import message_to_prompt_and_imgs
-from onyx.llm.utils import model_supports_image_input
+from onyx.llm.utils import (
+    build_content_with_imgs,
+    check_message_tokens,
+    message_to_prompt_and_imgs,
+    model_supports_image_input,
+)
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT
-from onyx.prompts.chat_prompts import CODE_BLOCK_MARKDOWN
+from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT, CODE_BLOCK_MARKDOWN
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
-from onyx.prompts.prompt_utils import drop_messages_history_overflow
-from onyx.prompts.prompt_utils import handle_onyx_date_awareness
+from onyx.prompts.prompt_utils import (
+    drop_messages_history_overflow,
+    handle_onyx_date_awareness,
+)
 from onyx.tools.force import ForceUseTool
-from onyx.tools.models import ToolCallFinalResult
-from onyx.tools.models import ToolCallKickoff
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import ToolCallFinalResult, ToolCallKickoff, ToolResponse
 from onyx.tools.tool import Tool
 
 
@@ -58,9 +57,11 @@ def default_build_system_message(
 def default_build_user_message(
     user_query: str,
     prompt_config: PromptConfig,
-    files: list[InMemoryChatFile] = [],
+    files: list[InMemoryChatFile] = None,
     single_message_history: str | None = None,
 ) -> HumanMessage:
+    if files is None:
+        files = []
     history_block = (
         HISTORY_BLOCK.format(history_str=single_message_history)
         if single_message_history

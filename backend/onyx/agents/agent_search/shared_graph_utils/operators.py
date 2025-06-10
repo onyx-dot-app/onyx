@@ -1,6 +1,4 @@
-from onyx.agents.agent_search.shared_graph_utils.models import (
-    SubQuestionAnswerResults,
-)
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.chat.prune_and_merge import _merge_sections
 from onyx.context.search.models import InferenceSection
 

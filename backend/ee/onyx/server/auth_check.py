@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 
-from onyx.server.auth_check import check_router_auth
-from onyx.server.auth_check import PUBLIC_ENDPOINT_SPECS
-
+from onyx.server.auth_check import PUBLIC_ENDPOINT_SPECS, check_router_auth
 
 EE_PUBLIC_ENDPOINT_SPECS = PUBLIC_ENDPOINT_SPECS + [
     # needs to be accessible prior to user login

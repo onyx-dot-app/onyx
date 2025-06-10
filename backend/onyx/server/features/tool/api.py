@@ -1,28 +1,27 @@
 from typing import Any
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.users import current_admin_user, current_user
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.db.tools import create_tool
-from onyx.db.tools import delete_tool
-from onyx.db.tools import get_tool_by_id
-from onyx.db.tools import get_tools
-from onyx.db.tools import update_tool
-from onyx.server.features.tool.models import CustomToolCreate
-from onyx.server.features.tool.models import CustomToolUpdate
-from onyx.server.features.tool.models import ToolSnapshot
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
-    openapi_to_method_specs,
+from onyx.db.tools import (
+    create_tool,
+    delete_tool,
+    get_tool_by_id,
+    get_tools,
+    update_tool,
+)
+from onyx.server.features.tool.models import (
+    CustomToolCreate,
+    CustomToolUpdate,
+    ToolSnapshot,
 )
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    MethodSpec,
+    openapi_to_method_specs,
     validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (

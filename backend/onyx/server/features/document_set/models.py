@@ -1,12 +1,13 @@
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.db.models import DocumentSet as DocumentSetDBModel
-from onyx.server.documents.models import ConnectorCredentialPairDescriptor
-from onyx.server.documents.models import ConnectorSnapshot
-from onyx.server.documents.models import CredentialSnapshot
+from onyx.server.documents.models import (
+    ConnectorCredentialPairDescriptor,
+    ConnectorSnapshot,
+    CredentialSnapshot,
+)
 
 
 class DocumentSetCreationRequest(BaseModel):

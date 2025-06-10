@@ -1,6 +1,4 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
@@ -9,29 +7,33 @@ from onyx.auth.users import current_admin_user
 from onyx.configs.constants import MilestoneRecordType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.engine import get_session
-from onyx.db.models import ChannelConfig
-from onyx.db.models import User
+from onyx.db.models import ChannelConfig, User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.slack_bot import fetch_slack_bot
-from onyx.db.slack_bot import fetch_slack_bot_tokens
-from onyx.db.slack_bot import fetch_slack_bots
-from onyx.db.slack_bot import insert_slack_bot
-from onyx.db.slack_bot import remove_slack_bot
-from onyx.db.slack_bot import update_slack_bot
-from onyx.db.slack_channel_config import create_slack_channel_persona
-from onyx.db.slack_channel_config import fetch_slack_channel_config
-from onyx.db.slack_channel_config import fetch_slack_channel_configs
-from onyx.db.slack_channel_config import insert_slack_channel_config
-from onyx.db.slack_channel_config import remove_slack_channel_config
-from onyx.db.slack_channel_config import update_slack_channel_config
+from onyx.db.slack_bot import (
+    fetch_slack_bot,
+    fetch_slack_bot_tokens,
+    fetch_slack_bots,
+    insert_slack_bot,
+    remove_slack_bot,
+    update_slack_bot,
+)
+from onyx.db.slack_channel_config import (
+    create_slack_channel_persona,
+    fetch_slack_channel_config,
+    fetch_slack_channel_configs,
+    insert_slack_channel_config,
+    remove_slack_channel_config,
+    update_slack_channel_config,
+)
 from onyx.onyxbot.slack.config import validate_channel_name
-from onyx.server.manage.models import SlackBot
-from onyx.server.manage.models import SlackBotCreationRequest
-from onyx.server.manage.models import SlackChannel
-from onyx.server.manage.models import SlackChannelConfig
-from onyx.server.manage.models import SlackChannelConfigCreationRequest
-from onyx.server.manage.validate_tokens import validate_app_token
-from onyx.server.manage.validate_tokens import validate_bot_token
+from onyx.server.manage.models import (
+    SlackBot,
+    SlackBotCreationRequest,
+    SlackChannel,
+    SlackChannelConfig,
+    SlackChannelConfigCreationRequest,
+)
+from onyx.server.manage.validate_tokens import validate_app_token, validate_bot_token
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id

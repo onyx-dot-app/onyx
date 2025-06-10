@@ -1,23 +1,20 @@
-from typing import Any
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine import get_session
-from onyx.db.models import Persona
-from onyx.db.models import User
-from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas_for_user
-from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import upsert_persona
+from onyx.db.models import Persona, User
+from onyx.db.persona import (
+    get_persona_by_id,
+    get_personas_for_user,
+    mark_persona_as_deleted,
+    upsert_persona,
+)
 from onyx.db.prompts import upsert_prompt
 from onyx.db.tools import get_tool_by_name
 from onyx.utils.logger import setup_logger

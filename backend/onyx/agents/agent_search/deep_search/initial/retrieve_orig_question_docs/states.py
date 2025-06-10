@@ -1,6 +1,4 @@
-from onyx.agents.agent_search.deep_search.main.states import (
-    OrigQuestionRetrievalUpdate,
-)
+from onyx.agents.agent_search.deep_search.main.states import OrigQuestionRetrievalUpdate
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalInput,
 )

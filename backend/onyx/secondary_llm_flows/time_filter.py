@@ -1,13 +1,11 @@
+import contextlib
 import json
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from dateutil.parser import parse
 
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import dict_based_prompt_to_langchain_prompt, message_to_string
 from onyx.prompts.filter_extration import TIME_FILTER_PROMPT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.utils.logger import setup_logger
@@ -115,10 +113,8 @@ def extract_time_filter(query: str, llm: LLM) -> tuple[datetime | None, bool]:
             multiplier = 1.0
 
             if "value_multiple" in model_json:
-                try:
+                with contextlib.suppress(ValueError):
                     multiplier = float(model_json["value_multiple"])
-                except ValueError:
-                    pass
 
             if "filter_value" in model_json:
                 filter_value = model_json["filter_value"]

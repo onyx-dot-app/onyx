@@ -1,8 +1,7 @@
 import copy
 import time
 from collections.abc import Iterator
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import requests
 from pydantic import BaseModel
@@ -11,28 +10,31 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
-    time_str_to_utc,
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
 )
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import CheckpointedConnector
-from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import ConnectorFailure
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointOutput,
+    ConnectorFailure,
+    GenerateSlimDocumentOutput,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    BasicExpertInfo,
+    ConnectorCheckpoint,
+    Document,
+    DocumentFailure,
+    SlimDocument,
+    TextSection,
+)
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.retry_wrapper import retry_builder
-
 
 MAX_PAGE_SIZE = 30  # Zendesk API maximum
 MAX_AUTHOR_MAP_SIZE = 50_000  # Reset author map cache if it gets too large
@@ -110,8 +112,7 @@ def _get_articles(
 
     while True:
         data = client.make_request("help_center/articles", params)
-        for article in data["articles"]:
-            yield article
+        yield from data["articles"]
 
         if not data.get("meta", {}).get("has_more"):
             break
@@ -145,8 +146,7 @@ def _get_tickets(
 
     while True:
         data = client.make_request("incremental/tickets.json", params)
-        for ticket in data["tickets"]:
-            yield ticket
+        yield from data["tickets"]
 
         if not data.get("end_of_stream", False):
             params["start_time"] = data["end_time"]

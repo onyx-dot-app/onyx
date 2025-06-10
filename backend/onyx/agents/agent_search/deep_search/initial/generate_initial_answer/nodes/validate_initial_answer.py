@@ -4,9 +4,7 @@ from onyx.agents.agent_search.deep_search.initial.generate_initial_answer.states
     SubQuestionRetrievalState,
 )
 from onyx.agents.agent_search.deep_search.main.operations import logger
-from onyx.agents.agent_search.deep_search.main.states import (
-    InitialAnswerQualityUpdate,
-)
+from onyx.agents.agent_search.deep_search.main.states import InitialAnswerQualityUpdate
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )

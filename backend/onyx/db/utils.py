@@ -1,7 +1,6 @@
 from typing import Any
 
-from psycopg2 import errorcodes
-from psycopg2 import OperationalError
+from psycopg2 import OperationalError, errorcodes
 from sqlalchemy import inspect
 
 from onyx.db.models import Base

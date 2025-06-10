@@ -1,31 +1,33 @@
 import os
 from datetime import datetime
 from io import BytesIO
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.highspot.client import HighspotClient
-from onyx.connectors.highspot.client import HighspotClientError
+from onyx.connectors.highspot.client import HighspotClient, HighspotClientError
 from onyx.connectors.highspot.utils import scrape_url_content
-from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimConnector
-from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import ACCEPTED_DOCUMENT_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    SlimDocument,
+    TextSection,
+)
+from onyx.file_processing.extract_file_text import (
+    ACCEPTED_DOCUMENT_FILE_EXTENSIONS,
+    ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS,
+    extract_file_text,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -245,12 +247,12 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                                     doc_batch = []
 
                             except HighspotClientError as e:
-                                item_id = "ID" if not item_id else item_id
+                                item_id = item_id if item_id else "ID"
                                 logger.error(
                                     f"Error retrieving item {item_id}: {str(e)}"
                                 )
                             except Exception as e:
-                                item_id = "ID" if not item_id else item_id
+                                item_id = item_id if item_id else "ID"
                                 logger.error(
                                     f"Unexpected error for item {item_id}: {str(e)}"
                                 )

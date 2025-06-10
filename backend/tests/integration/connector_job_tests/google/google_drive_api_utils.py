@@ -3,11 +3,12 @@ from uuid import uuid4
 
 from google.oauth2.service_account import Credentials
 
-from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_google_docs_service
-from onyx.connectors.google_utils.resources import GoogleDocsService
-from onyx.connectors.google_utils.resources import GoogleDriveService
-
+from onyx.connectors.google_utils.resources import (
+    GoogleDocsService,
+    GoogleDriveService,
+    get_drive_service,
+    get_google_docs_service,
+)
 
 GOOGLE_SCOPES = {
     "google_drive": [

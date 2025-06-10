@@ -1,15 +1,11 @@
 import io
 import mimetypes
-from typing import cast
-from typing import IO
-from typing import List
-from typing import Tuple
+from typing import IO, List, Tuple, cast
 
 import requests
 
 from onyx.file_store.models import FileDescriptor
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
 

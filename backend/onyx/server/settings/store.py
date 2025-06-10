@@ -1,6 +1,5 @@
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
-from onyx.configs.constants import KV_SETTINGS_KEY
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import KV_SETTINGS_KEY, OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client

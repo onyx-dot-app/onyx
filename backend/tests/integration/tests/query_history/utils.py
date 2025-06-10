@@ -1,5 +1,4 @@
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from onyx.configs.constants import QAFeedbackType
 from tests.integration.common_utils.managers.api_key import APIKeyManager
@@ -8,8 +7,7 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DAQueryHistoryEntry
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DAQueryHistoryEntry, DATestUser
 
 
 def _create_chat_session_with_feedback(

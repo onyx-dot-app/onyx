@@ -1,24 +1,23 @@
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timezone
+from typing import Any, cast
 
 import httpx
 
-from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
-from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
-    rate_limit_builder,
+from onyx.configs.app_configs import (
+    MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE,
+    VESPA_REQUEST_TIMEOUT,
 )
-from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
-from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    LoadConnector,
+    PollConnector,
+    SlimConnector,
+)
 from onyx.connectors.models import Document
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -62,11 +61,10 @@ def extract_ids_from_runnable_connector(
             max_calls=MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE, period=60
         )(document_batch_to_ids)
     for doc_batch in doc_batch_generator:
-        if callback:
-            if callback.should_stop():
-                raise RuntimeError(
-                    "extract_ids_from_runnable_connector: Stop signal detected"
-                )
+        if callback and callback.should_stop():
+            raise RuntimeError(
+                "extract_ids_from_runnable_connector: Stop signal detected"
+            )
 
         all_connector_doc_ids.update(doc_batch_processing_func(doc_batch))
 
@@ -82,11 +80,7 @@ def celery_is_listening_to_queue(worker: Any, name: str) -> bool:
     # how to get a list of queues this worker is listening to
     # https://stackoverflow.com/questions/29790523/how-to-determine-which-queues-a-celery-worker-is-consuming-at-runtime
     queue_names = list(worker.app.amqp.queues.consume_from.keys())
-    for queue_name in queue_names:
-        if queue_name == name:
-            return True
-
-    return False
+    return any(queue_name == name for queue_name in queue_names)
 
 
 def celery_is_worker_primary(worker: Any) -> bool:

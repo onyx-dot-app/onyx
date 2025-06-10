@@ -6,15 +6,18 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.constants import DEFAULT_PERSONA_SLACK_CHANNEL_NAME
-from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.models import ChannelConfig
-from onyx.db.models import Persona
-from onyx.db.models import Persona__DocumentSet
-from onyx.db.models import SlackChannelConfig
-from onyx.db.models import User
-from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import upsert_persona
+from onyx.db.constants import (
+    DEFAULT_PERSONA_SLACK_CHANNEL_NAME,
+    SLACK_BOT_PERSONA_PREFIX,
+)
+from onyx.db.models import (
+    ChannelConfig,
+    Persona,
+    Persona__DocumentSet,
+    SlackChannelConfig,
+    User,
+)
+from onyx.db.persona import mark_persona_as_deleted, upsert_persona
 from onyx.db.prompts import get_default_prompt
 from onyx.tools.built_in_tools import get_search_tool
 from onyx.utils.errors import EERequiredError

@@ -6,14 +6,9 @@ from pydantic import BaseModel
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
 from onyx.background.task_utils import extract_task_id_from_query_history_report_name
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import QAFeedbackType
-from onyx.configs.constants import SessionType
+from onyx.configs.constants import MessageType, QAFeedbackType, SessionType
 from onyx.db.enums import TaskStatus
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import PGFileStore
-from onyx.db.models import TaskQueueState
+from onyx.db.models import ChatMessage, ChatSession, PGFileStore, TaskQueueState
 
 
 class AbridgedSearchDoc(BaseModel):

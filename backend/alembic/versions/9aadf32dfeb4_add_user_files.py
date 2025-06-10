@@ -6,10 +6,11 @@ Create Date: 2025-01-26 16:08:21.551022
 
 """
 
-import sqlalchemy as sa
 import datetime
-from alembic import op
 
+import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "9aadf32dfeb4"

@@ -15,21 +15,26 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from transformers import logging as transformer_logging  # type:ignore
 
 from model_server.custom_models import router as custom_models_router
-from model_server.custom_models import warm_up_information_content_model
-from model_server.custom_models import warm_up_intent_model
+from model_server.custom_models import (
+    warm_up_information_content_model,
+    warm_up_intent_model,
+)
 from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
 from model_server.utils import get_gpu_type
 from onyx import __version__
-from onyx.utils.logger import setup_logger
-from onyx.utils.logger import setup_uvicorn_logger
-from onyx.utils.middleware import add_onyx_request_id_middleware
-from onyx.utils.middleware import add_onyx_tenant_id_middleware
-from shared_configs.configs import INDEXING_ONLY
-from shared_configs.configs import MIN_THREADS_ML_MODELS
-from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.configs import SENTRY_DSN
+from onyx.utils.logger import setup_logger, setup_uvicorn_logger
+from onyx.utils.middleware import (
+    add_onyx_request_id_middleware,
+    add_onyx_tenant_id_middleware,
+)
+from shared_configs.configs import (
+    INDEXING_ONLY,
+    MIN_THREADS_ML_MODELS,
+    MODEL_SERVER_ALLOWED_HOST,
+    MODEL_SERVER_PORT,
+    SENTRY_DSN,
+)
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"

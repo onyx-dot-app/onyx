@@ -2,29 +2,30 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from itertools import groupby
-from typing import Dict
-from typing import List
-from typing import Tuple
+from typing import Dict, List, Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage
-from onyx.db.models import ChatSession
-from onyx.db.models import TokenRateLimit
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
+from onyx.db.models import (
+    ChatMessage,
+    ChatSession,
+    TokenRateLimit,
+    TokenRateLimit__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+)
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
-from onyx.server.query_and_chat.token_limit import _get_cutoff_time
-from onyx.server.query_and_chat.token_limit import _is_rate_limited
-from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_global
+from onyx.server.query_and_chat.token_limit import (
+    _get_cutoff_time,
+    _is_rate_limited,
+    _user_is_rate_limited_by_global,
+)
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 

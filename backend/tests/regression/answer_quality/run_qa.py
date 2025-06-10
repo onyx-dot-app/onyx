@@ -7,8 +7,10 @@ import time
 import yaml
 
 from tests.regression.answer_quality.api_utils import get_answer_from_query
-from tests.regression.answer_quality.cli_utils import get_current_commit_sha
-from tests.regression.answer_quality.cli_utils import get_docker_container_env_vars
+from tests.regression.answer_quality.cli_utils import (
+    get_current_commit_sha,
+    get_docker_container_env_vars,
+)
 
 RESULTS_FILENAME = "results.jsonl"
 METADATA_FILENAME = "metadata.yaml"
@@ -24,7 +26,7 @@ def _populate_results_file(output_folder_path: str, all_qa_output: list[dict]) -
 
 def _update_metadata_file(test_output_folder: str, invalid_answer_count: int) -> None:
     metadata_path = os.path.join(test_output_folder, METADATA_FILENAME)
-    with open(metadata_path, "r", encoding="utf-8") as file:
+    with open(metadata_path, encoding="utf-8") as file:
         metadata = yaml.safe_load(file)
 
     metadata["number_of_failed_questions"] = invalid_answer_count
@@ -34,7 +36,7 @@ def _update_metadata_file(test_output_folder: str, invalid_answer_count: int) ->
 
 def _read_questions_jsonl(questions_file_path: str) -> list[dict]:
     questions = []
-    with open(questions_file_path, "r") as file:
+    with open(questions_file_path) as file:
         for line in file:
             json_obj = json.loads(line)
             questions.append(json_obj)
@@ -177,7 +179,7 @@ def _process_and_write_query_results(config: dict) -> None:
 def run_qa_test_and_save_results(env_name: str = "") -> None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(current_dir, "search_test_config.yaml")
-    with open(config_path, "r") as file:
+    with open(config_path) as file:
         config = yaml.safe_load(file)
 
     if not isinstance(config, dict):

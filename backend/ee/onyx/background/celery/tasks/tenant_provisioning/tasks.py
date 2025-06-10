@@ -6,24 +6,26 @@ import asyncio
 import datetime
 import uuid
 
-from celery import shared_task
-from celery import Task
+from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
 from ee.onyx.server.tenants.provisioning import setup_tenant
-from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
-from ee.onyx.server.tenants.schema_management import get_current_alembic_version
+from ee.onyx.server.tenants.schema_management import (
+    create_schema_if_not_exists,
+    get_current_alembic_version,
+)
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import TARGET_AVAILABLE_TENANTS
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import (
+    ONYX_CLOUD_TENANT_ID,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisLocks,
+)
 from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.models import AvailableTenant
 from onyx.redis.redis_pool import get_redis_client
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.configs import MULTI_TENANT, TENANT_ID_PREFIX
 
 # Default number of pre-provisioned tenants to maintain
 DEFAULT_TARGET_AVAILABLE_TENANTS = 5

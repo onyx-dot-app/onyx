@@ -6,16 +6,15 @@ Create Date: 2025-04-23 15:39:43.159504
 
 """
 
-from alembic import op
-from pydantic import BaseModel, ConfigDict
 import sqlalchemy as sa
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 from onyx.llm.llm_provider_options import (
     fetch_model_names_for_provider_as_set,
     fetch_visible_model_names_for_provider_as_set,
 )
-
 
 # revision identifiers, used by Alembic.
 revision = "47a07e1a38f1"

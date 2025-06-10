@@ -1,40 +1,45 @@
 from collections.abc import Callable
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accessible_user
+from onyx.auth.users import current_admin_user, current_chat_accessible_user
 from onyx.db.engine import get_session
-from onyx.db.llm import fetch_existing_llm_provider
-from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_existing_llm_providers_for_user
-from onyx.db.llm import remove_llm_provider
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import update_default_vision_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import (
+    fetch_existing_llm_provider,
+    fetch_existing_llm_providers,
+    fetch_existing_llm_providers_for_user,
+    remove_llm_provider,
+    update_default_provider,
+    update_default_vision_provider,
+    upsert_llm_provider,
+)
 from onyx.db.models import User
-from onyx.llm.factory import get_default_llms
-from onyx.llm.factory import get_llm
-from onyx.llm.factory import get_max_input_tokens_from_llm_provider
-from onyx.llm.llm_provider_options import fetch_available_well_known_llms
-from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
-from onyx.llm.utils import get_llm_contextual_cost
-from onyx.llm.utils import litellm_exception_to_error_msg
-from onyx.llm.utils import model_supports_image_input
-from onyx.llm.utils import test_llm
-from onyx.server.manage.llm.models import LLMCost
-from onyx.server.manage.llm.models import LLMProviderDescriptor
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
-from onyx.server.manage.llm.models import TestLLMRequest
-from onyx.server.manage.llm.models import VisionProviderResponse
+from onyx.llm.factory import (
+    get_default_llms,
+    get_llm,
+    get_max_input_tokens_from_llm_provider,
+)
+from onyx.llm.llm_provider_options import (
+    WellKnownLLMProviderDescriptor,
+    fetch_available_well_known_llms,
+)
+from onyx.llm.utils import (
+    get_llm_contextual_cost,
+    litellm_exception_to_error_msg,
+    model_supports_image_input,
+    test_llm,
+)
+from onyx.server.manage.llm.models import (
+    LLMCost,
+    LLMProviderDescriptor,
+    LLMProviderUpsertRequest,
+    LLMProviderView,
+    ModelConfigurationUpsertRequest,
+    TestLLMRequest,
+    VisionProviderResponse,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 

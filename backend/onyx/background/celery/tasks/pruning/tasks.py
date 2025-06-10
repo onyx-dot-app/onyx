@@ -1,14 +1,9 @@
 import time
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 from uuid import uuid4
 
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import ValidationError
 from redis import Redis
@@ -16,50 +11,55 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
-from onyx.background.celery.celery_redis import celery_get_queue_length
-from onyx.background.celery.celery_redis import celery_get_queued_task_ids
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_find_task,
+    celery_get_queue_length,
+    celery_get_queued_task_ids,
+    celery_get_unacked_task_ids,
+)
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.background.celery.tasks.indexing.utils import IndexingCallbackBase
-from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_PRUNING_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.constants import OnyxRedisSignals
+from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_PRUNING_LOCK_TIMEOUT,
+    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+    OnyxRedisSignals,
+)
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import InputType
 from onyx.db.connector import mark_ccpair_as_pruned
-from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair,
+    get_connector_credential_pair_from_id,
+    get_connector_credential_pairs,
+)
 from onyx.db.document import get_documents_for_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
+from onyx.db.enums import ConnectorCredentialPairStatus, SyncStatus, SyncType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.sync_record import insert_sync_record
-from onyx.db.sync_record import update_sync_record_status
+from onyx.db.sync_record import insert_sync_record, update_sync_record_status
 from onyx.db.tag import delete_orphan_tags__no_commit
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_prune import RedisConnectorPrune
-from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.redis.redis_connector_prune import (
+    RedisConnectorPrune,
+    RedisConnectorPrunePayload,
+)
+from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.server.utils import make_short_id
-from onyx.utils.logger import format_error_for_logging
-from onyx.utils.logger import LoggerContextVars
-from onyx.utils.logger import pruning_ctx
-from onyx.utils.logger import setup_logger
+from onyx.utils.logger import (
+    LoggerContextVars,
+    format_error_for_logging,
+    pruning_ctx,
+    setup_logger,
+)
 
 logger = setup_logger()
 

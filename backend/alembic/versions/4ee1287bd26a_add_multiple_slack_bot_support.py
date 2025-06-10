@@ -7,12 +7,14 @@ Create Date: 2024-11-06 13:15:53.302644
 """
 
 from typing import cast
-from alembic import op
+
 import sqlalchemy as sa
-from sqlalchemy.orm import Session
-from onyx.key_value_store.factory import get_kv_store
-from onyx.db.models import SlackBot
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import Session
+
+from alembic import op
+from onyx.db.models import SlackBot
+from onyx.key_value_store.factory import get_kv_store
 
 # revision identifiers, used by Alembic.
 revision = "4ee1287bd26a"

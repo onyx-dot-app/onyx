@@ -9,16 +9,18 @@ Assumptions:
     - chat:write.public
 """
 
+import contextlib
 from typing import Any
 from uuid import uuid4
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from onyx.connectors.slack.connector import default_msg_filter
-from onyx.connectors.slack.connector import get_channel_messages
-from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
-from onyx.connectors.slack.utils import make_slack_api_call_w_retries
+from onyx.connectors.slack.connector import default_msg_filter, get_channel_messages
+from onyx.connectors.slack.utils import (
+    make_paginated_slack_api_call_w_retries,
+    make_slack_api_call_w_retries,
+)
 
 
 def _get_slack_channel_id(channel: dict[str, Any]) -> str:
@@ -158,13 +160,11 @@ def _build_slack_channel_from_name(
     except Exception:
         # Channel is already unarchived
         pass
-    try:
+    with contextlib.suppress(Exception):
         slack_client.conversations_invite(
             channel=channel_response["channel"]["id"],
             users=[admin_user_id],
         )
-    except Exception:
-        pass
 
     final_channel = channel_response["channel"] if channel_response else {}
     return final_channel

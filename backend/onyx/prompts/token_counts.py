@@ -1,9 +1,11 @@
 from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.llm.utils import check_number_of_tokens
-from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import CHAT_USER_PROMPT
-from onyx.prompts.chat_prompts import CITATION_REMINDER
-from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
+from onyx.prompts.chat_prompts import (
+    ADDITIONAL_INFO,
+    CHAT_USER_PROMPT,
+    CITATION_REMINDER,
+    REQUIRE_CITATION_STATEMENT,
+)
 from onyx.prompts.constants import DEFAULT_IGNORE_STATEMENT
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 

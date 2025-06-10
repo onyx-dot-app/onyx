@@ -1,23 +1,20 @@
 import uuid
 from datetime import datetime
-from typing import Any
-from typing import Literal
-from typing import Optional
+from typing import Any, Literal, Optional
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from pydantic import BaseModel
-from pydantic import Field
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.configs.constants import MessageType
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_chat_message
-from onyx.db.chat import get_chat_messages_by_session
-from onyx.db.chat import get_chat_session_by_id
-from onyx.db.chat import get_or_create_root_message
+from onyx.db.chat import (
+    create_new_chat_message,
+    get_chat_message,
+    get_chat_messages_by_session,
+    get_chat_session_by_id,
+    get_or_create_root_message,
+)
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.llm.utils import check_number_of_tokens

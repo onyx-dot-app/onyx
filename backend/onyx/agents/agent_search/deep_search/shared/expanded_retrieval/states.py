@@ -8,8 +8,10 @@ from onyx.agents.agent_search.deep_search.main.states import LoggerUpdate
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.models import (
     QuestionRetrievalResult,
 )
-from onyx.agents.agent_search.shared_graph_utils.models import QueryRetrievalResult
-from onyx.agents.agent_search.shared_graph_utils.models import RetrievalFitStats
+from onyx.agents.agent_search.shared_graph_utils.models import (
+    QueryRetrievalResult,
+    RetrievalFitStats,
+)
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_sections,
 )

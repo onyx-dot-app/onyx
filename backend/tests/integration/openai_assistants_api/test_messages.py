@@ -4,8 +4,7 @@ from typing import Optional
 import pytest
 import requests
 
-from tests.integration.common_utils.constants import API_SERVER_URL
-from tests.integration.common_utils.constants import GENERAL_HEADERS
+from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
 
 BASE_URL = f"{API_SERVER_URL}/openai-assistants/threads"

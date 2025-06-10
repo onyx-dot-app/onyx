@@ -1,6 +1,5 @@
 import os
 
-
 AGENT_DEFAULT_RETRIEVAL_HITS = 15
 AGENT_DEFAULT_RERANKING_HITS = 10
 AGENT_DEFAULT_SUB_QUESTION_MAX_CONTEXT_HITS = 8
@@ -37,7 +36,7 @@ AGENT_ANSWER_GENERATION_BY_FAST_LLM = (
 )
 
 AGENT_RETRIEVAL_STATS = (
-    not os.environ.get("AGENT_RETRIEVAL_STATS") == "False"
+    os.environ.get("AGENT_RETRIEVAL_STATS") != "False"
 ) or True  # default True
 
 
@@ -56,7 +55,7 @@ AGENT_MAX_QUERY_RETRIEVAL_RESULTS = int(
 # Reranking agent configs
 # Reranking stats - no influence on flow outside of stats collection
 AGENT_RERANKING_STATS = (
-    not os.environ.get("AGENT_RERANKING_STATS") == "True"
+    os.environ.get("AGENT_RERANKING_STATS") != "True"
 ) or False  # default False
 
 AGENT_MAX_QUERY_RETRIEVAL_RESULTS = int(
@@ -111,7 +110,7 @@ AGENT_MAX_STREAMED_DOCS_FOR_REFINED_ANSWER = int(
 
 
 AGENT_RETRIEVAL_STATS = (
-    not os.environ.get("AGENT_RETRIEVAL_STATS") == "False"
+    os.environ.get("AGENT_RETRIEVAL_STATS") != "False"
 ) or True  # default True
 
 
@@ -126,7 +125,7 @@ AGENT_MAX_QUERY_RETRIEVAL_RESULTS = int(
 # Reranking agent configs
 # Reranking stats - no influence on flow outside of stats collection
 AGENT_RERANKING_STATS = (
-    not os.environ.get("AGENT_RERANKING_STATS") == "True"
+    os.environ.get("AGENT_RERANKING_STATS") != "True"
 ) or False  # default False
 
 AGENT_MAX_QUERY_RETRIEVAL_RESULTS = int(

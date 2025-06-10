@@ -1,19 +1,16 @@
 from collections.abc import Hashable
 from datetime import datetime
-from typing import cast
-from typing import Literal
+from typing import Literal, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Send
 
 from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     AnswerQuestionOutput,
-)
-from onyx.agents.agent_search.deep_search.initial.generate_individual_sub_answer.states import (
     SubQuestionAnsweringInput,
 )
-from onyx.agents.agent_search.deep_search.main.states import MainState
 from onyx.agents.agent_search.deep_search.main.states import (
+    MainState,
     RequireRefinemenEvalUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig

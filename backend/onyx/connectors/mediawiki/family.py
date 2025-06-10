@@ -6,16 +6,18 @@ import itertools
 import tempfile
 from typing import Any
 from unittest import mock
-from urllib.parse import urlparse
-from urllib.parse import urlunparse
+from urllib.parse import urlparse, urlunparse
 
-from pywikibot import family  # type: ignore[import-untyped]
-from pywikibot import pagegenerators  # type: ignore[import-untyped]
+from pywikibot import (
+    family,  # type: ignore[import-untyped]
+    pagegenerators,  # type: ignore[import-untyped]
+)
 from pywikibot.scripts import generate_family_file  # type: ignore[import-untyped]
-from pywikibot.scripts.generate_user_files import pywikibot  # type: ignore[import-untyped]
+from pywikibot.scripts.generate_user_files import (
+    pywikibot,  # type: ignore[import-untyped]
+)
 
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

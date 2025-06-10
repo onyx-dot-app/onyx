@@ -1,10 +1,15 @@
-from typing import TypedDict, Optional
-from pydantic import BaseModel
+from typing import Optional, TypedDict
+
 from langchain_core.messages import AIMessageChunk
-from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
-from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
-from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from pydantic import BaseModel
+
+from onyx.agents.agent_search.orchestration.states import (
+    ToolCallUpdate,
+    ToolChoiceInput,
+    ToolChoiceUpdate,
+)
 from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
+
 
 class DocumentChatInput(BaseModel):
     query: str
@@ -32,7 +37,7 @@ class DocumentEditUpdate(BaseModel):
 class DocumentChatState(
     DocumentChatInput,
     ToolChoiceInput,
-    ToolCallUpdate, 
+    ToolCallUpdate,
     ToolChoiceUpdate,
     SearchResultUpdate,
     DocumentEditUpdate,

@@ -9,14 +9,10 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage
-from onyx.db.models import UserFile
-from onyx.db.models import UserFolder
+from onyx.db.models import ChatMessage, UserFile, UserFolder
 from onyx.file_processing.extract_file_text import IMAGE_MEDIA_TYPES
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, FileDescriptor, InMemoryChatFile
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -317,8 +313,9 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
 def load_all_persona_files_for_chat(
     persona_id: int, db_session: Session
 ) -> tuple[list[InMemoryChatFile], list[int]]:
-    from onyx.db.models import Persona
     from sqlalchemy.orm import joinedload
+
+    from onyx.db.models import Persona
 
     persona = (
         db_session.query(Persona)

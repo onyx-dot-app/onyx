@@ -8,8 +8,8 @@ from requests import HTTPError
 
 from onyx.connectors.confluence.onyx_confluence import (
     _DEFAULT_PAGINATION_LIMIT,
+    OnyxConfluence,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.interfaces import CredentialsProviderInterface
 
 

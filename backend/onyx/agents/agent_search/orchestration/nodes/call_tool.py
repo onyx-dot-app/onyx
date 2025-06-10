@@ -6,16 +6,16 @@ from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.orchestration.states import ToolCallOutput
-from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
-from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.orchestration.states import (
+    ToolCallOutput,
+    ToolCallUpdate,
+    ToolChoiceUpdate,
+)
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AnswerPacket
-from onyx.tools.message import build_tool_message
-from onyx.tools.message import ToolCallSummary
+from onyx.tools.message import ToolCallSummary, build_tool_message
 from onyx.tools.tool_runner import ToolRunner
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

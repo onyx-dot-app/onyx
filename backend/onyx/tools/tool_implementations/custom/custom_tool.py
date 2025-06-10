@@ -2,16 +2,11 @@ import csv
 import json
 import uuid
 from collections.abc import Generator
-from io import BytesIO
-from io import StringIO
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import List
+from io import BytesIO, StringIO
+from typing import Any, Dict, List, cast
 
 import requests
-from langchain_core.messages import HumanMessage
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 from requests import JSONDecodeError
 
@@ -19,43 +14,35 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
-from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.models import ChatFileType, InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.message import ToolCallSummary
-from onyx.tools.models import CHAT_SESSION_ID_PLACEHOLDER
-from onyx.tools.models import DynamicSchemaInfo
-from onyx.tools.models import MESSAGE_ID_PLACEHOLDER
-from onyx.tools.models import ToolResponse
+from onyx.tools.models import (
+    CHAT_SESSION_ID_PLACEHOLDER,
+    MESSAGE_ID_PLACEHOLDER,
+    DynamicSchemaInfo,
+    ToolResponse,
+)
 from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
     SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
     SHOULD_USE_CUSTOM_TOOL_USER_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
     TOOL_ARG_SYSTEM_PROMPT,
-)
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import (
     TOOL_ARG_USER_PROMPT,
+    USE_TOOL,
 )
-from onyx.tools.tool_implementations.custom.custom_tool_prompts import USE_TOOL
-from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    REQUEST_BODY,
+    MethodSpec,
     openapi_to_method_specs,
-)
-from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
-from onyx.tools.tool_implementations.custom.openapi_parsing import REQUEST_BODY
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_url,
     validate_openapi_schema,
 )
 from onyx.tools.tool_implementations.custom.prompt import (
     build_custom_image_generation_user_prompt,
 )
-from onyx.utils.headers import header_list_to_header_dict
-from onyx.utils.headers import HeaderItemDict
+from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 
@@ -96,7 +83,7 @@ class CustomTool(BaseTool):
 
         # Check for both Authorization header and OAuth token
         has_auth_header = any(
-            key.lower() == "authorization" for key in self.headers.keys()
+            key.lower() == "authorization" for key in self.headers
         )
         if has_auth_header and self._user_oauth_token:
             logger.warning(

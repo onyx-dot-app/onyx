@@ -1,15 +1,12 @@
 import json
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import httpx
 
 from onyx.chat.chat_utils import combine_message_chain
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
+from onyx.chat.models import AnswerStyleConfig, LlmDoc, PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
@@ -25,15 +22,11 @@ from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.internet_search.models import (
     InternetSearchResponse,
-)
-from onyx.tools.tool_implementations.internet_search.models import (
     InternetSearchResult,
 )
 from onyx.tools.tool_implementations.search_like_tool_utils import (
-    build_next_prompt_for_search_like_tool,
-)
-from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
+    build_next_prompt_for_search_like_tool,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro

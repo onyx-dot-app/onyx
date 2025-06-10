@@ -2,15 +2,15 @@
 import re
 from collections.abc import Iterator
 
-from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import StreamingError
+from onyx.chat.models import OnyxAnswerPiece, StreamingError
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_generator_to_string_generator
-from onyx.llm.utils import message_to_string
-from onyx.prompts.constants import ANSWERABLE_PAT
-from onyx.prompts.constants import THOUGHT_PAT
+from onyx.llm.utils import (
+    dict_based_prompt_to_langchain_prompt,
+    message_generator_to_string_generator,
+    message_to_string,
+)
+from onyx.prompts.constants import ANSWERABLE_PAT, THOUGHT_PAT
 from onyx.prompts.query_validation import ANSWERABLE_PROMPT
 from onyx.server.query_and_chat.models import QueryValidationResponse
 from onyx.server.utils import get_json_line
@@ -41,7 +41,7 @@ def extract_answerability_reasoning(model_raw: str) -> str:
 def extract_answerability_bool(model_raw: str) -> bool:
     answerable_match = re.search(f"{ANSWERABLE_PAT.upper()}(.+)", model_raw)
     answerable_text = answerable_match.group(1).strip() if answerable_match else ""
-    answerable = True if answerable_text.strip().lower() in ["true", "yes"] else False
+    answerable = answerable_text.strip().lower() in ["true", "yes"]
     return answerable
 
 

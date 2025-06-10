@@ -1,31 +1,30 @@
 from collections.abc import Callable
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
+    ADMIN_FILE_IDS,
+    ADMIN_FOLDER_3_FILE_IDS,
+    FOLDER_1_1_FILE_IDS,
+    FOLDER_1_1_URL,
+    FOLDER_1_2_FILE_IDS,
+    FOLDER_1_2_URL,
+    FOLDER_1_FILE_IDS,
+    FOLDER_2_1_FILE_IDS,
+    FOLDER_2_1_URL,
+    FOLDER_2_2_FILE_IDS,
+    FOLDER_2_2_URL,
+    FOLDER_2_FILE_IDS,
+    FOLDER_2_URL,
+    FOLDER_3_URL,
+    SECTIONS_FILE_IDS,
+    SHARED_DRIVE_1_FILE_IDS,
+    SHARED_DRIVE_1_URL,
+    SHARED_DRIVE_2_FILE_IDS,
     assert_expected_docs_in_retrieved_docs,
+    load_all_docs,
 )
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_URL
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
-from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
-from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
 
 
 @patch(

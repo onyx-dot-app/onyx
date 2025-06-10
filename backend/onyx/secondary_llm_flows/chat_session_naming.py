@@ -4,8 +4,7 @@ from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.db.models import ChatMessage
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import dict_based_prompt_to_langchain_prompt, message_to_string
 from onyx.prompts.chat_prompts import CHAT_NAMING
 from onyx.utils.logger import setup_logger
 

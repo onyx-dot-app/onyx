@@ -1,16 +1,16 @@
 import os
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.configs.constants import BlobType
 from onyx.connectors.blob.connector import BlobStorageConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
-from onyx.file_processing.extract_file_text import ACCEPTED_DOCUMENT_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.connectors.models import Document, TextSection
+from onyx.file_processing.extract_file_text import (
+    ACCEPTED_DOCUMENT_FILE_EXTENSIONS,
+    ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS,
+    get_file_ext,
+)
 
 
 @pytest.fixture

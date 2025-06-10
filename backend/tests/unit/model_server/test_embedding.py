@@ -1,22 +1,20 @@
 import asyncio
 import time
 from collections.abc import AsyncGenerator
-from typing import Any
-from typing import List
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from typing import Any, List
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
 
-from model_server.encoders import CloudEmbedding
-from model_server.encoders import embed_text
-from model_server.encoders import local_rerank
-from model_server.encoders import process_embed_request
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import EmbedTextType
+from model_server.encoders import (
+    CloudEmbedding,
+    embed_text,
+    local_rerank,
+    process_embed_request,
+)
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest
 
 

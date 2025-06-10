@@ -1,15 +1,11 @@
-from collections.abc import Callable
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import ResponsePart
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import StreamStopReason
+from onyx.chat.models import ResponsePart, StreamStopInfo, StreamStopReason
 from onyx.chat.prompt_builder.answer_prompt_builder import LLMCall
-from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
 from onyx.chat.stream_processing.answer_response_handler import (
+    AnswerResponseHandler,
     DummyAnswerResponseHandler,
 )
 from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler

@@ -1,15 +1,14 @@
 from collections.abc import Iterator
 from typing import cast
 
-from langchain_core.messages import AIMessageChunk
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessageChunk, BaseMessage
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import LlmDoc
-from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
-from onyx.chat.stream_processing.answer_response_handler import CitationResponseHandler
 from onyx.chat.stream_processing.answer_response_handler import (
+    AnswerResponseHandler,
+    CitationResponseHandler,
     PassThroughAnswerResponseHandler,
 )
 from onyx.chat.stream_processing.utils import map_document_id_order

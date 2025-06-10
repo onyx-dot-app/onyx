@@ -1,6 +1,4 @@
-from langchain.schema.messages import AIMessage
-from langchain.schema.messages import BaseMessage
-from langchain.schema.messages import HumanMessage
+from langchain.schema.messages import AIMessage, BaseMessage, HumanMessage
 
 from onyx.configs.constants import MessageType
 from onyx.db.models import ChatMessage

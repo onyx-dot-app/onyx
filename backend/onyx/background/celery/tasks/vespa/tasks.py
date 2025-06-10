@@ -1,13 +1,10 @@
 import time
 from collections.abc import Callable
 from http import HTTPStatus
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import httpx
-from celery import Celery
-from celery import shared_task
-from celery import Task
+from celery import Celery, Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from redis import Redis
 from redis.lock import Lock as RedisLock
@@ -17,52 +14,61 @@ from tenacity import RetryError
 from onyx.access.access import get_access_for_document
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
-from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
-from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
-from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
-from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.configs.app_configs import VESPA_SYNC_MAX_TASKS
-from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.background.celery.tasks.shared.tasks import (
+    LIGHT_SOFT_TIME_LIMIT,
+    LIGHT_TIME_LIMIT,
+    OnyxCeleryTaskCompletionStatus,
+)
+from onyx.configs.app_configs import JOB_TIMEOUT, VESPA_SYNC_MAX_TASKS
+from onyx.configs.constants import (
+    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+    OnyxRedisLocks,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.document import count_documents_by_needs_sync
-from onyx.db.document import get_document
-from onyx.db.document import mark_document_as_synced
-from onyx.db.document_set import delete_document_set
-from onyx.db.document_set import fetch_document_sets
-from onyx.db.document_set import fetch_document_sets_for_document
-from onyx.db.document_set import get_document_set_by_id
-from onyx.db.document_set import mark_document_set_as_synced
+from onyx.db.document import (
+    count_documents_by_needs_sync,
+    get_document,
+    mark_document_as_synced,
+)
+from onyx.db.document_set import (
+    delete_document_set,
+    fetch_document_sets,
+    fetch_document_sets_for_document,
+    get_document_set_by_id,
+    mark_document_set_as_synced,
+)
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import SyncStatus
-from onyx.db.enums import SyncType
-from onyx.db.models import DocumentSet
-from onyx.db.models import UserGroup
+from onyx.db.enums import SyncStatus, SyncType
+from onyx.db.models import DocumentSet, UserGroup
 from onyx.db.search_settings import get_active_search_settings
-from onyx.db.sync_record import cleanup_sync_records
-from onyx.db.sync_record import insert_sync_record
-from onyx.db.sync_record import update_sync_record_status
+from onyx.db.sync_record import (
+    cleanup_sync_records,
+    insert_sync_record,
+    update_sync_record_status,
+)
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
-from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
 from onyx.redis.redis_connector_credential_pair import (
+    RedisConnectorCredentialPair,
     RedisGlobalConnectorCredentialPair,
 )
 from onyx.redis.redis_document_set import RedisDocumentSet
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_pool import get_redis_replica_client
-from onyx.redis.redis_pool import redis_lock_dump
+from onyx.redis.redis_pool import (
+    get_redis_client,
+    get_redis_replica_client,
+    redis_lock_dump,
+)
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_versioned_implementation
 from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation,
     fetch_versioned_implementation_with_fallback,
+    global_version,
+    noop_fallback,
 )
-from onyx.utils.variable_functionality import global_version
-from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 

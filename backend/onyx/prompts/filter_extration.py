@@ -3,7 +3,6 @@
 # or Slack
 from onyx.prompts.constants import SOURCES_KEY
 
-
 # Smaller followup prompts in time_filter.py
 TIME_FILTER_PROMPT = """
 You are a tool to identify time filters to apply to a user query for a downstream search \

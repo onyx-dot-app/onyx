@@ -1,52 +1,56 @@
 import re
 from typing import cast
 
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.query_and_chat.models import AgentAnswer
-from ee.onyx.server.query_and_chat.models import AgentSubQuery
-from ee.onyx.server.query_and_chat.models import AgentSubQuestion
-from ee.onyx.server.query_and_chat.models import BasicCreateChatMessageRequest
 from ee.onyx.server.query_and_chat.models import (
+    AgentAnswer,
+    AgentSubQuery,
+    AgentSubQuestion,
+    BasicCreateChatMessageRequest,
     BasicCreateChatMessageWithHistoryRequest,
+    ChatBasicResponse,
 )
-from ee.onyx.server.query_and_chat.models import ChatBasicResponse
 from onyx.auth.users import current_user
-from onyx.chat.chat_utils import combine_message_thread
-from onyx.chat.chat_utils import create_chat_chain
-from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import AllCitations
-from onyx.chat.models import ExtendedToolResponse
-from onyx.chat.models import FinalUsedContextDocsResponse
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import LLMRelevanceFilterResponse
-from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import QADocsResponse
-from onyx.chat.models import RefinedAnswerImprovement
-from onyx.chat.models import StreamingError
-from onyx.chat.models import SubQueryPiece
-from onyx.chat.models import SubQuestionIdentifier
-from onyx.chat.models import SubQuestionPiece
-from onyx.chat.process_message import ChatPacketStream
-from onyx.chat.process_message import stream_chat_message_objects
+from onyx.chat.chat_utils import combine_message_thread, create_chat_chain
+from onyx.chat.models import (
+    AgentAnswerPiece,
+    AllCitations,
+    ExtendedToolResponse,
+    FinalUsedContextDocsResponse,
+    LlmDoc,
+    LLMRelevanceFilterResponse,
+    OnyxAnswerPiece,
+    QADocsResponse,
+    RefinedAnswerImprovement,
+    StreamingError,
+    SubQueryPiece,
+    SubQuestionIdentifier,
+    SubQuestionPiece,
+)
+from onyx.chat.process_message import ChatPacketStream, stream_chat_message_objects
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import OptionalSearchSetting
-from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SavedSearchDoc
-from onyx.db.chat import create_chat_session
-from onyx.db.chat import create_new_chat_message
-from onyx.db.chat import get_or_create_root_message
+from onyx.context.search.models import (
+    OptionalSearchSetting,
+    RetrievalDetails,
+    SavedSearchDoc,
+)
+from onyx.db.chat import (
+    create_chat_session,
+    create_new_chat_message,
+    get_or_create_root_message,
+)
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.query_expansion import thread_based_query_rephrase
-from onyx.server.query_and_chat.models import ChatMessageDetail
-from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.models import (
+    ChatMessageDetail,
+    CreateChatMessageRequest,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

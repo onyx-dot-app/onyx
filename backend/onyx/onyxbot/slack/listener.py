@@ -8,103 +8,108 @@ from collections.abc import Callable
 from contextvars import Token
 from threading import Event
 from types import FrameType
-from typing import Any
-from typing import cast
-from typing import Dict
-from typing import Set
+from typing import Any, Dict, Set, cast
 
-from prometheus_client import Gauge
-from prometheus_client import start_http_server
+from prometheus_client import Gauge, start_http_server
 from redis.lock import Lock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from slack_sdk.http_retry import ConnectionErrorRetryHandler
-from slack_sdk.http_retry import RateLimitErrorRetryHandler
-from slack_sdk.http_retry import RetryHandler
+from slack_sdk.http_retry import (
+    ConnectionErrorRetryHandler,
+    RateLimitErrorRetryHandler,
+    RetryHandler,
+)
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
 from onyx.chat.models import ThreadMessage
-from onyx.configs.app_configs import DEV_MODE
-from onyx.configs.app_configs import POD_NAME
-from onyx.configs.app_configs import POD_NAMESPACE
-from onyx.configs.constants import MessageType
-from onyx.configs.constants import OnyxRedisLocks
-from onyx.configs.onyxbot_configs import DANSWER_BOT_REPHRASE_MESSAGE
-from onyx.configs.onyxbot_configs import DANSWER_BOT_RESPOND_EVERY_CHANNEL
-from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
-from onyx.connectors.slack.utils import expert_info_from_slack_id
-from onyx.context.search.retrieval.search_runner import (
-    download_nltk_data,
+from onyx.configs.app_configs import DEV_MODE, POD_NAME, POD_NAMESPACE
+from onyx.configs.constants import MessageType, OnyxRedisLocks
+from onyx.configs.onyxbot_configs import (
+    DANSWER_BOT_REPHRASE_MESSAGE,
+    DANSWER_BOT_RESPOND_EVERY_CHANNEL,
+    NOTIFY_SLACKBOT_NO_ANSWER,
 )
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import SqlEngine
+from onyx.connectors.slack.utils import expert_info_from_slack_id
+from onyx.context.search.retrieval.search_runner import download_nltk_data
+from onyx.db.engine import (
+    SqlEngine,
+    get_all_tenant_ids,
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.slack_bot import fetch_slack_bot
-from onyx.db.slack_bot import fetch_slack_bots
+from onyx.db.slack_bot import fetch_slack_bot, fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
-from onyx.onyxbot.slack.config import MAX_TENANTS_PER_POD
-from onyx.onyxbot.slack.config import TENANT_ACQUISITION_INTERVAL
-from onyx.onyxbot.slack.config import TENANT_HEARTBEAT_EXPIRATION
-from onyx.onyxbot.slack.config import TENANT_HEARTBEAT_INTERVAL
-from onyx.onyxbot.slack.config import TENANT_LOCK_EXPIRATION
-from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_RESOLVED_ACTION_ID
-from onyx.onyxbot.slack.constants import GENERATE_ANSWER_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import IMMEDIATE_RESOLVED_BUTTON_ACTION_ID
-from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
-from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
-from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
-from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
-from onyx.onyxbot.slack.handlers.handle_buttons import handle_doc_feedback_button
-from onyx.onyxbot.slack.handlers.handle_buttons import handle_followup_button
+from onyx.natural_language_processing.search_nlp_models import (
+    EmbeddingModel,
+    warm_up_bi_encoder,
+)
+from onyx.onyxbot.slack.config import (
+    MAX_TENANTS_PER_POD,
+    TENANT_ACQUISITION_INTERVAL,
+    TENANT_HEARTBEAT_EXPIRATION,
+    TENANT_HEARTBEAT_INTERVAL,
+    TENANT_LOCK_EXPIRATION,
+    get_slack_channel_config_for_bot_and_channel,
+)
+from onyx.onyxbot.slack.constants import (
+    DISLIKE_BLOCK_ACTION_ID,
+    FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID,
+    FOLLOWUP_BUTTON_ACTION_ID,
+    FOLLOWUP_BUTTON_RESOLVED_ACTION_ID,
+    GENERATE_ANSWER_BUTTON_ACTION_ID,
+    IMMEDIATE_RESOLVED_BUTTON_ACTION_ID,
+    KEEP_TO_YOURSELF_ACTION_ID,
+    LIKE_BLOCK_ACTION_ID,
+    SHOW_EVERYONE_ACTION_ID,
+    VIEW_DOC_FEEDBACK_ID,
+)
 from onyx.onyxbot.slack.handlers.handle_buttons import (
+    handle_doc_feedback_button,
+    handle_followup_button,
     handle_followup_resolved_button,
-)
-from onyx.onyxbot.slack.handlers.handle_buttons import (
     handle_generate_answer_button,
-)
-from onyx.onyxbot.slack.handlers.handle_buttons import (
     handle_publish_ephemeral_message_button,
+    handle_slack_feedback,
 )
-from onyx.onyxbot.slack.handlers.handle_buttons import handle_slack_feedback
-from onyx.onyxbot.slack.handlers.handle_message import handle_message
 from onyx.onyxbot.slack.handlers.handle_message import (
+    handle_message,
     remove_scheduled_feedback_reminder,
+    schedule_feedback_reminder,
 )
-from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
 from onyx.onyxbot.slack.models import SlackMessageInfo
-from onyx.onyxbot.slack.utils import check_message_limit
-from onyx.onyxbot.slack.utils import decompose_action_id
-from onyx.onyxbot.slack.utils import get_channel_name_from_id
-from onyx.onyxbot.slack.utils import get_onyx_bot_slack_bot_id
-from onyx.onyxbot.slack.utils import read_slack_thread
-from onyx.onyxbot.slack.utils import remove_onyx_bot_tag
-from onyx.onyxbot.slack.utils import rephrase_slack_message
-from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
-from onyx.onyxbot.slack.utils import TenantSocketModeClient
+from onyx.onyxbot.slack.utils import (
+    TenantSocketModeClient,
+    check_message_limit,
+    decompose_action_id,
+    get_channel_name_from_id,
+    get_onyx_bot_slack_bot_id,
+    read_slack_thread,
+    remove_onyx_bot_tag,
+    rephrase_slack_message,
+    respond_in_thread_or_channel,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
-from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
-from shared_configs.configs import DISALLOWED_SLACK_BOT_TENANT_LIST
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SLACK_CHANNEL_ID
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from shared_configs.contextvars import get_current_tenant_id
-
+from onyx.utils.variable_functionality import (
+    fetch_ee_implementation_or_noop,
+    set_is_ee_based_on_env_variable,
+)
+from shared_configs.configs import (
+    DISALLOWED_SLACK_BOT_TENANT_LIST,
+    MODEL_SERVER_HOST,
+    MODEL_SERVER_PORT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SLACK_CHANNEL_ID,
+)
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 logger = setup_logger()
 

@@ -2,11 +2,12 @@
 # system. Many new users do not understand the design/capabilities of the system and will ask
 # questions that are unanswerable such as aggregations or user specific questions that the system
 # cannot handle, this is used to identify those cases
-from onyx.prompts.constants import ANSWERABLE_PAT
-from onyx.prompts.constants import GENERAL_SEP_PAT
-from onyx.prompts.constants import QUESTION_PAT
-from onyx.prompts.constants import THOUGHT_PAT
-
+from onyx.prompts.constants import (
+    ANSWERABLE_PAT,
+    GENERAL_SEP_PAT,
+    QUESTION_PAT,
+    THOUGHT_PAT,
+)
 
 ANSWERABLE_PROMPT = f"""
 You are a helper tool to determine if a query is answerable using retrieval augmented generation.

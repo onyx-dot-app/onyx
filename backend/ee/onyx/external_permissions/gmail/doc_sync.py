@@ -1,10 +1,8 @@
 from collections.abc import Generator
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
-from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
+from onyx.access.models import DocExternalAccess, ExternalAccess
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.db.models import ConnectorCredentialPair

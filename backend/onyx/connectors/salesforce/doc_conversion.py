@@ -3,10 +3,7 @@ from typing import cast
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.connectors.models import BasicExpertInfo
-from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import BasicExpertInfo, Document, ImageSection, TextSection
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.utils.logger import setup_logger
@@ -34,13 +31,11 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
     Returns:
         Cleaned dictionary or list with transformed keys and filtered values
     """
-    if isinstance(data, dict):
-        if "records" in data.keys():
-            data = data["records"]
-    if isinstance(data, dict):
-        if "attributes" in data.keys():
-            if isinstance(data["attributes"], dict):
-                data.update(data.pop("attributes"))
+    if isinstance(data, dict) and "records" in data:
+        data = data["records"]
+    if isinstance(data, dict) and "attributes" in data:
+        if isinstance(data["attributes"], dict):
+            data.update(data.pop("attributes"))
 
     if isinstance(data, dict):
         filtered_dict = {}

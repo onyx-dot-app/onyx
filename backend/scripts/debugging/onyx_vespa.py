@@ -30,45 +30,44 @@ Example:
 
 import argparse
 import json
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import and_
 
 from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import SqlEngine
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.context.search.models import IndexFilters, SearchRequest
+from onyx.db.engine import (
+    SqlEngine,
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    DocumentByConnectorCredentialPair,
+)
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
-from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
+from onyx.document_index.vespa_constants import (
+    ACCESS_CONTROL_LIST,
+    DOC_UPDATED_AT,
+    DOCUMENT_ID_ENDPOINT,
+    DOCUMENT_SETS,
+    HIDDEN,
+    METADATA_LIST,
+    SEARCH_ENDPOINT,
+    SOURCE_TYPE,
+    VESPA_APP_CONTAINER_URL,
+    VESPA_APPLICATION_ENDPOINT,
+)
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -409,7 +408,7 @@ def get_chunk_ids_for_connector(
             previous_chunk_count=doc_id_to_new_chunk_cnt.get(doc_id, 0),
             new_chunk_count=0,
         )
-        for doc_id in doc_id_to_new_chunk_cnt.keys()
+        for doc_id in doc_id_to_new_chunk_cnt
     ]
     chunk_ids = get_document_chunk_ids(
         enriched_document_info_list=doc_infos,
@@ -650,7 +649,7 @@ class VespaDebugging:
                         continue
 
                     # Format the output based on field type
-                    if isinstance(field_value, dict) or isinstance(field_value, list):
+                    if isinstance(field_value, (dict, list)):
                         # Truncate dictionaries and lists
                         truncated = (
                             str(field_value)[:50] + "..."

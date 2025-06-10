@@ -1,53 +1,63 @@
 import time
 import traceback
 from collections import defaultdict
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
-from onyx.background.indexing.checkpointing_utils import get_latest_valid_checkpoint
-from onyx.background.indexing.checkpointing_utils import save_checkpoint
+from onyx.background.indexing.checkpointing_utils import (
+    check_checkpoint_size,
+    get_latest_valid_checkpoint,
+    save_checkpoint,
+)
 from onyx.background.indexing.memory_tracer import MemoryTracer
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.configs.app_configs import INDEXING_SIZE_WARNING_THRESHOLD
-from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
-from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
-from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
-from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.app_configs import (
+    INDEX_BATCH_SIZE,
+    INDEXING_SIZE_WARNING_THRESHOLD,
+    INDEXING_TRACER_INTERVAL,
+    INTEGRATION_TESTS_MODE,
+    LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
+    POLL_CONNECTOR_OFFSET,
+)
+from onyx.configs.constants import DocumentSource, MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import TextSection
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
-from onyx.db.connector_credential_pair import update_connector_credential_pair
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    IndexAttemptMetadata,
+    TextSection,
+)
+from onyx.db.connector_credential_pair import (
+    get_connector_credential_pair_from_id,
+    get_last_successful_attempt_poll_range_end,
+    update_connector_credential_pair,
+)
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.index_attempt import create_index_attempt_error
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
-from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
-from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.index_attempt import mark_attempt_partially_succeeded
-from onyx.db.index_attempt import mark_attempt_succeeded
-from onyx.db.index_attempt import transition_attempt_to_in_progress
-from onyx.db.index_attempt import update_docs_indexed
-from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.index_attempt import (
+    create_index_attempt_error,
+    get_index_attempt,
+    get_index_attempt_errors_for_cc_pair,
+    get_recent_completed_attempts_for_cc_pair,
+    mark_attempt_canceled,
+    mark_attempt_failed,
+    mark_attempt_partially_succeeded,
+    mark_attempt_succeeded,
+    transition_attempt_to_in_progress,
+    update_docs_indexed,
+)
+from onyx.db.models import IndexAttempt, IndexAttemptError
 from onyx.document_index.factory import get_default_document_index
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -56,12 +66,13 @@ from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
-from onyx.utils.logger import setup_logger
-from onyx.utils.logger import TaskAttemptSingleton
+from onyx.utils.logger import TaskAttemptSingleton, setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
-from onyx.utils.telemetry import create_milestone_and_report
-from onyx.utils.telemetry import optional_telemetry
-from onyx.utils.telemetry import RecordType
+from onyx.utils.telemetry import (
+    RecordType,
+    create_milestone_and_report,
+    optional_telemetry,
+)
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 

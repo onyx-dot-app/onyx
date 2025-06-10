@@ -1,13 +1,9 @@
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import jwt
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 
-from onyx.configs.app_configs import DATA_PLANE_SECRET
-from onyx.configs.app_configs import EXPECTED_API_KEY
-from onyx.configs.app_configs import JWT_ALGORITHM
+from onyx.configs.app_configs import DATA_PLANE_SECRET, EXPECTED_API_KEY, JWT_ALGORITHM
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

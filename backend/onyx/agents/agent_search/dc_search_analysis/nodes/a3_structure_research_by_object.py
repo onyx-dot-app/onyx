@@ -1,14 +1,12 @@
 from collections import defaultdict
 from datetime import datetime
-from typing import cast
-from typing import Dict
-from typing import List
+from typing import Dict, List, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dc_search_analysis.states import MainState
 from onyx.agents.agent_search.dc_search_analysis.states import (
+    MainState,
     ObjectResearchInformationUpdate,
 )
 from onyx.agents.agent_search.models import GraphConfig

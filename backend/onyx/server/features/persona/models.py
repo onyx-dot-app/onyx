@@ -1,19 +1,14 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.models import Persona
-from onyx.db.models import PersonaLabel
-from onyx.db.models import Prompt
-from onyx.db.models import StarterMessage
+from onyx.db.models import Persona, PersonaLabel, Prompt, StarterMessage
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

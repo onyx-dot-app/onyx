@@ -13,7 +13,7 @@ from tests.integration.common_utils.test_models import DATestUser
 )
 def test_playwright_setup() -> None:
     """Not really a test, just using this to automate setup for playwright tests."""
-    if not os.getenv("PYTEST_PLAYWRIGHT_SKIP_INITIAL_RESET", "").lower() == "true":
+    if os.getenv("PYTEST_PLAYWRIGHT_SKIP_INITIAL_RESET", "").lower() != "true":
         reset_all()
 
     # Creating an admin user (first user created is automatically an admin)

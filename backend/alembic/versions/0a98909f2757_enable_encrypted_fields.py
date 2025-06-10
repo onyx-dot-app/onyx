@@ -6,12 +6,13 @@ Create Date: 2024-05-05 19:30:34.317972
 
 """
 
-from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.sql import table
-from sqlalchemy.dialects import postgresql
 import json
 
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql import table
+
+from alembic import op
 from onyx.utils.encryption import encrypt_string_to_bytes
 
 # revision identifiers, used by Alembic.

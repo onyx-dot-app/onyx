@@ -7,22 +7,24 @@ import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.conftest import get_credentials_from_env
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
-from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import file_name_template
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_2_FILE_IDS
-from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_3_FILE_IDS
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    ADMIN_EMAIL,
+    ADMIN_FILE_IDS,
+    FOLDER_1_1_FILE_IDS,
+    FOLDER_1_2_FILE_IDS,
+    FOLDER_1_FILE_IDS,
+    FOLDER_2_1_FILE_IDS,
+    FOLDER_2_2_FILE_IDS,
+    FOLDER_2_FILE_IDS,
+    FOLDER_3_FILE_IDS,
+    SHARED_DRIVE_1_FILE_IDS,
+    SHARED_DRIVE_2_FILE_IDS,
+    TEST_USER_1_FILE_IDS,
+    TEST_USER_2_FILE_IDS,
+    TEST_USER_3_FILE_IDS,
+    file_name_template,
+    load_all_docs,
+)
 
 
 def generate_test_id_to_drive_id_mapping() -> dict[int, str]:

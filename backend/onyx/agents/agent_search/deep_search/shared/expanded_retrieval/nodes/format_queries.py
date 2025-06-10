@@ -2,8 +2,6 @@ from langchain_core.runnables.config import RunnableConfig
 
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalState,
-)
-from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     QueryExpansionUpdate,
 )
 

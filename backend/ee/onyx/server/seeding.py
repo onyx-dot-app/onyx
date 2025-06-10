@@ -1,27 +1,22 @@
 import json
 import os
 from copy import deepcopy
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.standard_answer import (
-    create_initial_default_standard_answer_category,
+from ee.onyx.db.standard_answer import create_initial_default_standard_answer_category
+from ee.onyx.server.enterprise_settings.models import (
+    AnalyticsScriptUpload,
+    EnterpriseSettings,
+    NavigationItem,
 )
-from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
-from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
-from ee.onyx.server.enterprise_settings.models import NavigationItem
-from ee.onyx.server.enterprise_settings.store import store_analytics_script
-from ee.onyx.server.enterprise_settings.store import (
-    store_settings as store_ee_settings,
-)
-from ee.onyx.server.enterprise_settings.store import upload_logo
+from ee.onyx.server.enterprise_settings.store import store_analytics_script, upload_logo
+from ee.onyx.server.enterprise_settings.store import store_settings as store_ee_settings
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine import get_session_context_manager
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_llm_provider
+from onyx.db.llm import update_default_provider, upsert_llm_provider
 from onyx.db.models import Tool
 from onyx.db.persona import upsert_persona
 from onyx.server.features.persona.models import PersonaUpsertRequest
@@ -84,7 +79,7 @@ def _seed_custom_tools(db_session: Session, tools: List[CustomToolSeed]) -> None
             try:
                 logger.debug(f"Attempting to seed tool: {tool.name}")
                 logger.debug(f"Reading definition from: {tool.definition_path}")
-                with open(tool.definition_path, "r") as file:
+                with open(tool.definition_path) as file:
                     file_content = file.read()
                     if not file_content.strip():
                         raise ValueError("File is empty")
@@ -183,7 +178,7 @@ def _seed_enterprise_settings(seed_config: SeedConfiguration) -> None:
         if seed_config.nav_item_overrides is not None:
             final_nav_items = []
             for item in seed_config.nav_item_overrides:
-                with open(item.svg_path, "r") as file:
+                with open(item.svg_path) as file:
                     svg_content = file.read().strip()
 
                 final_nav_items.append(
@@ -211,7 +206,7 @@ def _seed_analytics_script(seed_config: SeedConfiguration) -> None:
     if seed_config.analytics_script_path and custom_analytics_secret_key:
         logger.notice("Seeding analytics script")
         try:
-            with open(seed_config.analytics_script_path, "r") as file:
+            with open(seed_config.analytics_script_path) as file:
                 script_content = file.read()
             analytics_script = AnalyticsScriptUpload(
                 script=script_content, secret_key=custom_analytics_secret_key

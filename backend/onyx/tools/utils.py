@@ -8,8 +8,7 @@ from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
 from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.utils import find_model_obj
-from onyx.llm.utils import get_model_map
+from onyx.llm.utils import find_model_obj, get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.tool import Tool
 

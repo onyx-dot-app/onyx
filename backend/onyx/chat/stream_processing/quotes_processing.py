@@ -8,19 +8,17 @@ from typing import Optional
 import regex
 from pydantic import BaseModel
 
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxAnswer
-from onyx.chat.models import OnyxAnswerPiece
+from onyx.chat.models import LlmDoc, OnyxAnswer, OnyxAnswerPiece
 from onyx.configs.chat_configs import QUOTE_ALLOWED_ERROR_PERCENT
 from onyx.context.search.models import InferenceChunk
-from onyx.prompts.constants import ANSWER_PAT
-from onyx.prompts.constants import QUOTE_PAT
+from onyx.prompts.constants import ANSWER_PAT, QUOTE_PAT
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import clean_model_quote
-from onyx.utils.text_processing import clean_up_code_blocks
-from onyx.utils.text_processing import extract_embedded_json
-from onyx.utils.text_processing import shared_precompare_cleanup
-
+from onyx.utils.text_processing import (
+    clean_model_quote,
+    clean_up_code_blocks,
+    extract_embedded_json,
+    shared_precompare_cleanup,
+)
 
 logger = setup_logger()
 answer_pattern = re.compile(r'{\s*"answer"\s*:\s*"', re.IGNORECASE)
@@ -224,7 +222,7 @@ class QuotesProcessor:
         self.context_docs = context_docs
         self.is_json_prompt = is_json_prompt
 
-        self.found_answer_start = False if is_json_prompt else True
+        self.found_answer_start = not is_json_prompt
         self.found_answer_end = False
         self.hold_quote = ""
         self.model_output = ""

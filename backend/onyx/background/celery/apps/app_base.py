@@ -2,15 +2,13 @@ import logging
 import multiprocessing
 import os
 import time
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import sentry_sdk
 from celery import Task
 from celery.app import trace
 from celery.exceptions import WorkerShutdown
-from celery.signals import task_postrun
-from celery.signals import task_prerun
+from celery.signals import task_postrun, task_prerun
 from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from celery.worker import strategy  # type: ignore
@@ -19,11 +17,12 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
-from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
+from onyx.background.celery.apps.task_formatters import (
+    CeleryTaskColoredFormatter,
+    CeleryTaskPlainFormatter,
+)
 from onyx.background.celery.celery_utils import celery_is_worker_primary
-from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
-from onyx.configs.constants import OnyxRedisLocks
+from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX, OnyxRedisLocks
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
@@ -36,13 +35,13 @@ from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
-from onyx.utils.logger import ColoredFormatter
-from onyx.utils.logger import PlainFormatter
-from onyx.utils.logger import setup_logger
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import SENTRY_DSN
-from shared_configs.configs import TENANT_ID_PREFIX
+from onyx.utils.logger import ColoredFormatter, PlainFormatter, setup_logger
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    SENTRY_DSN,
+    TENANT_ID_PREFIX,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()

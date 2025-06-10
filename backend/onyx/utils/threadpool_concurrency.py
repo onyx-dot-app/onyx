@@ -3,21 +3,15 @@ import contextvars
 import copy
 import threading
 import uuid
-from collections.abc import Callable
-from collections.abc import Iterator
-from collections.abc import MutableMapping
-from collections.abc import Sequence
-from concurrent.futures import as_completed
-from concurrent.futures import FIRST_COMPLETED
-from concurrent.futures import Future
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import wait
-from typing import Any
-from typing import cast
-from typing import Generic
-from typing import overload
-from typing import Protocol
-from typing import TypeVar
+from collections.abc import Callable, Iterator, MutableMapping, Sequence
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
+from typing import Any, Generic, Protocol, TypeVar, cast, overload
 
 from pydantic import GetCoreSchemaHandler
 from pydantic_core import core_schema

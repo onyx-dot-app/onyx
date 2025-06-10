@@ -3,32 +3,31 @@ from operator import and_
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import Select
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.user_group.models import SetCuratorRequest
-from ee.onyx.server.user_group.models import UserGroupCreate
-from ee.onyx.server.user_group.models import UserGroupUpdate
+from ee.onyx.server.user_group.models import (
+    SetCuratorRequest,
+    UserGroupCreate,
+    UserGroupUpdate,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.enums import AccessType
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Credential__UserGroup
-from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import DocumentSet__UserGroup
-from onyx.db.models import LLMProvider__UserGroup
-from onyx.db.models import Persona__UserGroup
-from onyx.db.models import TokenRateLimit__UserGroup
-from onyx.db.models import User
-from onyx.db.models import User__UserGroup
-from onyx.db.models import UserGroup
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.models import UserRole
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Credential__UserGroup,
+    Document,
+    DocumentByConnectorCredentialPair,
+    DocumentSet__UserGroup,
+    LLMProvider__UserGroup,
+    Persona__UserGroup,
+    TokenRateLimit__UserGroup,
+    User,
+    User__UserGroup,
+    UserGroup,
+    UserGroup__ConnectorCredentialPair,
+    UserRole,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.utils.logger import setup_logger
 

@@ -2,9 +2,9 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from onyx.background.error_logging import emit_background_error
 from onyx.connectors.confluence.onyx_confluence import (
+    OnyxConfluence,
     get_user_email_from_username__server,
 )
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger

@@ -1,6 +1,4 @@
-from langgraph.graph import END
-from langgraph.graph import START
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.edges import (
     parallel_retrieval_edge,
@@ -28,11 +26,7 @@ from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.nodes.verify
 )
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalInput,
-)
-from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalOutput,
-)
-from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalState,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
@@ -131,9 +125,9 @@ def expanded_retrieval_graph_builder() -> StateGraph:
 
 
 if __name__ == "__main__":
+    from onyx.context.search.models import SearchRequest
     from onyx.db.engine import get_session_context_manager
     from onyx.llm.factory import get_default_llms
-    from onyx.context.search.models import SearchRequest
 
     graph = expanded_retrieval_graph_builder()
     compiled_graph = graph.compile()

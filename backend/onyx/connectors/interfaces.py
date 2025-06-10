@@ -1,19 +1,17 @@
 import abc
-from collections.abc import Generator
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from types import TracebackType
-from typing import Any
-from typing import Generic
-from typing import TypeAlias
-from typing import TypeVar
+from typing import Any, Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import ConnectorCheckpoint
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import (
+    ConnectorCheckpoint,
+    ConnectorFailure,
+    Document,
+    SlimDocument,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 SecondsSinceUnixEpoch = float

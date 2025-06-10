@@ -1,32 +1,34 @@
-from fastapi import APIRouter
-from fastapi import Depends
-from fastapi import HTTPException
-from fastapi import Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_curator_or_admin_user
-from onyx.auth.users import current_user
+from onyx.auth.users import (
+    current_admin_user,
+    current_curator_or_admin_user,
+    current_user,
+)
 from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.db.credentials import alter_credential
-from onyx.db.credentials import cleanup_gmail_credentials
-from onyx.db.credentials import create_credential
-from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
-from onyx.db.credentials import delete_credential
-from onyx.db.credentials import delete_credential_for_user
-from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.credentials import fetch_credentials_by_source_for_user
-from onyx.db.credentials import fetch_credentials_for_user
-from onyx.db.credentials import swap_credentials_connector
-from onyx.db.credentials import update_credential
+from onyx.db.credentials import (
+    CREDENTIAL_PERMISSIONS_TO_IGNORE,
+    alter_credential,
+    cleanup_gmail_credentials,
+    create_credential,
+    delete_credential,
+    delete_credential_for_user,
+    fetch_credential_by_id_for_user,
+    fetch_credentials_by_source_for_user,
+    fetch_credentials_for_user,
+    swap_credentials_connector,
+    update_credential,
+)
 from onyx.db.engine import get_session
-from onyx.db.models import DocumentSource
-from onyx.db.models import User
-from onyx.server.documents.models import CredentialBase
-from onyx.server.documents.models import CredentialDataUpdateRequest
-from onyx.server.documents.models import CredentialSnapshot
-from onyx.server.documents.models import CredentialSwapRequest
-from onyx.server.documents.models import ObjectCreationIdResponse
+from onyx.db.models import DocumentSource, User
+from onyx.server.documents.models import (
+    CredentialBase,
+    CredentialDataUpdateRequest,
+    CredentialSnapshot,
+    CredentialSwapRequest,
+    ObjectCreationIdResponse,
+)
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop

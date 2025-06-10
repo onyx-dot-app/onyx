@@ -2,8 +2,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -27,7 +26,7 @@ def load_test_data(
     file_name: str = "test_salesforce_data.json",
 ) -> dict[str, str | list[str] | dict[str, Any] | list[dict[str, Any]]]:
     current_dir = Path(__file__).parent
-    with open(current_dir / file_name, "r") as f:
+    with open(current_dir / file_name) as f:
         return json.load(f)
 
 

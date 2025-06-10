@@ -10,9 +10,11 @@ from slack_sdk import WebClient
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.slack.connector import SlackConnector
 from shared_configs.contextvars import get_current_tenant_id
-from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
-from tests.daily.connectors.utils import to_sections
-from tests.daily.connectors.utils import to_text_sections
+from tests.daily.connectors.utils import (
+    load_everything_from_checkpoint_connector,
+    to_sections,
+    to_text_sections,
+)
 
 
 @pytest.fixture

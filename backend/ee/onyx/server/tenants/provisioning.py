@@ -5,55 +5,69 @@ import uuid
 import aiohttp  # Async HTTP client
 import httpx
 import requests
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import ANTHROPIC_DEFAULT_API_KEY
-from ee.onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
-from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
-from ee.onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
+from ee.onyx.configs.app_configs import (
+    ANTHROPIC_DEFAULT_API_KEY,
+    COHERE_DEFAULT_API_KEY,
+    HUBSPOT_TRACKING_URL,
+    OPENAI_DEFAULT_API_KEY,
+)
 from ee.onyx.server.tenants.access import generate_data_plane_token
-from ee.onyx.server.tenants.models import TenantByDomainResponse
-from ee.onyx.server.tenants.models import TenantCreationPayload
-from ee.onyx.server.tenants.models import TenantDeletionPayload
-from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
-from ee.onyx.server.tenants.schema_management import drop_schema
-from ee.onyx.server.tenants.schema_management import run_alembic_migrations
-from ee.onyx.server.tenants.user_mapping import add_users_to_tenant
-from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
-from ee.onyx.server.tenants.user_mapping import user_owns_a_tenant
+from ee.onyx.server.tenants.models import (
+    TenantByDomainResponse,
+    TenantCreationPayload,
+    TenantDeletionPayload,
+)
+from ee.onyx.server.tenants.schema_management import (
+    create_schema_if_not_exists,
+    drop_schema,
+    run_alembic_migrations,
+)
+from ee.onyx.server.tenants.user_mapping import (
+    add_users_to_tenant,
+    get_tenant_id_for_email,
+    user_owns_a_tenant,
+)
 from onyx.auth.users import exceptions
-from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
-from onyx.configs.app_configs import DEV_MODE
+from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL, DEV_MODE
 from onyx.configs.constants import MilestoneRecordType
-from onyx.db.engine import get_session_with_shared_schema
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.llm import update_default_provider
-from onyx.db.llm import upsert_cloud_embedding_provider
-from onyx.db.llm import upsert_llm_provider
-from onyx.db.models import AvailableTenant
-from onyx.db.models import IndexModelStatus
-from onyx.db.models import SearchSettings
-from onyx.db.models import UserTenantMapping
-from onyx.llm.llm_provider_options import ANTHROPIC_MODEL_NAMES
-from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
-from onyx.llm.llm_provider_options import ANTHROPIC_VISIBLE_MODEL_NAMES
-from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
-from onyx.llm.llm_provider_options import OPEN_AI_VISIBLE_MODEL_NAMES
-from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
+from onyx.db.engine import get_session_with_shared_schema, get_session_with_tenant
+from onyx.db.llm import (
+    update_default_provider,
+    upsert_cloud_embedding_provider,
+    upsert_llm_provider,
+)
+from onyx.db.models import (
+    AvailableTenant,
+    IndexModelStatus,
+    SearchSettings,
+    UserTenantMapping,
+)
+from onyx.llm.llm_provider_options import (
+    ANTHROPIC_MODEL_NAMES,
+    ANTHROPIC_PROVIDER_NAME,
+    ANTHROPIC_VISIBLE_MODEL_NAMES,
+    OPEN_AI_MODEL_NAMES,
+    OPEN_AI_VISIBLE_MODEL_NAMES,
+    OPENAI_PROVIDER_NAME,
+)
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
+from onyx.server.manage.llm.models import (
+    LLMProviderUpsertRequest,
+    ModelConfigurationUpsertRequest,
+)
 from onyx.setup import setup_onyx
 from onyx.utils.telemetry import create_milestone_and_report
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    TENANT_ID_PREFIX,
+)
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.enums import EmbeddingProvider
-
 
 logger = logging.getLogger(__name__)
 
@@ -179,18 +193,17 @@ async def notify_control_plane(
         tenant_id=tenant_id, email=email, referral_source=referral_source
     )
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(
-            f"{CONTROL_PLANE_API_BASE_URL}/tenants/create",
-            headers=headers,
-            json=payload.model_dump(),
-        ) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                logger.error(f"Control plane tenant creation failed: {error_text}")
-                raise Exception(
-                    f"Failed to create tenant on control plane: {error_text}"
-                )
+    async with aiohttp.ClientSession() as session, session.post(
+        f"{CONTROL_PLANE_API_BASE_URL}/tenants/create",
+        headers=headers,
+        json=payload.model_dump(),
+    ) as response:
+        if response.status != 200:
+            error_text = await response.text()
+            logger.error(f"Control plane tenant creation failed: {error_text}")
+            raise Exception(
+                f"Failed to create tenant on control plane: {error_text}"
+            )
 
 
 async def rollback_tenant_provisioning(tenant_id: str) -> None:
@@ -415,18 +428,17 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
     }
     payload = TenantDeletionPayload(tenant_id=tenant_id, email=email)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.delete(
-            f"{CONTROL_PLANE_API_BASE_URL}/tenants/delete",
-            headers=headers,
-            json=payload.model_dump(),
-        ) as response:
-            if response.status != 200:
-                error_text = await response.text()
-                logger.error(f"Control plane tenant creation failed: {error_text}")
-                raise Exception(
-                    f"Failed to delete tenant on control plane: {error_text}"
-                )
+    async with aiohttp.ClientSession() as session, session.delete(
+        f"{CONTROL_PLANE_API_BASE_URL}/tenants/delete",
+        headers=headers,
+        json=payload.model_dump(),
+    ) as response:
+        if response.status != 200:
+            error_text = await response.text()
+            logger.error(f"Control plane tenant creation failed: {error_text}")
+            raise Exception(
+                f"Failed to delete tenant on control plane: {error_text}"
+            )
 
 
 def get_tenant_by_domain_from_control_plane(

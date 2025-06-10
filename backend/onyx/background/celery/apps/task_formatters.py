@@ -2,8 +2,7 @@ import logging
 
 from celery import current_task
 
-from onyx.utils.logger import ColoredFormatter
-from onyx.utils.logger import PlainFormatter
+from onyx.utils.logger import ColoredFormatter, PlainFormatter
 
 
 class CeleryTaskPlainFormatter(PlainFormatter):

@@ -1,6 +1,4 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from ee.onyx.db.usage_export import get_all_empty_chat_message_entries
 from onyx.db.engine import get_session_with_current_tenant
@@ -25,7 +23,7 @@ def test_usage_reports(reset: None) -> None:
 
         count = 0
         for entry_batch in get_all_empty_chat_message_entries(db_session, period):
-            for entry in entry_batch:
+            for _entry in entry_batch:
                 count += 1
 
         assert count == EXPECTED_MESSAGES
@@ -39,7 +37,7 @@ def test_usage_reports(reset: None) -> None:
 
         count = 0
         for entry_batch in get_all_empty_chat_message_entries(db_session, period):
-            for entry in entry_batch:
+            for _entry in entry_batch:
                 count += 1
 
         lower = EXPECTED_MESSAGES // 3 - (EXPECTED_MESSAGES // (3 * 3))

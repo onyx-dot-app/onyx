@@ -4,10 +4,8 @@ from datetime import datetime
 from typing import Any
 
 from pytz import UTC
-from simple_salesforce import Salesforce
-from simple_salesforce import SFType
-from simple_salesforce.bulk2 import SFBulk2Handler
-from simple_salesforce.bulk2 import SFBulk2Type
+from simple_salesforce import Salesforce, SFType
+from simple_salesforce.bulk2 import SFBulk2Handler, SFBulk2Type
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger

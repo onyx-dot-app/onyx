@@ -4,17 +4,14 @@ from typing import cast
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
+from onyx.chat.models import LlmDoc, PromptConfig
 from onyx.configs.chat_configs import LANGUAGE_HINT
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Prompt
-from onyx.prompts.chat_prompts import ADDITIONAL_INFO
-from onyx.prompts.chat_prompts import CITATION_REMINDER
+from onyx.prompts.chat_prompts import ADDITIONAL_INFO, CITATION_REMINDER
 from onyx.prompts.constants import CODE_BLOCK_PAT
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 

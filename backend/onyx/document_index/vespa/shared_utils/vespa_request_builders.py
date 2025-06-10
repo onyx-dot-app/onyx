@@ -1,21 +1,21 @@
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces import VespaChunkRequest
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
-from onyx.document_index.vespa_constants import CHUNK_ID
-from onyx.document_index.vespa_constants import DOC_UPDATED_AT
-from onyx.document_index.vespa_constants import DOCUMENT_ID
-from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import HIDDEN
-from onyx.document_index.vespa_constants import METADATA_LIST
-from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
-from onyx.document_index.vespa_constants import USER_FILE
-from onyx.document_index.vespa_constants import USER_FOLDER
+from onyx.document_index.vespa_constants import (
+    ACCESS_CONTROL_LIST,
+    CHUNK_ID,
+    DOC_UPDATED_AT,
+    DOCUMENT_ID,
+    DOCUMENT_SETS,
+    HIDDEN,
+    METADATA_LIST,
+    SOURCE_TYPE,
+    TENANT_ID,
+    USER_FILE,
+    USER_FOLDER,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

@@ -3,95 +3,105 @@ from collections.abc import Callable
 from functools import partial
 from typing import Protocol
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
-from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
-from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
-from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
-from onyx.configs.app_configs import USE_CHUNK_SUMMARY
-from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
+from onyx.configs.app_configs import (
+    DEFAULT_CONTEXTUAL_RAG_LLM_NAME,
+    DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER,
+    ENABLE_CONTEXTUAL_RAG,
+    MAX_DOCUMENT_CHARS,
+    MAX_TOKENS_FOR_FULL_INCLUSION,
+    USE_CHUNK_SUMMARY,
+    USE_DOCUMENT_SUMMARY,
+)
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
-from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import ImageSection
-from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import IndexingDocument
-from onyx.connectors.models import Section
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    ImageSection,
+    IndexAttemptMetadata,
+    IndexingDocument,
+    Section,
+    TextSection,
+)
 from onyx.db.chunk import update_chunk_boost_components__no_commit
-from onyx.db.document import fetch_chunk_counts_for_documents
-from onyx.db.document import get_documents_by_ids
-from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
-from onyx.db.document import prepare_to_modify_documents
-from onyx.db.document import update_docs_chunk_count__no_commit
-from onyx.db.document import update_docs_last_modified__no_commit
-from onyx.db.document import update_docs_updated_at__no_commit
-from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.document import upsert_documents
+from onyx.db.document import (
+    fetch_chunk_counts_for_documents,
+    get_documents_by_ids,
+    mark_document_as_indexed_for_cc_pair__no_commit,
+    prepare_to_modify_documents,
+    update_docs_chunk_count__no_commit,
+    update_docs_last_modified__no_commit,
+    update_docs_updated_at__no_commit,
+    upsert_document_by_connector_credential_pair,
+    upsert_documents,
+)
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name
-from onyx.db.pg_file_store import read_lobj
+from onyx.db.pg_file_store import get_pgfilestore_by_file_name, read_lobj
 from onyx.db.search_settings import get_active_search_settings
-from onyx.db.tag import create_or_add_document_tag
-from onyx.db.tag import create_or_add_document_tag_list
-from onyx.db.user_documents import fetch_user_files_for_documents
-from onyx.db.user_documents import fetch_user_folders_for_documents
-from onyx.db.user_documents import update_user_file_token_count__no_commit
-from onyx.document_index.document_index_utils import (
-    get_multipass_config,
+from onyx.db.tag import create_or_add_document_tag, create_or_add_document_tag_list
+from onyx.db.user_documents import (
+    fetch_user_files_for_documents,
+    fetch_user_folders_for_documents,
+    update_user_file_token_count__no_commit,
 )
-from onyx.document_index.interfaces import DocumentIndex
-from onyx.document_index.interfaces import DocumentMetadata
-from onyx.document_index.interfaces import IndexBatchParams
+from onyx.document_index.document_index_utils import get_multipass_config
+from onyx.document_index.interfaces import (
+    DocumentIndex,
+    DocumentMetadata,
+    IndexBatchParams,
+)
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.chunker import Chunker
-from onyx.indexing.embedder import embed_chunks_with_failure_handling
-from onyx.indexing.embedder import IndexingEmbedder
+from onyx.indexing.embedder import IndexingEmbedder, embed_chunks_with_failure_handling
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.indexing.models import DocAwareChunk
-from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.indexing.models import IndexChunk
-from onyx.indexing.models import UpdatableChunkData
+from onyx.indexing.models import (
+    DocAwareChunk,
+    DocMetadataAwareIndexChunk,
+    IndexChunk,
+    UpdatableChunkData,
+)
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.llm.chat_llm import LLMRateLimitError
-from onyx.llm.factory import get_default_llm_with_vision
-from onyx.llm.factory import get_default_llms
-from onyx.llm.factory import get_llm_for_contextual_rag
+from onyx.llm.factory import (
+    get_default_llm_with_vision,
+    get_default_llms,
+    get_llm_for_contextual_rag,
+)
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import MAX_CONTEXT_TOKENS
-from onyx.llm.utils import message_to_string
+from onyx.llm.utils import MAX_CONTEXT_TOKENS, message_to_string
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.natural_language_processing.utils import tokenizer_trim_middle
-from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_PROMPT1
-from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_PROMPT2
-from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_PROMPT
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    get_tokenizer,
+    tokenizer_trim_middle,
+)
+from onyx.prompts.chat_prompts import (
+    CONTEXTUAL_RAG_PROMPT1,
+    CONTEXTUAL_RAG_PROMPT2,
+    DOCUMENT_SUMMARY_PROMPT,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import (
     INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
 )
-
 
 logger = setup_logger()
 

@@ -4,9 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.configs.constants import MilestoneRecordType
-from onyx.db.models import Milestone
-from onyx.db.models import User
-
+from onyx.db.models import Milestone, User
 
 USER_ASSISTANT_PREFIX = "user_assistants_used_"
 MULTI_ASSISTANT_USED = "multi_assistant_used"

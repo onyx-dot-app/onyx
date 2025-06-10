@@ -1,12 +1,9 @@
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from onyx.connectors.gmail.connector import GmailConnector
-from onyx.connectors.models import Document
-from onyx.connectors.models import SlimDocument
-
+from onyx.connectors.models import Document, SlimDocument
 
 _THREAD_1_START_TIME = 1730568700
 _THREAD_1_END_TIME = 1730569000

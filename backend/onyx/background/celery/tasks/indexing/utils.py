@@ -1,8 +1,6 @@
 import time
-from datetime import datetime
-from datetime import timezone
-from typing import Any
-from typing import cast
+from datetime import datetime, timezone
+from typing import Any, cast
 
 import redis
 from celery import Celery
@@ -12,36 +10,43 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_redis import celery_find_task
-from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.celery_redis import (
+    celery_find_task,
+    celery_get_unacked_task_ids,
+)
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
-from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
-from onyx.configs.constants import DANSWER_REDIS_FUNCTION_LOCK_PREFIX
-from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
-from onyx.configs.constants import OnyxRedisConstants
+from onyx.configs.constants import (
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+    OnyxRedisConstants,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
-from onyx.db.index_attempt import create_index_attempt
-from onyx.db.index_attempt import delete_index_attempt
-from onyx.db.index_attempt import get_all_index_attempts_by_status
-from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_last_attempt_for_cc_pair
-from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
-from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import IndexAttempt
-from onyx.db.models import SearchSettings
+from onyx.db.engine import get_db_current_time, get_session_with_current_tenant
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
+from onyx.db.index_attempt import (
+    create_index_attempt,
+    delete_index_attempt,
+    get_all_index_attempts_by_status,
+    get_index_attempt,
+    get_last_attempt_for_cc_pair,
+    get_recent_attempts_for_cc_pair,
+    mark_attempt_failed,
+)
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_index import RedisConnectorIndex
-from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
+from onyx.redis.redis_connector_index import (
+    RedisConnectorIndex,
+    RedisConnectorIndexPayload,
+)
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.logger import setup_logger
 

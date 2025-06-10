@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 
@@ -11,12 +12,10 @@ OIDC_SCOPE_OVERRIDE: list[str] | None = None
 _OIDC_SCOPE_OVERRIDE = os.environ.get("OIDC_SCOPE_OVERRIDE")
 
 if _OIDC_SCOPE_OVERRIDE:
-    try:
+    with contextlib.suppress(Exception):
         OIDC_SCOPE_OVERRIDE = [
             scope.strip() for scope in _OIDC_SCOPE_OVERRIDE.split(",")
         ]
-    except Exception:
-        pass
 
 # Applicable for SAML Auth
 SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_config"
