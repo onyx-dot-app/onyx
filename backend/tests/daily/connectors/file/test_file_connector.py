@@ -34,15 +34,14 @@ def mock_pgfilestore_record() -> MagicMock:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_single_text_file_with_metadata(
-    mock_get_unstructured_api_key,
-    mock_get_session,
-    mock_get_pgfile,
-    mock_get_filestore,
-    mock_db_session,
-    mock_file_store,
-    mock_pgfilestore_record,
+    mock_get_unstructured_api_key: MagicMock,
+    mock_get_session: MagicMock,
+    mock_get_pgfile: MagicMock,
+    mock_get_filestore: MagicMock,
+    mock_db_session: MagicMock,
+    mock_file_store: MagicMock,
+    mock_pgfilestore_record: MagicMock,
 ) -> None:
-    # Setup mocks
     file_content = io.BytesIO(
         b'#ONYX_METADATA={"link": "https://onyx.app", "file_display_name":"my display name", "tag_of_your_choice": "test-tag", \
           "primary_owners": ["wenxi@onyx.app"], "secondary_owners": ["founders@onyx.app"], \
@@ -53,16 +52,15 @@ def test_single_text_file_with_metadata(
     mock_get_pgfile.return_value = mock_pgfilestore_record
     mock_get_session.return_value.__enter__.return_value = mock_db_session
     mock_file_store.read_file.return_value = file_content
+
     connector = LocalFileConnector(file_locations=["test.txt"], zip_metadata={})
     batches = list(connector.load_from_state())
 
-    # Assert doc exists
     assert len(batches) == 1
     docs = batches[0]
     assert len(docs) == 1
     doc = docs[0]
 
-    # Assert data is correctly loaded
     assert doc.sections[0].text == "Test answer is 12345"
     assert doc.sections[0].link == "https://onyx.app"
     assert doc.semantic_identifier == "my display name"
@@ -78,18 +76,16 @@ def test_single_text_file_with_metadata(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_two_text_files_with_zip_metadata(
-    mock_get_unstructured_api_key,
-    mock_get_session,
-    mock_get_pgfile,
-    mock_get_filestore,
-    mock_db_session,
-    mock_file_store,
-    mock_pgfilestore_record,
+    mock_get_unstructured_api_key: MagicMock,
+    mock_get_session: MagicMock,
+    mock_get_pgfile: MagicMock,
+    mock_get_filestore: MagicMock,
+    mock_db_session: MagicMock,
+    mock_file_store: MagicMock,
+    mock_pgfilestore_record: MagicMock,
 ) -> None:
-    # Setup mocks for two files (no ONYX_METADATA in file content)
     file1_content = io.BytesIO(b"File 1 content")
     file2_content = io.BytesIO(b"File 2 content")
-    # Patch file store to return correct file for each call
     mock_get_filestore.return_value = mock_file_store
     mock_get_pgfile.side_effect = [
         MagicMock(file_name="file1.txt"),
@@ -97,7 +93,6 @@ def test_two_text_files_with_zip_metadata(
     ]
     mock_get_session.return_value.__enter__.return_value = mock_db_session
     mock_file_store.read_file.side_effect = [file1_content, file2_content]
-    # All metadata in zip_metadata
     zip_metadata = {
         "file1.txt": {
             "filename": "file1.txt",
@@ -116,23 +111,23 @@ def test_two_text_files_with_zip_metadata(
             "doc_updated_at": "2023-03-03T00:00:00Z",
         },
     }
+
     connector = LocalFileConnector(
         file_locations=["file1.txt", "file2.txt"], zip_metadata=zip_metadata
     )
     batches = list(connector.load_from_state())
-    # Assert both docs exist
+
     assert len(batches) == 1
     docs = batches[0]
     assert len(docs) == 2
     doc1, doc2 = docs
-    # Assert doc1
+
     assert doc1.sections[0].text == "File 1 content"
     assert doc1.sections[0].link == "https://onyx.app/1"
     assert doc1.semantic_identifier == "display 1"
     assert doc1.primary_owners[0].display_name == "alice@onyx.app"
     assert doc1.secondary_owners[0].display_name == "bob@onyx.app"
     assert doc1.doc_updated_at == datetime(2022, 2, 2, 0, 0, 0, tzinfo=timezone.utc)
-    # Assert doc2
     assert doc2.sections[0].text == "File 2 content"
     assert doc2.sections[0].link == "https://onyx.app/2"
     assert doc2.semantic_identifier == "display 2"
