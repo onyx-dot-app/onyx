@@ -147,7 +147,7 @@ def _download_and_extract_sections_basic(
     # For other file types, download the file
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
-    def response_call():
+    def response_call() -> bytes:
         return download_request(service, file_id)
 
     # Process based on mime type
