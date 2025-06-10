@@ -5,8 +5,6 @@ from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
-from onyx.kg.utils.formatting_utils import generalize_entities
-from onyx.kg.utils.formatting_utils import generalize_relationships
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -46,13 +44,8 @@ def get_kg_vespa_info_update_requests_for_document(
         )
 
     # create the kg vespa info
-    entity_id_names = [entity.id_name for entity in entities]
-    relationship_id_names = [relationship.id_name for relationship in relationships]
-
-    kg_entities = generalize_entities(entity_id_names) | set(entity_id_names)
-    kg_relationships = generalize_relationships(relationship_id_names) | set(
-        relationship_id_names
-    )
+    kg_entities = [entity.id_name for entity in entities]
+    kg_relationships = [relationship.id_name for relationship in relationships]
 
     # get chunks in the document
     with get_session_with_current_tenant() as db_session:
