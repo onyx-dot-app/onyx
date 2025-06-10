@@ -10,18 +10,18 @@ from onyx.connectors.file.connector import LocalFileConnector
 
 
 @pytest.fixture
-def mock_db_session():
+def mock_db_session() -> MagicMock:
     return MagicMock()
 
 
 @pytest.fixture
-def mock_file_store():
+def mock_file_store() -> MagicMock:
     store = MagicMock()
     return store
 
 
 @pytest.fixture
-def mock_pgfilestore_record():
+def mock_pgfilestore_record() -> MagicMock:
     record = MagicMock()
     record.file_name = "test.txt"
     return record
@@ -41,7 +41,7 @@ def test_single_text_file_with_metadata(
     mock_db_session,
     mock_file_store,
     mock_pgfilestore_record,
-):
+) -> None:
     # Setup mocks
     file_content = io.BytesIO(
         b'#ONYX_METADATA={"link": "https://onyx.app", "file_display_name":"my display name", "tag_of_your_choice": "test-tag", \
@@ -85,7 +85,7 @@ def test_two_text_files_with_zip_metadata(
     mock_db_session,
     mock_file_store,
     mock_pgfilestore_record,
-):
+) -> None:
     # Setup mocks for two files (no ONYX_METADATA in file content)
     file1_content = io.BytesIO(b"File 1 content")
     file2_content = io.BytesIO(b"File 2 content")
