@@ -49,6 +49,7 @@ from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import YQL_BASE
+from shared_configs.configs import MULTI_TENANT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -189,9 +190,12 @@ def get_chunks_via_visit_api(
     if not get_large_chunks:
         selection += f" and {index_name}.large_chunk_reference_ids == null"
 
-    selection += build_vespa_filters(
-        filters=filters, include_hidden=True, remove_trailing_and=True
-    )
+    # enforcing tenant_id through a == condition
+    if MULTI_TENANT:
+        if filters.tenant_id:
+            selection += f" and {index_name}.tenant_id=='{filters.tenant_id}'"
+        else:
+            raise ValueError("Tenant ID is required for multi-tenant")
 
     # Setting up the selection criteria in the query parameters
     params = {
