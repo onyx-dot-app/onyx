@@ -350,6 +350,7 @@ def generate_simple_sql(
                 except Exception as e:
                     # No stopping here, the individualized SQL query is not mandatory
                     logger.error(f"Error executing Individualized SQL query: {e}")
+                    raise e
                     # individualized_query_results = None
 
         else:
