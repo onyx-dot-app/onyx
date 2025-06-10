@@ -69,19 +69,20 @@ def build_vespa_filters(
             # TYPE-SUBTYPE::ID -> "TYPE-SUBTYPE::ID"
             # TYPE-SUBTYPE::*  -> ({prefix: true}"TYPE-SUBTYPE")
             # TYPE::*          -> ({prefix: true}"TYPE")
-            if entity.endswith("::*"):
-                return f'({{prefix: true}}"{entity[:-3]}")'
+            GENERAL = "::*"
+            if entity.endswith(GENERAL):
+                return f'({{prefix: true}}"{entity.split(GENERAL, 1)[0]}")'
             else:
                 return f'"{entity}"'
 
-        # OR the entities (e.g., a Jira or a Linear ticket)
+        # OR the entities
         if kg_entities:
             filter_parts = []
             for kg_entity in kg_entities:
                 filter_parts.append(f"(kg_entities contains {_build_kge(kg_entity)})")
             combined_filter_parts.append(f"({' or '.join(filter_parts)})")
 
-        # OR the relationships (e.g., PRs by John or Jane)
+        # TODO: handle complex nested relationship logic (e.g., A participated, and B or C participated)
         if kg_relationships:
             filter_parts = []
             for kg_relationship in kg_relationships:
@@ -92,16 +93,11 @@ def build_vespa_filters(
                     f'rel_type contains "{rel_type}",'
                     f"target contains {_build_kge(target)}))"
                 )
-            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
+            combined_filter_parts.append(f"{' and '.join(filter_parts)}")
 
-        # OR the terms
-        if kg_terms:
-            filter_parts = []
-            for kg_term in kg_terms:
-                filter_parts.append(f'(kg_terms contains "{kg_term}")')
-            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
+        # TODO: remove kg terms entirely from prompts and codebase
 
-        # AND the combined filter parts (e.g., is a PR, and is a PR by John or Jane)
+        # AND the combined filter parts
         return f"({' and '.join(combined_filter_parts)}) and "
 
     def _build_kg_source_filters(
