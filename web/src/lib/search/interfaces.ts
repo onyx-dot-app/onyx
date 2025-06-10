@@ -161,6 +161,11 @@ export interface SearchResponse {
   additional_relevance?: Relevance;
 }
 
+export interface DocumentEditorResponse {
+  edited_text: string;
+  summary: string;
+}
+
 export enum SourceCategory {
   Storage = "Storage",
   Wiki = "Wiki",

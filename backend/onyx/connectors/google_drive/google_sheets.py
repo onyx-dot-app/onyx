@@ -1,4 +1,5 @@
 from typing import Any, Optional
+import datetime
 
 from onyx.connectors.google_utils.resources import get_sheets_service
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
@@ -68,11 +69,11 @@ def read_spreadsheet(
         # Construct the full range with sheet name
         full_range = f"'{sheet_name}'" if not cell_range else f"'{sheet_name}'!{cell_range}"
         
-        # Read the values with formatting to preserve hyperlinks
+        # Read the values with formatting to preserve hyperlinks and effective values for dates
         result = sheets_service.spreadsheets().get(
             spreadsheetId=spreadsheet_id,
             ranges=[full_range],
-            fields="sheets(data(rowData(values(userEnteredValue,hyperlink))))"
+            fields="sheets(data(rowData(values(userEnteredValue,effectiveValue,hyperlink))))",
         ).execute()
         
         # Process the response to extract values and hyperlinks
@@ -86,7 +87,26 @@ def read_spreadsheet(
             processed_row = []
             for cell in row.get("values", []):
                 value = None
-                if "userEnteredValue" in cell:
+                # Check for date values in effectiveValue
+                if "effectiveValue" in cell and "numberValue" in cell["effectiveValue"]:
+                    number_value = cell["effectiveValue"]["numberValue"]
+                    # Check if this might be a date (Google Sheets stores dates as serial numbers)
+                    if "userEnteredValue" in cell and "numberValue" in cell["userEnteredValue"]:
+                        # Convert Excel/Google Sheets date serial number to Python date
+                        # Excel/Google Sheets dates are number of days since December 30, 1899
+                        try:
+                            # Excel/Google Sheets use a different epoch and we need to account for timezone
+                            # Using timedelta to avoid timezone issues with fromtimestamp
+                            base_date = datetime.datetime(1899, 12, 30)
+                            date_value = base_date + datetime.timedelta(days=number_value)
+                            value = date_value.isoformat().split('T')[0]  # Format as YYYY-MM-DD
+                        except (ValueError, OverflowError):
+                            # If conversion fails, fall back to the original number
+                            value = number_value
+                    else:
+                        value = number_value
+                # If not a date or conversion failed, use the original userEnteredValue
+                elif "userEnteredValue" in cell:
                     for key, val in cell["userEnteredValue"].items():
                         value = val
                         break

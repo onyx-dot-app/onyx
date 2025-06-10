@@ -20,6 +20,7 @@ from fastapi import UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from langchain_core.messages import SystemMessage
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
@@ -96,7 +97,10 @@ from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from onyx.server.query_and_chat.models import DocumentChatRequest
+
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.tools.tool_implementations.document.document_editor_tool import DocumentEditorTool
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -841,6 +845,125 @@ def fetch_chat_file(
     file_io = file_store.read_file(file_id, mode="b")
 
     return StreamingResponse(file_io, media_type=media_type)
+
+
+@router.post("/document-chat")
+def handle_document_chat_message(
+    request: DocumentChatRequest,
+    http_request: Request,
+    user: User | None = Depends(current_chat_accessible_user),
+    is_connected_func: Callable[[], bool] = Depends(is_connected),
+) -> StreamingResponse:
+    """
+    Endpoint for document chat using LANGGRAPH agentic workflow.
+    Analyzes documents and provides intelligent responses.
+    """
+    logger.debug(f"Received document chat message: {request.message}")
+
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            llm, fast_llm = get_default_llms(
+                additional_headers=extract_headers(
+                    http_request.headers, LITELLM_PASS_THROUGH_HEADERS
+                )
+            )
+            
+            from onyx.context.search.models import SearchRequest, RetrievalDetails
+            from onyx.agents.agent_search.models import GraphConfig, GraphInputs, GraphTooling, GraphPersistence, GraphSearchConfig
+            from onyx.tools.tool_implementations.search.search_tool import SearchTool
+            from onyx.db.persona import get_best_persona_id_for_user, get_persona_by_id
+            from onyx.chat.models import PromptConfig, DocumentPruningConfig, AnswerStyleConfig, CitationConfig
+            from onyx.context.search.enums import LLMEvaluationType
+            from onyx.tools.force import ForceUseTool
+            from langchain_core.messages import HumanMessage
+            from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+            
+            search_request = SearchRequest(query=request.message)
+
+            original_message = "User message: " + request.message
+            
+            tenant_id = get_current_tenant_id()
+            with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+                persona_id = get_best_persona_id_for_user(db_session, user)
+                if not persona_id:
+                    raise ValueError("No persona available for document chat")
+                
+                persona = get_persona_by_id(persona_id, user, db_session, is_for_edit=False)
+                
+                search_tool = SearchTool(
+                    db_session=db_session,
+                    user=user,
+                    persona=persona,
+                    retrieval_options=RetrievalDetails(),
+                    prompt_config=PromptConfig.from_model(persona.prompts[0]),
+                    llm=llm,
+                    fast_llm=fast_llm,
+                    pruning_config=DocumentPruningConfig(),
+                    answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                    evaluation_type=LLMEvaluationType.BASIC,
+                )
+
+                tools = [search_tool]
+                if request.document_content:
+                    document_editor_tool = DocumentEditorTool(
+                        db_session=db_session,
+                        user=user,
+                        persona=persona,
+                        llm=llm,
+                        fast_llm=fast_llm,
+                        prompt_config=PromptConfig.from_model(persona.prompts[0]),
+                        answer_style_config=AnswerStyleConfig(citation_config=CitationConfig()),
+                        document_content=request.document_content,
+                    )
+                    tools.append(document_editor_tool)
+                    
+                
+                config = GraphConfig(
+                    inputs=GraphInputs(
+                        search_request=search_request,
+                        prompt_builder=AnswerPromptBuilder(
+                            user_message=HumanMessage(content=original_message),
+                            message_history=[],
+                            llm_config=llm.config,
+                            raw_user_query=request.message,
+                            raw_user_uploaded_files=[],
+                            system_message=SystemMessage(content=persona.prompts[0].system_prompt),
+                        ),
+                    ),
+                    tooling=GraphTooling(
+                        primary_llm=llm, 
+                        fast_llm=fast_llm, 
+                        search_tool=search_tool,
+                        tools=tools,
+                        force_use_tool=ForceUseTool(force_use=False, tool_name=search_tool.name),
+                        using_tool_calling_llm=True
+                    ),
+                    persistence=GraphPersistence(
+                        db_session=db_session,
+                        chat_session_id=UUID(request.session_id) if request.session_id else None,
+                        message_id=0,
+                    ),
+                    behavior=GraphSearchConfig(use_agentic_search=True),
+                )
+                
+                from onyx.agents.agent_search.run_graph import run_document_chat_graph
+                
+                for packet in run_document_chat_graph(
+                    config=config,
+                    query=request.message,
+                    document_ids=request.document_ids,
+                ):
+                    try:
+                        yield packet.model_dump_json() + "\n"
+                    except Exception as e:
+                        logger.exception("Error in document chat streaming")
+                        yield json.dumps({"error": str(e)})
+
+        except Exception as e:
+            logger.exception("Error in document chat streaming")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
 @router.get("/search")

@@ -236,6 +236,30 @@ export function UserDropdown({
                     openInNewTab
                   />
                 ))}
+                
+                {/* Chat Navigation */}
+                {page !== "chat" && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <DropdownOption
+                      href="/chat"
+                      icon={<UserIcon size={16} className="my-auto" />}
+                      label="Chat"
+                    />
+                  </>
+                )}
+                
+                {/* Document Editor Section */}
+                {page !== "documents" && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <DropdownOption
+                      href="/documents"
+                      icon={<UserIcon size={16} className="my-auto" />}
+                      label="Documents"
+                    />
+                  </>
+                )}
 
                 {showAdminPanel ? (
                   <DropdownOption

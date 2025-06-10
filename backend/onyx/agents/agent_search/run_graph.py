@@ -37,11 +37,15 @@ from onyx.db.engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
-
+from pydantic import BaseModel
 
 logger = setup_logger()
 
 _COMPILED_GRAPH: CompiledStateGraph | None = None
+
+
+class ChatCompletionPacket(BaseModel):
+    content: str = "chat_complete"
 
 
 def _parse_agent_event(
@@ -157,6 +161,40 @@ def run_dc_graph(
     input = DCMainInput(log_messages=[])
     config.inputs.search_request.query = config.inputs.search_request.query.strip()
     return run_graph(compiled_graph, config, input)
+
+def run_document_chat_graph(
+    config: GraphConfig,
+    query: str,
+    document_ids: list[str] = [],
+) -> AnswerStream:
+    # Add search_tool and document_editor tool in Config (chat_backend.py)
+    from onyx.agents.agent_search.document_chat.graph_builder import document_chat_graph_builder
+    from onyx.agents.agent_search.document_chat.states import DocumentChatInput
+    from onyx.tools.models import SearchToolOverrideKwargs
+    
+    user_file_ids = [int(doc_id) for doc_id in document_ids if doc_id.isdigit()] if document_ids else None
+    
+    # If document IDs are provided, configure search tool to use them
+    if user_file_ids:
+        config.tooling.search_tool_override_kwargs = SearchToolOverrideKwargs(user_file_ids=user_file_ids) 
+    
+    graph = document_chat_graph_builder()
+    compiled_graph = graph.compile()
+    input = DocumentChatInput(
+        query=query, 
+        document_ids=document_ids, 
+    )
+    
+    yield ToolCallKickoff(
+        tool_name="document_chat",
+        tool_args={
+            "query": query, 
+            "document_ids": document_ids, 
+        },
+    )
+    yield from run_graph(compiled_graph, config, input)
+
+    yield ChatCompletionPacket()
 
 
 if __name__ == "__main__":

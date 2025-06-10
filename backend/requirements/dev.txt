@@ -15,7 +15,7 @@ pytest-asyncio==0.22.0
 pytest-xdist==3.6.1
 pytest==8.3.5
 reorder-python-imports-black==3.14.0
-ruff==0.0.286
+ruff==0.0.291
 sentence-transformers==4.0.2
 trafilatura==1.12.2
 types-beautifulsoup4==4.12.0.3

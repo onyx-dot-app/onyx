@@ -1,0 +1,225 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { TiptapEditor } from '../../components/editors/TiptapEditor';
+import { TiptapTableEditor } from '../../components/editors/TiptapTableEditor';
+import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { useGoogleDoc, useGoogleSheet, useGoogleDocFormatted, convertSectionsToHtml, convertFormattedSectionsToStructuredHtml, DocumentBase, FormattedDocumentBase } from '@/lib/hooks/useGoogleDocs';
+import { getSidebarFiles } from '@/lib/documents/types';
+import { FiExternalLink } from 'react-icons/fi';
+import { ThreeDotsLoader } from '@/components/Loading';
+
+export default function DocumentsPage() {
+  const searchParams = useSearchParams();
+  const docId = searchParams?.get('docId');
+  const [content, setContent] = useState('');
+  const [documentData, setDocumentData] = useState<DocumentBase | null>(null);
+  const [formattedDocumentData, setFormattedDocumentData] = useState<FormattedDocumentBase | null>(null);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const [isUserTyping, setIsUserTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // TODO: We should move this to the backend and manage this using the groups instead
+  // set to correct DocumentConfig. As an intermediate step, this could also use an
+  // env var instead too. 
+  const documentConfig = 'PRECISION';
+
+  const fileInfo = getSidebarFiles(documentConfig).find(file => file.docId === docId);
+  const isSpreadsheet = fileInfo?.fileType === 'spreadsheet';
+  
+  const { doc, isLoading: docLoading, error: docError } = useGoogleDoc(isSpreadsheet ? null : docId);
+  const { doc: formattedDoc, isLoading: formattedDocLoading, error: formattedDocError } = useGoogleDocFormatted(isSpreadsheet ? null : docId);
+  const { sheet, isLoading: sheetLoading, error: sheetError } = useGoogleSheet(isSpreadsheet ? docId : null);
+  
+  const isLoading = docLoading || formattedDocLoading || sheetLoading;
+  const error = docError || formattedDocError || sheetError;
+  
+  // Always set the first sheet as the default when sheet data is loaded
+  useEffect(() => {
+    if (sheet && Object.keys(sheet).length > 0) {
+      const sheetNames = Object.keys(sheet);
+      // Always select the first sheet as default when sheet data changes
+      // This ensures the first sheet is always the default
+      setSelectedSheet(sheetNames[0]);
+    }
+  }, [sheet]);
+  
+  // Track previous docId to handle transitions
+  const prevDocIdRef = useRef<string | null>(null);
+  
+  // Reset state when document ID changes
+  useEffect(() => {
+    if (docId !== prevDocIdRef.current) {
+      // Only reset content when docId actually changes, not on first render
+      if (prevDocIdRef.current !== null) {
+        setContent('');
+        setDocumentData(null);
+        setFormattedDocumentData(null);
+        
+        // Only reset selected sheet for non-spreadsheets
+        // For spreadsheets, we'll let the sheet data effect handle setting the first sheet
+        if (!isSpreadsheet) {
+          setSelectedSheet('');
+        }
+      }
+      
+      // Update the ref with current docId
+      prevDocIdRef.current = docId;
+    }
+  }, [docId, isSpreadsheet]);
+
+  // Update content whenever doc, formattedDoc, sheet, or selectedSheet changes
+  useEffect(() => {
+    if (formattedDoc) {
+      setFormattedDocumentData(formattedDoc);
+      setDocumentData(null);
+      // Convert formatted sections to structured HTML for TipTap
+      const htmlContent = convertFormattedSectionsToStructuredHtml(formattedDoc.sections);
+      setContent(htmlContent);
+    } else if (doc) {
+      // Fallback to regular document data
+      setDocumentData(doc);
+      setFormattedDocumentData(null);
+      // Convert sections to HTML for display
+      const htmlContent = convertSectionsToHtml(doc.sections);
+      setContent(htmlContent);
+    } else if (sheet && selectedSheet && sheet[selectedSheet]) {
+      // Get the data for the selected sheet
+      const sheetData = sheet[selectedSheet];
+      // Convert the sheet data to HTML table
+      const tableHtml = convertSheetDataToTableHtml(sheetData);
+      // Update the content state
+      setContent(tableHtml);
+      // Reset document data since we're viewing a sheet
+      setDocumentData(null);
+      setFormattedDocumentData(null);
+    }
+  }, [doc, formattedDoc, sheet, selectedSheet]);
+
+  const convertSheetDataToTableHtml = (data: any[][]) => {
+    if (!data || data.length === 0) return '';
+    
+    const tableRows = data.map((row, index) => {
+      const cells = row.map(cell => {
+        // Check if cell is an object with hyperlink
+        if (cell && typeof cell === 'object' && 'hyperlink' in cell) {
+          const cellValue = cell.value || '';
+          const hyperlink = cell.hyperlink;
+          // Use data-href attribute to preserve the link for Tiptap to process
+          const cellContent = `<a href="${hyperlink}">${cellValue}</a>`;
+          return index === 0 ? `<th>${cellContent}</th>` : `<td>${cellContent}</td>`;
+        } else {
+          // Regular cell without hyperlink
+          return index === 0 ? `<th>${cell || ''}</th>` : `<td>${cell || ''}</td>`;
+        }
+      }).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    
+    return `<table><tbody>${tableRows}</tbody></table>`;
+  };
+
+  return (
+    <DocumentLayout
+      documentContent={content}
+      documentType={isSpreadsheet ? 'spreadsheet' : 'document'}
+      documentTitle={fileInfo?.name || (docId ? 'Document' : 'Documents')}
+      setContent={setContent}
+      documentConfig={documentConfig}
+      documentIds={docId ? [docId] : []}
+    >
+      <div className="container mx-auto p-6 max-w-6xl">
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-foreground">
+              {fileInfo?.name || (docId ? 'Document' : 'Documents')}
+            </h1>
+            {fileInfo?.url && (
+              <a 
+                href={fileInfo.url} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-blue-500 hover:text-blue-700 transition-colors"
+              >
+                <FiExternalLink size={16} />
+              </a>
+            )}
+          </div>
+          {isLoading && <div className="my-2"><ThreeDotsLoader /></div>}
+          {error && <p className="text-red-600">{error.message || 'Failed to load document'}</p>}
+        </div>
+        
+        {/* Sheet selection tabs for spreadsheets */}
+        {sheet && Object.keys(sheet).length > 1 && (
+          <div className="mb-6">
+            <div className="border-b border-border">
+              <nav className="flex space-x-8">
+                {Object.keys(sheet).map((sheetName) => (
+                  <button
+                    key={sheetName}
+                    onClick={() => setSelectedSheet(sheetName)}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      selectedSheet === sheetName
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                    }`}
+                  >
+                    {sheetName}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
+        )}
+        
+        {/* Document editor */}
+        {docId && !isLoading && (
+          <>
+            {isSpreadsheet ? (
+              <TiptapTableEditor 
+                key={`sheet-${docId}-${selectedSheet}`}
+                content={content}
+                onChange={(newContent) => {
+                  setContent(newContent);
+                  setIsUserTyping(true);
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+                  typingTimeoutRef.current = setTimeout(() => {
+                    setIsUserTyping(false);
+                  }, 1000);
+                }}
+                editable={true}
+              />
+            ) : (
+              <TiptapEditor 
+                key={`doc-${docId}`}
+                content={content}
+                documentData={formattedDocumentData || documentData}
+                onChange={(newContent) => {
+                  setContent(newContent);
+                  setIsUserTyping(true);
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+                  typingTimeoutRef.current = setTimeout(() => {
+                    setIsUserTyping(false);
+                  }, 1000);
+                }}
+                editable={true}
+              />
+            )}
+          </>
+        )}
+        
+        {/* Default state when no document selected */}
+        {!docId && (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Select a document from the sidebar to start editing</p>
+          </div>
+        )}
+      </div>
+    </DocumentLayout>
+  );
+}

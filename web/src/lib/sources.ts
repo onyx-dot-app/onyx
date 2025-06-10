@@ -104,6 +104,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Oxos Google Drive",
     category: SourceCategory.Other,
   },
+  oxos_master_file: {
+    icon: GoogleDriveIcon,
+    displayName: "Oxos Master File",
+    category: SourceCategory.Other,
+  },
   github: {
     icon: GithubIcon,
     displayName: "Github",

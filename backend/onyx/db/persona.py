@@ -148,7 +148,7 @@ def get_best_persona_id_for_user(
     # we need to find the best persona for the user
     # This is the persona with the highest display priority that the user has access to
     stmt = select(Persona).order_by(Persona.display_priority.desc()).distinct()
-    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=True)
+    stmt = _add_user_filters(stmt=stmt, user=user, get_editable=False)
     persona = db_session.scalars(stmt).one_or_none()
     return persona.id if persona else None
 

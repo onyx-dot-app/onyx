@@ -46,7 +46,8 @@ sleep 1
 
 # Run Alembic upgrade
 echo "Running Alembic migration..."
-alembic upgrade head
+source ../../.venv/bin/activate
+python -m alembic upgrade head
 
 # Run the following instead of the above if using MT cloud
 # alembic -n schema_private upgrade head
