@@ -140,7 +140,7 @@ def build_citations_user_message(
     context_docs: list[LlmDoc] | list[InferenceChunk],
     all_doc_useful: bool,
     history_message: str = "",
-    context_type: str = "context documents",
+    context_type: str = "контекстные документы",
 ) -> HumanMessage:
     multilingual_expansion = get_multilingual_expansion()
     task_prompt_with_reminder = build_task_prompt_reminders(
