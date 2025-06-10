@@ -62,37 +62,47 @@ def build_vespa_filters(
     ) -> str:
         if not kg_entities and not kg_relationships and not kg_terms:
             return ""
-        kg_entities = kg_entities or []
-        kg_relationships = kg_relationships or []
-        kg_terms = kg_terms or []
 
-        filter_parts = []
+        combined_filter_parts = []
 
-        for kg_entity in kg_entities:
-            kg_entity = f'"{kg_entity}"'
-            if kg_entity.endswith('::*"'):
-                kg_entity = f'({{prefix: true}}{kg_entity[:-4]}")'
-            filter_parts.append(f"kg_entities contains {kg_entity}")
+        def _build_kge(entity: str) -> str:
+            # TYPE-SUBTYPE::ID -> "TYPE-SUBTYPE::ID"
+            # TYPE-SUBTYPE::*  -> ({prefix: true}"TYPE-SUBTYPE")
+            # TYPE::*          -> ({prefix: true}"TYPE")
+            if entity.endswith("::*"):
+                return f'({{prefix: true}}"{entity[:-3]}")'
+            else:
+                return f'"{entity}"'
 
-        for kg_relationship in kg_relationships:
-            source, rel_type, target = split_relationship_id(kg_relationship)
-            source = f'"{source}"'
-            target = f'"{target}"'
-            if source.endswith('::*"'):
-                source = f'({{prefix: true}}{source[:-4]}")'
-            if target.endswith('::*"'):
-                target = f'({{prefix: true}}{target[:-4]}")'
-            filter_parts.append(
-                "kg_relationships contains sameElement("
-                f"source contains {source}, "
-                f'rel_type contains "{rel_type}", '
-                f"target contains {target})"
-            )
+        # OR the entities (e.g., a Jira or a Linear ticket)
+        if kg_entities:
+            filter_parts = []
+            for kg_entity in kg_entities:
+                filter_parts.append(f"(kg_entities contains {_build_kge(kg_entity)})")
+            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
 
-        for kg_term in kg_terms:
-            filter_parts.append(f'kg_terms contains "{kg_term}"')
+        # OR the relationships (e.g., PRs by John or Jane)
+        if kg_relationships:
+            filter_parts = []
+            for kg_relationship in kg_relationships:
+                source, rel_type, target = split_relationship_id(kg_relationship)
+                filter_parts.append(
+                    "(kg_relationships contains sameElement("
+                    f"source contains {_build_kge(source)},"
+                    f'rel_type contains "{rel_type}",'
+                    f"target contains {_build_kge(target)}))"
+                )
+            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
 
-        return f"({' and '.join(filter_parts)}) and "
+        # OR the terms
+        if kg_terms:
+            filter_parts = []
+            for kg_term in kg_terms:
+                filter_parts.append(f'(kg_terms contains "{kg_term}")')
+            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
+
+        # AND the combined filter parts (e.g., is a PR, and is a PR by John or Jane)
+        return f"({' and '.join(combined_filter_parts)}) and "
 
     def _build_kg_source_filters(
         kg_sources: list[str] | None,
