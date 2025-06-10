@@ -29,6 +29,7 @@ from onyx.kg.utils.formatting_utils import format_entity_id_for_models
 from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import split_entity_id
+from onyx.kg.utils.formatting_utils import split_entity_type
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -69,7 +70,6 @@ def _normalize_one_entity(
     with get_session_with_current_tenant() as db_session:
 
         # get allowed documents
-
         metadata = MetaData()
         if allowed_docs_temp_view_name is None:
             raise ValueError("allowed_docs_temp_view_name is not available")
@@ -78,6 +78,13 @@ def _normalize_one_entity(
             metadata,
             autoload_with=db_session.get_bind(),
         )
+
+        # get entity type filter
+        entity_type_split = split_entity_type(entity_type)
+        if len(entity_type_split) == 1:
+            entity_type_filter = KGEntity.entity_class == entity_type
+        else:
+            entity_type_filter = KGEntity.entity_type_id_name == entity_type
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
@@ -118,7 +125,7 @@ def _normalize_one_entity(
                 KGEntity.document_id == allowed_docs_temp_view.c.allowed_doc_id,
             )
             .filter(
-                KGEntity.entity_type_id_name == entity_type,
+                entity_type_filter,
                 KGEntity.name_trigrams.overlap(query_trigrams.c.trigrams),
                 # Add filter for allowed docs - either document_id is NULL or it's in allowed_docs
                 (
