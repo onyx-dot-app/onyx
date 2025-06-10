@@ -231,20 +231,20 @@ def _process_file(
         p_owners = (
             [BasicExpertInfo(display_name=name) for name in p_owner_names]
             if p_owner_names
-            else None
+            else p_owners
         )
 
         s_owner_names = metadata.get("secondary_owners")
         s_owners = (
             [BasicExpertInfo(display_name=name) for name in s_owner_names]
             if s_owner_names
-            else None
+            else s_owners
         )
 
         dt_str = metadata.get("doc_updated_at")
         final_time_updated = time_str_to_utc(dt_str) if dt_str else final_time_updated
 
-        file_display_name = metadata.get("file_display_name")
+        file_display_name = metadata.get("file_display_name") or file_display_name
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection] = []
