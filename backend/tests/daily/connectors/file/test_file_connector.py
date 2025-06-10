@@ -64,8 +64,8 @@ def test_single_text_file_with_metadata(
     assert doc.sections[0].text == "Test answer is 12345"
     assert doc.sections[0].link == "https://onyx.app"
     assert doc.semantic_identifier == "my display name"
-    assert doc.primary_owners[0].display_name == "wenxi@onyx.app"
-    assert doc.secondary_owners[0].display_name == "founders@onyx.app"
+    assert doc.primary_owners[0].display_name == "wenxi@onyx.app"  # type: ignore
+    assert doc.secondary_owners[0].display_name == "founders@onyx.app"  # type: ignore
     assert doc.doc_updated_at == datetime(2001, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
 
@@ -125,12 +125,12 @@ def test_two_text_files_with_zip_metadata(
     assert doc1.sections[0].text == "File 1 content"
     assert doc1.sections[0].link == "https://onyx.app/1"
     assert doc1.semantic_identifier == "display 1"
-    assert doc1.primary_owners[0].display_name == "alice@onyx.app"
-    assert doc1.secondary_owners[0].display_name == "bob@onyx.app"
+    assert doc1.primary_owners[0].display_name == "alice@onyx.app"  # type: ignore
+    assert doc1.secondary_owners[0].display_name == "bob@onyx.app"  # type: ignore
     assert doc1.doc_updated_at == datetime(2022, 2, 2, 0, 0, 0, tzinfo=timezone.utc)
     assert doc2.sections[0].text == "File 2 content"
     assert doc2.sections[0].link == "https://onyx.app/2"
     assert doc2.semantic_identifier == "display 2"
-    assert doc2.primary_owners[0].display_name == "carol@onyx.app"
-    assert doc2.secondary_owners[0].display_name == "dave@onyx.app"
+    assert doc2.primary_owners[0].display_name == "carol@onyx.app"  # type: ignore
+    assert doc2.secondary_owners[0].display_name == "dave@onyx.app"  # type: ignore
     assert doc2.doc_updated_at == datetime(2023, 3, 3, 0, 0, 0, tzinfo=timezone.utc)
