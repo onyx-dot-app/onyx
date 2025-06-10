@@ -95,6 +95,12 @@ class ImageGenerationTool(Tool[None]):
         additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
     ) -> None:
+
+        if model == "gpt-image-1" and output_format == ImageFormat.URL:
+            raise ValueError(
+                "gpt-image-1 does not support URL format. Please use BASE64 format."
+            )
+
         self.api_key = api_key
         self.api_base = api_base
         self.api_version = api_version
@@ -209,7 +215,9 @@ class ImageGenerationTool(Tool[None]):
                 size = "1024x1792"
         else:
             size = "1024x1024"
-
+        logger.debug(
+            f"Generating image with model: {self.model}, size: {size}, format: {format}"
+        )
         try:
             response = image_generation(
                 prompt=prompt,
