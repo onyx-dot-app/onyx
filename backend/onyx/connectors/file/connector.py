@@ -145,26 +145,22 @@ def _process_file(
         else None
     )
 
-    # Additional tags we store as doc metadata
-    metadata_tags = {
-        k: v
-        for k, v in metadata.items()
-        if k
-        not in [
-            "document_id",
-            "time_updated",
-            "doc_updated_at",
-            "link",
-            "primary_owners",
-            "secondary_owners",
-            "filename",
-            "file_display_name",
-            "title",
-            "connector_type",
-            "pdf_password",
-            "mime_type",
-        ]
-    }
+    # Items that should not be stored in doc metadata
+    exclusion_list = [
+        "document_id",
+        "time_updated",
+        "doc_updated_at",
+        "link",
+        "primary_owners",
+        "secondary_owners",
+        "filename",
+        "file_display_name",
+        "title",
+        "connector_type",
+        "pdf_password",
+        "mime_type",
+    ]
+    metadata_tags = {k: v for k, v in metadata.items() if k not in exclusion_list}
 
     source_type_str = metadata.get("connector_type")
     source_type = (
@@ -224,6 +220,31 @@ def _process_file(
             f"Found file-specific metadata for {file_name}: {extraction_result.metadata}"
         )
         metadata.update(extraction_result.metadata)
+
+        # Add tags from file header to final doc metadata
+        metadata_tags.update(
+            {k: v for k, v in metadata.items() if k not in exclusion_list}
+        )
+
+        # Update any user-specified data
+        p_owner_names = metadata.get("primary_owners")
+        p_owners = (
+            [BasicExpertInfo(display_name=name) for name in p_owner_names]
+            if p_owner_names
+            else None
+        )
+
+        s_owner_names = metadata.get("secondary_owners")
+        s_owners = (
+            [BasicExpertInfo(display_name=name) for name in s_owner_names]
+            if s_owner_names
+            else None
+        )
+
+        dt_str = metadata.get("doc_updated_at")
+        final_time_updated = time_str_to_utc(dt_str) if dt_str else final_time_updated
+
+        file_display_name = metadata.get("file_display_name")
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection] = []
