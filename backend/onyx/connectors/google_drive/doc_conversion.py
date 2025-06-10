@@ -36,7 +36,6 @@ from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
-from onyx.utils.lazy import lazy_eval
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -146,7 +145,9 @@ def _download_and_extract_sections_basic(
 
     # For other file types, download the file
     # Use the correct API call for downloading files
-    response_call = lazy_eval(lambda: download_request(service, file_id))
+    # lazy evaluation to only download the file if necessary
+    def response_call():
+        return download_request(service, file_id)
 
     # Process based on mime type
     if mime_type == "text/plain":
@@ -419,12 +420,8 @@ def _convert_drive_item_to_document(
     """
     sections: list[TextSection | ImageSection] = []
     # Only construct these services when needed
-    drive_service = lazy_eval(
-        lambda: get_drive_service(creds, user_email=retriever_email)
-    )
-    docs_service = lazy_eval(
-        lambda: get_google_docs_service(creds, user_email=retriever_email)
-    )
+    drive_service = get_drive_service(creds, user_email=retriever_email)
+    docs_service = get_google_docs_service(creds, user_email=retriever_email)
     doc_id = "unknown"
 
     try:
