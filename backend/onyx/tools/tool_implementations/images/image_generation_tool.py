@@ -230,8 +230,12 @@ class ImageGenerationTool(Tool[None]):
                 url = None
                 image_data = response.data[0]["b64_json"]
 
+            revised_prompt = response.data[0].get("revised_prompt")
+            if revised_prompt is None:
+                revised_prompt = prompt
+
             return ImageGenerationResponse(
-                revised_prompt=response.data[0]["revised_prompt"],
+                revised_prompt=revised_prompt,
                 url=url,
                 image_data=image_data,
             )
