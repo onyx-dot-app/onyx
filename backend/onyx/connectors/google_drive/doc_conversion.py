@@ -19,6 +19,7 @@ from onyx.connectors.google_drive.section_extraction import get_document_section
 from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_google_docs_service
+from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -419,9 +420,14 @@ def _convert_drive_item_to_document(
     Main entry point for converting a Google Drive file => Document object.
     """
     sections: list[TextSection | ImageSection] = []
+
     # Only construct these services when needed
-    drive_service = get_drive_service(creds, user_email=retriever_email)
-    docs_service = get_google_docs_service(creds, user_email=retriever_email)
+    def _get_drive_service() -> GoogleDriveService:
+        return get_drive_service(creds, user_email=retriever_email)
+
+    def _get_docs_service() -> GoogleDocsService:
+        return get_google_docs_service(creds, user_email=retriever_email)
+
     doc_id = "unknown"
 
     try:
@@ -435,14 +441,14 @@ def _convert_drive_item_to_document(
             try:
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
-                    docs_service=docs_service(),
+                    docs_service=_get_docs_service(),
                     doc_id=file.get("id", ""),
                 )
                 if doc_sections:
                     sections = cast(list[TextSection | ImageSection], doc_sections)
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         basic_sections = _download_and_extract_sections_basic(
-                            file, drive_service(), allow_images
+                            file, _get_drive_service(), allow_images
                         )
                         sections = align_basic_advanced(basic_sections, doc_sections)
 
@@ -467,7 +473,7 @@ def _convert_drive_item_to_document(
         # If we don't have sections yet, use the basic extraction method
         if not sections:
             sections = _download_and_extract_sections_basic(
-                file, drive_service(), allow_images
+                file, _get_drive_service(), allow_images
             )
 
         # If we still don't have any sections, skip this file
