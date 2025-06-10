@@ -3,39 +3,6 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGEntityType
-from onyx.kg.models import KGGroundingType
-
-
-def get_determined_grounded_entity_types(db_session: Session) -> List[KGEntityType]:
-    """Get all entity types that have non-null entity_values.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have entity_values defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.entity_values.isnot(None))
-        .all()
-    )
-
-
-def get_grounded_entity_types(db_session: Session) -> List[KGEntityType]:
-    """Get all entity types that have grounding = GROUNDED.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have grounding = GROUNDED
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounding == KGGroundingType.GROUNDED)
-        .all()
-    )
 
 
 def get_entity_types_with_grounded_source_name(
@@ -56,31 +23,6 @@ def get_entity_types_with_grounded_source_name(
     )
 
 
-def get_entity_type_by_grounded_source_name(
-    db_session: Session, grounded_source_name: KGGroundingType
-) -> KGEntityType | None:
-    """Get an entity type by its grounded_source_name and return it as a dictionary.
-
-    Args:
-        db_session: SQLAlchemy session
-        grounded_source_name: The grounded_source_name of the entity to retrieve
-
-    Returns:
-        Dictionary containing the entity's data with column names as keys,
-        or None if the entity is not found
-    """
-    entity_type = (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounded_source_name == grounded_source_name)
-        .first()
-    )
-
-    if entity_type is None:
-        return None
-
-    return entity_type
-
-
 def get_entity_types(
     db_session: Session,
     active: bool | None = True,
@@ -97,56 +39,3 @@ def get_entity_types(
             .order_by(KGEntityType.id_name)
             .all()
         )
-
-
-def get_grounded_entity_types_with_null_grounded_source(
-    db_session: Session,
-) -> List[KGEntityType]:
-    """Get all entity types that have null grounded_source_name and grounding = GROUNDED.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have null grounded_source_name and grounding = GROUNDED
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounded_source_name.is_(None))
-        .filter(KGEntityType.grounding == KGGroundingType.GROUNDED)
-        .all()
-    )
-
-
-def get_entity_types_by_grounding(
-    db_session: Session,
-    grounding: KGGroundingType,
-) -> List[KGEntityType]:
-    """Get all entity types that have a specific grounding.
-
-    Args:
-        db_session: SQLAlchemy session
-        grounding: The grounding type to filter by
-
-    Returns:
-        List of KGEntityType objects that have the specified grounding
-    """
-    return (
-        db_session.query(KGEntityType).filter(KGEntityType.grounding == grounding).all()
-    )
-
-
-def get_grounded_source_name(db_session: Session, entity_type: str) -> str | None:
-    """
-    Get the grounded source name for an entity type.
-    """
-
-    result = (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.id_name == entity_type)
-        .first()
-    )
-    if result is None:
-        return None
-
-    return result.grounded_source_name
