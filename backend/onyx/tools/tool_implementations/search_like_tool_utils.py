@@ -25,7 +25,7 @@ def build_next_prompt_for_search_like_tool(
     using_tool_calling_llm: bool,
     answer_style_config: AnswerStyleConfig,
     prompt_config: PromptConfig,
-    context_type: str = "контекстные документы",
+    context_type: str = "документам из контекста",
 ) -> AnswerPromptBuilder:
     if not using_tool_calling_llm:
         final_context_docs_response = next(

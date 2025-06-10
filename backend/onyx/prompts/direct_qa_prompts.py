@@ -91,7 +91,7 @@ JSON_PROMPT = f"""
 # similar to the chat flow, but with the option of including a
 # "conversation history" block
 CITATIONS_PROMPT = f"""
-Отвечая мне, используй следуюущие {{context_type}}.{DEFAULT_IGNORE_STATEMENT}
+Отвечая мне, обращайся к следуюущим {{context_type}}.{DEFAULT_IGNORE_STATEMENT}
 
 КОНТЕКСТ:
 {GENERAL_SEP_PAT}
@@ -108,7 +108,7 @@ CITATIONS_PROMPT = f"""
 # NOTE: need to add the extra line about "getting right to the point" since the
 # tool calling models from OpenAI tend to be more verbose
 CITATIONS_PROMPT_FOR_TOOL_CALLING = f"""
-Отвечая мне, используй следующие {{context_type}}.{DEFAULT_IGNORE_STATEMENT} \
+Отвечая мне, обращайся к следуюущим {{context_type}}.{DEFAULT_IGNORE_STATEMENT} \
 Ты всегда должнен переходить прямо к делу и никогда не использовать посторонних выражений.
 
 {{history_block}}{{task_prompt}}
