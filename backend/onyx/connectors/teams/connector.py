@@ -499,45 +499,32 @@ def _collect_documents_for_channel(
             replies: list[ChatMessage] | None = None
             cre: ClientRequestException | None = None
 
-            while True:
-                if retries == MAX_RETRIES:
-                    break
-
+            while retries < MAX_RETRIES:
                 try:
                     replies = list(message.replies.get_all().execute_query())
                     cre = None
                     break
+
                 except ClientRequestException as e:
                     cre = e
 
                     if not cre.response:
-                        continue
+                        break
                     if cre.response.status_code != int(HTTPStatus.TOO_MANY_REQUESTS):
-                        continue
+                        break
 
                     retry_after = int(cre.response.headers.get("Retry-After", 10))
                     time.sleep(retry_after)
                     retries += 1
 
-            if cre:
-                failure_message = f"Retrieval of message and its replies failed; {channel.id=} {message.id}"
-                if cre.response:
+            if cre or not replies:
+                failure_message = f"Retrieval of message and its replies failed; {channel.id=} {message.id=}"
+                if cre and cre.response:
                     failure_message = f"{failure_message}; {cre.response.status_code=}"
 
                 yield ConnectorFailure(
-                    failed_entity=EntityFailure(
-                        entity_id=message.id,
-                    ),
-                    failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
-                    exception=cre,
-                )
-
-            if not replies:
-                yield ConnectorFailure(
-                    failed_entity=EntityFailure(
-                        entity_id=message.id,
-                    ),
-                    failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
+                    failed_entity=EntityFailure(entity_id=message.id),
+                    failure_message=failure_message,
                     exception=cre,
                 )
                 continue
