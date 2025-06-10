@@ -1,6 +1,5 @@
 import React from "react";
-import { Formik, Form, Field, ErrorMessage } from "formik";
-import * as Yup from "yup";
+import { Formik, Form } from "formik";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { TextFormField } from "../admin/connectors/Field";

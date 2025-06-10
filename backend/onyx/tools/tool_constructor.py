@@ -16,6 +16,7 @@ from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
+from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
@@ -57,6 +58,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             api_key=llm.config.api_key,
             api_base=llm.config.api_base,
             api_version=llm.config.api_version,
+            max_input_tokens=llm.config.max_input_tokens,
         )
 
     if llm.config.model_provider == "azure" and AZURE_DALLE_API_KEY is not None:
@@ -67,6 +69,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             api_key=AZURE_DALLE_API_KEY,
             api_base=AZURE_DALLE_API_BASE,
             api_version=AZURE_DALLE_API_VERSION,
+            max_input_tokens=llm.config.max_input_tokens,
         )
 
     # Fallback to checking for OpenAI provider in database
@@ -92,6 +95,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         api_key=openai_provider.api_key,
         api_base=openai_provider.api_base,
         api_version=openai_provider.api_version,
+        max_input_tokens=llm.config.max_input_tokens,
     )
 
 
@@ -138,6 +142,7 @@ def construct_tools(
     user: User | None,
     llm: LLM,
     fast_llm: LLM,
+    run_search_setting: OptionalSearchSetting,
     search_tool_config: SearchToolConfig | None = None,
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
@@ -158,7 +163,10 @@ def construct_tools(
             )
 
             # Handle Search Tool
-            if tool_cls.__name__ == SearchTool.__name__:
+            if (
+                tool_cls.__name__ == SearchTool.__name__
+                and run_search_setting != OptionalSearchSetting.NEVER
+            ):
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 

@@ -63,8 +63,8 @@ def persist_agent_results(state: MainState, config: RunnableConfig) -> MainOutpu
 
     persona_id = None
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    if graph_config.inputs.search_request.persona:
-        persona_id = graph_config.inputs.search_request.persona.id
+    if graph_config.inputs.persona:
+        persona_id = graph_config.inputs.persona.id
 
     user_id = None
     assert (

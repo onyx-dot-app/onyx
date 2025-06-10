@@ -74,3 +74,21 @@ def drop_schema(tenant_id: str) -> None:
             text("DROP SCHEMA IF EXISTS %(schema_name)s CASCADE"),
             {"schema_name": tenant_id},
         )
+
+
+def get_current_alembic_version(tenant_id: str) -> str:
+    """Get the current Alembic version for a tenant."""
+    from alembic.runtime.migration import MigrationContext
+    from sqlalchemy import text
+
+    engine = get_sqlalchemy_engine()
+
+    # Set the search path to the tenant's schema
+    with engine.connect() as connection:
+        connection.execute(text(f'SET search_path TO "{tenant_id}"'))
+
+        # Get the current version from the alembic_version table
+        context = MigrationContext.configure(connection)
+        current_rev = context.get_current_revision()
+
+    return current_rev or "head"

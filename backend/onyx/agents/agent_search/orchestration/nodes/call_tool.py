@@ -44,7 +44,9 @@ def call_tool(
     tool = tool_choice.tool
     tool_args = tool_choice.tool_args
     tool_id = tool_choice.id
-    tool_runner = ToolRunner(tool, tool_args)
+    tool_runner = ToolRunner(
+        tool, tool_args, override_kwargs=tool_choice.search_tool_override_kwargs
+    )
     tool_kickoff = tool_runner.kickoff()
 
     emit_packet(tool_kickoff, writer)

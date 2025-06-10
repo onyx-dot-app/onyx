@@ -1,10 +1,10 @@
 from datetime import datetime
 from datetime import timezone
+from pathlib import Path
 from typing import Any
 from typing import cast
 
 import httpx
-from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
@@ -16,70 +16,12 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import Document
-from onyx.db.connector_credential_pair import get_connector_credential_pair
-from onyx.db.enums import ConnectorCredentialPairStatus
-from onyx.db.enums import TaskStatus
-from onyx.db.models import TaskQueueState
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.redis.redis_connector import RedisConnector
-from onyx.server.documents.models import DeletionAttemptSnapshot
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
-
-
-def _get_deletion_status(
-    connector_id: int,
-    credential_id: int,
-    db_session: Session,
-    tenant_id: str,
-) -> TaskQueueState | None:
-    """We no longer store TaskQueueState in the DB for a deletion attempt.
-    This function populates TaskQueueState by just checking redis.
-    """
-    cc_pair = get_connector_credential_pair(
-        connector_id=connector_id, credential_id=credential_id, db_session=db_session
-    )
-    if not cc_pair:
-        return None
-
-    redis_connector = RedisConnector(tenant_id, cc_pair.id)
-    if redis_connector.delete.fenced:
-        return TaskQueueState(
-            task_id="",
-            task_name=redis_connector.delete.fence_key,
-            status=TaskStatus.STARTED,
-        )
-
-    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
-        return TaskQueueState(
-            task_id="",
-            task_name=redis_connector.delete.fence_key,
-            status=TaskStatus.PENDING,
-        )
-
-    return None
-
-
-def get_deletion_attempt_snapshot(
-    connector_id: int,
-    credential_id: int,
-    db_session: Session,
-    tenant_id: str,
-) -> DeletionAttemptSnapshot | None:
-    deletion_task = _get_deletion_status(
-        connector_id, credential_id, db_session, tenant_id
-    )
-    if not deletion_task:
-        return None
-
-    return DeletionAttemptSnapshot(
-        connector_id=connector_id,
-        credential_id=credential_id,
-        status=deletion_task.status,
-    )
 
 
 def document_batch_to_ids(
@@ -180,3 +122,20 @@ def httpx_init_vespa_pool(
         http2=False,
         limits=httpx.Limits(max_keepalive_connections=max_keepalive_connections),
     )
+
+
+def make_probe_path(probe: str, hostname: str) -> Path:
+    """templates the path for a k8s probe file.
+
+    e.g. /tmp/onyx_k8s_indexing_readiness.txt
+    """
+    hostname_parts = hostname.split("@")
+    if len(hostname_parts) != 2:
+        raise ValueError(f"hostname could not be split! {hostname=}")
+
+    name = hostname_parts[0]
+    if not name:
+        raise ValueError(f"name cannot be empty! {name=}")
+
+    safe_name = "".join(c for c in name if c.isalnum()).rstrip()
+    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")

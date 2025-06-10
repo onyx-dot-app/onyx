@@ -5,6 +5,7 @@ Revises: 91ffac7e65b3
 Create Date: 2024-07-24 21:29:31.784562
 
 """
+
 import random
 from alembic import op
 import sqlalchemy as sa

@@ -2,7 +2,7 @@ import { User } from "@/lib/types";
 import { FiPlus, FiX } from "react-icons/fi";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 import { UsersIcon } from "@/components/icons/icons";
-import { Button } from "@/components/Button";
+import { Button } from "@/components/ui/button";
 
 interface UserEditorProps {
   selectedUserIds: string[];

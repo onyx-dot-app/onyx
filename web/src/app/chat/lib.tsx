@@ -26,6 +26,7 @@ import {
   StreamingError,
   ToolCallMetadata,
   AgenticMessageResponseIDInfo,
+  UserKnowledgeFilePacket,
 } from "./interfaces";
 import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
@@ -156,15 +157,39 @@ export type PacketType =
   | SubQuestionPiece
   | ExtendedToolResponse
   | RefinedAnswerImprovement
-  | AgenticMessageResponseIDInfo;
+  | AgenticMessageResponseIDInfo
+  | UserKnowledgeFilePacket;
+
+export interface SendMessageParams {
+  regenerate: boolean;
+  message: string;
+  fileDescriptors: FileDescriptor[];
+  parentMessageId: number | null;
+  chatSessionId: string;
+  filters: Filters | null;
+  selectedDocumentIds: number[] | null;
+  queryOverride?: string;
+  forceSearch?: boolean;
+  modelProvider?: string;
+  modelVersion?: string;
+  temperature?: number;
+  systemPromptOverride?: string;
+  useExistingUserMessage?: boolean;
+  alternateAssistantId?: number;
+  signal?: AbortSignal;
+  userFileIds?: number[];
+  userFolderIds?: number[];
+  useLanggraph?: boolean;
+}
 
 export async function* sendMessage({
   regenerate,
   message,
   fileDescriptors,
+  userFileIds,
+  userFolderIds,
   parentMessageId,
   chatSessionId,
-  promptId,
   filters,
   selectedDocumentIds,
   queryOverride,
@@ -177,26 +202,7 @@ export async function* sendMessage({
   alternateAssistantId,
   signal,
   useLanggraph,
-}: {
-  regenerate: boolean;
-  message: string;
-  fileDescriptors: FileDescriptor[];
-  parentMessageId: number | null;
-  chatSessionId: string;
-  promptId: number | null | undefined;
-  filters: Filters | null;
-  selectedDocumentIds: number[] | null;
-  queryOverride?: string;
-  forceSearch?: boolean;
-  modelProvider?: string;
-  modelVersion?: string;
-  temperature?: number;
-  systemPromptOverride?: string;
-  useExistingUserMessage?: boolean;
-  alternateAssistantId?: number;
-  signal?: AbortSignal;
-  useLanggraph?: boolean;
-}): AsyncGenerator<PacketType, void, unknown> {
+}: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
   const body = JSON.stringify({
@@ -204,19 +210,18 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     message: message,
-    prompt_id: promptId,
+    // just use the default prompt for the assistant.
+    // should remove this in the future, as we don't support multiple prompts for a
+    // single assistant anyways
+    prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     file_descriptors: fileDescriptors,
+    user_file_ids: userFileIds,
+    user_folder_ids: userFolderIds,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
-          run_search:
-            promptId === null ||
-            promptId === undefined ||
-            queryOverride ||
-            forceSearch
-              ? "always"
-              : "auto",
+          run_search: queryOverride || forceSearch ? "always" : "auto",
           real_time: true,
           filters: filters,
         }
@@ -369,14 +374,18 @@ export function getHumanAndAIMessageFromMessageNumber(
   if (messageInd !== -1) {
     const matchingMessage = messageHistory[messageInd];
     const pairedMessage =
-      matchingMessage.type === "user"
+      matchingMessage && matchingMessage.type === "user"
         ? messageHistory[messageInd + 1]
         : messageHistory[messageInd - 1];
 
     const humanMessage =
-      matchingMessage.type === "user" ? matchingMessage : pairedMessage;
+      matchingMessage && matchingMessage.type === "user"
+        ? matchingMessage
+        : pairedMessage;
     const aiMessage =
-      matchingMessage.type === "user" ? pairedMessage : matchingMessage;
+      matchingMessage && matchingMessage.type === "user"
+        ? pairedMessage
+        : matchingMessage;
 
     return {
       humanMessage,
@@ -425,13 +434,25 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
     const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
 
     if (diffDays < 1) {
-      groups["Today"].push(chatSession);
+      const groups_today = groups["Today"];
+      if (groups_today) {
+        groups_today.push(chatSession);
+      }
     } else if (diffDays <= 7) {
-      groups["Previous 7 Days"].push(chatSession);
+      const groups_7 = groups["Previous 7 Days"];
+      if (groups_7) {
+        groups_7.push(chatSession);
+      }
     } else if (diffDays <= 30) {
-      groups["Previous 30 days"].push(chatSession);
+      const groups_30 = groups["Previous 30 Days"];
+      if (groups_30) {
+        groups_30.push(chatSession);
+      }
     } else {
-      groups["Over 30 days"].push(chatSession);
+      const groups_over_30 = groups["Over 30 days"];
+      if (groups_over_30) {
+        groups_over_30.push(chatSession);
+      }
     }
   });
 
@@ -552,7 +573,11 @@ export function buildLatestMessageChain(
 
   //
   // remove system message
-  if (finalMessageList.length > 0 && finalMessageList[0].type === "system") {
+  if (
+    finalMessageList.length > 0 &&
+    finalMessageList[0] &&
+    finalMessageList[0].type === "system"
+  ) {
     finalMessageList = finalMessageList.slice(1);
   }
   return finalMessageList.concat(additionalMessagesOnMainline);
@@ -632,7 +657,11 @@ export function personaIncludesRetrieval(selectedPersona: Persona) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
+      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(
+        tool.in_code_tool_id
+      ) &&
+      selectedPersona.user_file_ids?.length === 0 &&
+      selectedPersona.user_folder_ids?.length === 0
   );
 }
 
@@ -653,7 +682,7 @@ const PARAMS_TO_SKIP = [
 ];
 
 export function buildChatUrl(
-  existingSearchParams: ReadonlyURLSearchParams,
+  existingSearchParams: ReadonlyURLSearchParams | null,
   chatSessionId: string | null,
   personaId: number | null,
   search?: boolean
@@ -670,7 +699,7 @@ export function buildChatUrl(
     finalSearchParams.push(`${SEARCH_PARAM_NAMES.PERSONA_ID}=${personaId}`);
   }
 
-  existingSearchParams.forEach((value, key) => {
+  existingSearchParams?.forEach((value, key) => {
     if (!PARAMS_TO_SKIP.includes(key)) {
       finalSearchParams.push(`${key}=${value}`);
     }
@@ -704,7 +733,7 @@ export async function uploadFilesForChat(
   return [responseJson.files as FileDescriptor[], null];
 }
 
-export async function useScrollonStream({
+export function useScrollonStream({
   chatState,
   scrollableDivRef,
   scrollDist,
@@ -802,5 +831,5 @@ export async function useScrollonStream({
         });
       }
     }
-  }, [chatState, distance, scrollDist, scrollableDivRef]);
+  }, [chatState, distance, scrollDist, scrollableDivRef, enableAutoScroll]);
 }

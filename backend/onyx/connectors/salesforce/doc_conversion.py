@@ -1,12 +1,13 @@
 import re
+from typing import cast
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
-from onyx.connectors.salesforce.sqlite_functions import get_child_ids
-from onyx.connectors.salesforce.sqlite_functions import get_record
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
+from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.utils.logger import setup_logger
 
@@ -114,21 +115,22 @@ def _extract_dict_text(raw_dict: dict) -> str:
     return natural_language_for_dict
 
 
-def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> Section:
-    return Section(
+def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> TextSection:
+    return TextSection(
         text=_extract_dict_text(salesforce_object.data),
         link=f"{base_url}/{salesforce_object.id}",
     )
 
 
 def _extract_primary_owners(
+    sf_db: OnyxSalesforceSQLite,
     sf_object: SalesforceObject,
 ) -> list[BasicExpertInfo] | None:
     object_dict = sf_object.data
     if not (last_modified_by_id := object_dict.get("LastModifiedById")):
         logger.warning(f"No LastModifiedById found for {sf_object.id}")
         return None
-    if not (last_modified_by := get_record(last_modified_by_id)):
+    if not (last_modified_by := sf_db.get_record(last_modified_by_id)):
         logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
         return None
 
@@ -157,6 +159,7 @@ def _extract_primary_owners(
 
 
 def convert_sf_object_to_doc(
+    sf_db: OnyxSalesforceSQLite,
     sf_object: SalesforceObject,
     sf_instance: str,
 ) -> Document:
@@ -168,18 +171,18 @@ def convert_sf_object_to_doc(
     extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
 
     sections = [_extract_section(sf_object, base_url)]
-    for id in get_child_ids(sf_object.id):
-        if not (child_object := get_record(id)):
+    for id in sf_db.get_child_ids(sf_object.id):
+        if not (child_object := sf_db.get_record(id, isChild=True)):
             continue
         sections.append(_extract_section(child_object, base_url))
 
     doc = Document(
         id=onyx_salesforce_id,
-        sections=sections,
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,
-        primary_owners=_extract_primary_owners(sf_object),
+        primary_owners=_extract_primary_owners(sf_db, sf_object),
         metadata={},
     )
     return doc

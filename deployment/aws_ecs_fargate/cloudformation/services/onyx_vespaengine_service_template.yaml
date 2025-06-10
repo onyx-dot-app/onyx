@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template for Onyx Vespa Engine TaskDefinition
+Parameters:
+  Environment:
+    Type: String
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
+  VpcID:
+    Type: String
+    Default: vpc-098cfa79d637dabff
+  ServiceName:
+    Type: String
+    Default: onyx-vespaengine
+  TaskCpu:
+    Type: String
+    Default: "4096"
+  TaskMemory:
+    Type: String
+    Default: "16384"
+  TaskDesiredCount:
+    Type: Number
+    Default: 1
+
+Resources:
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSClusterName"
+      CapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Base: 0
+          Weight: 1
+      TaskDefinition: !Ref TaskDefinition
+      ServiceName: !Sub ${Environment}-${ServiceName}-service
+      SchedulingStrategy: REPLICA
+      DesiredCount: !Ref TaskDesiredCount
+      AvailabilityZoneRebalancing: ENABLED
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Ref: SecurityGroup
+          Subnets: !Ref SubnetIDs
+      PlatformVersion: LATEST
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      ServiceConnectConfiguration:
+        Enabled: false
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ServiceDiscoveryService.Arn
+      Tags:
+        - Key: app
+          Value: onyx
+        - Key: service
+          Value: !Ref ServiceName
+        - Key: env
+          Value: !Ref Environment
+      EnableECSManagedTags: true
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub Onyx SecurityGroup access to EFS mount and ${ServiceName}.
+      GroupName: !Sub ${Environment}-ecs-${ServiceName}
+      VpcId: !Ref VpcID
+      SecurityGroupIngress:
+        - FromPort: 19071
+          ToPort: 19071
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+        - FromPort: 19071
+          ToPort: 19071
+          IpProtocol: tcp
+          CidrIpv6: "::/0"
+        - FromPort: 8081
+          ToPort: 8081
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+        - FromPort: 8081
+          ToPort: 8081
+          IpProtocol: tcp
+          CidrIpv6: "::/0"
+        - FromPort: 2049
+          ToPort: 2049
+          IpProtocol: tcp
+          SourceSecurityGroupId:
+            Fn::ImportValue:
+              Fn::Sub: "${Environment}-onyx-efs-EFSSecurityGroupMountTargets"
+
+  ServiceDiscoveryService:
+    Type: "AWS::ServiceDiscovery::Service"
+    Properties:
+      Name: !Sub ${Environment}-${ServiceName}-service
+      DnsConfig:
+        DnsRecords:
+          - Type: "A"
+            TTL: 15
+      NamespaceId:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+  
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${Environment}-${ServiceName}-TaskDefinition
+      TaskRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskRole"
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskExecutionRole"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: vespaengine
+          Image: vespaengine/vespa:8.526.15
+          Cpu: 0
+          Essential: true
+          PortMappings:
+            - Name: vespaengine_port
+              ContainerPort: 19071
+              HostPort: 19071
+              Protocol: tcp
+              AppProtocol: http
+            - Name: vespaengine_port2
+              ContainerPort: 8081
+              HostPort: 8081
+              Protocol: tcp
+              AppProtocol: http
+          MountPoints:
+            - SourceVolume: efs-volume-data
+              ContainerPath: /opt/vespa/var
+              ReadOnly: false
+            - SourceVolume: efs-volume-tmp
+              ContainerPath: /var/tmp
+              ReadOnly: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: /ecs/OnyxVespaEngineTaskDefinition
+              mode: non-blocking
+              awslogs-create-group: "true"
+              max-buffer-size: "25m"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          User: "1000"
+          Environment:
+            - Name: VESPA_SKIP_UPGRADE_CHECK
+              Value: "true"
+          VolumesFrom: []
+          SystemControls: []
+      Volumes:
+        - Name: efs-volume-tmp
+          EFSVolumeConfiguration:
+            FilesystemId:
+              Fn::ImportValue:
+                Fn::Sub: "${Environment}-onyx-efs-OnyxEfsId"
+            RootDirectory: "/"
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId:
+                Fn::ImportValue:
+                  Fn::Sub: "${Environment}-onyx-efs-VespaEngineTmpEfsAccessPoint"
+        - Name: efs-volume-data
+          EFSVolumeConfiguration:
+            FilesystemId:
+              Fn::ImportValue:
+                Fn::Sub: "${Environment}-onyx-efs-OnyxEfsId"
+            RootDirectory: "/"
+            TransitEncryption: ENABLED
+            AuthorizationConfig:
+              AccessPointId:
+                Fn::ImportValue:
+                  Fn::Sub: "${Environment}-onyx-efs-VespaEngineDataEfsAccessPoint"

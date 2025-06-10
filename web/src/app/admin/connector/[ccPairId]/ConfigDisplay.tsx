@@ -1,7 +1,5 @@
-import CardSection from "@/components/admin/CardSection";
 import { getNameFromPath } from "@/lib/fileUtils";
 import { ValidSources } from "@/lib/types";
-import Title from "@/components/ui/title";
 import { EditIcon } from "@/components/icons/icons";
 
 import { useState } from "react";
@@ -26,7 +24,7 @@ function convertObjectToString(obj: any): string | any {
   return obj;
 }
 
-function buildConfigEntries(
+export function buildConfigEntries(
   obj: any,
   sourceType: ValidSources
 ): { [key: string]: string } {
@@ -44,7 +42,15 @@ function buildConfigEntries(
   return obj;
 }
 
-function ConfigItem({ label, value }: { label: string; value: any }) {
+function ConfigItem({
+  label,
+  value,
+  onEdit,
+}: {
+  label: string;
+  value: any;
+  onEdit?: () => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const isExpandable = Array.isArray(value) && value.length > 5;
 
@@ -52,11 +58,11 @@ function ConfigItem({ label, value }: { label: string; value: any }) {
     if (Array.isArray(value)) {
       const displayedItems = isExpanded ? value : value.slice(0, 5);
       return (
-        <ul className="list-disc max-w-full pl-4 mt-2 overflow-x-auto">
+        <ul className="list-disc pl-4 overflow-x-auto">
           {displayedItems.map((item, index) => (
             <li
               key={index}
-              className="mb-1 max-w-full overflow-hidden  text-right text-ellipsis whitespace-nowrap"
+              className="mb-1 overflow-hidden text-ellipsis whitespace-nowrap"
             >
               {convertObjectToString(item)}
             </li>
@@ -65,7 +71,7 @@ function ConfigItem({ label, value }: { label: string; value: any }) {
       );
     } else if (typeof value === "object" && value !== null) {
       return (
-        <div className="mt-2 overflow-x-auto">
+        <div className="overflow-x-auto">
           {Object.entries(value).map(([key, val]) => (
             <div key={key} className="mb-1">
               <span className="font-semibold">{key}:</span>{" "}
@@ -75,20 +81,24 @@ function ConfigItem({ label, value }: { label: string; value: any }) {
         </div>
       );
     }
+    // TODO: figure out a nice way to display boolean values
+    else if (typeof value === "boolean") {
+      return value ? "True" : "False";
+    }
     return convertObjectToString(value) || "-";
   };
 
   return (
-    <li className="w-full py-2">
-      <div className="flex items-center justify-between w-full">
-        <span className="mb-2">{label}</span>
-        <div className="mt-2 overflow-x-auto w-fit">
+    <li className="w-full py-4 px-1">
+      <div className="flex items-center w-full">
+        <span className="text-sm">{label}</span>
+        <div className="text-right overflow-x-auto max-w-[60%] text-sm font-normal ml-auto">
           {renderValue()}
 
           {isExpandable && (
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="mt-2 ml-auto text-text-600 hover:text-text-800 flex items-center"
+              className="mt-2 text-sm text-text-600 hover:text-text-800 flex items-center ml-auto"
             >
               {isExpanded ? (
                 <>
@@ -104,6 +114,11 @@ function ConfigItem({ label, value }: { label: string; value: any }) {
             </button>
           )}
         </div>
+        {onEdit && (
+          <button onClick={onEdit} className="ml-4">
+            <EditIcon size={12} />
+          </button>
+        )}
       </div>
     </li>
   );
@@ -146,81 +161,50 @@ export function AdvancedConfigDisplay({
   };
 
   return (
-    <>
-      <Title className="mt-8 mb-2">Advanced Configuration</Title>
-      <CardSection>
-        <ul className="w-full text-sm divide-y divide-neutral-200 dark:divide-neutral-700">
-          {pruneFreq && (
-            <li
-              key={0}
-              className="w-full flex justify-between items-center py-2"
-            >
-              <span>Pruning Frequency</span>
-              <span className="ml-auto w-24">
-                {formatPruneFrequency(pruneFreq)}
-              </span>
-              <span className="w-8 text-right">
-                <button onClick={() => onPruningEdit()}>
-                  <EditIcon size={12} />
-                </button>
-              </span>
-            </li>
-          )}
-          {refreshFreq && (
-            <li
-              key={1}
-              className="w-full flex justify-between items-center py-2"
-            >
-              <span>Refresh Frequency</span>
-              <span className="ml-auto w-24">
-                {formatRefreshFrequency(refreshFreq)}
-              </span>
-              <span className="w-8 text-right">
-                <button onClick={() => onRefreshEdit()}>
-                  <EditIcon size={12} />
-                </button>
-              </span>
-            </li>
-          )}
-          {indexingStart && (
-            <li
-              key={2}
-              className="w-full flex justify-between items-center py-2"
-            >
-              <span>Indexing Start</span>
-              <span>{formatDate(indexingStart)}</span>
-            </li>
-          )}
-        </ul>
-      </CardSection>
-    </>
+    <div>
+      <ul className="w-full divide-y divide-neutral-200 dark:divide-neutral-700">
+        {pruneFreq !== null && (
+          <ConfigItem
+            label="Pruning Frequency"
+            value={formatPruneFrequency(pruneFreq)}
+            onEdit={onPruningEdit}
+          />
+        )}
+        {refreshFreq && (
+          <ConfigItem
+            label="Refresh Frequency"
+            value={formatRefreshFrequency(refreshFreq)}
+            onEdit={onRefreshEdit}
+          />
+        )}
+        {indexingStart && (
+          <ConfigItem
+            label="Indexing Start"
+            value={formatDate(indexingStart)}
+          />
+        )}
+      </ul>
+    </div>
   );
 }
 
 export function ConfigDisplay({
-  connectorSpecificConfig,
-  sourceType,
+  configEntries,
+  onEdit,
 }: {
-  connectorSpecificConfig: any;
-  sourceType: ValidSources;
+  configEntries: { [key: string]: string };
+  onEdit?: (key: string) => void;
 }) {
-  const configEntries = Object.entries(
-    buildConfigEntries(connectorSpecificConfig, sourceType)
-  );
-  if (!configEntries.length) {
-    return null;
-  }
-
   return (
-    <>
-      <Title className="mb-2">Configuration</Title>
-      <CardSection>
-        <ul className="w-full text-sm divide-y divide-background-200 dark:divide-background-700">
-          {configEntries.map(([key, value]) => (
-            <ConfigItem key={key} label={key} value={value} />
-          ))}
-        </ul>
-      </CardSection>
-    </>
+    <ul className="w-full divide-y divide-background-200 dark:divide-background-700">
+      {Object.entries(configEntries).map(([key, value]) => (
+        <ConfigItem
+          key={key}
+          label={key}
+          value={value}
+          onEdit={onEdit ? () => onEdit(key) : undefined}
+        />
+      ))}
+    </ul>
   );
 }

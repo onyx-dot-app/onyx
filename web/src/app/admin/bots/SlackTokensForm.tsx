@@ -7,7 +7,6 @@ import { createSlackBot, updateSlackBot } from "./new/lib";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useEffect } from "react";
-import { Switch } from "@/components/ui/switch";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -30,7 +29,7 @@ export const SlackTokensForm = ({
     if (onValuesChange) {
       onValuesChange(initialValues);
     }
-  }, [initialValues]);
+  }, [initialValues, onValuesChange]);
 
   return (
     <Formik

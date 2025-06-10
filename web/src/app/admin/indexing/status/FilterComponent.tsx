@@ -5,20 +5,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { SortIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
-import { FiFilter, FiX, FiCheck } from "react-icons/fi";
 
 export interface FilterOptions {
   accessType: AccessType[] | null;
@@ -185,7 +181,10 @@ export const FilterComponent = forwardRef<
               hasActiveFilters ? "border-primary bg-primary/5" : ""
             }`}
           >
-            <SortIcon size={20} className="text-neutral-800" />
+            <SortIcon
+              size={20}
+              className="text-neutral-800 dark:text-neutral-200"
+            />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -365,7 +364,7 @@ export const FilterComponent = forwardRef<
 
       {hasActiveFilters && (
         <div className="absolute -top-1 -right-1">
-          <Badge className="h-2 bg-red-400 border-red-400 w-2 p-0 border-2 flex items-center justify-center" />
+          <Badge className="h-2 !bg-red-400 !border-red-400 w-2 p-0 border-2 flex items-center justify-center" />
         </div>
       )}
     </div>

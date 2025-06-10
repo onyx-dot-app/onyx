@@ -49,9 +49,9 @@ class FullUserSnapshot(BaseModel):
         )
 
 
-class InvitedUserSnapshot(BaseModel):
-    email: str
-
-
 class DisplayPriorityRequest(BaseModel):
     display_priority_map: dict[int, int]
+
+
+class InvitedUserSnapshot(BaseModel):
+    email: str

@@ -32,15 +32,15 @@ class InCodeToolInfo(TypedDict):
 BUILT_IN_TOOLS: list[InCodeToolInfo] = [
     InCodeToolInfo(
         cls=SearchTool,
-        description="The Search Tool allows the Assistant to search through connected knowledge to help build an answer.",
+        description="The Search Action allows the Assistant to search through connected knowledge to help build an answer.",
         in_code_tool_id=SearchTool.__name__,
         display_name=SearchTool._DISPLAY_NAME,
     ),
     InCodeToolInfo(
         cls=ImageGenerationTool,
         description=(
-            "The Image Generation Tool allows the assistant to use DALL-E 3 to generate images. "
-            "The tool will be used when the user asks the assistant to generate an image."
+            "The Image Generation Action allows the assistant to use DALL-E 3 to generate images. "
+            "The action will be used when the user asks the assistant to generate an image."
         ),
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
@@ -51,7 +51,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
             InCodeToolInfo(
                 cls=InternetSearchTool,
                 description=(
-                    "The Internet Search Tool allows the assistant "
+                    "The Internet Search Action allows the assistant "
                     "to perform internet searches for up-to-date information."
                 ),
                 in_code_tool_id=InternetSearchTool.__name__,
@@ -98,7 +98,7 @@ def load_builtin_tools(db_session: Session) -> None:
     for tool_id, tool in list(in_code_tool_id_to_tool.items()):
         if tool_id not in built_in_ids:
             db_session.delete(tool)
-            logger.notice(f"Removed tool no longer in built-in list: {tool.name}")
+            logger.notice(f"Removed action no longer in built-in list: {tool.name}")
 
     db_session.commit()
     logger.notice("All built-in tools are loaded/verified.")

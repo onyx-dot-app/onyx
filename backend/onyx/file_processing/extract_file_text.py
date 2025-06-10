@@ -2,16 +2,20 @@ import io
 import json
 import os
 import re
+import uuid
 import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
+from collections.abc import Sequence
 from email.parser import Parser as EmailParser
+from enum import auto
+from enum import IntFlag
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 from typing import IO
-from typing import List
-from typing import Tuple
+from typing import NamedTuple
+from zipfile import BadZipFile
 
 import chardet
 import docx  # type: ignore
@@ -23,8 +27,8 @@ from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
-from onyx.configs.constants import DANSWER_METADATA_FILENAME
 from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
@@ -33,9 +37,10 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
 TEXT_SECTION_SEPARATOR = "\n\n"
 
-PLAIN_TEXT_FILE_EXTENSIONS = [
+ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
     ".txt",
     ".md",
     ".mdx",
@@ -49,7 +54,7 @@ PLAIN_TEXT_FILE_EXTENSIONS = [
     ".yaml",
 ]
 
-VALID_FILE_EXTENSIONS = PLAIN_TEXT_FILE_EXTENSIONS + [
+ACCEPTED_DOCUMENT_FILE_EXTENSIONS = [
     ".pdf",
     ".docx",
     ".pptx",
@@ -57,11 +62,20 @@ VALID_FILE_EXTENSIONS = PLAIN_TEXT_FILE_EXTENSIONS + [
     ".eml",
     ".epub",
     ".html",
+]
+
+ACCEPTED_IMAGE_FILE_EXTENSIONS = [
     ".png",
     ".jpg",
     ".jpeg",
     ".webp",
 ]
+
+ALL_ACCEPTED_FILE_EXTENSIONS = (
+    ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
+    + ACCEPTED_DOCUMENT_FILE_EXTENSIONS
+    + ACCEPTED_IMAGE_FILE_EXTENSIONS
+)
 
 IMAGE_MEDIA_TYPES = [
     "image/png",
@@ -70,8 +84,15 @@ IMAGE_MEDIA_TYPES = [
 ]
 
 
+class OnyxExtensionType(IntFlag):
+    Plain = auto()
+    Document = auto()
+    Multimedia = auto()
+    All = Plain | Document | Multimedia
+
+
 def is_text_file_extension(file_name: str) -> bool:
-    return any(file_name.endswith(ext) for ext in PLAIN_TEXT_FILE_EXTENSIONS)
+    return any(file_name.endswith(ext) for ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS)
 
 
 def get_file_ext(file_path_or_name: str | Path) -> str:
@@ -83,8 +104,20 @@ def is_valid_media_type(media_type: str) -> bool:
     return media_type in IMAGE_MEDIA_TYPES
 
 
-def is_valid_file_ext(ext: str) -> bool:
-    return ext in VALID_FILE_EXTENSIONS
+def is_accepted_file_ext(ext: str, ext_type: OnyxExtensionType) -> bool:
+    if ext_type & OnyxExtensionType.Plain:
+        if ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS:
+            return True
+
+    if ext_type & OnyxExtensionType.Document:
+        if ext in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
+            return True
+
+    if ext_type & OnyxExtensionType.Multimedia:
+        if ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+            return True
+
+    return False
 
 
 def is_text_file(file: IO[bytes]) -> bool:
@@ -115,25 +148,11 @@ def load_files_from_zip(
     zip_file_io: IO,
     ignore_macos_resource_fork_files: bool = True,
     ignore_dirs: bool = True,
-) -> Iterator[tuple[zipfile.ZipInfo, IO[Any], dict[str, Any]]]:
+) -> Iterator[tuple[zipfile.ZipInfo, IO[Any]]]:
     """
-    If there's a .onyx_metadata.json in the zip, attach those metadata to each subfile.
+    Iterates through files in a zip archive, yielding (ZipInfo, file handle) pairs.
     """
     with zipfile.ZipFile(zip_file_io, "r") as zip_file:
-        zip_metadata = {}
-        try:
-            metadata_file_info = zip_file.getinfo(DANSWER_METADATA_FILENAME)
-            with zip_file.open(metadata_file_info, "r") as metadata_file:
-                try:
-                    zip_metadata = json.load(metadata_file)
-                    if isinstance(zip_metadata, list):
-                        # convert list of dicts to dict of dicts
-                        zip_metadata = {d["filename"]: d for d in zip_metadata}
-                except json.JSONDecodeError:
-                    logger.warning(f"Unable to load {DANSWER_METADATA_FILENAME}")
-        except KeyError:
-            logger.info(f"No {DANSWER_METADATA_FILENAME} file")
-
         for file_info in zip_file.infolist():
             if ignore_dirs and file_info.is_dir():
                 continue
@@ -141,22 +160,23 @@ def load_files_from_zip(
             if (
                 ignore_macos_resource_fork_files
                 and is_macos_resource_fork_file(file_info.filename)
-            ) or file_info.filename == DANSWER_METADATA_FILENAME:
+            ) or file_info.filename == ONYX_METADATA_FILENAME:
                 continue
 
             with zip_file.open(file_info.filename, "r") as subfile:
-                yield file_info, subfile, zip_metadata.get(file_info.filename, {})
+                # Try to match by exact filename first
+                yield file_info, subfile
 
 
 def _extract_onyx_metadata(line: str) -> dict | None:
     """
     Example: first line has:
-        <!-- DANSWER_METADATA={"title": "..."} -->
+        <!-- ONYX_METADATA={"title": "..."} -->
       or
-        #DANSWER_METADATA={"title":"..."}
+        #ONYX_METADATA={"title":"..."}
     """
-    html_comment_pattern = r"<!--\s*DANSWER_METADATA=\{(.*?)\}\s*-->"
-    hashtag_pattern = r"#DANSWER_METADATA=\{(.*?)\}"
+    html_comment_pattern = r"<!--\s*ONYX_METADATA=\{(.*?)\}\s*-->"
+    hashtag_pattern = r"#ONYX_METADATA=\{(.*?)\}"
 
     html_comment_match = re.search(html_comment_pattern, line)
     hashtag_match = re.search(hashtag_pattern, line)
@@ -219,7 +239,7 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 
 def read_pdf_file(
     file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
-) -> tuple[str, dict, list[tuple[bytes, str]]]:
+) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
     """
@@ -281,16 +301,20 @@ def read_pdf_file(
 
 
 def docx_to_text_and_images(
-    file: IO[Any],
-) -> Tuple[str, List[Tuple[bytes, str]]]:
+    file: IO[Any], file_name: str = ""
+) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx. If embed_images=True, also extract inline images.
     Return (text_content, list_of_images).
     """
     paragraphs = []
-    embedded_images: List[Tuple[bytes, str]] = []
+    embedded_images: list[tuple[bytes, str]] = []
 
-    doc = docx.Document(file)
+    try:
+        doc = docx.Document(file)
+    except BadZipFile as e:
+        logger.warning(f"Failed to extract text from {file_name or 'docx file'}: {e}")
+        return "", []
 
     # Grab text from paragraphs
     for paragraph in doc.paragraphs:
@@ -313,8 +337,13 @@ def docx_to_text_and_images(
     return text_content, embedded_images
 
 
-def pptx_to_text(file: IO[Any]) -> str:
-    presentation = pptx.Presentation(file)
+def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
+    try:
+        presentation = pptx.Presentation(file)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'pptx file'}: {e}"
+        logger.warning(error_str)
+        return ""
     text_content = []
     for slide_number, slide in enumerate(presentation.slides, start=1):
         slide_text = f"\nSlide {slide_number}:\n"
@@ -325,8 +354,24 @@ def pptx_to_text(file: IO[Any]) -> str:
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
-def xlsx_to_text(file: IO[Any]) -> str:
-    workbook = openpyxl.load_workbook(file, read_only=True)
+def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    try:
+        workbook = openpyxl.load_workbook(file, read_only=True)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
+        if file_name.startswith("~"):
+            logger.debug(error_str + " (this is expected for files with ~)")
+        else:
+            logger.warning(error_str)
+        return ""
+    except Exception as e:
+        if "File contains no valid workbook part" in str(e):
+            logger.error(
+                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            )
+            return ""
+        raise e
+
     text_content = []
     for sheet in workbook.worksheets:
         rows = []
@@ -382,6 +427,9 @@ def extract_file_text(
     """
     Legacy function that returns *only text*, ignoring embedded images.
     For backward-compatibility in code that only wants text.
+
+    NOTE: Ignoring seems to be defined as returning an empty string for files it can't
+    handle (such as images).
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
@@ -405,7 +453,9 @@ def extract_file_text(
         if extension is None:
             extension = get_file_ext(file_name)
 
-        if is_valid_file_ext(extension):
+        if is_accepted_file_ext(
+            extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+        ):
             func = extension_to_function.get(extension, file_io_to_text)
             file.seek(0)
             return func(file)
@@ -426,14 +476,22 @@ def extract_file_text(
         return ""
 
 
+class ExtractionResult(NamedTuple):
+    """Structured result from text and image extraction from various file types."""
+
+    text_content: str
+    embedded_images: Sequence[tuple[bytes, str]]
+    metadata: dict[str, Any]
+
+
 def extract_text_and_images(
     file: IO[Any],
     file_name: str,
     pdf_pass: str | None = None,
-) -> Tuple[str, List[Tuple[bytes, str]]]:
+) -> ExtractionResult:
     """
     Primary new function for the updated connector.
-    Returns (text_content, [(embedded_img_bytes, embedded_img_name), ...]).
+    Returns structured extraction result with text content, embedded images, and metadata.
     """
 
     try:
@@ -442,7 +500,9 @@ def extract_text_and_images(
             # If the user doesn't want embedded images, unstructured is fine
             file.seek(0)
             text_content = unstructured_to_text(file, file_name)
-            return (text_content, [])
+            return ExtractionResult(
+                text_content=text_content, embedded_images=[], metadata={}
+            )
 
         extension = get_file_ext(file_name)
 
@@ -450,59 +510,83 @@ def extract_text_and_images(
         if extension == ".docx":
             file.seek(0)
             text_content, images = docx_to_text_and_images(file)
-            return (text_content, images)
+            return ExtractionResult(
+                text_content=text_content, embedded_images=images, metadata={}
+            )
 
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
             file.seek(0)
-            text_content, _, images = read_pdf_file(file, pdf_pass, extract_images=True)
-            return (text_content, images)
+            text_content, pdf_metadata, images = read_pdf_file(
+                file, pdf_pass, extract_images=True
+            )
+            return ExtractionResult(
+                text_content=text_content, embedded_images=images, metadata=pdf_metadata
+            )
 
         # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
         # You can do something similar to docx if needed.
         if extension == ".pptx":
             file.seek(0)
-            return (pptx_to_text(file), [])
+            return ExtractionResult(
+                text_content=pptx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
+            )
 
         if extension == ".xlsx":
             file.seek(0)
-            return (xlsx_to_text(file), [])
+            return ExtractionResult(
+                text_content=xlsx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
+            )
 
         if extension == ".eml":
             file.seek(0)
-            return (eml_to_text(file), [])
+            return ExtractionResult(
+                text_content=eml_to_text(file), embedded_images=[], metadata={}
+            )
 
         if extension == ".epub":
             file.seek(0)
-            return (epub_to_text(file), [])
+            return ExtractionResult(
+                text_content=epub_to_text(file), embedded_images=[], metadata={}
+            )
 
         if extension == ".html":
             file.seek(0)
-            return (parse_html_page_basic(file), [])
+            return ExtractionResult(
+                text_content=parse_html_page_basic(file),
+                embedded_images=[],
+                metadata={},
+            )
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
             file.seek(0)
             encoding = detect_encoding(file)
-            text_content_raw, _ = read_text_file(
+            text_content_raw, file_metadata = read_text_file(
                 file, encoding=encoding, ignore_onyx_metadata=False
             )
-            return (text_content_raw, [])
+            return ExtractionResult(
+                text_content=text_content_raw,
+                embedded_images=[],
+                metadata=file_metadata,
+            )
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
         file.seek(0)
-        return ("", [])
+        return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:
         logger.exception(f"Failed to extract text/images from {file_name}: {e}")
-        return ("", [])
+        return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
 
-def convert_docx_to_txt(
-    file: UploadFile, file_store: FileStore, file_path: str
-) -> None:
+def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
     """
     Helper to convert docx to a .txt file in the same filestore.
     """
@@ -514,14 +598,15 @@ def convert_docx_to_txt(
     all_paras = [p.text for p in doc.paragraphs]
     text_content = "\n".join(all_paras)
 
-    txt_file_path = docx_to_txt_filename(file_path)
+    text_file_name = docx_to_txt_filename(file.filename or f"docx_{uuid.uuid4()}")
     file_store.save_file(
-        file_name=txt_file_path,
+        file_name=text_file_name,
         content=BytesIO(text_content.encode("utf-8")),
         display_name=file.filename,
         file_origin=FileOrigin.CONNECTOR,
         file_type="text/plain",
     )
+    return text_file_name
 
 
 def docx_to_txt_filename(file_path: str) -> str:

@@ -1,3 +1,4 @@
+import logging
 import sys
 import traceback
 from collections.abc import AsyncGenerator
@@ -15,10 +16,12 @@ from fastapi import status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
+from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
-from sqlalchemy.orm import Session
+from starlette.types import Lifespan
 
 from onyx import __version__
 from onyx.auth.schemas import UserCreate
@@ -38,11 +41,14 @@ from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE
 from onyx.configs.app_configs import SYSTEM_RECURSION_LIMIT
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import SqlEngine
 from onyx.db.engine import warm_up_connections
 from onyx.server.api_key.api import router as api_key_router
@@ -97,10 +103,13 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )
+from onyx.server.user_documents.api import router as user_documents_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
 from onyx.utils.logger import setup_logger
+from onyx.utils.logger import setup_uvicorn_logger
+from onyx.utils.middleware import add_onyx_request_id_middleware
 from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -114,6 +123,12 @@ from shared_configs.configs import SENTRY_DSN
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+
+file_handlers = [
+    h for h in logger.logger.handlers if isinstance(h, logging.FileHandler)
+]
+
+setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
 
 def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -143,6 +158,20 @@ def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
         status_code=400,
         content={"message": str(exc)},
     )
+
+
+def use_route_function_names_as_operation_ids(app: FastAPI) -> None:
+    """
+    OpenAPI generation defaults to naming the operation with the
+    function + route + HTTP method, which usually looks very redundant.
+
+    This function changes the operation IDs to be just the function name.
+
+    Should be called only after all routes have been added.
+    """
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            route.operation_id = route.name
 
 
 def include_router_with_global_prefix_prepended(
@@ -194,7 +223,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
     )
-    engine = SqlEngine.get_engine()
+    SqlEngine.get_engine()
+
+    SqlEngine.init_readonly_engine(
+        pool_size=POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
+    )
 
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
@@ -218,7 +252,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
-        with Session(engine) as db_session:
+        with get_session_context_manager() as db_session:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
     else:
         setup_multitenant_onyx()
@@ -233,6 +267,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await setup_auth_limiter()
 
     yield
+
+    SqlEngine.reset_engine()
 
     if AUTH_RATE_LIMITING_ENABLED:
         await close_auth_limiter()
@@ -262,8 +298,12 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-def get_application() -> FastAPI:
-    application = FastAPI(title="Onyx Backend", version=__version__, lifespan=lifespan)
+def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
+    application = FastAPI(
+        title="Onyx Backend",
+        version=__version__,
+        lifespan=lifespan_override or lifespan,
+    )
     if SENTRY_DSN:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
@@ -290,11 +330,11 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_query_router)
     include_router_with_global_prefix_prepended(application, admin_router)
     include_router_with_global_prefix_prepended(application, connector_router)
-    include_router_with_global_prefix_prepended(application, user_router)
     include_router_with_global_prefix_prepended(application, credential_router)
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
+    include_router_with_global_prefix_prepended(application, user_documents_router)
     include_router_with_global_prefix_prepended(application, folder_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)
@@ -359,7 +399,15 @@ def get_application() -> FastAPI:
         )
 
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
-        oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+        # For Google OAuth, refresh tokens are requested by:
+        # 1. Adding the right scopes
+        # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
+        oauth_client = GoogleOAuth2(
+            OAUTH_CLIENT_ID,
+            OAUTH_CLIENT_SECRET,
+            # Use standard scopes that include profile and email
+            scopes=["openid", "email", "profile"],
+        )
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
@@ -381,6 +429,18 @@ def get_application() -> FastAPI:
             prefix="/auth",
         )
 
+    if (
+        AUTH_TYPE == AuthType.CLOUD
+        or AUTH_TYPE == AuthType.BASIC
+        or AUTH_TYPE == AuthType.GOOGLE_OAUTH
+    ):
+        # Add refresh token endpoint for OAuth as well
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_refresh_router(auth_backend),
+            prefix="/auth",
+        )
+
     application.add_exception_handler(
         RequestValidationError, validation_exception_handler
     )
@@ -397,8 +457,15 @@ def get_application() -> FastAPI:
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
 
+    add_onyx_request_id_middleware(application, "API", logger)
+
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)
+
+    # Initialize and instrument the app
+    Instrumentator().instrument(application).expose(application)
+
+    use_route_function_names_as_operation_ids(application)
 
     return application
 

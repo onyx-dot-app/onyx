@@ -26,9 +26,11 @@ class DocumentSearchManager:
         result = requests.post(
             url=f"{API_SERVER_URL}/query/document-search",
             json=search_request.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         result.raise_for_status()
         result_json = result.json()

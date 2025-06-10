@@ -23,11 +23,7 @@ import {
   oauthSupportedSources,
   ValidSources,
 } from "@/lib/types";
-import {
-  Credential,
-  credentialTemplates,
-  OAuthDetails,
-} from "@/lib/connectors/credentials";
+import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import {
   ConnectionConfiguration,
   connectorConfigs,
@@ -281,7 +277,7 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={{
-        ...createConnectorInitialValues(connector),
+        ...createConnectorInitialValues(connector, currentCredential),
         ...Object.fromEntries(
           connectorConfigs[connector].advanced_values.map((field) => [
             field.name,
@@ -302,11 +298,17 @@ export default function AddConnector({
           ...connector_specific_config
         } = values;
 
-        // Apply transforms from connectors.ts configuration
+        // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
           connector_specific_config
         ).reduce(
           (acc, [key, value]) => {
+            // Filter out empty strings from arrays
+            if (Array.isArray(value)) {
+              value = (value as any[]).filter(
+                (item) => typeof item !== "string" || item.trim() !== ""
+              );
+            }
             const matchingConfigValue = configuration.values.find(
               (configValue) => configValue.name === key
             );
@@ -434,7 +436,7 @@ export default function AddConnector({
     >
       {(formikProps) => {
         return (
-          <div className="mx-auto mb-8 w-full">
+          <div className="mx-auto w-full">
             {popup}
 
             {uploading && (

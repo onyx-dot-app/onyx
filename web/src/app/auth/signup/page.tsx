@@ -8,8 +8,6 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import { EmailPasswordForm } from "../login/EmailPasswordForm";
-import Text from "@/components/ui/text";
-import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
@@ -84,23 +82,22 @@ const Page = async (props: {
             </>
           )}
 
-          {cloud && authUrl && (
-            <div className="w-full justify-center">
-              <SignInButton authorizeUrl={authUrl} authType="cloud" />
-              <div className="flex items-center w-full my-4">
-                <div className="flex-grow border-t border-background-300"></div>
-                <span className="px-4 text-text-500">or</span>
-                <div className="flex-grow border-t border-background-300"></div>
-              </div>
-            </div>
-          )}
-
           <EmailPasswordForm
             isSignup
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}
           />
+          {cloud && authUrl && (
+            <div className="w-full justify-center">
+              <div className="flex items-center w-full my-4">
+                <div className="flex-grow border-t border-background-300"></div>
+                <span className="px-4 text-text-500">or</span>
+                <div className="flex-grow border-t border-background-300"></div>
+              </div>
+              <SignInButton authorizeUrl={authUrl} authType="cloud" />
+            </div>
+          )}
         </div>
       </>
     </AuthFlowContainer>

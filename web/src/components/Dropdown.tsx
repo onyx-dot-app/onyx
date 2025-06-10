@@ -54,6 +54,7 @@ export function SearchMultiSelectDropdown({
   onDelete,
   onSearchTermChange,
   initialSearchTerm = "",
+  allowCustomValues = false,
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
@@ -62,6 +63,7 @@ export function SearchMultiSelectDropdown({
   onDelete?: (name: string) => void;
   onSearchTermChange?: (term: string) => void;
   initialSearchTerm?: string;
+  allowCustomValues?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
@@ -77,12 +79,29 @@ export function SearchMultiSelectDropdown({
     option.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Handle selecting a custom value not in the options list
+  const handleCustomValueSelect = () => {
+    if (allowCustomValues && searchTerm.trim() !== "") {
+      const customOption: StringOrNumberOption = {
+        name: searchTerm,
+        value: searchTerm,
+      };
+      onSelect(customOption);
+      setIsOpen(false);
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
       ) {
+        // If allowCustomValues is enabled and there's text in the search field,
+        // treat clicking outside as selecting the custom value
+        if (allowCustomValues && searchTerm.trim() !== "") {
+          handleCustomValueSelect();
+        }
         setIsOpen(false);
       }
     };
@@ -91,7 +110,7 @@ export function SearchMultiSelectDropdown({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [allowCustomValues, searchTerm]);
 
   useEffect(() => {
     setSearchTerm(initialSearchTerm);
@@ -102,17 +121,33 @@ export function SearchMultiSelectDropdown({
       <div>
         <input
           type="text"
-          placeholder="Search..."
+          placeholder={
+            allowCustomValues ? "Search or enter custom value..." : "Search..."
+          }
           value={searchTerm}
           onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            setSearchTerm(e.target.value);
-            if (e.target.value) {
+            const newValue = e.target.value;
+            setSearchTerm(newValue);
+            if (onSearchTermChange) {
+              onSearchTermChange(newValue);
+            }
+            if (newValue) {
               setIsOpen(true);
             } else {
               setIsOpen(false);
             }
           }}
           onFocus={() => setIsOpen(true)}
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              allowCustomValues &&
+              searchTerm.trim() !== ""
+            ) {
+              e.preventDefault();
+              handleCustomValueSelect();
+            }
+          }}
           className="inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-text-800 border border-background-300 rounded-md shadow-sm"
         />
         <button
@@ -153,6 +188,22 @@ export function SearchMultiSelectDropdown({
               )
             )}
 
+            {allowCustomValues &&
+              searchTerm.trim() !== "" &&
+              !filteredOptions.some(
+                (option) =>
+                  option.name.toLowerCase() === searchTerm.toLowerCase()
+              ) && (
+                <button
+                  className="w-full text-left flex items-center px-4 py-2 text-sm text-text-800 hover:bg-background-100"
+                  role="menuitem"
+                  onClick={handleCustomValueSelect}
+                >
+                  <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
+                  Use &quot;{searchTerm}&quot; as custom value
+                </button>
+              )}
+
             {onCreate &&
               searchTerm.trim() !== "" &&
               !filteredOptions.some(
@@ -177,7 +228,8 @@ export function SearchMultiSelectDropdown({
               )}
 
             {filteredOptions.length === 0 &&
-              (!onCreate || searchTerm.trim() === "") && (
+              ((!onCreate && !allowCustomValues) ||
+                searchTerm.trim() === "") && (
                 <div className="px-4 py-2.5 text-sm text-text-500">
                   No matches found
                 </div>

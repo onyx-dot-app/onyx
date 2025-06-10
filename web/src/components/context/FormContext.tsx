@@ -34,7 +34,7 @@ export const FormProvider: React.FC<{
   const pathname = usePathname();
 
   // Initialize formStep based on the URL parameter
-  const initialStep = parseInt(searchParams.get("step") || "0", 10);
+  const initialStep = parseInt(searchParams?.get("step") || "0", 10);
   const [formStep, setFormStep] = useState(initialStep);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
 
@@ -56,8 +56,10 @@ export const FormProvider: React.FC<{
 
   useEffect(() => {
     // Update URL when formStep changes
-    const updatedSearchParams = new URLSearchParams(searchParams.toString());
-    const existingStep = updatedSearchParams.get("step");
+    const updatedSearchParams = new URLSearchParams(
+      searchParams?.toString() || ""
+    );
+    const existingStep = updatedSearchParams?.get("step");
     updatedSearchParams.set("step", formStep.toString());
     const newUrl = `${pathname}?${updatedSearchParams.toString()}`;
 
@@ -69,7 +71,7 @@ export const FormProvider: React.FC<{
   }, [formStep, router, pathname, searchParams]);
 
   useEffect(() => {
-    const stepFromUrl = parseInt(searchParams.get("step") || "0", 10);
+    const stepFromUrl = parseInt(searchParams?.get("step") || "0", 10);
     if (stepFromUrl !== formStep) {
       setFormStep(stepFromUrl);
     }

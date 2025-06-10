@@ -7,7 +7,7 @@ from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
-from onyx.setup import setup_logger
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -48,4 +48,5 @@ def store_product_gating(tenant_id: str, application_status: ApplicationStatus) 
 
 def get_gated_tenants() -> set[str]:
     redis_client = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-    return cast(set[str], redis_client.smembers(GATED_TENANTS_KEY))
+    gated_tenants_bytes = cast(set[bytes], redis_client.smembers(GATED_TENANTS_KEY))
+    return {tenant_id.decode("utf-8") for tenant_id in gated_tenants_bytes}

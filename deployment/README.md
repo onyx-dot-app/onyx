@@ -1,4 +1,4 @@
-<!-- DANSWER_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/README.md"} -->
+<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/deployment/README.md"} -->
 
 # Deploying Onyx
 
@@ -80,3 +80,13 @@ prod cluster**
    - `kubectl delete -f .`
    - To not delete the persistent volumes (Document indexes and Users), specify the specific `.yaml` files instead of
      `.` without specifying delete on persistent-volumes.yaml.
+
+### Using Helm to deploy to an existing cluster
+
+Onyx has a helm chart that is convenient to install all services to an existing Kubernetes cluster. To install:
+
+* Currently the helm chart is not published so to install, clone the repo.
+* Configure access to the cluster via kubectl. Ensure the kubectl context is set to the cluster that you want to use
+* The default secrets, environment variables and other service level configuration are stored in `deployment/helm/charts/onyx/values.yml`. You may create another `override.yml`
+* `cd deployment/helm/charts/onyx` and run `helm install onyx -n onyx -f override.yaml .`. This will install onyx on the cluster under the `onyx` namespace.
+* Check the status of the deploy using `kubectl get pods -n onyx`

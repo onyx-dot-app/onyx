@@ -56,6 +56,7 @@ export function AccessTypeGroupSelector({
       if (
         access_type.value === "private" &&
         userGroups.length === 1 &&
+        userGroups[0] !== undefined &&
         !isUserAdmin
       ) {
         groups_helpers.setValue([userGroups[0].id]);
@@ -87,7 +88,7 @@ export function AccessTypeGroupSelector({
   if (shouldHideContent) {
     return (
       <>
-        {userGroups && (
+        {userGroups && userGroups[0] !== undefined && (
           <div className="mb-1 font-medium text-base">
             This Connector will be assigned to group <b>{userGroups[0].name}</b>
             .

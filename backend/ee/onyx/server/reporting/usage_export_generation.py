@@ -7,6 +7,8 @@ from datetime import timedelta
 from datetime import timezone
 
 from fastapi_users_db_sqlalchemy import UUID_ID
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.usage_export import get_all_empty_chat_message_entries
@@ -14,6 +16,7 @@ from ee.onyx.db.usage_export import write_usage_report
 from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from ee.onyx.server.reporting.usage_export_models import UserSkeleton
 from onyx.configs.constants import FileOrigin
+from onyx.db.models import User
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore
@@ -153,11 +156,19 @@ def create_new_usage_report(
     # add report after zip file is written
     new_report = write_usage_report(db_session, report_name, user_id, period)
 
+    # get user email
+    requestor_user = (
+        db_session.query(User)
+        .filter(cast(User.id, UUID) == new_report.requestor_user_id)
+        .one_or_none()
+        if new_report.requestor_user_id
+        else None
+    )
+    requestor_email = requestor_user.email if requestor_user else None
+
     return UsageReportMetadata(
         report_name=new_report.report_name,
-        requestor=(
-            str(new_report.requestor_user_id) if new_report.requestor_user_id else None
-        ),
+        requestor=requestor_email,
         time_created=new_report.time_created,
         period_from=new_report.period_from,
         period_to=new_report.period_to,

@@ -1,24 +1,20 @@
-import {
-  AnthropicIcon,
-  AmazonIcon,
-  AWSIcon,
-  AzureIcon,
-  CPUIcon,
-  MicrosoftIconSVG,
-  MistralIcon,
-  MetaIcon,
-  GeminiIcon,
-  AnthropicSVG,
-  IconProps,
-  OpenAIISVG,
-  DeepseekIcon,
-} from "@/components/icons/icons";
-
 export interface CustomConfigKey {
   name: string;
+  display_name: string;
   description: string | null;
   is_required: boolean;
   is_secret: boolean;
+  key_type: "text_input" | "file_input";
+}
+
+export interface ModelConfigurationUpsertRequest {
+  name: string;
+  is_visible: boolean;
+  max_input_tokens: number | null;
+}
+
+export interface ModelConfiguration extends ModelConfigurationUpsertRequest {
+  supports_image_input: boolean;
 }
 
 export interface WellKnownLLMProviderDescriptor {
@@ -32,11 +28,17 @@ export interface WellKnownLLMProviderDescriptor {
 
   single_model_supported: boolean;
   custom_config_keys: CustomConfigKey[] | null;
-  llm_names: string[];
+  model_configurations: ModelConfiguration[];
   default_model: string | null;
   default_fast_model: string | null;
   is_public: boolean;
   groups: number[];
+}
+
+export interface LLMModelDescriptor {
+  modelName: string;
+  provider: string;
+  maxTokens: number;
 }
 
 export interface LLMProvider {
@@ -50,71 +52,29 @@ export interface LLMProvider {
   fast_default_model_name: string | null;
   is_public: boolean;
   groups: number[];
-  display_model_names: string[] | null;
   deployment_name: string | null;
+  default_vision_model: string | null;
+  is_default_vision_provider: boolean | null;
+  model_configurations: ModelConfiguration[];
 }
 
-export interface FullLLMProvider extends LLMProvider {
+export interface LLMProviderView extends LLMProvider {
   id: number;
   is_default_provider: boolean | null;
-  model_names: string[];
   icon?: React.FC<{ size?: number; className?: string }>;
+}
+
+export interface VisionProvider extends LLMProviderView {
+  vision_models: string[];
 }
 
 export interface LLMProviderDescriptor {
   name: string;
   provider: string;
-  model_names: string[];
   default_model_name: string;
   fast_default_model_name: string | null;
   is_default_provider: boolean | null;
   is_public: boolean;
   groups: number[];
-  display_model_names: string[] | null;
+  model_configurations: ModelConfiguration[];
 }
-
-export const getProviderIcon = (providerName: string, modelName?: string) => {
-  const modelIconMap: Record<
-    string,
-    ({ size, className }: IconProps) => JSX.Element
-  > = {
-    amazon: AmazonIcon,
-    phi: MicrosoftIconSVG,
-    mistral: MistralIcon,
-    ministral: MistralIcon,
-    llama: MetaIcon,
-    gemini: GeminiIcon,
-    deepseek: DeepseekIcon,
-    claude: AnthropicIcon,
-  };
-
-  const modelNameToIcon = (
-    modelName: string,
-    fallbackIcon: ({ size, className }: IconProps) => JSX.Element
-  ): (({ size, className }: IconProps) => JSX.Element) => {
-    const lowerModelName = modelName?.toLowerCase();
-    for (const [key, icon] of Object.entries(modelIconMap)) {
-      if (lowerModelName?.includes(key)) {
-        return icon;
-      }
-    }
-    return fallbackIcon;
-  };
-
-  switch (providerName) {
-    case "openai":
-      // Special cases for openai based on modelName
-      return modelNameToIcon(modelName || "", OpenAIISVG);
-    case "anthropic":
-      return AnthropicSVG;
-    case "bedrock":
-      return AWSIcon;
-    case "azure":
-      return AzureIcon;
-    default:
-      return modelNameToIcon(modelName || "", CPUIcon);
-  }
-};
-
-export const isAnthropic = (provider: string, modelName: string) =>
-  provider === "anthropic" || modelName.toLowerCase().includes("claude");

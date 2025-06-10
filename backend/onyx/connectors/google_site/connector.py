@@ -5,15 +5,14 @@ from typing import cast
 
 from bs4 import BeautifulSoup
 from bs4 import Tag
-from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.connectors.models import TextSection
+from onyx.db.engine import get_session_context_manager
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.file_processing.html_utils import web_html_cleanup
@@ -69,7 +68,7 @@ class GoogleSitesConnector(LoadConnector):
     def load_from_state(self) -> GenerateDocumentsOutput:
         documents: list[Document] = []
 
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_context_manager() as db_session:
             file_content_io = get_default_file_store(db_session).read_file(
                 self.zip_path, mode="b"
             )
@@ -77,7 +76,7 @@ class GoogleSitesConnector(LoadConnector):
         # load the HTML files
         files = load_files_from_zip(file_content_io)
         count = 0
-        for file_info, file_io, _metadata in files:
+        for file_info, file_io in files:
             # skip non-published files
             if "/PUBLISHED/" not in file_info.filename:
                 continue
@@ -118,10 +117,12 @@ class GoogleSitesConnector(LoadConnector):
                     source=DocumentSource.GOOGLE_SITES,
                     semantic_identifier=title,
                     sections=[
-                        Section(
-                            link=(self.base_url.rstrip("/") + "/" + path.lstrip("/"))
-                            if path
-                            else "",
+                        TextSection(
+                            link=(
+                                (self.base_url.rstrip("/") + "/" + path.lstrip("/"))
+                                if path
+                                else ""
+                            ),
                             text=parsed_html.cleaned_text,
                         )
                     ],

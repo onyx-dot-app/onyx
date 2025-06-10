@@ -1,6 +1,11 @@
 """
 This test tests the happy path for curator permissions
 """
+
+import os
+
+import pytest
+
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
 from onyx.server.documents.models import DocumentSource
@@ -12,6 +17,10 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Curator tests are enterprise only",
+)
 def test_whole_curator_flow(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -89,6 +98,10 @@ def test_whole_curator_flow(reset: None) -> None:
     )
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Curator tests are enterprise only",
+)
 def test_global_curator_flow(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

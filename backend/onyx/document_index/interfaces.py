@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Any
 
 from onyx.access.models import DocumentAccess
+from onyx.access.models import ExternalAccess
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
+from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.db.enums import EmbeddingPrecision
@@ -87,6 +90,8 @@ class DocumentMetadata:
     secondary_owners: list[str] | None = None
     from_ingestion_api: bool = False
 
+    external_access: ExternalAccess | None = None
+
 
 @dataclass
 class VespaDocumentFields:
@@ -101,6 +106,17 @@ class VespaDocumentFields:
     document_sets: set[str] | None = None
     boost: float | None = None
     hidden: bool | None = None
+    aggregated_chunk_boost_factor: float | None = None
+
+
+@dataclass
+class VespaDocumentUserFields:
+    """
+    Fields that are specific to the user who is indexing the document.
+    """
+
+    user_file_id: str | None = None
+    user_folder_id: str | None = None
 
 
 @dataclass
@@ -257,7 +273,8 @@ class Updatable(abc.ABC):
         *,
         tenant_id: str,
         chunk_count: int | None,
-        fields: VespaDocumentFields,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
     ) -> int:
         """
         Updates all chunks for a document with the specified fields.
@@ -339,7 +356,9 @@ class HybridCapable(abc.ABC):
         hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
+        ranking_profile_type: QueryExpansionType,
         offset: int = 0,
+        title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunkUncleaned]:
         """
         Run hybrid search and return a list of inference chunks.

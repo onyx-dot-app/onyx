@@ -16,7 +16,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 
@@ -110,7 +110,7 @@ class ProductboardConnector(PollConnector):
             yield Document(
                 id=feature["id"],
                 sections=[
-                    Section(
+                    TextSection(
                         link=feature["links"]["html"],
                         text=self._parse_description_html(feature["description"]),
                     )
@@ -133,7 +133,7 @@ class ProductboardConnector(PollConnector):
             yield Document(
                 id=component["id"],
                 sections=[
-                    Section(
+                    TextSection(
                         link=component["links"]["html"],
                         text=self._parse_description_html(component["description"]),
                     )
@@ -159,7 +159,7 @@ class ProductboardConnector(PollConnector):
             yield Document(
                 id=product["id"],
                 sections=[
-                    Section(
+                    TextSection(
                         link=product["links"]["html"],
                         text=self._parse_description_html(product["description"]),
                     )
@@ -189,7 +189,7 @@ class ProductboardConnector(PollConnector):
             yield Document(
                 id=objective["id"],
                 sections=[
-                    Section(
+                    TextSection(
                         link=objective["links"]["html"],
                         text=self._parse_description_html(objective["description"]),
                     )

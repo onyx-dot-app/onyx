@@ -1,4 +1,4 @@
-import { FullLLMProvider } from "../configuration/llm/interfaces";
+import { LLMProviderView } from "../configuration/llm/interfaces";
 import { Persona, StarterMessage } from "./interfaces";
 
 interface PersonaUpsertRequest {
@@ -29,6 +29,8 @@ interface PersonaUpsertRequest {
   is_default_persona: boolean;
   display_priority: number | null;
   label_ids: number[] | null;
+  user_file_ids: number[] | null;
+  user_folder_ids: number[] | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -56,6 +58,8 @@ export interface PersonaUpsertParameters {
   uploaded_image: File | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
+  user_file_ids: number[];
+  user_folder_ids: number[];
 }
 
 export const createPersonaLabel = (name: string) => {
@@ -114,7 +118,10 @@ function buildPersonaUpsertRequest(
     icon_shape,
     remove_image,
     search_start_date,
+    user_file_ids,
+    user_folder_ids,
   } = creationRequest;
+
   return {
     name,
     description,
@@ -145,6 +152,8 @@ function buildPersonaUpsertRequest(
     starter_messages: creationRequest.starter_messages ?? null,
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,
+    user_file_ids: user_file_ids ?? null,
+    user_folder_ids: user_folder_ids ?? null,
   };
 }
 
@@ -175,7 +184,6 @@ export async function createPersona(
       return null;
     }
   }
-
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {
@@ -319,30 +327,7 @@ export function checkPersonaRequiresImageGeneration(persona: Persona) {
 }
 
 export function providersContainImageGeneratingSupport(
-  providers: FullLLMProvider[]
+  providers: LLMProviderView[]
 ) {
   return providers.some((provider) => provider.provider === "openai");
 }
-
-// Default fallback persona for when we must display a persona
-// but assistant has access to none
-export const defaultPersona: Persona = {
-  id: 0,
-  name: "Default Assistant",
-  description: "A default assistant",
-  is_visible: true,
-  is_public: true,
-  builtin_persona: false,
-  is_default_persona: true,
-  users: [],
-  groups: [],
-  document_sets: [],
-  prompts: [],
-  tools: [],
-  starter_messages: null,
-  display_priority: null,
-  search_start_date: null,
-  owner: null,
-  icon_shape: 50910,
-  icon_color: "#FF6F6F",
-};

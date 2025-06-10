@@ -140,7 +140,7 @@ def fetch_onyxbot_analytics(
                     (
                         or_(
                             ChatMessageFeedback.is_positive.is_(False),
-                            ChatMessageFeedback.required_followup,
+                            ChatMessageFeedback.required_followup.is_(True),
                         ),
                         1,
                     ),
@@ -173,7 +173,7 @@ def fetch_onyxbot_analytics(
         .all()
     )
 
-    return results
+    return [tuple(row) for row in results]
 
 
 def fetch_persona_message_analytics(

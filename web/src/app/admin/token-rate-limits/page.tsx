@@ -1,7 +1,6 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import Text from "@/components/ui/text";
 import { useState } from "react";
@@ -114,8 +113,8 @@ function Main() {
       <ul className="list-disc mt-2 ml-4 mb-2">
         <li>
           <Text>
-            Set a global rate limit to control your organization&apos;s overall
-            token spend.
+            Set a global rate limit to control your team&apos;s overall token
+            spend.
           </Text>
         </li>
         {isPaidEnterpriseFeaturesEnabled && (
@@ -145,6 +144,7 @@ function Main() {
       />
       {isPaidEnterpriseFeaturesEnabled && (
         <Tabs
+          className="mt-2"
           value={tabIndex.toString()}
           onValueChange={(val) => setTabIndex(parseInt(val))}
         >

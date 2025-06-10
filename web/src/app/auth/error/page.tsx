@@ -14,7 +14,7 @@ const Page = () => {
           Authentication Error
         </h2>
         <p className="text-text-700 text-center">
-          We encountered an issue while attempting to log you in.
+          There was a problem with your login attempt.
         </p>
         <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-sm">
           <h3 className="text-red-800 dark:text-red-400 font-semibold mb-2">
@@ -46,8 +46,11 @@ const Page = () => {
           please reach out to your system administrator for assistance.
           {NEXT_PUBLIC_CLOUD_ENABLED && (
             <span className="block mt-1 text-blue-600">
-              A member of our team has been automatically notified about this
-              issue.
+              If you continue to experience problems please reach out to the
+              Onyx team at{" "}
+              <a href="mailto:support@onyx.app" className="text-blue-600">
+                support@onyx.app
+              </a>
             </span>
           )}
         </p>

@@ -1,9 +1,8 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { Bubble } from "@/components/Bubble";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { useSortable } from "@dnd-kit/sortable";
-import React, { useState } from "react";
-import { FiBookmark, FiImage, FiSearch } from "react-icons/fi";
+import React from "react";
+import { FiImage, FiSearch } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 
 import { Badge } from "../ui/badge";

@@ -2,12 +2,9 @@ from typing import Tuple
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
-from onyx.file_processing.image_summarization import summarize_image_with_error_handling
-from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -18,12 +15,12 @@ def store_image_and_create_section(
     image_data: bytes,
     file_name: str,
     display_name: str,
-    media_type: str = "image/unknown",
-    llm: LLM | None = None,
+    link: str | None = None,
+    media_type: str = "application/octet-stream",
     file_origin: FileOrigin = FileOrigin.OTHER,
-) -> Tuple[Section, str | None]:
+) -> Tuple[ImageSection, str | None]:
     """
-    Stores an image in PGFileStore and creates a Section object with optional summarization.
+    Stores an image in PGFileStore and creates an ImageSection object without summarization.
 
     Args:
         db_session: Database session
@@ -31,12 +28,11 @@ def store_image_and_create_section(
         file_name: Base identifier for the file
         display_name: Human-readable name for the image
         media_type: MIME type of the image
-        llm: Optional LLM with vision capabilities for summarization
         file_origin: Origin of the file (e.g., CONFLUENCE, GOOGLE_DRIVE, etc.)
 
     Returns:
         Tuple containing:
-        - Section object with image reference and optional summary text
+        - ImageSection object with image reference
         - The file_name in PGFileStore or None if storage failed
     """
     # Storage logic
@@ -53,18 +49,10 @@ def store_image_and_create_section(
         stored_file_name = pgfilestore.file_name
     except Exception as e:
         logger.error(f"Failed to store image: {e}")
-        if not CONTINUE_ON_CONNECTOR_FAILURE:
-            raise
-        return Section(text=""), None
+        raise e
 
-    # Summarization logic
-    summary_text = ""
-    if llm:
-        summary_text = (
-            summarize_image_with_error_handling(llm, image_data, display_name) or ""
-        )
-
+    # Create an ImageSection with empty text (will be filled by LLM later in the pipeline)
     return (
-        Section(text=summary_text, image_file_name=stored_file_name),
+        ImageSection(image_file_name=stored_file_name, link=link),
         stored_file_name,
     )

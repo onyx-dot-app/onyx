@@ -40,10 +40,19 @@ const Page = async (props: {
 
   // if user is already logged in, take them to the main app page
   if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
+    console.log("Login page: User is logged in, redirecting to chat", {
+      userId: currentUser.id,
+      is_active: currentUser.is_active,
+      is_anonymous: currentUser.is_anonymous_user,
+    });
+
     if (authTypeMetadata?.requiresVerification && !currentUser.is_verified) {
       return redirect("/auth/waiting-on-verification");
     }
-    return redirect("/chat");
+
+    // Add a query parameter to indicate this is a redirect from login
+    // This will help prevent redirect loops
+    return redirect("/chat?from=login");
   }
 
   // get where to send the user to authenticate
@@ -72,6 +81,7 @@ const Page = async (props: {
           authTypeMetadata={authTypeMetadata}
           nextUrl={nextUrl!}
           searchParams={searchParams}
+          hidePageRedirect={true}
         />
       </AuthFlowContainer>
     </div>

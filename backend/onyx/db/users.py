@@ -24,7 +24,9 @@ from onyx.db.models import User__UserGroup
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
-def validate_user_role_update(requested_role: UserRole, current_role: UserRole) -> None:
+def validate_user_role_update(
+    requested_role: UserRole, current_role: UserRole, explicit_override: bool = False
+) -> None:
     """
     Validate that a user role update is valid.
     Assumed only admins can hit this endpoint.
@@ -56,6 +58,9 @@ def validate_user_role_update(requested_role: UserRole, current_role: UserRole) 
             status_code=400,
             detail="To change a Limited User's role, they must first login to Onyx via the web app.",
         )
+
+    if explicit_override:
+        return
 
     if requested_role == UserRole.CURATOR:
         # This shouldn't happen, but just in case
@@ -250,6 +255,9 @@ def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
 def _get_users_by_emails(
     db_session: Session, lower_emails: list[str]
 ) -> tuple[list[User], list[str]]:
+    """given a list of lowercase emails,
+    returns a list[User] of Users whose emails match and a list[str]
+    the missing emails that had no User"""
     stmt = select(User).filter(func.lower(User.email).in_(lower_emails))  # type: ignore
     found_users = list(db_session.scalars(stmt).unique().all())  # Convert to list
 

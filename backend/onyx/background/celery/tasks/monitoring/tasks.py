@@ -4,8 +4,10 @@ from collections.abc import Callable
 from datetime import timedelta
 from itertools import islice
 from typing import Any
+from typing import cast
 from typing import Literal
 
+import psutil
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryQueues
@@ -39,8 +42,10 @@ from onyx.db.models import UserGroup
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.utils.logger import is_running_in_container
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 _MONITORING_SOFT_TIME_LIMIT = 60 * 5  # 5 minutes
@@ -77,7 +82,9 @@ def _has_metric_been_emitted(redis_std: Redis, key: str) -> bool:
 
 
 class Metric(BaseModel):
-    key: str | None  # only required if we need to store that we have emitted this metric
+    key: (
+        str | None
+    )  # only required if we need to store that we have emitted this metric
     name: str
     value: Any
     tags: dict[str, str]
@@ -904,3 +911,140 @@ def monitor_celery_queues_helper(
         f"external_group_sync={n_external_group_sync} "
         f"permissions_upsert={n_permissions_upsert} "
     )
+
+
+"""Memory monitoring"""
+
+
+def _get_cmdline_for_process(process: psutil.Process) -> str | None:
+    try:
+        return " ".join(process.cmdline())
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        return None
+
+
+@shared_task(
+    name=OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
+    ignore_result=True,
+    soft_time_limit=_MONITORING_SOFT_TIME_LIMIT,
+    time_limit=_MONITORING_TIME_LIMIT,
+    queue=OnyxCeleryQueues.MONITORING,
+    bind=True,
+)
+def monitor_process_memory(self: Task, *, tenant_id: str) -> None:
+    """
+    Task to monitor memory usage of supervisor-managed processes.
+    This periodically checks the memory usage of processes and logs information
+    in a standardized format.
+
+    The task looks for processes managed by supervisor and logs their
+    memory usage statistics. This is useful for monitoring memory consumption
+    over time and identifying potential memory leaks.
+    """
+    # don't run this task in multi-tenant mode, have other, better means of monitoring
+    if MULTI_TENANT:
+        return
+
+    # Skip memory monitoring if not in container
+    if not is_running_in_container():
+        return
+
+    try:
+        # Get all supervisor-managed processes
+        supervisor_processes: dict[int, str] = {}
+
+        # Map cmd line elements to more readable process names
+        process_type_mapping = {
+            "--hostname=primary": "primary",
+            "--hostname=light": "light",
+            "--hostname=heavy": "heavy",
+            "--hostname=indexing": "indexing",
+            "--hostname=monitoring": "monitoring",
+            "beat": "beat",
+            "slack/listener.py": "slack",
+        }
+
+        # Find all python processes that are likely celery workers
+        for proc in psutil.process_iter():
+            cmdline = _get_cmdline_for_process(proc)
+            if not cmdline:
+                continue
+
+            # Match supervisor-managed processes
+            for process_name, process_type in process_type_mapping.items():
+                if process_name in cmdline:
+                    if process_type in supervisor_processes.values():
+                        task_logger.error(
+                            f"Duplicate process type for type {process_type} "
+                            f"with cmd {cmdline} with pid={proc.pid}."
+                        )
+                        continue
+
+                    supervisor_processes[proc.pid] = process_type
+                    break
+
+        if len(supervisor_processes) != len(process_type_mapping):
+            task_logger.error(
+                "Missing processes: "
+                f"{set(process_type_mapping.keys()).symmetric_difference(supervisor_processes.values())}"
+            )
+
+        # Log memory usage for each process
+        for pid, process_type in supervisor_processes.items():
+            try:
+                emit_process_memory(pid, process_type, {})
+            except psutil.NoSuchProcess:
+                # Process may have terminated since we obtained the list
+                continue
+            except Exception as e:
+                task_logger.exception(f"Error monitoring process {pid}: {str(e)}")
+
+    except Exception:
+        task_logger.exception("Error in monitor_process_memory task")
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX, ignore_result=True, bind=True
+)
+def cloud_monitor_celery_pidbox(
+    self: Task,
+) -> None:
+    """
+    Celery can leave behind orphaned pidboxes from old workers that are idle and never cleaned up.
+    This task removes them based on idle time to avoid Redis clutter and overflowing the instance.
+    This is a real issue we've observed in production.
+
+    Note:
+    - Setting CELERY_ENABLE_REMOTE_CONTROL = False would prevent pidbox keys entirely,
+    but might also disable features like inspect, broadcast, and worker remote control.
+    Use with caution.
+    """
+
+    num_deleted = 0
+
+    MAX_PIDBOX_IDLE = 24 * 3600  # 1 day in seconds
+    r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+    for key in r_celery.scan_iter("*.reply.celery.pidbox"):
+        key_bytes = cast(bytes, key)
+        key_str = key_bytes.decode("utf-8")
+        if key_str.startswith("_kombu"):
+            continue
+
+        idletime_raw = r_celery.object("idletime", key)
+        if idletime_raw is None:
+            continue
+
+        idletime = cast(int, idletime_raw)
+        if idletime < MAX_PIDBOX_IDLE:
+            continue
+
+        r_celery.delete(key)
+        task_logger.info(
+            f"Deleted idle pidbox: pidbox={key_str} "
+            f"idletime={idletime} "
+            f"max_idletime={MAX_PIDBOX_IDLE}"
+        )
+        num_deleted += 1
+
+    # Enable later in case we want some aggregate metrics
+    # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")

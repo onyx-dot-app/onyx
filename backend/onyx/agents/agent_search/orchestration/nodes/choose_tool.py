@@ -1,6 +1,8 @@
 from typing import cast
 from uuid import uuid4
 
+from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.messages import ToolCall
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
@@ -10,21 +12,82 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolChoice
 from onyx.agents.agent_search.orchestration.states import ToolChoiceState
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
     get_tool_call_for_non_tool_calling_llm_impl,
 )
+from onyx.configs.chat_configs import USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH
+from onyx.context.search.preprocessing.preprocessing import query_analysis
+from onyx.context.search.retrieval.search_runner import get_query_embedding
+from onyx.llm.factory import get_default_llms
+from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
+from onyx.tools.models import QueryExpansions
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_in_background
+from onyx.utils.threadpool_concurrency import TimeoutThread
+from onyx.utils.threadpool_concurrency import wait_on_background
+from onyx.utils.timing import log_function_time
+from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
+
+
+def _create_history_str(prompt_builder: AnswerPromptBuilder) -> str:
+    # TODO: Add trimming logic
+    history_segments = []
+    for msg in prompt_builder.message_history:
+        if isinstance(msg, HumanMessage):
+            role = "User"
+        elif isinstance(msg, AIMessage):
+            role = "Assistant"
+        else:
+            continue
+        history_segments.append(f"{role}:\n {msg.content}\n\n")
+    return "\n".join(history_segments)
+
+
+def _expand_query(
+    query: str,
+    expansion_type: QueryExpansionType,
+    prompt_builder: AnswerPromptBuilder,
+) -> str:
+
+    history_str = _create_history_str(prompt_builder)
+
+    if history_str:
+        if expansion_type == QueryExpansionType.KEYWORD:
+            base_prompt = QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
+        else:
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+        expansion_prompt = base_prompt.format(question=query, history=history_str)
+    else:
+        if expansion_type == QueryExpansionType.KEYWORD:
+            base_prompt = QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
+        else:
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
+        expansion_prompt = base_prompt.format(question=query)
+
+    msg = HumanMessage(content=expansion_prompt)
+    primary_llm, _ = get_default_llms()
+    response = primary_llm.invoke([msg])
+    rephrased_query: str = cast(str, response.content)
+
+    return rephrased_query
 
 
 # TODO: break this out into an implementation function
 # and a function that handles extracting the necessary fields
 # from the state and config
 # TODO: fan-out to multiple tool call nodes? Make this configurable?
+@log_function_time(print_only=True)
 def choose_tool(
     state: ToolChoiceState,
     config: RunnableConfig,
@@ -37,17 +100,61 @@ def choose_tool(
     should_stream_answer = state.should_stream_answer
 
     agent_config = cast(GraphConfig, config["metadata"]["config"])
+
+    force_use_tool = agent_config.tooling.force_use_tool
+
+    embedding_thread: TimeoutThread[Embedding] | None = None
+    keyword_thread: TimeoutThread[tuple[bool, list[str]]] | None = None
+    expanded_keyword_thread: TimeoutThread[str] | None = None
+    expanded_semantic_thread: TimeoutThread[str] | None = None
+    # If we have override_kwargs, add them to the tool_args
+    override_kwargs: SearchToolOverrideKwargs = (
+        force_use_tool.override_kwargs or SearchToolOverrideKwargs()
+    )
+
     using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
     prompt_builder = state.prompt_snapshot or agent_config.inputs.prompt_builder
 
     llm = agent_config.tooling.primary_llm
     skip_gen_ai_answer_generation = agent_config.behavior.skip_gen_ai_answer_generation
 
+    if (
+        not agent_config.behavior.use_agentic_search
+        and agent_config.tooling.search_tool is not None
+        and (
+            not force_use_tool.force_use or force_use_tool.tool_name == SearchTool._NAME
+        )
+    ):
+        # Run in a background thread to avoid blocking the main thread
+        embedding_thread = run_in_background(
+            get_query_embedding,
+            agent_config.inputs.prompt_builder.raw_user_query,
+            agent_config.persistence.db_session,
+        )
+        keyword_thread = run_in_background(
+            query_analysis,
+            agent_config.inputs.prompt_builder.raw_user_query,
+        )
+
+        if USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH:
+
+            expanded_keyword_thread = run_in_background(
+                _expand_query,
+                agent_config.inputs.prompt_builder.raw_user_query,
+                QueryExpansionType.KEYWORD,
+                prompt_builder,
+            )
+            expanded_semantic_thread = run_in_background(
+                _expand_query,
+                agent_config.inputs.prompt_builder.raw_user_query,
+                QueryExpansionType.SEMANTIC,
+                prompt_builder,
+            )
+
     structured_response_format = agent_config.inputs.structured_response_format
     tools = [
         tool for tool in (agent_config.tooling.tools or []) if tool.name in state.tools
     ]
-    force_use_tool = agent_config.tooling.force_use_tool
 
     tool, tool_args = None, None
     if force_use_tool.force_use and force_use_tool.args is not None:
@@ -71,11 +178,20 @@ def choose_tool(
     # If we have a tool and tool args, we are ready to request a tool call.
     # This only happens if the tool call was forced or we are using a non-tool calling LLM.
     if tool and tool_args:
+        if embedding_thread and tool.name == SearchTool._NAME:
+            # Wait for the embedding thread to finish
+            embedding = wait_on_background(embedding_thread)
+            override_kwargs.precomputed_query_embedding = embedding
+        if keyword_thread and tool.name == SearchTool._NAME:
+            is_keyword, keywords = wait_on_background(keyword_thread)
+            override_kwargs.precomputed_is_keyword = is_keyword
+            override_kwargs.precomputed_keywords = keywords
         return ToolChoiceUpdate(
             tool_choice=ToolChoice(
                 tool=tool,
                 tool_args=tool_args,
                 id=str(uuid4()),
+                search_tool_override_kwargs=override_kwargs,
             ),
         )
 
@@ -153,10 +269,38 @@ def choose_tool(
     logger.debug(f"Selected tool: {selected_tool.name}")
     logger.debug(f"Selected tool call request: {selected_tool_call_request}")
 
+    if embedding_thread and selected_tool.name == SearchTool._NAME:
+        # Wait for the embedding thread to finish
+        embedding = wait_on_background(embedding_thread)
+        override_kwargs.precomputed_query_embedding = embedding
+    if keyword_thread and selected_tool.name == SearchTool._NAME:
+        is_keyword, keywords = wait_on_background(keyword_thread)
+        override_kwargs.precomputed_is_keyword = is_keyword
+        override_kwargs.precomputed_keywords = keywords
+
+    if (
+        selected_tool.name == SearchTool._NAME
+        and expanded_keyword_thread
+        and expanded_semantic_thread
+    ):
+        keyword_expansion = wait_on_background(expanded_keyword_thread)
+        semantic_expansion = wait_on_background(expanded_semantic_thread)
+        override_kwargs.expanded_queries = QueryExpansions(
+            keywords_expansions=[keyword_expansion],
+            semantic_expansions=[semantic_expansion],
+        )
+
+        logger.info(
+            f"Original query: {agent_config.inputs.prompt_builder.raw_user_query}"
+        )
+        logger.info(f"Expanded keyword queries: {keyword_expansion}")
+        logger.info(f"Expanded semantic queries: {semantic_expansion}")
+
     return ToolChoiceUpdate(
         tool_choice=ToolChoice(
             tool=selected_tool,
             tool_args=selected_tool_call_request["args"],
             id=selected_tool_call_request["id"],
+            search_tool_override_kwargs=override_kwargs,
         ),
     )

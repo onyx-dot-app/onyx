@@ -16,28 +16,28 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
 import FunctionalHeader from "@/components/chat/Header";
 import FixedLogo from "@/components/logo/FixedLogo";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 function BackToOnyxButton({
   documentSidebarVisible,
 }: {
   documentSidebarVisible: boolean;
 }) {
-  const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
 
   return (
     <div className="absolute bottom-0 bg-background w-full flex border-t border-border py-4">
       <div className="mx-auto">
-        <Button onClick={() => router.push("/chat")}>
+        <Link href="/chat">
           Back to {enterpriseSettings?.application_name || "Onyx Chat"}
-        </Button>
+        </Link>
       </div>
       <div
         style={{ transition: "width 0.30s ease-out" }}
@@ -67,7 +67,7 @@ export function SharedChatDisplay({
     useState<number | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [presentingDocument, setPresentingDocument] =
-    useState<OnyxDocument | null>(null);
+    useState<MinimalOnyxDocument | null>(null);
 
   const toggleDocumentSidebar = () => {
     setDocumentSidebarVisible(!documentSidebarVisible);
@@ -94,6 +94,21 @@ export function SharedChatDisplay({
     processRawChatHistory(chatSession.messages)
   );
 
+  const firstMessage = messages[0];
+
+  if (firstMessage === undefined) {
+    return (
+      <div className="min-h-full w-full">
+        <div className="mx-auto w-fit pt-8">
+          <Callout type="danger" title="Shared Chat Not Found">
+            No messages found in shared chat.
+          </Callout>
+        </div>
+        <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
+      </div>
+    );
+  }
+
   return (
     <>
       {presentingDocument && (
@@ -106,6 +121,7 @@ export function SharedChatDisplay({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
+              humanMessage={firstMessage}
               agenticMessage={false}
               isSharedChat={true}
               selectedMessage={
@@ -162,6 +178,7 @@ export function SharedChatDisplay({
             `}
               >
                 <DocumentResults
+                  humanMessage={firstMessage}
                   agenticMessage={false}
                   modal={false}
                   isSharedChat={true}
@@ -232,6 +249,7 @@ export function SharedChatDisplay({
                             key={message.messageId}
                             content={message.message}
                             files={message.files}
+                            setPresentingDocument={setPresentingDocument}
                           />
                         );
                       } else if (message.type === "assistant") {
@@ -267,7 +285,6 @@ export function SharedChatDisplay({
                               isGenerating={false}
                               shared
                               key={message.messageId}
-                              isImprovement={message.isImprovement}
                               secondLevelGenerating={false}
                               secondLevelSubquestions={message.sub_questions?.filter(
                                 (subQuestion) => subQuestion.level === 1
@@ -284,19 +301,6 @@ export function SharedChatDisplay({
                                 ) || []
                               }
                               agenticDocs={message.agentic_docs || agenticDocs}
-                              toggleDocDisplay={(agentic: boolean) => {
-                                if (agentic) {
-                                  setSelectedMessageForDocDisplay(
-                                    message.messageId
-                                  );
-                                } else {
-                                  setSelectedMessageForDocDisplay(
-                                    secondLevelMessage
-                                      ? secondLevelMessage.messageId
-                                      : null
-                                  );
-                                }
-                              }}
                               docs={message?.documents}
                               setPresentingDocument={setPresentingDocument}
                               overriddenModel={message.overridden_model}
@@ -310,7 +314,6 @@ export function SharedChatDisplay({
                               )}
                               toolCall={message.toolCall}
                               isComplete={true}
-                              selectedDocuments={[]}
                               toggleDocumentSelection={() => {
                                 if (
                                   !documentSidebarVisible ||

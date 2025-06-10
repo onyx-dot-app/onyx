@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<services version="1.0">
+    <container id="default" version="1.0">
+        <document-api />
+        <search />
+        <http>
+            <server id="default" port="4080" />
+        </http>
+        <nodes count="[2, 4]">
+            <resources vcpu="4.0" memory="16Gb" architecture="arm64" storage-type="remote"
+                disk="48Gb" />
+        </nodes>
+
+
+    </container>
+    <content id="danswer_index" version="1.0">
+        <documents>
+            <!-- <document type="danswer_chunk" mode="index" /> -->
+{{ document_elements }}
+        </documents>
+        <nodes count="75">
+            <resources vcpu="8.0" memory="64.0Gb" architecture="arm64" storage-type="local"
+                disk="474.0Gb" />
+        </nodes>
+        <engine>
+            <proton>
+                <tuning>
+                    <searchnode>
+                        <requestthreads>
+                            <persearch>2</persearch>
+                        </requestthreads>
+                    </searchnode>
+                </tuning>
+            </proton>
+        </engine>
+
+        <config name="vespa.config.search.summary.juniperrc">
+            <max_matches>3</max_matches>
+            <length>750</length>
+            <surround_max>350</surround_max>
+            <min_length>300</min_length>
+        </config>
+
+
+        <min-redundancy>2</min-redundancy>
+
+    </content>
+</services>

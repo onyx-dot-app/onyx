@@ -1,5 +1,4 @@
 import React from "react";
-import { PlusCircle } from "lucide-react";
 import { NewChatIcon } from "@/components/icons/icons";
 
 interface NewChatButtonProps {

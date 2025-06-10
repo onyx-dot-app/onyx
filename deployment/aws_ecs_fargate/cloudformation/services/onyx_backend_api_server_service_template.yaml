@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: CloudFormation template for Onyx Backend Api Server TaskDefinition
+Parameters:
+  Environment:
+    Type: String
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
+  VpcID:
+    Type: String
+    Default: vpc-098cfa79d637dabff
+  ServiceName:
+    Type: String
+    Default: onyx-backend-api-server
+  TaskCpu:
+    Type: String
+    Default: "2048"
+  TaskMemory:
+    Type: String
+    Default: "4096"
+  TaskDesiredCount:
+    Type: Number
+    Default: 1
+
+Resources:
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSClusterName"
+      CapacityProviderStrategy:
+        - CapacityProvider: FARGATE
+          Base: 0
+          Weight: 1
+      TaskDefinition: !Ref TaskDefinition
+      ServiceName: !Sub ${Environment}-${ServiceName}-service
+      SchedulingStrategy: REPLICA
+      DesiredCount: !Ref TaskDesiredCount
+      AvailabilityZoneRebalancing: ENABLED
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Ref: SecurityGroup
+          Subnets: !Ref SubnetIDs
+      PlatformVersion: LATEST
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      ServiceConnectConfiguration:
+        Enabled: false
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ServiceDiscoveryService.Arn
+      Tags:
+        - Key: app
+          Value: onyx
+        - Key: service
+          Value: !Ref ServiceName
+        - Key: env
+          Value: !Ref Environment
+      EnableECSManagedTags: true
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub Onyx SecurityGroup access to EFS mount and ${ServiceName}.
+      GroupName: !Sub ${Environment}-ecs-${ServiceName}
+      VpcId: !Ref VpcID
+      SecurityGroupIngress:
+        - FromPort: 8080
+          ToPort: 8080
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+        - FromPort: 8080
+          ToPort: 8080
+          IpProtocol: tcp
+          CidrIpv6: "::/0"
+
+  ServiceDiscoveryService:
+    Type: "AWS::ServiceDiscovery::Service"
+    Properties:
+      Name: !Sub ${Environment}-${ServiceName}-service
+      DnsConfig:
+        DnsRecords:
+          - Type: "A"
+            TTL: 15
+      NamespaceId:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespace"
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+  
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${Environment}-${ServiceName}-TaskDefinition
+      TaskRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskRole"
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Environment}-onyx-cluster-ECSTaskExecutionRole"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: onyx-backend
+          Image: onyxdotapp/onyx-backend:latest
+          Cpu: 0
+          Essential: true
+          Command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              alembic upgrade head && echo "Starting Onyx Api Server" && uvicorn onyx.main:app --host 0.0.0.0 --port 8080
+          PortMappings:
+            - Name: backend
+              ContainerPort: 8080
+              HostPort: 8080
+              Protocol: tcp
+              AppProtocol: http
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub /ecs/${Environment}-${ServiceName}
+              mode: non-blocking
+              awslogs-create-group: "true"
+              max-buffer-size: "25m"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Environment:
+            - Name: REDIS_HOST
+              Value: !Sub 
+                - "${Environment}-onyx-redis-service.${ImportedNamespace}"
+                - ImportedNamespace: !ImportValue
+                    Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
+            - Name: MODEL_SERVER_HOST
+              Value: !Sub 
+                - "${Environment}-onyx-model-server-inference-service.${ImportedNamespace}"
+                - ImportedNamespace: !ImportValue
+                    Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
+            - Name: VESPA_HOST
+              Value: !Sub 
+                - "${Environment}-onyx-vespaengine-service.${ImportedNamespace}"
+                - ImportedNamespace: !ImportValue
+                    Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
+            - Name: POSTGRES_HOST
+              Value: !Sub 
+                - "${Environment}-onyx-postgres-service.${ImportedNamespace}"
+                - ImportedNamespace: !ImportValue
+                    Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
+            - Name: INDEXING_MODEL_SERVER_HOST
+              Value: !Sub 
+                - "${Environment}-onyx-model-server-indexing-service.${ImportedNamespace}"
+                - ImportedNamespace: !ImportValue
+                    Fn::Sub: "${Environment}-onyx-cluster-OnyxNamespaceName"
+            - Name: AUTH_TYPE
+              Value: disabled
+          Secrets:
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Environment}/postgres/user/password
+          VolumesFrom: []
+          SystemControls: []
+
+  ECSAutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ECSService
+    Properties:
+      MaxCapacity: 5
+      MinCapacity: 1
+      ResourceId: !Sub
+        - "service/${ImportedCluster}/${Environment}-${ServiceName}-service"
+        - ImportedCluster: !ImportValue
+            'Fn::Sub': "${Environment}-onyx-cluster-ECSClusterName"
+          ServiceName: !Ref ServiceName
+          Environment: !Ref Environment
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  ECSAutoScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub ${Environment}-${ServiceName}-service-cpu-scaleout
+      ScalingTargetId: !Ref ECSAutoScalingTarget
+      PolicyType: TargetTrackingScaling
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 75
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 60
+
+  ECSAutoScalingPolicyMemory:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub ${Environment}-${ServiceName}-service-mem-scaleout
+      ScalingTargetId: !Ref ECSAutoScalingTarget
+      PolicyType: TargetTrackingScaling
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        ScaleOutCooldown: 60
+        ScaleInCooldown: 60

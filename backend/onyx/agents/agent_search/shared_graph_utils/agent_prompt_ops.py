@@ -17,7 +17,6 @@ from onyx.configs.agent_configs import AGENT_MAX_STATIC_HISTORY_WORD_LENGTH
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.prompts.agent_search import HISTORY_FRAMING_PROMPT
@@ -44,9 +43,9 @@ def build_sub_question_answer_prompt(
     docs_str = format_docs(docs)
 
     docs_str = trim_prompt_piece(
-        config,
-        docs_str,
-        SUB_QUESTION_RAG_PROMPT + question + original_question + date_str,
+        config=config,
+        prompt_piece=docs_str,
+        reserved_str=SUB_QUESTION_RAG_PROMPT + question + original_question + date_str,
     )
     human_message = HumanMessage(
         content=SUB_QUESTION_RAG_PROMPT.format(
@@ -61,15 +60,9 @@ def build_sub_question_answer_prompt(
 
 
 def trim_prompt_piece(config: LLMConfig, prompt_piece: str, reserved_str: str) -> str:
-    # TODO: save the max input tokens in LLMConfig
-    max_tokens = get_max_input_tokens(
-        model_provider=config.model_provider,
-        model_name=config.model_name,
-    )
-
     # no need to trim if a conservative estimate of one token
     # per character is already less than the max tokens
-    if len(prompt_piece) + len(reserved_str) < max_tokens:
+    if len(prompt_piece) + len(reserved_str) < config.max_input_tokens:
         return prompt_piece
 
     llm_tokenizer = get_tokenizer(
@@ -80,7 +73,8 @@ def trim_prompt_piece(config: LLMConfig, prompt_piece: str, reserved_str: str) -
     # slightly conservative trimming
     return tokenizer_trim_content(
         content=prompt_piece,
-        desired_length=max_tokens - len(llm_tokenizer.encode(reserved_str)),
+        desired_length=config.max_input_tokens
+        - len(llm_tokenizer.encode(reserved_str)),
         tokenizer=llm_tokenizer,
     )
 
@@ -88,7 +82,7 @@ def trim_prompt_piece(config: LLMConfig, prompt_piece: str, reserved_str: str) -
 def build_history_prompt(config: GraphConfig, question: str) -> str:
     prompt_builder = config.inputs.prompt_builder
     persona_base = get_persona_agent_prompt_expressions(
-        config.inputs.search_request.persona
+        config.inputs.persona
     ).base_prompt
 
     if prompt_builder is None:
@@ -132,11 +126,9 @@ def build_history_prompt(config: GraphConfig, question: str) -> str:
 def get_prompt_enrichment_components(
     config: GraphConfig,
 ) -> AgentPromptEnrichmentComponents:
-    persona_prompts = get_persona_agent_prompt_expressions(
-        config.inputs.search_request.persona
-    )
+    persona_prompts = get_persona_agent_prompt_expressions(config.inputs.persona)
 
-    history = build_history_prompt(config, config.inputs.search_request.query)
+    history = build_history_prompt(config, config.inputs.prompt_builder.raw_user_query)
 
     date_str = build_date_time_string()
 

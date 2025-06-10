@@ -62,6 +62,8 @@ services:
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - log_store:/var/log
     logging:
       driver: json-file
       options:
@@ -146,11 +148,14 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
+    shm_size: 1g
     command: -c 'max_connections=250'
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_READONLY_USER=${DB_READONLY_USER:-}
+      - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
     ports:
       - "5432"
     volumes:
@@ -158,11 +163,13 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.277.17
+    image: vespaengine/vespa:8.526.15
     restart: always
+    environment:
+      - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
-      - "19071"
-      - "8081"
+      - "19071:19071"
+      - "8081:8081"
     volumes:
       - vespa_volume:/opt/vespa/var
     logging:
@@ -221,3 +228,4 @@ volumes:
       type: none
       o: bind
       device: ${DANSWER_VESPA_DATA_DIR:-./vespa_data}
+  log_store:  # for logs that we don't want to lose on container restarts

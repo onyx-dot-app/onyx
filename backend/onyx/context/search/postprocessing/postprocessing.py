@@ -10,6 +10,8 @@ from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.app_configs import IMAGE_ANALYSIS_SYSTEM_PROMPT
+from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.llm_configs import get_search_time_image_analysis_enabled
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
@@ -31,7 +33,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
-from onyx.prompts.image_analysis import IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall
@@ -162,9 +163,11 @@ logger = setup_logger()
 
 def _log_top_section_links(search_flow: str, sections: list[InferenceSection]) -> None:
     top_links = [
-        section.center_chunk.source_links[0]
-        if section.center_chunk.source_links is not None
-        else "No Link"
+        (
+            section.center_chunk.source_links[0]
+            if section.center_chunk.source_links is not None
+            else "No Link"
+        )
         for section in sections
     ]
     logger.debug(f"Top links from {search_flow} search: {', '.join(top_links)}")
@@ -196,9 +199,21 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
             RETURN_SEPARATOR
         )
 
+    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
+        # remove document summary
+        if chunk.content.startswith(chunk.doc_summary):
+            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
+        # remove chunk context
+        if chunk.content.endswith(chunk.chunk_context):
+            chunk.content = chunk.content[
+                : len(chunk.content) - len(chunk.chunk_context)
+            ].rstrip()
+        return chunk.content
+
     for chunk in chunks:
         chunk.content = _remove_title(chunk)
         chunk.content = _remove_metadata_suffix(chunk)
+        chunk.content = _remove_contextual_rag(chunk)
 
     return [chunk.to_inference_chunk() for chunk in chunks]
 
@@ -354,6 +369,12 @@ def filter_sections(
 
     Returns a list of the unique chunk IDs that were marked as relevant
     """
+    # Log evaluation type to help with debugging
+    logger.info(f"filter_sections called with evaluation_type={query.evaluation_type}")
+
+    if query.evaluation_type == LLMEvaluationType.SKIP:
+        return []
+
     sections_to_filter = sections_to_filter[: query.max_llm_filter_sections]
 
     contents = [
@@ -422,10 +443,12 @@ def search_postprocessing(
         sections_yielded = True
 
     llm_filter_task_id = None
-    if search_query.evaluation_type in [
+    # Only add LLM filtering if not in SKIP mode and if LLM doc relevance is not disabled
+    if not DISABLE_LLM_DOC_RELEVANCE and search_query.evaluation_type in [
         LLMEvaluationType.BASIC,
         LLMEvaluationType.UNSPECIFIED,
     ]:
+        logger.info("Adding LLM filtering task for document relevance evaluation")
         post_processing_tasks.append(
             FunctionCall(
                 filter_sections,
@@ -437,6 +460,8 @@ def search_postprocessing(
             )
         )
         llm_filter_task_id = post_processing_tasks[-1].result_id
+    elif DISABLE_LLM_DOC_RELEVANCE:
+        logger.info("Skipping LLM filtering task because LLM doc relevance is disabled")
 
     post_processing_results = (
         run_functions_in_parallel(post_processing_tasks)

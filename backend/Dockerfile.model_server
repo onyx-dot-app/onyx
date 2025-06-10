@@ -7,7 +7,7 @@ You can find it at https://hub.docker.com/r/onyx/onyx-model-server. For more det
 visit https://github.com/onyx-dot-app/onyx."
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.8-dev
+ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true"
 
@@ -31,7 +31,8 @@ RUN python -c "from transformers import AutoTokenizer; \
 AutoTokenizer.from_pretrained('distilbert-base-uncased'); \
 AutoTokenizer.from_pretrained('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from huggingface_hub import snapshot_download; \
-snapshot_download(repo_id='danswer/hybrid-intent-token-classifier', revision='v1.0.3'); \
+snapshot_download(repo_id='onyx-dot-app/hybrid-intent-token-classifier'); \
+snapshot_download(repo_id='onyx-dot-app/information-content-model'); \
 snapshot_download('nomic-ai/nomic-embed-text-v1'); \
 snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from sentence_transformers import SentenceTransformer; \
@@ -45,6 +46,7 @@ WORKDIR /app
 
 # Utils used by model server
 COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
+COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 
 # Place to fetch version information
 COPY ./onyx/__init__.py /app/onyx/__init__.py

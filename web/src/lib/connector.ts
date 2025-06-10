@@ -1,4 +1,3 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ValidSources } from "./types";
 import {
   Connector,
@@ -136,6 +135,7 @@ export async function deleteConnectorIfExistsAndIsUnlinked({
     );
     if (
       matchingConnectors.length > 0 &&
+      matchingConnectors[0] &&
       matchingConnectors[0].credential_ids.length === 0
     ) {
       const errorMsg = await deleteConnector(matchingConnectors[0].id);

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 from typing import cast
+from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
@@ -11,8 +12,6 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContext
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
@@ -24,11 +23,13 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import QueryFlow
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import UserFileFilters
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
 from onyx.db.models import Persona
@@ -55,7 +56,6 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 SEARCH_RESPONSE_SUMMARY_ID = "search_response_summary"
-SEARCH_DOC_CONTENT_ID = "search_doc_content"
 SECTION_RELEVANCE_LIST_ID = "section_relevance_list"
 SEARCH_EVALUATION_ID = "llm_doc_eval"
 QUERY_FIELD = "query"
@@ -143,8 +143,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # For small context models, don't include additional surrounding context
         # The 3 here for at least minimum 1 above, 1 below and 1 for the middle chunk
-        max_llm_tokens = compute_max_llm_input_tokens(self.llm.config)
-        if max_llm_tokens < 3 * GEN_AI_MODEL_FALLBACK_MAX_TOKENS:
+
+        max_input_tokens = compute_max_llm_input_tokens(
+            llm_config=llm.config,
+        )
+        if max_input_tokens < 3 * GEN_AI_MODEL_FALLBACK_MAX_TOKENS:
             self.chunks_above = 0
             self.chunks_below = 0
 
@@ -281,52 +284,116 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
+        precomputed_query_embedding = None
+        precomputed_is_keyword = None
+        precomputed_keywords = None
         force_no_rerank = False
         alternate_db_session = None
         retrieved_sections_callback = None
         skip_query_analysis = False
+        user_file_ids = None
+        user_folder_ids = None
+        document_sources = None
+        time_cutoff = None
+        expanded_queries = None
+        kg_entities = None
+        kg_relationships = None
+        kg_terms = None
+        kg_sources = None
+        kg_chunk_id_zero_only = False
         if override_kwargs:
-            force_no_rerank = override_kwargs.force_no_rerank
+            force_no_rerank = use_alt_not_None(override_kwargs.force_no_rerank, False)
             alternate_db_session = override_kwargs.alternate_db_session
             retrieved_sections_callback = override_kwargs.retrieved_sections_callback
-            skip_query_analysis = override_kwargs.skip_query_analysis
+            skip_query_analysis = use_alt_not_None(
+                override_kwargs.skip_query_analysis, False
+            )
+            user_file_ids = override_kwargs.user_file_ids
+            user_folder_ids = override_kwargs.user_folder_ids
+            document_sources = override_kwargs.document_sources
+            time_cutoff = override_kwargs.time_cutoff
+            expanded_queries = override_kwargs.expanded_queries
+            kg_entities = override_kwargs.kg_entities
+            kg_relationships = override_kwargs.kg_relationships
+            kg_terms = override_kwargs.kg_terms
+            kg_sources = override_kwargs.kg_sources
+            kg_chunk_id_zero_only = override_kwargs.kg_chunk_id_zero_only or False
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
             return
 
+        retrieval_options = self.retrieval_options or RetrievalDetails()
+        if document_sources or time_cutoff:
+            # if empty, just start with an empty filters object
+            if not retrieval_options.filters:
+                retrieval_options.filters = BaseFilters()
+
+            # Handle document sources
+            if document_sources:
+                source_types = retrieval_options.filters.source_type or []
+                retrieval_options.filters.source_type = list(
+                    set(source_types + document_sources)
+                )
+
+            # Handle time cutoff
+            if time_cutoff:
+                # Overwrite time-cutoff should supercede existing time-cutoff, even if defined
+                retrieval_options.filters.time_cutoff = time_cutoff
+
+        retrieval_options = retrieval_options or RetrievalDetails()
+        retrieval_options.filters = retrieval_options.filters or BaseFilters()
+        if kg_entities:
+            retrieval_options.filters.kg_entities = kg_entities
+        if kg_relationships:
+            retrieval_options.filters.kg_relationships = kg_relationships
+        if kg_terms:
+            retrieval_options.filters.kg_terms = kg_terms
+        if kg_sources:
+            retrieval_options.filters.kg_sources = kg_sources
+        if kg_chunk_id_zero_only:
+            retrieval_options.filters.kg_chunk_id_zero_only = kg_chunk_id_zero_only
+
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(
                 query=query,
-                evaluation_type=LLMEvaluationType.SKIP
-                if force_no_rerank
-                else self.evaluation_type,
+                evaluation_type=(
+                    LLMEvaluationType.SKIP if force_no_rerank else self.evaluation_type
+                ),
                 human_selected_filters=(
-                    self.retrieval_options.filters if self.retrieval_options else None
+                    retrieval_options.filters if retrieval_options else None
+                ),
+                user_file_filters=UserFileFilters(
+                    user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
                 ),
                 persona=self.persona,
-                offset=(
-                    self.retrieval_options.offset if self.retrieval_options else None
+                offset=(retrieval_options.offset if retrieval_options else None),
+                limit=retrieval_options.limit if retrieval_options else None,
+                rerank_settings=(
+                    RerankingDetails(
+                        rerank_model_name=None,
+                        rerank_api_url=None,
+                        rerank_provider_type=None,
+                        rerank_api_key=None,
+                        num_rerank=0,
+                        disable_rerank_for_streaming=True,
+                    )
+                    if force_no_rerank
+                    else self.rerank_settings
                 ),
-                limit=self.retrieval_options.limit if self.retrieval_options else None,
-                rerank_settings=RerankingDetails(
-                    rerank_model_name=None,
-                    rerank_api_url=None,
-                    rerank_provider_type=None,
-                    rerank_api_key=None,
-                    num_rerank=0,
-                    disable_rerank_for_streaming=True,
-                )
-                if force_no_rerank
-                else self.rerank_settings,
                 chunks_above=self.chunks_above,
                 chunks_below=self.chunks_below,
                 full_doc=self.full_doc,
                 enable_auto_detect_filters=(
-                    self.retrieval_options.enable_auto_detect_filters
-                    if self.retrieval_options
+                    retrieval_options.enable_auto_detect_filters
+                    if retrieval_options
                     else None
                 ),
+                precomputed_query_embedding=precomputed_query_embedding,
+                precomputed_is_keyword=precomputed_is_keyword,
+                precomputed_keywords=precomputed_keywords,
+                # add expanded queries
+                expanded_queries=expanded_queries,
             ),
             user=self.user,
             llm=self.llm,
@@ -336,6 +403,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             db_session=alternate_db_session or self.db_session,
             prompt_config=self.prompt_config,
             retrieved_sections_callback=retrieved_sections_callback,
+            contextual_pruning_config=self.contextual_pruning_config,
         )
 
         search_query_info = SearchQueryInfo(
@@ -344,12 +412,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             recency_bias_multiplier=search_pipeline.search_query.recency_bias_multiplier,
         )
         yield from yield_search_responses(
-            query,
-            search_pipeline.reranked_sections,
-            search_pipeline.final_context_sections,
-            search_query_info,
-            lambda: search_pipeline.section_relevance,
-            self,
+            query=query,
+            # give back the merged sections to prevent duplicate docs from appearing in the UI
+            get_retrieved_sections=lambda: search_pipeline.merged_retrieved_sections,
+            get_final_context_sections=lambda: search_pipeline.final_context_sections,
+            search_query_info=search_query_info,
+            get_section_relevance=lambda: search_pipeline.section_relevance,
+            search_tool=self,
         )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
@@ -383,10 +452,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 # SearchTool passed in to allow for access to SearchTool properties.
 # We can't just call SearchTool methods in the graph because we're operating on
 # the retrieved docs (reranking, deduping, etc.) after the SearchTool has run.
+#
+# The various inference sections are passed in as functions to allow for lazy
+# evaluation. The SearchPipeline object properties that they correspond to are
+# actually functions defined with @property decorators, and passing them into
+# this function causes them to get evaluated immediately which is undesirable.
 def yield_search_responses(
     query: str,
-    reranked_sections: list[InferenceSection],
-    final_context_sections: list[InferenceSection],
+    get_retrieved_sections: Callable[[], list[InferenceSection]],
+    get_final_context_sections: Callable[[], list[InferenceSection]],
     search_query_info: SearchQueryInfo,
     get_section_relevance: Callable[[], list[SectionRelevancePiece] | None],
     search_tool: SearchTool,
@@ -395,26 +469,11 @@ def yield_search_responses(
         id=SEARCH_RESPONSE_SUMMARY_ID,
         response=SearchResponseSummary(
             rephrased_query=query,
-            top_sections=final_context_sections,
+            top_sections=get_retrieved_sections(),
             predicted_flow=QueryFlow.QUESTION_ANSWER,
             predicted_search=search_query_info.predicted_search,
             final_filters=search_query_info.final_filters,
             recency_bias_multiplier=search_query_info.recency_bias_multiplier,
-        ),
-    )
-
-    yield ToolResponse(
-        id=SEARCH_DOC_CONTENT_ID,
-        response=OnyxContexts(
-            contexts=[
-                OnyxContext(
-                    content=section.combined_content,
-                    document_id=section.center_chunk.document_id,
-                    semantic_identifier=section.center_chunk.semantic_identifier,
-                    blurb=section.center_chunk.blurb,
-                )
-                for section in reranked_sections
-            ]
         ),
     )
 
@@ -424,6 +483,9 @@ def yield_search_responses(
         response=section_relevance,
     )
 
+    final_context_sections = get_final_context_sections()
+
+    # Use the section_relevance we already computed above
     pruned_sections = prune_sections(
         sections=final_context_sections,
         section_relevance_list=section_relevance_list_impl(
@@ -434,7 +496,13 @@ def yield_search_responses(
         question=query,
         contextual_pruning_config=search_tool.contextual_pruning_config,
     )
-
     llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
 
     yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
+
+
+T = TypeVar("T")
+
+
+def use_alt_not_None(value: T | None, alt: T) -> T:
+    return value if value is not None else alt

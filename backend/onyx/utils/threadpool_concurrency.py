@@ -1,27 +1,188 @@
+import collections.abc
 import contextvars
+import copy
 import threading
 import uuid
 from collections.abc import Callable
+from collections.abc import Iterator
+from collections.abc import MutableMapping
+from collections.abc import Sequence
 from concurrent.futures import as_completed
+from concurrent.futures import FIRST_COMPLETED
+from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import wait
 from typing import Any
+from typing import cast
 from typing import Generic
+from typing import overload
+from typing import Protocol
 from typing import TypeVar
+
+from pydantic import GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 R = TypeVar("R")
+KT = TypeVar("KT")  # Key type
+VT = TypeVar("VT")  # Value type
+_T = TypeVar("_T")  # Default type
+
+
+class ThreadSafeDict(MutableMapping[KT, VT]):
+    """
+    A thread-safe dictionary implementation that uses a lock to ensure thread safety.
+    Implements the MutableMapping interface to provide a complete dictionary-like interface.
+
+    Example usage:
+        # Create a thread-safe dictionary
+        safe_dict: ThreadSafeDict[str, int] = ThreadSafeDict()
+
+        # Basic operations (atomic)
+        safe_dict["key"] = 1
+        value = safe_dict["key"]
+        del safe_dict["key"]
+
+        # Bulk operations (atomic)
+        safe_dict.update({"key1": 1, "key2": 2})
+    """
+
+    def __init__(self, input_dict: dict[KT, VT] | None = None) -> None:
+        self._dict: dict[KT, VT] = input_dict or {}
+        self.lock = threading.Lock()
+
+    def __getitem__(self, key: KT) -> VT:
+        with self.lock:
+            return self._dict[key]
+
+    def __setitem__(self, key: KT, value: VT) -> None:
+        with self.lock:
+            self._dict[key] = value
+
+    def __delitem__(self, key: KT) -> None:
+        with self.lock:
+            del self._dict[key]
+
+    def __iter__(self) -> Iterator[KT]:
+        # Return a snapshot of keys to avoid potential modification during iteration
+        with self.lock:
+            return iter(list(self._dict.keys()))
+
+    def __len__(self) -> int:
+        with self.lock:
+            return len(self._dict)
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.no_info_after_validator_function(
+            cls.validate, handler(dict[KT, VT])
+        )
+
+    @classmethod
+    def validate(cls, v: Any) -> "ThreadSafeDict[KT, VT]":
+        if isinstance(v, dict):
+            return ThreadSafeDict(v)
+        return v
+
+    def __deepcopy__(self, memo: Any) -> "ThreadSafeDict[KT, VT]":
+        return ThreadSafeDict(copy.deepcopy(self._dict))
+
+    def clear(self) -> None:
+        """Remove all items from the dictionary atomically."""
+        with self.lock:
+            self._dict.clear()
+
+    def copy(self) -> dict[KT, VT]:
+        """Return a shallow copy of the dictionary atomically."""
+        with self.lock:
+            return self._dict.copy()
+
+    @overload
+    def get(self, key: KT) -> VT | None: ...
+
+    @overload
+    def get(self, key: KT, default: VT | _T) -> VT | _T: ...
+
+    def get(self, key: KT, default: Any = None) -> Any:
+        """Get a value with a default, atomically."""
+        with self.lock:
+            return self._dict.get(key, default)
+
+    def pop(self, key: KT, default: Any = None) -> Any:
+        """Remove and return a value with optional default, atomically."""
+        with self.lock:
+            if default is None:
+                return self._dict.pop(key)
+            return self._dict.pop(key, default)
+
+    def setdefault(self, key: KT, default: VT) -> VT:
+        """Set a default value if key is missing, atomically."""
+        with self.lock:
+            return self._dict.setdefault(key, default)
+
+    def update(self, *args: Any, **kwargs: VT) -> None:
+        """Update the dictionary atomically from another mapping or from kwargs."""
+        with self.lock:
+            self._dict.update(*args, **kwargs)
+
+    def items(self) -> collections.abc.ItemsView[KT, VT]:
+        """Return a view of (key, value) pairs atomically."""
+        with self.lock:
+            return collections.abc.ItemsView(self)
+
+    def keys(self) -> collections.abc.KeysView[KT]:
+        """Return a view of keys atomically."""
+        with self.lock:
+            return collections.abc.KeysView(self)
+
+    def values(self) -> collections.abc.ValuesView[VT]:
+        """Return a view of values atomically."""
+        with self.lock:
+            return collections.abc.ValuesView(self)
+
+    @overload
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[VT], VT], default: VT
+    ) -> tuple[VT, VT]: ...
+
+    @overload
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[VT | _T], VT], default: VT | _T
+    ) -> tuple[VT | _T, VT]: ...
+
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[Any], VT], default: Any = None
+    ) -> tuple[Any, VT]:
+        """Replace a value from the dict with a function applied to the previous value, atomically.
+
+        Returns:
+            A tuple of the previous value and the new value.
+        """
+        with self.lock:
+            val = self._dict.get(key, default)
+            new_val = value_callback(val)
+            self._dict[key] = new_val
+            return val, new_val
+
+
+class CallableProtocol(Protocol):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 def run_functions_tuples_in_parallel(
-    functions_with_args: list[tuple[Callable, tuple]],
+    functions_with_args: Sequence[tuple[CallableProtocol, tuple[Any, ...]]],
     allow_failures: bool = False,
     max_workers: int | None = None,
 ) -> list[Any]:
     """
     Executes multiple functions in parallel and returns a list of the results for each function.
+    This function preserves contextvars across threads, which is important for maintaining
+    context like tenant IDs in database sessions.
 
     Args:
         functions_with_args: List of tuples each containing the function callable and a tuple of arguments.
@@ -29,7 +190,7 @@ def run_functions_tuples_in_parallel(
         max_workers: Max number of worker threads
 
     Returns:
-        dict: A dictionary mapping function names to their results or error messages.
+        list: A list of results from each function, in the same order as the input functions.
     """
     workers = (
         min(max_workers, len(functions_with_args))
@@ -56,7 +217,7 @@ def run_functions_tuples_in_parallel(
                 results.append((index, future.result()))
             except Exception as e:
                 logger.exception(f"Function at index {index} failed due to {e}")
-                results.append((index, None))
+                results.append((index, None))  # type: ignore
 
                 if not allow_failures:
                     raise
@@ -118,7 +279,7 @@ def run_functions_in_parallel(
     return results
 
 
-class TimeoutThread(threading.Thread):
+class TimeoutThread(threading.Thread, Generic[R]):
     def __init__(
         self, timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
     ):
@@ -158,4 +319,68 @@ def run_with_timeout(
     if task.is_alive():
         task.end()
 
+    return task.result  # type: ignore
+
+
+# NOTE: this function should really only be used when run_functions_tuples_in_parallel is
+# difficult to use. It's up to the programmer to call wait_on_background on the thread after
+# the code you want to run in parallel is finished. As with all python thread parallelism,
+# this is only useful for I/O bound tasks.
+def run_in_background(
+    func: Callable[..., R], *args: Any, **kwargs: Any
+) -> TimeoutThread[R]:
+    """
+    Runs a function in a background thread. Returns a TimeoutThread object that can be used
+    to wait for the function to finish with wait_on_background.
+    """
+    context = contextvars.copy_context()
+    # Timeout not used in the non-blocking case
+    task = TimeoutThread(-1, context.run, func, *args, **kwargs)  # type: ignore
+    task.start()
+    return cast(TimeoutThread[R], task)
+
+
+def wait_on_background(task: TimeoutThread[R]) -> R:
+    """
+    Used in conjunction with run_in_background. blocks until the task is finished,
+    then returns the result of the task.
+    """
+    task.join()
+
+    if task.exception is not None:
+        raise task.exception
+
     return task.result
+
+
+def _next_or_none(ind: int, gen: Iterator[R]) -> tuple[int, R | None]:
+    return ind, next(gen, None)
+
+
+def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R]:
+    """
+    Runs the list of generators with thread-level parallelism, yielding
+    results as available. The asynchronous nature of this yielding means
+    that stopping the returned iterator early DOES NOT GUARANTEE THAT NO
+    FURTHER ITEMS WERE PRODUCED by the input gens. Only use this function
+    if you are consuming all elements from the generators OR it is acceptable
+    for some extra generator code to run and not have the result(s) yielded.
+    """
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_index: dict[Future[tuple[int, R | None]], int] = {
+            executor.submit(_next_or_none, ind, gen): ind
+            for ind, gen in enumerate(gens)
+        }
+
+        next_ind = len(gens)
+        while future_to_index:
+            done, _ = wait(future_to_index, return_when=FIRST_COMPLETED)
+            for future in done:
+                ind, result = future.result()
+                if result is not None:
+                    yield result
+                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
+                        next_ind
+                    )
+                    next_ind += 1
+                del future_to_index[future]

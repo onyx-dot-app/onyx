@@ -18,13 +18,13 @@ function SourceTile({
 }) {
   return (
     <Link
-      className={`flex 
-        flex-col 
-        items-center 
-        justify-center 
-        p-4 
-        rounded-lg 
-        w-40 
+      className={`flex
+        flex-col
+        items-center
+        justify-center
+        p-4
+        rounded-lg
+        w-40
         cursor-pointer
         shadow-md
         hover:bg-accent-background-hovered
@@ -88,6 +88,7 @@ export default function Page() {
       );
       if (
         filteredCategories.length > 0 &&
+        filteredCategories[0] !== undefined &&
         filteredCategories[0][1].length > 0
       ) {
         const firstSource = filteredCategories[0][1][0];
@@ -153,6 +154,8 @@ function getCategoryDescription(category: SourceCategory): string {
       return "Link to project management and task tracking tools.";
     case SourceCategory.CustomerSupport:
       return "Connect to customer support and helpdesk systems.";
+    case SourceCategory.CustomerRelationshipManagement:
+      return "Integrate with customer relationship management platforms.";
     case SourceCategory.CodeRepository:
       return "Integrate with code repositories and version control systems.";
     case SourceCategory.Storage:

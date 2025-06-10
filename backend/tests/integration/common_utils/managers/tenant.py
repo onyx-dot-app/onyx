@@ -30,9 +30,11 @@ class TenantManager:
     ) -> AllUsersResponse:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 

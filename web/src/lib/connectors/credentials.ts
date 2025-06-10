@@ -10,6 +10,15 @@ export interface OAuthDetails {
   oauth_enabled: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
+export interface AuthMethodOption<TFields> {
+  value: string;
+  label: string;
+  fields: TFields;
+}
+export interface CredentialTemplateWithAuth<TFields> {
+  authentication_method?: string;
+  authMethods?: AuthMethodOption<Partial<TFields>>[];
+}
 
 export interface CredentialBase<T> {
   credential_json: T;
@@ -23,6 +32,7 @@ export interface CredentialBase<T> {
 export interface Credential<T> extends CredentialBase<T> {
   id: number;
   user_id: string | null;
+  user_email: string | null;
   time_created: string;
   time_updated: string;
 }
@@ -152,8 +162,9 @@ export interface R2CredentialJson {
 }
 
 export interface S3CredentialJson {
-  aws_access_key_id: string;
-  aws_secret_access_key: string;
+  aws_access_key_id?: string;
+  aws_secret_access_key?: string;
+  aws_role_arn?: string;
 }
 
 export interface GCSCredentialJson {
@@ -171,6 +182,7 @@ export interface SalesforceCredentialJson {
   sf_username: string;
   sf_password: string;
   sf_security_token: string;
+  is_sandbox: boolean;
 }
 
 export interface SharepointCredentialJson {
@@ -225,6 +237,12 @@ export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
+export interface HighspotCredentialJson {
+  highspot_url: string;
+  highspot_key: string;
+  highspot_secret: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -270,6 +288,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     sf_username: "",
     sf_password: "",
     sf_security_token: "",
+    is_sandbox: false,
   } as SalesforceCredentialJson,
   sharepoint: {
     sp_client_id: "",
@@ -302,9 +321,25 @@ export const credentialTemplates: Record<ValidSources, any> = {
     clickup_team_id: "",
   } as ClickupCredentialJson,
   s3: {
-    aws_access_key_id: "",
-    aws_secret_access_key: "",
-  } as S3CredentialJson,
+    authentication_method: "access_key",
+    authMethods: [
+      {
+        value: "access_key",
+        label: "Access Key and Secret",
+        fields: {
+          aws_access_key_id: "",
+          aws_secret_access_key: "",
+        },
+      },
+      {
+        value: "iam_role",
+        label: "IAM Role",
+        fields: {
+          aws_role_arn: "",
+        },
+      },
+    ],
+  } as CredentialTemplateWithAuth<S3CredentialJson>,
   r2: {
     account_id: "",
     r2_access_key_id: "",
@@ -351,6 +386,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gitbook: {
     gitbook_api_key: "",
   } as GitbookCredentialJson,
+  highspot: {
+    highspot_url: "",
+    highspot_key: "",
+    highspot_secret: "",
+  } as HighspotCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -439,6 +479,8 @@ export const credentialDisplayNames: Record<string, string> = {
   // S3
   aws_access_key_id: "AWS Access Key ID",
   aws_secret_access_key: "AWS Secret Access Key",
+  aws_role_arn: "AWS Role ARN",
+  authentication_method: "Authentication Method",
 
   // GCS
   access_key_id: "GCS Access Key ID",
@@ -452,6 +494,7 @@ export const credentialDisplayNames: Record<string, string> = {
   sf_username: "Salesforce Username",
   sf_password: "Salesforce Password",
   sf_security_token: "Salesforce Security Token",
+  is_sandbox: "Is Sandbox Environment",
 
   // Sharepoint
   sp_client_id: "SharePoint Client ID",
@@ -485,6 +528,11 @@ export const credentialDisplayNames: Record<string, string> = {
   // GitBook
   gitbook_space_id: "GitBook Space ID",
   gitbook_api_key: "GitBook API Key",
+
+  //Highspot
+  highspot_url: "Highspot URL",
+  highspot_key: "Highspot Key",
+  highspot_secret: "Highspot Secret",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

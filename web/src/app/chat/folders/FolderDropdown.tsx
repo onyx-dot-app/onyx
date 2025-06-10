@@ -8,21 +8,13 @@ import React, {
 } from "react";
 import { Folder } from "./interfaces";
 import { ChatSession } from "../interfaces";
-import {
-  FiChevronDown,
-  FiChevronRight,
-  FiEdit,
-  FiTrash2,
-  FiCheck,
-  FiX,
-} from "react-icons/fi";
+import { FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { Caret } from "@/components/icons/icons";
-import { addChatToFolder, deleteFolder } from "./FolderManagement";
+import { deleteFolder } from "./FolderManagement";
 import { PencilIcon } from "lucide-react";
 import { Popover } from "@/components/popover/Popover";
 import { useChatContext } from "@/components/context/ChatContext";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
 interface FolderDropdownProps {
   folder: Folder;
@@ -157,7 +149,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         ref={setNodeRef}
         style={style}
         {...attributes}
-        className="overflow-visible mt-2 w-full"
+        className="overflow-visible pt-2 w-full"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
@@ -167,13 +159,13 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         >
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative sticky top-0"
+            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 bg-background-sidebar  dark:bg-[#000] relative sticky top-0"
             style={{ zIndex: 10 - index }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
             <button
-              className="flex overflow-hidden items-center flex-grow"
+              className="flex overflow-hidden bg-background-sidebar dark:bg-[#000] items-center flex-grow"
               onClick={() => !isEditing && setIsOpen(!isOpen)}
               {...(isEditing ? {} : listeners)}
             >
@@ -191,6 +183,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                     onChange={(e) => setNewFolderName(e.target.value)}
                     className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
                     onKeyDown={(e) => {
+                      e.stopPropagation();
                       if (e.key === "Enter") {
                         handleEdit();
                       }

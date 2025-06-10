@@ -5,6 +5,7 @@ Revises: 8f43500ee275
 Create Date: 2025-02-26 13:07:56.217791
 
 """
+
 from alembic import op
 
 
@@ -28,6 +29,20 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # First, drop any existing indexes to avoid conflicts
+    op.execute("COMMIT")
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_chat_message_tsv;")
+
+    op.execute("COMMIT")
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_chat_session_desc_tsv;")
+
+    op.execute("COMMIT")
+    op.execute("DROP INDEX IF EXISTS idx_chat_message_message_lower;")
+
+    # Drop existing columns if they exist
+    op.execute("ALTER TABLE chat_message DROP COLUMN IF EXISTS message_tsv;")
+    op.execute("ALTER TABLE chat_session DROP COLUMN IF EXISTS description_tsv;")
+
     # Create a GIN index for full-text search on chat_message.message
     op.execute(
         """

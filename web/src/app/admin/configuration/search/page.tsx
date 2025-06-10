@@ -97,7 +97,7 @@ function Main() {
           <Title className="mb-6 mt-8 !text-2xl">Embedding Model</Title>
 
           {currentEmeddingModel ? (
-            <ModelPreview model={currentEmeddingModel} display />
+            <ModelPreview model={currentEmeddingModel} display showDetails />
           ) : (
             <Title className="mt-8 mb-4">Choose your Embedding Model</Title>
           )}
@@ -138,6 +138,15 @@ function Main() {
                       <Text className="font-semibold">Multipass Indexing</Text>
                       <Text className="text-text-700">
                         {searchSettings.multipass_indexing
+                          ? "Enabled"
+                          : "Disabled"}
+                      </Text>
+                    </div>
+
+                    <div>
+                      <Text className="font-semibold">Contextual RAG</Text>
+                      <Text className="text-text-700">
+                        {searchSettings.enable_contextual_rag
                           ? "Enabled"
                           : "Disabled"}
                       </Text>

@@ -7,6 +7,8 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import KV_SEARCH_SETTINGS
+from onyx.configs.embedding_configs import SUPPORTED_EMBEDDING_MODELS
+from onyx.configs.embedding_configs import SupportedEmbeddingModel
 from onyx.configs.model_configs import FAST_GEN_AI_MODEL_VERSION
 from onyx.configs.model_configs import GEN_AI_API_KEY
 from onyx.configs.model_configs import GEN_AI_MODEL_VERSION
@@ -47,6 +49,7 @@ from onyx.natural_language_processing.search_nlp_models import warm_up_cross_enc
 from onyx.seeding.load_docs import seed_initial_documents
 from onyx.seeding.load_yamls import load_chat_yamls
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.tools.built_in_tools import auto_add_search_tool_to_personas
@@ -58,8 +61,6 @@ from shared_configs.configs import ALT_INDEX_SUFFIX
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import SUPPORTED_EMBEDDING_MODELS
-from shared_configs.model_server_models import SupportedEmbeddingModel
 
 
 logger = setup_logger()
@@ -96,7 +97,11 @@ def setup_onyx(
         )
 
         for cc_pair in get_connector_credential_pairs(db_session):
-            resync_cc_pair(cc_pair, db_session=db_session)
+            resync_cc_pair(
+                cc_pair=cc_pair,
+                search_settings_id=search_settings.id,
+                db_session=db_session,
+            )
 
     # Expire all old embedding models indexing attempts, technically redundant
     cancel_indexing_attempts_past_model(db_session)
@@ -145,9 +150,11 @@ def setup_onyx(
     success = setup_vespa(
         document_index,
         IndexingSetting.from_db_model(search_settings),
-        IndexingSetting.from_db_model(secondary_search_settings)
-        if secondary_search_settings
-        else None,
+        (
+            IndexingSetting.from_db_model(secondary_search_settings)
+            if secondary_search_settings
+            else None
+        ),
     )
     if not success:
         raise RuntimeError("Could not connect to Vespa within the specified timeout.")
@@ -305,11 +312,14 @@ def setup_postgres(db_session: Session) -> None:
             fast_default_model_name=fast_model,
             is_public=True,
             groups=[],
-            display_model_names=OPEN_AI_MODEL_NAMES,
-            model_names=OPEN_AI_MODEL_NAMES,
+            model_configurations=[
+                ModelConfigurationUpsertRequest(name=name, is_visible=True)
+                for name in OPEN_AI_MODEL_NAMES
+            ],
+            api_key_changed=True,
         )
         new_llm_provider = upsert_llm_provider(
-            llm_provider=model_req, db_session=db_session
+            llm_provider_upsert_request=model_req, db_session=db_session
         )
         update_default_provider(provider_id=new_llm_provider.id, db_session=db_session)
 
@@ -323,7 +333,7 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         logger.info(
             "No existing docs or connectors found. Checking GPU availability for multipass indexing."
         )
-        gpu_available = gpu_status_request()
+        gpu_available = gpu_status_request(indexing=True)
         logger.info(f"GPU available: {gpu_available}")
 
         current_settings = get_current_search_settings(db_session)

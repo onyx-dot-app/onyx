@@ -1,0 +1,26 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-ingress-webserver
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
+    kubernetes.io/tls-acme: "true"
+spec:
+  rules:
+    - host: {{ .Values.ingress.webserver.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "onyx-stack.fullname" . }}-webserver
+                port:
+                  number: {{ .Values.webserver.service.servicePort }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.webserver.host }}
+      secretName: {{ include "onyx-stack.fullname" . }}-ingress-webserver-tls
+{{- end }}

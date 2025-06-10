@@ -18,8 +18,8 @@ const Page = () => {
           need to either:
         </p>
         <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
-          <li>Be invited to an existing Onyx organization</li>
-          <li>Create a new Onyx organization</li>
+          <li>Be invited to an existing Onyx team</li>
+          <li>Create a new Onyx team</li>
         </ul>
         <div className="flex justify-center">
           <Link

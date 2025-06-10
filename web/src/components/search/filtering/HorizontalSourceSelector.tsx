@@ -10,7 +10,7 @@ import { Calendar } from "@/components/ui/calendar"; // or wherever your Calenda
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { listSourceMetadata } from "@/lib/sources";
 import { getDateRangeString } from "@/lib/dateUtils";
-import { DateRangePickerValue } from "../../../app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "../../dateRangeSelectors/AdminDateRangeSelector";
 import { Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 export interface SourceSelectorProps {

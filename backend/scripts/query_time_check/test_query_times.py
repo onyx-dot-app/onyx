@@ -1,9 +1,11 @@
 """
 RUN THIS AFTER SEED_DUMMY_DOCS.PY
 """
+
 import random
 import time
 
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import DOC_EMBEDDING_DIM
 from onyx.context.search.models import IndexFilters
@@ -95,6 +97,7 @@ def test_hybrid_retrieval_times(
             hybrid_alpha=0.5,
             time_decay_multiplier=1.0,
             num_to_retrieve=50,
+            ranking_profile_type=QueryExpansionType.SEMANTIC,
             offset=0,
             title_content_ratio=0.5,
         )

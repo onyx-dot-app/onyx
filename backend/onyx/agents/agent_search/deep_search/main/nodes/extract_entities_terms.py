@@ -21,6 +21,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import format_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_ENTITY_TERM_EXTRACTION
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
 )
@@ -65,7 +66,7 @@ def extract_entities_terms(
         )
 
     # first four lines duplicates from generate_initial_answer
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     initial_search_docs = state.exploratory_search_results[:NUM_EXPLORATORY_DOCS]
 
     # start with the entity/term/extraction
@@ -73,9 +74,9 @@ def extract_entities_terms(
 
     # Calculation here is only approximate
     doc_context = trim_prompt_piece(
-        graph_config.tooling.fast_llm.config,
-        doc_context,
-        ENTITY_TERM_EXTRACTION_PROMPT
+        config=graph_config.tooling.fast_llm.config,
+        prompt_piece=doc_context,
+        reserved_str=ENTITY_TERM_EXTRACTION_PROMPT
         + question
         + ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE,
     )
@@ -96,6 +97,7 @@ def extract_entities_terms(
             fast_llm.invoke,
             prompt=msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_ENTITY_TERM_EXTRACTION,
+            max_tokens=AGENT_MAX_TOKENS_ENTITY_TERM_EXTRACTION,
         )
 
         cleaned_response = (

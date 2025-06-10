@@ -33,6 +33,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import parse_question_id
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_SUBQUERY_GENERATION
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_QUERY_REWRITING_GENERATION,
 )
@@ -96,6 +97,7 @@ def expand_queries(
             model.stream(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_QUERY_REWRITING_GENERATION,
+                max_tokens=AGENT_MAX_TOKENS_SUBQUERY_GENERATION,
             ),
             dispatch_subquery(level, question_num, writer),
         )

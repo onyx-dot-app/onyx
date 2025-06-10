@@ -34,11 +34,12 @@
     /* -------------------------------------------------------
      * 2. Keep special, custom, or near-duplicate background
      * ------------------------------------------------------- */
-    --background: #fefcfa; /* slightly off-white, keep it */
+    --background: #fefcfa; /* slightly off-white */
+    --background-50: #fffdfb; /* a little lighter than background but not quite white */
     --input-background: #fefcfa;
     --input-border: #f1eee8;
     --text-text: #f4f2ed;
-    --background-dark: #e9e6e0;
+    --background-dark: #141414;
     --new-background: #ebe7de;
     --new-background-light: #d9d1c0;
     --background-chatbar: #f5f3ee;
@@ -234,6 +235,7 @@
 
     --text-text: #1d1d1d;
     --background-dark: #252525;
+    --background-50: #252525;
 
     /* --new-background: #fff; */
     --new-background: #2c2c2c;
@@ -655,4 +657,24 @@ ul > li > p {
   margin-bottom: 0;
   display: inline;
   /* Make paragraphs inline to reduce vertical space */
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.container {
+  margin-bottom: 1rem;
 }

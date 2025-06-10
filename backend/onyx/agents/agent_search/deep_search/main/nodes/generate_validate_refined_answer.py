@@ -40,12 +40,14 @@ from onyx.agents.agent_search.shared_graph_utils.constants import (
 from onyx.agents.agent_search.shared_graph_utils.constants import (
     AgentLLMErrorType,
 )
+from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
 from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.models import RefinedAgentStats
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import _should_restrict_tokens
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     dispatch_main_answer_stop_info,
 )
@@ -62,12 +64,13 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     remove_document_citations,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import StreamingError
 from onyx.configs.agent_configs import AGENT_ANSWER_GENERATION_BY_FAST_LLM
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
 from onyx.configs.agent_configs import AGENT_MAX_STREAMED_DOCS_FOR_REFINED_ANSWER
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_ANSWER_GENERATION
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_VALIDATION
 from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
@@ -121,7 +124,7 @@ def generate_validate_refined_answer(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     prompt_enrichment_components = get_prompt_enrichment_components(graph_config)
 
     persona_contextualized_prompt = (
@@ -143,10 +146,8 @@ def generate_validate_refined_answer(
     consolidated_context_docs = structured_subquestion_docs.cited_documents
 
     counter = 0
-    for original_doc_number, original_doc in enumerate(
-        original_question_verified_documents
-    ):
-        if original_doc_number not in structured_subquestion_docs.cited_documents:
+    for original_doc in original_question_verified_documents:
+        if original_doc not in structured_subquestion_docs.cited_documents:
             if (
                 counter <= AGENT_MIN_ORIG_QUESTION_DOCS
                 or len(consolidated_context_docs)
@@ -179,8 +180,8 @@ def generate_validate_refined_answer(
     )
     for tool_response in yield_search_responses(
         query=question,
-        reranked_sections=answer_generation_documents.streaming_documents,
-        final_context_sections=answer_generation_documents.context_documents,
+        get_retrieved_sections=lambda: answer_generation_documents.context_documents,
+        get_final_context_sections=lambda: answer_generation_documents.context_documents,
         search_query_info=query_info,
         get_section_relevance=lambda: relevance_list,
         search_tool=graph_config.tooling.search_tool,
@@ -243,9 +244,7 @@ def generate_validate_refined_answer(
     revision_question_efficiency = (
         len(total_answered_questions) / len(initial_answered_sub_questions)
         if initial_answered_sub_questions
-        else 10.0
-        if refined_answered_sub_questions
-        else 1.0
+        else 10.0 if refined_answered_sub_questions else 1.0
     )
 
     sub_question_answer_str = "\n\n------\n\n".join(
@@ -268,9 +267,9 @@ def generate_validate_refined_answer(
 
     relevant_docs_str = format_docs(answer_generation_documents.context_documents)
     relevant_docs_str = trim_prompt_piece(
-        model.config,
-        relevant_docs_str,
-        base_prompt
+        config=model.config,
+        prompt_piece=relevant_docs_str,
+        reserved_str=base_prompt
         + question
         + sub_question_answer_str
         + initial_answer
@@ -287,9 +286,11 @@ def generate_validate_refined_answer(
                     sub_question_answer_str
                 ),
                 relevant_docs=relevant_docs_str,
-                initial_answer=remove_document_citations(initial_answer)
-                if initial_answer
-                else None,
+                initial_answer=(
+                    remove_document_citations(initial_answer)
+                    if initial_answer
+                    else None
+                ),
                 persona_specification=persona_contextualized_prompt,
                 date_prompt=prompt_enrichment_components.date_str,
             )
@@ -300,39 +301,24 @@ def generate_validate_refined_answer(
     dispatch_timings: list[float] = []
     agent_error: AgentErrorLog | None = None
 
-    def stream_refined_answer() -> list[str]:
-        for message in model.stream(
-            msg, timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION
-        ):
-            # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-            content = message.content
-            if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected content to be a string, but got {type(content)}"
-                )
-
-            start_stream_token = datetime.now()
-            write_custom_event(
-                "refined_agent_answer",
-                AgentAnswerPiece(
-                    answer_piece=content,
-                    level=1,
-                    level_question_num=0,
-                    answer_type="agent_level_answer",
-                ),
-                writer,
-            )
-            end_stream_token = datetime.now()
-            dispatch_timings.append(
-                (end_stream_token - start_stream_token).microseconds
-            )
-            streamed_tokens.append(content)
-        return streamed_tokens
-
     try:
-        streamed_tokens = run_with_timeout(
+        streamed_tokens, dispatch_timings = run_with_timeout(
             AGENT_TIMEOUT_LLM_REFINED_ANSWER_GENERATION,
-            stream_refined_answer,
+            lambda: stream_llm_answer(
+                llm=model,
+                prompt=msg,
+                event_name="refined_agent_answer",
+                writer=writer,
+                agent_answer_level=1,
+                agent_answer_question_num=0,
+                agent_answer_type="agent_level_answer",
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
+                max_tokens=(
+                    AGENT_MAX_TOKENS_ANSWER_GENERATION
+                    if _should_restrict_tokens(model.config)
+                    else None
+                ),
+            ),
         )
 
     except (LLMTimeoutError, TimeoutError):
@@ -409,6 +395,7 @@ def generate_validate_refined_answer(
             validation_model.invoke,
             prompt=msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_VALIDATION,
+            max_tokens=AGENT_MAX_TOKENS_VALIDATION,
         )
         refined_answer_quality = binary_string_test_after_answer_separator(
             text=cast(str, validation_response.content),

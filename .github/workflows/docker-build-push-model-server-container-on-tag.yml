@@ -7,10 +7,13 @@ on:
 
 env:
   REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
-  LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
   DOCKER_BUILDKIT: 1
   BUILDKIT_PROGRESS: plain
+  DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
 
+  # don't tag cloud images with "latest"
+  LATEST_TAG: ${{ contains(github.ref_name, 'latest') && !contains(github.ref_name, 'cloud') }}
+  
 jobs:
 
 #   Bypassing this for now as the idea of not building is glitching
@@ -45,12 +48,13 @@ jobs:
     steps:
       - name: Bypass check and set output
         run: echo "changed=true" >> $GITHUB_ENV
-        
   build-amd64:
     needs: [check_model_server_changes]
     if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
       [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-amd64"]
+    env:
+      PLATFORM_PAIR: linux-amd64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,7 +79,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and Push AMD64
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -86,12 +90,17 @@ jobs:
             DANSWER_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+#           no-cache: true
 
   build-arm64:
     needs: [check_model_server_changes]
     if: needs.check_model_server_changes.outputs.changed == 'true'
     runs-on:
       [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}-arm64"]
+    env:
+      PLATFORM_PAIR: linux-arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -116,7 +125,7 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and Push ARM64
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.model_server
@@ -127,6 +136,8 @@ jobs:
             DANSWER_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
   merge-and-scan:
     needs: [build-amd64, build-arm64, check_model_server_changes]
@@ -156,6 +167,8 @@ jobs:
         env:
           TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
           TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
+          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
         with:
           image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
           severity: "CRITICAL,HIGH"

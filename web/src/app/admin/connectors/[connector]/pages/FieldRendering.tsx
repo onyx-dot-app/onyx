@@ -1,6 +1,5 @@
-import React, { Dispatch, FC, SetStateAction, useEffect } from "react";
+import React, { FC, useEffect } from "react";
 import { AdminBooleanFormField } from "@/components/credentials/CredentialFields";
-import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import { TabOption } from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
@@ -50,63 +49,68 @@ const TabsField: FC<TabsFieldProps> = ({
         </div>
       )}
 
-      <Tabs
-        defaultValue={tabField.tabs[0].value}
-        className="w-full"
-        onValueChange={(newTab) => {
-          // Clear values from other tabs but preserve defaults
-          tabField.tabs.forEach((tab) => {
-            if (tab.value !== newTab) {
-              tab.fields.forEach((field) => {
-                // Only clear if not default value
-                if (values[field.name] !== field.default) {
-                  values[field.name] = field.default;
-                }
-              });
-            }
-          });
-        }}
-      >
-        <TabsList>
-          {tabField.tabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {tabField.tabs.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value} className="">
-            {tab.fields.map((subField, index, array) => {
-              // Check visibility condition first
-              if (
-                subField.visibleCondition &&
-                !subField.visibleCondition(values, currentCredential)
-              ) {
-                return null;
-              }
-
-              return (
-                <div
-                  key={subField.name}
-                  className={
-                    index < array.length - 1 && subField.type !== "string_tab"
-                      ? "mb-4"
-                      : ""
+      {/* Ensure there's at least one tab before rendering */}
+      {tabField.tabs.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No tabs to display.</div>
+      ) : (
+        <Tabs
+          defaultValue={tabField.tabs[0]?.value} // Optional chaining for safety, though the length check above handles it
+          className="w-full"
+          onValueChange={(newTab) => {
+            // Clear values from other tabs but preserve defaults
+            tabField.tabs.forEach((tab) => {
+              if (tab.value !== newTab) {
+                tab.fields.forEach((field) => {
+                  // Only clear if not default value
+                  if (values[field.name] !== field.default) {
+                    values[field.name] = field.default;
                   }
-                >
-                  <RenderField
+                });
+              }
+            });
+          }}
+        >
+          <TabsList>
+            {tabField.tabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {tabField.tabs.map((tab) => (
+            <TabsContent key={tab.value} value={tab.value} className="">
+              {tab.fields.map((subField, index, array) => {
+                // Check visibility condition first
+                if (
+                  subField.visibleCondition &&
+                  !subField.visibleCondition(values, currentCredential)
+                ) {
+                  return null;
+                }
+
+                return (
+                  <div
                     key={subField.name}
-                    field={subField}
-                    values={values}
-                    connector={connector}
-                    currentCredential={currentCredential}
-                  />
-                </div>
-              );
-            })}
-          </TabsContent>
-        ))}
-      </Tabs>
+                    className={
+                      index < array.length - 1 && subField.type !== "string_tab"
+                        ? "mb-4"
+                        : ""
+                    }
+                  >
+                    <RenderField
+                      key={subField.name}
+                      field={subField}
+                      values={values}
+                      connector={connector}
+                      currentCredential={currentCredential}
+                    />
+                  </div>
+                );
+              })}
+            </TabsContent>
+          ))}
+        </Tabs>
+      )}
     </div>
   );
 };

@@ -57,7 +57,7 @@ export interface User {
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
   is_cloud_superuser?: boolean;
-  organization_name: string | null;
+  team_name: string | null;
   is_anonymous_user?: boolean;
   // If user does not have a configured password
   // (i.e.) they are using an oauth flow
@@ -65,6 +65,17 @@ export interface User {
   // we don't want to show them things like the reset password
   // functionality
   password_configured?: boolean;
+  tenant_info?: TenantInfo | null;
+}
+
+export interface TenantInfo {
+  new_tenant?: NewTenantInfo | null;
+  invitation?: NewTenantInfo | null;
+}
+
+export interface NewTenantInfo {
+  tenant_id: string;
+  number_of_users: number;
 }
 
 export interface AllUsersResponse {
@@ -159,6 +170,7 @@ export interface ConnectorIndexingStatus<
   last_status: ValidStatuses | null;
   last_finished_status: ValidStatuses | null;
   cc_pair_status: ConnectorCredentialPairStatus;
+  in_repeated_error_state: boolean;
   latest_index_attempt: IndexAttemptSnapshot | null;
   docs_indexed: number;
 }
@@ -379,6 +391,7 @@ export enum ValidSources {
   Egnyte = "egnyte",
   Airtable = "airtable",
   Gitbook = "gitbook",
+  Highspot = "highspot",
 }
 
 export const validAutoSyncSources = [

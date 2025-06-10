@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from typing import cast
 from typing import List
 
 import requests
@@ -14,7 +15,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -43,9 +45,11 @@ _FIREFLIES_API_QUERY = """
     }
 """
 
+ONE_MINUTE = 60
+
 
 def _create_doc_from_transcript(transcript: dict) -> Document | None:
-    sections: List[Section] = []
+    sections: List[TextSection] = []
     current_speaker_name = None
     current_link = ""
     current_text = ""
@@ -57,7 +61,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
         if sentence["speaker_name"] != current_speaker_name:
             if current_speaker_name is not None:
                 sections.append(
-                    Section(
+                    TextSection(
                         link=current_link,
                         text=current_text.strip(),
                     )
@@ -71,7 +75,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
 
     # Sometimes these links (links with a timestamp) do not work, it is a bug with Fireflies.
     sections.append(
-        Section(
+        TextSection(
             link=current_link,
             text=current_text.strip(),
         )
@@ -94,7 +98,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
 
     return Document(
         id=fireflies_id,
-        sections=sections,
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.FIREFLIES,
         semantic_identifier=meeting_title,
         metadata={},
@@ -104,6 +108,8 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
     )
 
 
+# If not all transcripts are being indexed, try using a more-recently-generated
+# API key.
 class FirefliesConnector(PollConnector, LoadConnector):
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
@@ -189,6 +195,9 @@ class FirefliesConnector(PollConnector, LoadConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
+        # add some leeway to account for any timezone funkiness and/or bad handling
+        # of start time on the Fireflies side
+        start = max(0, start - ONE_MINUTE)
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%S.000Z"
         )

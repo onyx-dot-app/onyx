@@ -3,6 +3,7 @@ import datetime
 import io
 import json
 import os
+import time
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
@@ -20,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import current_chat_accesssible_user
+from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import extract_headers
@@ -29,10 +30,13 @@ from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.chat_configs import HARD_DELETE_CHATS
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
+from onyx.connectors.models import InputType
 from onyx.db.chat import add_chats_to_session_from_slack_thread
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
@@ -48,12 +52,17 @@ from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
+from onyx.db.connector import create_connector
+from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.credentials import create_credential
 from onyx.db.engine import get_session
 from onyx.db.engine import get_session_with_tenant
+from onyx.db.enums import AccessType
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.user_documents import create_user_files
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
@@ -66,6 +75,9 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
+from onyx.server.documents.models import ConnectorBase
+from onyx.server.documents.models import CredentialBase
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -86,11 +98,13 @@ from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
+RECENT_DOCS_FOLDER_ID = -1
 
 logger = setup_logger()
 
@@ -190,7 +204,8 @@ def update_chat_session_model(
 def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
-    user: User | None = Depends(current_chat_accesssible_user),
+    include_deleted: bool = False,
+    user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
     user_id = user.id if user is not None else None
@@ -200,6 +215,7 @@ def get_chat_session(
             user_id=user_id,
             db_session=db_session,
             is_shared=is_shared,
+            include_deleted=include_deleted,
         )
     except ValueError:
         raise ValueError("Chat session does not exist or has been deleted")
@@ -227,12 +243,12 @@ def get_chat_session(
         description=chat_session.description,
         persona_id=chat_session.persona_id,
         persona_name=chat_session.persona.name if chat_session.persona else None,
-        persona_icon_color=chat_session.persona.icon_color
-        if chat_session.persona
-        else None,
-        persona_icon_shape=chat_session.persona.icon_shape
-        if chat_session.persona
-        else None,
+        persona_icon_color=(
+            chat_session.persona.icon_color if chat_session.persona else None
+        ),
+        persona_icon_shape=(
+            chat_session.persona.icon_shape if chat_session.persona else None
+        ),
         current_alternate_model=chat_session.current_alternate_model,
         messages=[
             translate_db_message_to_chat_message_detail(msg) for msg in session_messages
@@ -240,13 +256,14 @@ def get_chat_session(
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
+        deleted=chat_session.deleted,
     )
 
 
 @router.post("/create-chat-session")
 def create_new_chat_session(
     chat_session_creation_request: ChatSessionCreationRequest,
-    user: User | None = Depends(current_chat_accesssible_user),
+    user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     user_id = user.id if user is not None else None
@@ -344,12 +361,19 @@ def delete_all_chat_sessions(
 @router.delete("/delete-chat-session/{session_id}")
 def delete_chat_session_by_id(
     session_id: UUID,
+    hard_delete: bool | None = None,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id if user is not None else None
     try:
-        delete_chat_session(user_id, session_id, db_session)
+        # Use the provided hard_delete parameter if specified, otherwise use the default config
+        actual_hard_delete = (
+            hard_delete if hard_delete is not None else HARD_DELETE_CHATS
+        )
+        delete_chat_session(
+            user_id, session_id, db_session, hard_delete=actual_hard_delete
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -381,7 +405,7 @@ async def is_connected(request: Request) -> Callable[[], bool]:
 def handle_new_chat_message(
     chat_message_req: CreateChatMessageRequest,
     request: Request,
-    user: User | None = Depends(current_chat_accesssible_user),
+    user: User | None = Depends(current_chat_accessible_user),
     _rate_limit_check: None = Depends(check_token_rate_limits),
     is_connected_func: Callable[[], bool] = Depends(is_connected),
 ) -> StreamingResponse:
@@ -437,7 +461,7 @@ def handle_new_chat_message(
                 ),
                 is_connected=is_connected_func,
             ):
-                yield json.dumps(packet) if isinstance(packet, dict) else packet
+                yield packet
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
@@ -473,7 +497,7 @@ def set_message_as_latest(
 @router.post("/create-chat-message-feedback")
 def create_chat_feedback(
     feedback: ChatFeedbackRequest,
-    user: User | None = Depends(current_chat_accesssible_user),
+    user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id if user else None
@@ -648,59 +672,47 @@ def seed_chat_from_slack(
 def upload_files_for_chat(
     files: list[UploadFile],
     db_session: Session = Depends(get_session),
-    _: User | None = Depends(current_user),
+    user: User | None = Depends(current_user),
 ) -> dict[str, list[FileDescriptor]]:
-    image_content_types = {"image/jpeg", "image/png", "image/webp"}
-    csv_content_types = {"text/csv"}
-    text_content_types = {
-        "text/plain",
-        "text/markdown",
-        "text/x-markdown",
-        "text/x-config",
-        "text/tab-separated-values",
-        "application/json",
-        "application/xml",
-        "text/xml",
-        "application/x-yaml",
-    }
-    document_content_types = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "message/rfc822",
-        "application/epub+zip",
-    }
 
-    allowed_content_types = (
-        image_content_types.union(text_content_types)
-        .union(document_content_types)
-        .union(csv_content_types)
-    )
+    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
+    # image_content_types = {"image/jpeg", "image/png", "image/webp"}
+    # csv_content_types = {"text/csv"}
+    # text_content_types = {
+    #     "text/plain",
+    #     "text/markdown",
+    #     "text/x-markdown",
+    #     "text/x-config",
+    #     "text/tab-separated-values",
+    #     "application/json",
+    #     "application/xml",
+    #     "text/xml",
+    #     "application/x-yaml",
+    # }
+    # document_content_types = {
+    #     "application/pdf",
+    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    #     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    #     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    #     "message/rfc822",
+    #     "application/epub+zip",
+    # }
+
+    # allowed_content_types = (
+    #     image_content_types.union(text_content_types)
+    #     .union(document_content_types)
+    #     .union(csv_content_types)
+    # )
 
     for file in files:
         if not file.content_type:
             raise HTTPException(status_code=400, detail="File content type is required")
 
-        if file.content_type not in allowed_content_types:
-            if file.content_type in image_content_types:
-                error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
-            elif file.content_type in text_content_types:
-                error_detail = "Unsupported text file type. Supported text types include .txt, .csv, .md, .mdx, .conf, "
-                ".log, .tsv."
-            elif file.content_type in csv_content_types:
-                error_detail = (
-                    "Unsupported CSV file type. Supported CSV types include .csv."
-                )
-            else:
-                error_detail = (
-                    "Unsupported document file type. Supported document types include .pdf, .docx, .pptx, .xlsx, "
-                    ".json, .xml, .yml, .yaml, .eml, .epub."
-                )
-            raise HTTPException(status_code=400, detail=error_detail)
+        if file.content_type not in UploadMimeTypes.ALLOWED_MIME_TYPES:
+            raise HTTPException(status_code=400, detail="Unsupported file type.")
 
         if (
-            file.content_type in image_content_types
+            file.content_type in UploadMimeTypes.IMAGE_MIME_TYPES
             and file.size
             and file.size > 20 * 1024 * 1024
         ):
@@ -713,15 +725,7 @@ def upload_files_for_chat(
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        file_type = (
-            ChatFileType.IMAGE
-            if file.content_type in image_content_types
-            else ChatFileType.CSV
-            if file.content_type in csv_content_types
-            else ChatFileType.DOC
-            if file.content_type in document_content_types
-            else ChatFileType.PLAIN_TEXT
-        )
+        file_type = mime_type_to_chat_file_type(file.content_type)
 
         file_content = file.file.read()  # Read the file content
 
@@ -744,11 +748,12 @@ def upload_files_for_chat(
             file_type=new_content_type or file_type.value,
         )
 
-        # if the file is a doc, extract text and store that so we don't need
-        # to re-extract it every time we send a message
+        # 4) If the file is a doc, extract text and store that separately
         if file_type == ChatFileType.DOC:
+            # Re-wrap bytes in a fresh BytesIO so we start at position 0
+            extracted_text_io = io.BytesIO(file_content)
             extracted_text = extract_file_text(
-                file=file_content_io,  # use the bytes we already read
+                file=extracted_text_io,  # use the bytes we already read
                 file_name=file.filename or "",
             )
             text_file_id = str(uuid.uuid4())
@@ -760,12 +765,57 @@ def upload_files_for_chat(
                 file_origin=FileOrigin.CHAT_UPLOAD,
                 file_type="text/plain",
             )
-            # for DOC type, just return this for the FileDescriptor
-            # as we would always use this as the ID to attach to the
-            # message
+            # Return the text file as the "main" file descriptor for doc types
             file_info.append((text_file_id, file.filename, ChatFileType.PLAIN_TEXT))
         else:
             file_info.append((file_id, file.filename, file_type))
+
+        # 5) Create a user file for each uploaded file
+        user_files = create_user_files([file], RECENT_DOCS_FOLDER_ID, user, db_session)
+        for user_file in user_files:
+            # 6) Create connector
+            connector_base = ConnectorBase(
+                name=f"UserFile-{int(time.time())}",
+                source=DocumentSource.FILE,
+                input_type=InputType.LOAD_STATE,
+                connector_specific_config={
+                    "file_locations": [user_file.file_id],
+                    "zip_metadata": {},
+                },
+                refresh_freq=None,
+                prune_freq=None,
+                indexing_start=None,
+            )
+            connector = create_connector(
+                db_session=db_session,
+                connector_data=connector_base,
+            )
+
+            # 7) Create credential
+            credential_info = CredentialBase(
+                credential_json={},
+                admin_public=True,
+                source=DocumentSource.FILE,
+                curator_public=True,
+                groups=[],
+                name=f"UserFileCredential-{int(time.time())}",
+                is_user_file=True,
+            )
+            credential = create_credential(credential_info, user, db_session)
+
+            # 8) Create connector credential pair
+            cc_pair = add_credential_to_connector(
+                db_session=db_session,
+                user=user,
+                connector_id=connector.id,
+                credential_id=credential.id,
+                cc_pair_name=f"UserFileCCPair-{int(time.time())}",
+                access_type=AccessType.PRIVATE,
+                auto_sync_options=None,
+                groups=[],
+            )
+            user_file.cc_pair_id = cc_pair.data
+            db_session.commit()
 
     return {
         "files": [

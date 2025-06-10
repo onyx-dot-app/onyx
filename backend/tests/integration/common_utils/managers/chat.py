@@ -5,6 +5,7 @@ import requests
 from requests.models import Response
 
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -31,9 +32,11 @@ class ChatSessionManager:
         response = requests.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -57,6 +60,7 @@ class ChatSessionManager:
         prompt_override: PromptOverride | None = None,
         alternate_assistant_id: int | None = None,
         use_existing_user_message: bool = False,
+        use_agentic_search: bool = False,
     ) -> StreamedResponse:
         chat_message_req = CreateChatMessageRequest(
             chat_session_id=chat_session_id,
@@ -73,15 +77,22 @@ class ChatSessionManager:
             prompt_override=prompt_override,
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
+            use_agentic_search=use_agentic_search,
         )
+
+        headers = (
+            user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS
+        )
+        cookies = user_performing_action.cookies if user_performing_action else None
 
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
             json=chat_message_req.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=headers,
             stream=True,
+            cookies=cookies,
         )
 
         return ChatSessionManager.analyze_response(response)
@@ -97,17 +108,24 @@ class ChatSessionManager:
         for data in response_data:
             if "rephrased_query" in data:
                 analyzed.rephrased_query = data["rephrased_query"]
-            elif "tool_name" in data:
+            if "tool_name" in data:
                 analyzed.tool_name = data["tool_name"]
                 analyzed.tool_result = (
                     data.get("tool_result")
                     if analyzed.tool_name == "run_search"
                     else None
                 )
-            elif "relevance_summaries" in data:
+            if "relevance_summaries" in data:
                 analyzed.relevance_summaries = data["relevance_summaries"]
-            elif "answer_piece" in data and data["answer_piece"]:
+            if "answer_piece" in data and data["answer_piece"]:
                 analyzed.full_message += data["answer_piece"]
+            if "top_documents" in data:
+                assert (
+                    analyzed.top_documents is None
+                ), "top_documents should only be set once"
+                analyzed.top_documents = [
+                    SavedSearchDoc(**doc) for doc in data["top_documents"]
+                ]
 
         return analyzed
 
@@ -118,9 +136,11 @@ class ChatSessionManager:
     ) -> list[DATestChatMessage]:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -150,8 +170,143 @@ class ChatSessionManager:
                 "feedback_text": feedback_text,
                 "predefined_feedback": predefined_feedback,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
+
+    @staticmethod
+    def delete(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Delete a chat session and all its related records (messages, agent data, etc.)
+        Uses the default deletion method configured on the server.
+
+        Returns True if deletion was successful, False otherwise.
+        """
+        response = requests.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        return response.ok
+
+    @staticmethod
+    def soft_delete(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Soft delete a chat session (marks as deleted but keeps in database).
+
+        Returns True if deletion was successful, False otherwise.
+        """
+        # Since there's no direct API for soft delete, we'll use a query parameter approach
+        # or make a direct call with hard_delete=False parameter via a new endpoint
+        response = requests.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=false",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        return response.ok
+
+    @staticmethod
+    def hard_delete(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Hard delete a chat session (completely removes from database).
+
+        Returns True if deletion was successful, False otherwise.
+        """
+        response = requests.delete(
+            f"{API_SERVER_URL}/chat/delete-chat-session/{chat_session.id}?hard_delete=true",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        return response.ok
+
+    @staticmethod
+    def verify_deleted(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Verify that a chat session has been deleted by attempting to retrieve it.
+
+        Returns True if the chat session is confirmed deleted, False if it still exists.
+        """
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+        # Chat session should return 400 if it doesn't exist
+        return response.status_code == 400
+
+    @staticmethod
+    def verify_soft_deleted(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Verify that a chat session has been soft deleted (marked as deleted but still in DB).
+
+        Returns True if the chat session is soft deleted, False otherwise.
+        """
+        # Try to get the chat session with include_deleted=true
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+
+        if response.status_code == 200:
+            # Chat exists, check if it's marked as deleted
+            chat_data = response.json()
+            return chat_data.get("deleted", False) is True
+        return False
+
+    @staticmethod
+    def verify_hard_deleted(
+        chat_session: DATestChatSession,
+        user_performing_action: DATestUser | None = None,
+    ) -> bool:
+        """
+        Verify that a chat session has been hard deleted (completely removed from DB).
+
+        Returns True if the chat session is hard deleted, False otherwise.
+        """
+        # Try to get the chat session with include_deleted=true
+        response = requests.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}?include_deleted=true",
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
+        )
+
+        # For hard delete, even with include_deleted=true, the record should not exist
+        return response.status_code != 200

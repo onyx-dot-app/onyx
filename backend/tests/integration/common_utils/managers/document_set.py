@@ -36,9 +36,11 @@ class DocumentSetManager:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_creation_request,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -69,9 +71,11 @@ class DocumentSetManager:
         response = requests.patch(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_update_request,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return True
@@ -83,9 +87,11 @@ class DocumentSetManager:
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/manage/admin/document-set/{document_set.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return True
@@ -96,9 +102,11 @@ class DocumentSetManager:
     ) -> list[DATestDocumentSet]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/document-set",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [
@@ -139,11 +147,23 @@ class DocumentSetManager:
                 break
 
             if time.time() - start > MAX_DELAY:
+                not_synced_doc_sets = [
+                    doc_set for doc_set in doc_sets if not doc_set.is_up_to_date
+                ]
                 raise TimeoutError(
-                    f"Document sets were not synced within the {MAX_DELAY} seconds"
+                    f"Document sets were not synced within the {MAX_DELAY} seconds. "
+                    f"Remaining unsynced document sets: {len(not_synced_doc_sets)}. "
+                    f"IDs: {[doc_set.id for doc_set in not_synced_doc_sets]}"
                 )
             else:
-                print("Document sets were not synced yet, waiting...")
+                not_synced_doc_sets = [
+                    doc_set for doc_set in doc_sets if not doc_set.is_up_to_date
+                ]
+                print(
+                    f"Document sets were not synced yet, waiting... "
+                    f"{len(not_synced_doc_sets)}/{len(doc_sets)} document sets still syncing. "
+                    f"IDs: {[doc_set.id for doc_set in not_synced_doc_sets]}"
+                )
 
             time.sleep(2)
 

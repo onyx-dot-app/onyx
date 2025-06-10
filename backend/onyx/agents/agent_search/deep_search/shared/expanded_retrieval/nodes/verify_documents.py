@@ -25,6 +25,7 @@ from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrin
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_VALIDATION
 from onyx.configs.agent_configs import AGENT_TIMEOUT_CONNECT_LLM_DOCUMENT_VERIFICATION
 from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_DOCUMENT_VERIFICATION
 from onyx.llm.chat_llm import LLMRateLimitError
@@ -70,7 +71,9 @@ def verify_documents(
     fast_llm = graph_config.tooling.fast_llm
 
     document_content = trim_prompt_piece(
-        fast_llm.config, document_content, DOCUMENT_VERIFICATION_PROMPT + question
+        config=fast_llm.config,
+        prompt_piece=document_content,
+        reserved_str=DOCUMENT_VERIFICATION_PROMPT + question,
     )
 
     msg = [
@@ -93,6 +96,7 @@ def verify_documents(
             fast_llm.invoke,
             prompt=msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_DOCUMENT_VERIFICATION,
+            max_tokens=AGENT_MAX_TOKENS_VALIDATION,
         )
 
         assert isinstance(response.content, str)

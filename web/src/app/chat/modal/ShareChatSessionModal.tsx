@@ -117,9 +117,8 @@ export function ShareChatSessionModal({
             {shareLink ? (
               <div>
                 <Text>
-                  This chat session is currently shared. Anyone in your
-                  organization can view the message history using the following
-                  link:
+                  This chat session is currently shared. Anyone in your team can
+                  view the message history using the following link:
                 </Text>
 
                 <div className="flex mt-2">
@@ -160,7 +159,7 @@ export function ShareChatSessionModal({
               <div>
                 <Callout type="warning" title="Warning" className="mb-4">
                   Please make sure that all content in this chat is safe to
-                  share with the whole organization.
+                  share with the whole team.
                 </Callout>
                 <div className="flex w-full justify-between">
                   <Button

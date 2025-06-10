@@ -15,7 +15,7 @@ from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import InputType
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
@@ -55,7 +55,7 @@ def _create_indexable_chunks(
             # The section is not really used past this point since we have already done the other processing
             # for the chunking and embedding.
             sections=[
-                Section(
+                TextSection(
                     text=preprocessed_doc["content"],
                     link=preprocessed_doc["url"],
                     image_file_name=None,
@@ -87,6 +87,9 @@ def _create_indexable_chunks(
             metadata_suffix_keyword="",
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
+            doc_summary="",
+            chunk_context="",
+            contextual_rag_reserved_tokens=0,
             embeddings=ChunkEmbedding(
                 full_embedding=preprocessed_doc["content_embedding"],
                 mini_chunk_embeddings=[],
@@ -95,9 +98,12 @@ def _create_indexable_chunks(
             tenant_id=tenant_id if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA,
             access=default_public_access,
             document_sets=set(),
+            user_file=None,
+            user_folder=None,
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
             image_file_name=None,
+            aggregated_chunk_boost_factor=1.0,
         )
 
         chunks.append(chunk)

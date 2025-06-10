@@ -1,5 +1,5 @@
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
-import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
+import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { Modal } from "@/components/Modal";
 import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
@@ -8,7 +8,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import isEqual from "lodash/isEqual";
+import { isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -19,7 +19,7 @@ function LLMProviderUpdateModal({
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
   onClose: () => void;
-  existingLlmProvider?: FullLLMProvider;
+  existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
@@ -28,10 +28,12 @@ function LLMProviderUpdateModal({
     : llmProviderDescriptor?.display_name ||
       llmProviderDescriptor?.name ||
       "Custom LLM Provider";
+
   return (
     <Modal
       title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
       onOutsideClick={() => onClose()}
+      hideOverflow={true}
     >
       <div className="max-h-[70vh] overflow-y-auto px-4">
         {llmProviderDescriptor ? (
@@ -61,7 +63,7 @@ function LLMProviderDisplay({
   shouldMarkAsDefault,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
-  existingLlmProvider: FullLLMProvider;
+  existingLlmProvider: LLMProviderView;
   shouldMarkAsDefault?: boolean;
 }) {
   const [formIsVisible, setFormIsVisible] = useState(false);
@@ -146,7 +148,7 @@ export function ConfiguredLLMProviderDisplay({
   existingLlmProviders,
   llmProviderDescriptors,
 }: {
-  existingLlmProviders: FullLLMProvider[];
+  existingLlmProviders: LLMProviderView[];
   llmProviderDescriptors: WellKnownLLMProviderDescriptor[];
 }) {
   existingLlmProviders = existingLlmProviders.sort((a, b) => {
@@ -174,7 +176,16 @@ export function ConfiguredLLMProviderDisplay({
             // then the provider is custom - don't use the default
             // provider descriptor
             llmProviderDescriptor={
-              isEqual(provider.model_names, defaultProviderDesciptor?.llm_names)
+              isSubset(
+                defaultProviderDesciptor
+                  ? defaultProviderDesciptor.model_configurations.map(
+                      (model_configuration) => model_configuration.name
+                    )
+                  : [],
+                provider.model_configurations.map(
+                  (model_configuration) => model_configuration.name
+                )
+              )
                 ? defaultProviderDesciptor
                 : null
             }

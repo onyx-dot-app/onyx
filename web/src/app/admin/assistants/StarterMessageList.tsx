@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrayHelpers, ErrorMessage, Field, useFormikContext } from "formik";
+import { ArrayHelpers } from "formik";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useEffect, useState } from "react";
-import { FiTrash2, FiRefreshCcw, FiRefreshCw } from "react-icons/fi";
+import { useState } from "react";
+import { FiTrash2, FiRefreshCw } from "react-icons/fi";
 import { StarterMessage } from "./interfaces";
 import { Button } from "@/components/ui/button";
 import { SwapIcon } from "@/components/icons/icons";
@@ -36,12 +36,12 @@ export default function StarterMessagesList({
 
     if (value && index === values.length - 1 && values.length < 4) {
       arrayHelpers.push({ message: "" });
-    } else if (
-      !value &&
-      index === values.length - 2 &&
-      !values[values.length - 1].message
-    ) {
-      arrayHelpers.pop();
+    } else if (!value && index === values.length - 2) {
+      const lastItem = values[values.length - 1];
+      if (lastItem !== undefined && !lastItem.message) {
+        // Check if lastItem's message is also empty
+        arrayHelpers.pop();
+      }
     }
   };
 

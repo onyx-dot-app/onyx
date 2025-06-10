@@ -1,18 +1,15 @@
 "use client";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import useSWR, { mutate } from "swr";
+import useSWR from "swr";
 import { Dispatch, SetStateAction, useState } from "react";
 import {
   CloudEmbeddingProvider,
   CloudEmbeddingModel,
   AVAILABLE_MODELS,
-  INVALID_OLD_MODEL,
   HostedEmbeddingModel,
-  EmbeddingModelDescriptor,
   EmbeddingProvider,
 } from "../../../components/embedding/interfaces";
-import { Connector } from "@/lib/connectors/connectors";
 import OpenEmbeddingPage from "./pages/OpenEmbeddingPage";
 import CloudEmbeddingPage from "./pages/CloudEmbeddingPage";
 import { ProviderCreationModal } from "./modals/ProviderCreationModal";
@@ -132,8 +129,12 @@ export function EmbeddingModelSelection({
       {showTentativeProvider && (
         <ProviderCreationModal
           updateCurrentModel={updateCurrentModel}
-          isProxy={showTentativeProvider.provider_type == "LiteLLM"}
-          isAzure={showTentativeProvider.provider_type == "Azure"}
+          isProxy={
+            showTentativeProvider.provider_type == EmbeddingProvider.LITELLM
+          }
+          isAzure={
+            showTentativeProvider.provider_type == EmbeddingProvider.AZURE
+          }
           selectedProvider={showTentativeProvider}
           onConfirm={() => {
             setShowTentativeProvider(showUnconfiguredProvider);
@@ -151,9 +152,15 @@ export function EmbeddingModelSelection({
 
       {changeCredentialsProvider && (
         <ChangeCredentialsModal
-          isProxy={changeCredentialsProvider.provider_type == "LiteLLM"}
-          isAzure={changeCredentialsProvider.provider_type == "Azure"}
-          useFileUpload={changeCredentialsProvider.provider_type == "Google"}
+          isProxy={
+            changeCredentialsProvider.provider_type == EmbeddingProvider.LITELLM
+          }
+          isAzure={
+            changeCredentialsProvider.provider_type == EmbeddingProvider.AZURE
+          }
+          useFileUpload={
+            changeCredentialsProvider.provider_type == EmbeddingProvider.GOOGLE
+          }
           onDeleted={() => {
             setChangeCredentialsProvider(null);
             mutateEmbeddingProviderDetails();

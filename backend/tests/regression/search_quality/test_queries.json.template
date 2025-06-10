@@ -1,0 +1,22 @@
+[
+    {
+        "question": "What is Onyx?",
+        "ground_truth": [
+            {
+                "doc_source": "Web",
+                "doc_link": "https://docs.onyx.app/more/use_cases/overview"
+            },
+            {
+                "doc_source": "Web",
+                "doc_link": "https://docs.onyx.app/more/use_cases/ai_platform"
+            }
+        ],
+        "categories": [
+            "keyword",
+            "broad"
+        ]
+    },
+    {
+        "question": "What is the meaning of life?"
+    }
+]

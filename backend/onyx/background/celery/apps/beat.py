@@ -1,6 +1,5 @@
 from datetime import timedelta
 from typing import Any
-from typing import cast
 
 from celery import Celery
 from celery import signals
@@ -9,13 +8,12 @@ from celery.signals import beat_init
 from celery.utils.log import get_task_logger
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.celery_utils import make_probe_path
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
-from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import POSTGRES_CELERY_BEAT_APP_NAME
 from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import SqlEngine
-from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
 from shared_configs.configs import MULTI_TENANT
@@ -44,10 +42,17 @@ class DynamicTenantScheduler(PersistentScheduler):
 
         # Let the parent class handle store initialization
         self.setup_schedule()
-        self._try_updating_schedule()
         task_logger.info(
             f"DynamicTenantScheduler initialized: reload_interval={self._reload_interval}"
         )
+
+        self._liveness_probe_path = make_probe_path("liveness", "beat@hostname")
+
+        # do not set the initial schedule here because we don't have db access yet.
+        # do it in beat_init after the db engine is initialized
+
+        # An initial schedule is required ... otherwise, the scheduler will delay
+        # for 5 minutes before calling tick()
 
     def setup_schedule(self) -> None:
         super().setup_schedule()
@@ -60,6 +65,8 @@ class DynamicTenantScheduler(PersistentScheduler):
             or (now - self._last_reload) > self._reload_interval
         ):
             task_logger.debug("Reload interval reached, initiating task update")
+            self._liveness_probe_path.touch()
+
             try:
                 self._try_updating_schedule()
             except (AttributeError, KeyError):
@@ -141,8 +148,6 @@ class DynamicTenantScheduler(PersistentScheduler):
         """Only updates the actual beat schedule on the celery app when it changes"""
         do_update = False
 
-        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
-
         task_logger.debug("_try_updating_schedule starting")
 
         tenant_ids = get_all_tenant_ids()
@@ -152,16 +157,10 @@ class DynamicTenantScheduler(PersistentScheduler):
         current_schedule = self.schedule.items()
 
         # get potential new state
-        beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
-        beat_multiplier_raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
-        if beat_multiplier_raw is not None:
-            try:
-                beat_multiplier_bytes = cast(bytes, beat_multiplier_raw)
-                beat_multiplier = float(beat_multiplier_bytes.decode())
-            except ValueError:
-                task_logger.error(
-                    f"Invalid beat_multiplier value: {beat_multiplier_raw}"
-                )
+        try:
+            beat_multiplier = OnyxRuntime.get_beat_multiplier()
+        except Exception:
+            beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
         new_schedule = self._generate_schedule(tenant_ids, beat_multiplier)
 
@@ -247,6 +246,13 @@ def on_beat_init(sender: Any, **kwargs: Any) -> None:
     SqlEngine.init_engine(pool_size=2, max_overflow=0)
 
     app_base.wait_for_redis(sender, **kwargs)
+    path = make_probe_path("readiness", "beat@hostname")
+    path.touch()
+    task_logger.info(f"Readiness signal touched at {path}.")
+
+    # first time init of the scheduler after db has been init'ed
+    scheduler: DynamicTenantScheduler = sender.scheduler
+    scheduler._try_updating_schedule()
 
 
 @signals.setup_logging.connect

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
-from typing import ContextManager
+from typing import AsyncContextManager
 
 import asyncpg  # type: ignore
 import boto3
@@ -27,6 +27,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
 from onyx.configs.app_configs import AWS_REGION_NAME
+from onyx.configs.app_configs import DB_READONLY_PASSWORD
+from onyx.configs.app_configs import DB_READONLY_USER
 from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -46,6 +48,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
@@ -55,7 +58,11 @@ logger = setup_logger()
 SYNC_DB_API = "psycopg2"
 ASYNC_DB_API = "asyncpg"
 
+# why isn't this in configs?
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
+SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
+
 
 # Global so we don't create more than one engine per process
 _ASYNC_ENGINE: AsyncEngine | None = None
@@ -106,10 +113,10 @@ def build_connection_string(
     port: str = POSTGRES_PORT,
     db: str = POSTGRES_DB,
     app_name: str | None = None,
-    use_iam: bool = USE_IAM_AUTH,
+    use_iam_auth: bool = USE_IAM_AUTH,
     region: str = "us-west-2",
 ) -> str:
-    if use_iam:
+    if use_iam_auth:
         base_conn_str = f"postgresql+{db_api}://{user}@{host}:{port}/{db}"
     else:
         base_conn_str = f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
@@ -176,69 +183,152 @@ def get_db_current_time(db_session: Session) -> datetime:
     return result
 
 
-SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
-
-
 def is_valid_schema_name(name: str) -> bool:
     return SCHEMA_NAME_REGEX.match(name) is not None
 
 
 class SqlEngine:
     _engine: Engine | None = None
+    _readonly_engine: Engine | None = None
     _lock: threading.Lock = threading.Lock()
+    _readonly_lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
 
     @classmethod
-    def _init_engine(cls, **engine_kwargs: Any) -> Engine:
-        connection_string = build_connection_string(
-            db_api=SYNC_DB_API, app_name=cls._app_name + "_sync", use_iam=USE_IAM_AUTH
-        )
+    def init_engine(
+        cls,
+        pool_size: int,
+        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
+        max_overflow: int,
+        app_name: str | None = None,
+        db_api: str = SYNC_DB_API,
+        use_iam: bool = USE_IAM_AUTH,
+        connection_string: str | None = None,
+        **extra_engine_kwargs: Any,
+    ) -> None:
+        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
+        important args, and if incorrectly specified, we have run into hitting the pool
+        limit / using too many connections and overwhelming the database.
 
-        # Start with base kwargs that are valid for all pool types
-        final_engine_kwargs: dict[str, Any] = {}
+        Specifying connection_string directly will cause some of the other parameters
+        to be ignored.
+        """
+        with cls._lock:
+            if cls._engine:
+                return
 
-        if POSTGRES_USE_NULL_POOL:
-            # if null pool is specified, then we need to make sure that
-            # we remove any passed in kwargs related to pool size that would
-            # cause the initialization to fail
-            final_engine_kwargs.update(engine_kwargs)
+            if not connection_string:
+                connection_string = build_connection_string(
+                    db_api=db_api,
+                    app_name=cls._app_name + "_sync",
+                    use_iam_auth=use_iam,
+                )
 
-            final_engine_kwargs["poolclass"] = pool.NullPool
-            if "pool_size" in final_engine_kwargs:
-                del final_engine_kwargs["pool_size"]
-            if "max_overflow" in final_engine_kwargs:
-                del final_engine_kwargs["max_overflow"]
-        else:
-            final_engine_kwargs["pool_size"] = 20
-            final_engine_kwargs["max_overflow"] = 5
-            final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
-            final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
+            # Start with base kwargs that are valid for all pool types
+            final_engine_kwargs: dict[str, Any] = {}
 
-            # any passed in kwargs override the defaults
-            final_engine_kwargs.update(engine_kwargs)
+            if POSTGRES_USE_NULL_POOL:
+                # if null pool is specified, then we need to make sure that
+                # we remove any passed in kwargs related to pool size that would
+                # cause the initialization to fail
+                final_engine_kwargs.update(extra_engine_kwargs)
 
-        logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
-        # echo=True here for inspecting all emitted db queries
-        engine = create_engine(connection_string, **final_engine_kwargs)
+                final_engine_kwargs["poolclass"] = pool.NullPool
+                if "pool_size" in final_engine_kwargs:
+                    del final_engine_kwargs["pool_size"]
+                if "max_overflow" in final_engine_kwargs:
+                    del final_engine_kwargs["max_overflow"]
+            else:
+                final_engine_kwargs["pool_size"] = pool_size
+                final_engine_kwargs["max_overflow"] = max_overflow
+                final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
+                final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
 
-        if USE_IAM_AUTH:
-            event.listen(engine, "do_connect", provide_iam_token)
+                # any passed in kwargs override the defaults
+                final_engine_kwargs.update(extra_engine_kwargs)
 
-        return engine
+            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+            # echo=True here for inspecting all emitted db queries
+            engine = create_engine(connection_string, **final_engine_kwargs)
+
+            if use_iam:
+                event.listen(engine, "do_connect", provide_iam_token)
+
+            cls._engine = engine
 
     @classmethod
-    def init_engine(cls, **engine_kwargs: Any) -> None:
-        with cls._lock:
-            if not cls._engine:
-                cls._engine = cls._init_engine(**engine_kwargs)
+    def init_readonly_engine(
+        cls,
+        pool_size: int,
+        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
+        max_overflow: int,
+        **extra_engine_kwargs: Any,
+    ) -> None:
+        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
+        important args, and if incorrectly specified, we have run into hitting the pool
+        limit / using too many connections and overwhelming the database."""
+        with cls._readonly_lock:
+            if cls._readonly_engine:
+                return
+
+            if not DB_READONLY_USER or not DB_READONLY_PASSWORD:
+                raise ValueError(
+                    "Custom database user credentials not configured in environment variables"
+                )
+
+            # Build connection string with custom user
+            connection_string = build_connection_string(
+                user=DB_READONLY_USER,
+                password=DB_READONLY_PASSWORD,
+                use_iam_auth=False,  # Custom users typically don't use IAM auth
+                db_api=SYNC_DB_API,  # Explicitly use sync DB API
+            )
+
+            # Start with base kwargs that are valid for all pool types
+            final_engine_kwargs: dict[str, Any] = {}
+
+            if POSTGRES_USE_NULL_POOL:
+                # if null pool is specified, then we need to make sure that
+                # we remove any passed in kwargs related to pool size that would
+                # cause the initialization to fail
+                final_engine_kwargs.update(extra_engine_kwargs)
+
+                final_engine_kwargs["poolclass"] = pool.NullPool
+                if "pool_size" in final_engine_kwargs:
+                    del final_engine_kwargs["pool_size"]
+                if "max_overflow" in final_engine_kwargs:
+                    del final_engine_kwargs["max_overflow"]
+            else:
+                final_engine_kwargs["pool_size"] = pool_size
+                final_engine_kwargs["max_overflow"] = max_overflow
+                final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
+                final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
+
+                # any passed in kwargs override the defaults
+                final_engine_kwargs.update(extra_engine_kwargs)
+
+            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+            # echo=True here for inspecting all emitted db queries
+            engine = create_engine(connection_string, **final_engine_kwargs)
+
+            if USE_IAM_AUTH:
+                event.listen(engine, "do_connect", provide_iam_token)
+
+            cls._readonly_engine = engine
 
     @classmethod
     def get_engine(cls) -> Engine:
         if not cls._engine:
-            with cls._lock:
-                if not cls._engine:
-                    cls._engine = cls._init_engine()
+            raise RuntimeError("Engine not initialized. Must call init_engine first.")
         return cls._engine
+
+    @classmethod
+    def get_readonly_engine(cls) -> Engine:
+        if not cls._readonly_engine:
+            raise RuntimeError(
+                "Readonly engine not initialized. Must call init_readonly_engine first."
+            )
+        return cls._readonly_engine
 
     @classmethod
     def set_app_name(cls, app_name: str) -> None:
@@ -260,6 +350,8 @@ class SqlEngine:
 
 def get_all_tenant_ids() -> list[str]:
     """Returning [None] means the only tenant is the 'public' or self hosted tenant."""
+
+    tenant_ids: list[str]
 
     if not MULTI_TENANT:
         return [POSTGRES_DEFAULT_SCHEMA]
@@ -287,6 +379,10 @@ def get_sqlalchemy_engine() -> Engine:
     return SqlEngine.get_engine()
 
 
+def get_readonly_sqlalchemy_engine() -> Engine:
+    return SqlEngine.get_readonly_engine()
+
+
 async def get_async_connection() -> Any:
     """
     Custom connection function for async engine when using IAM auth.
@@ -309,7 +405,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
         app_name = SqlEngine.get_app_name() + "_async"
         connection_string = build_connection_string(
             db_api=ASYNC_DB_API,
-            use_iam=USE_IAM_AUTH,
+            use_iam_auth=USE_IAM_AUTH,
         )
 
         connect_args: dict[str, Any] = {}
@@ -352,51 +448,12 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
     return _ASYNC_ENGINE
 
 
-# Listen for events on the synchronous Session class
-@event.listens_for(Session, "after_begin")
-def _set_search_path(
-    session: Session, transaction: Any, connection: Any, *args: Any, **kwargs: Any
-) -> None:
-    """Every time a new transaction is started,
-    set the search_path from the session's info."""
-    tenant_id = session.info.get("tenant_id")
-    if tenant_id:
-        connection.exec_driver_sql(f'SET search_path = "{tenant_id}"')
-
-
 engine = get_sqlalchemy_async_engine()
 AsyncSessionLocal = sessionmaker(  # type: ignore
     bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
-
-
-@asynccontextmanager
-async def get_async_session_with_tenant(
-    tenant_id: str | None = None,
-) -> AsyncGenerator[AsyncSession, None]:
-    if tenant_id is None:
-        tenant_id = get_current_tenant_id()
-
-    if not is_valid_schema_name(tenant_id):
-        logger.error(f"Invalid tenant ID: {tenant_id}")
-        raise ValueError("Invalid tenant ID")
-
-    async with AsyncSessionLocal() as session:
-        session.sync_session.info["tenant_id"] = tenant_id
-
-        if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-            await session.execute(
-                text(
-                    f"SET idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                )
-            )
-
-        try:
-            yield session
-        finally:
-            pass
 
 
 @contextmanager
@@ -416,17 +473,24 @@ def get_session_with_shared_schema() -> Generator[Session, None, None]:
     CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
+def _set_search_path_on_checkout__listener(
+    dbapi_conn: Any, connection_record: Any, connection_proxy: Any
+) -> None:
+    """Listener to make sure we ALWAYS set the search path on checkout."""
+    tenant_id = get_current_tenant_id()
+    if tenant_id and is_valid_schema_name(tenant_id):
+        with dbapi_conn.cursor() as cursor:
+            cursor.execute(f'SET search_path TO "{tenant_id}"')
+
+
 @contextmanager
 def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]:
     """
     Generate a database session for a specific tenant.
     """
-    if tenant_id is None:
-        tenant_id = POSTGRES_DEFAULT_SCHEMA
-
     engine = get_sqlalchemy_engine()
 
-    event.listen(engine, "checkout", set_search_path_on_checkout)
+    event.listen(engine, "checkout", _set_search_path_on_checkout__listener)
 
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
@@ -435,79 +499,114 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
         dbapi_connection = connection.connection
         cursor = dbapi_connection.cursor()
         try:
+            # NOTE: don't use `text()` here since we're using the cursor directly
             cursor.execute(f'SET search_path = "{tenant_id}"')
             if POSTGRES_IDLE_SESSIONS_TIMEOUT:
                 cursor.execute(
-                    text(
-                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                    )
+                    f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
                 )
+        except Exception:
+            raise RuntimeError(f"search_path not set for {tenant_id}")
         finally:
             cursor.close()
 
-        with Session(bind=connection, expire_on_commit=False) as session:
-            try:
+        try:
+            # automatically rollback or close
+            with Session(bind=connection, expire_on_commit=False) as session:
                 yield session
-            finally:
-                if MULTI_TENANT:
-                    cursor = dbapi_connection.cursor()
-                    try:
-                        cursor.execute('SET search_path TO "$user", public')
-                    finally:
-                        cursor.close()
+        finally:
+            # always reset the search path on exit
+            if MULTI_TENANT:
+                cursor = dbapi_connection.cursor()
+                try:
+                    cursor.execute('SET search_path TO "$user", public')
+                except Exception as e:
+                    logger.warning(f"Failed to reset search path: {e}")
+                    connection.rollback()
+                finally:
+                    cursor.close()
 
 
-def set_search_path_on_checkout(
-    dbapi_conn: Any, connection_record: Any, connection_proxy: Any
-) -> None:
+def get_session() -> Generator[Session, None, None]:
+    """For use w/ Depends for FastAPI endpoints.
+
+    Has some additional validation, and likely should be merged
+    with get_session_context_manager in the future."""
     tenant_id = get_current_tenant_id()
-    if tenant_id and is_valid_schema_name(tenant_id):
-        with dbapi_conn.cursor() as cursor:
-            cursor.execute(f'SET search_path TO "{tenant_id}"')
+    if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
+        raise BasicAuthenticationError(detail="User must authenticate")
+
+    if not is_valid_schema_name(tenant_id):
+        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
+    with get_session_context_manager() as db_session:
+        yield db_session
 
 
-def get_session_generator_with_tenant() -> Generator[Session, None, None]:
+@contextlib.contextmanager
+def get_session_context_manager() -> Generator[Session, None, None]:
+    """Context manager for database sessions."""
     tenant_id = get_current_tenant_id()
     with get_session_with_tenant(tenant_id=tenant_id) as session:
         yield session
 
 
-def get_session() -> Generator[Session, None, None]:
-    tenant_id = get_current_tenant_id()
-    if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
-        raise BasicAuthenticationError(detail="User must authenticate")
-
-    engine = get_sqlalchemy_engine()
-
-    with Session(engine, expire_on_commit=False) as session:
-        if MULTI_TENANT:
-            if not is_valid_schema_name(tenant_id):
-                raise HTTPException(status_code=400, detail="Invalid tenant ID")
-            session.execute(text(f'SET search_path = "{tenant_id}"'))
-        yield session
+def _set_search_path_on_transaction__listener(
+    session: Session, transaction: Any, connection: Any, *args: Any, **kwargs: Any
+) -> None:
+    """Every time a new transaction is started,
+    set the search_path from the session's info."""
+    tenant_id = session.info.get("tenant_id")
+    if tenant_id:
+        connection.exec_driver_sql(f'SET search_path = "{tenant_id}"')
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    tenant_id = get_current_tenant_id()
+async def get_async_session(
+    tenant_id: str | None = None,
+) -> AsyncGenerator[AsyncSession, None]:
+    """For use w/ Depends for *async* FastAPI endpoints.
+
+    For standard `async with ... as ...` use, use get_async_session_context_manager.
+    """
+
+    if tenant_id is None:
+        tenant_id = get_current_tenant_id()
+
     engine = get_sqlalchemy_async_engine()
+
     async with AsyncSession(engine, expire_on_commit=False) as async_session:
-        if MULTI_TENANT:
-            if not is_valid_schema_name(tenant_id):
-                raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        # IMPORTANT: do NOT remove. The search_path seems to get reset on every `.commit()`
+        # without this. Do not fully understand why atm
+        async_session.info["tenant_id"] = tenant_id
+        event.listen(
+            async_session.sync_session,
+            "after_begin",
+            _set_search_path_on_transaction__listener,
+        )
+
+        if POSTGRES_IDLE_SESSIONS_TIMEOUT:
+            await async_session.execute(
+                text(
+                    f"SET idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
+                )
+            )
+
+        if not is_valid_schema_name(tenant_id):
+            raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
+        # don't need to set the search path for self-hosted + default schema
+        # this is also true for sync sessions, but just not adding it there for
+        # now to simplify / not change too much
+        if MULTI_TENANT or tenant_id != POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
             await async_session.execute(text(f'SET search_path = "{tenant_id}"'))
+
         yield async_session
 
 
-def get_session_context_manager() -> ContextManager[Session]:
-    """Context manager for database sessions."""
-    return contextlib.contextmanager(get_session_generator_with_tenant)()
-
-
-def get_session_factory() -> sessionmaker[Session]:
-    global SessionFactory
-    if SessionFactory is None:
-        SessionFactory = sessionmaker(bind=get_sqlalchemy_engine())
-    return SessionFactory
+def get_async_session_context_manager(
+    tenant_id: str | None = None,
+) -> AsyncContextManager[AsyncSession]:
+    return asynccontextmanager(get_async_session)(tenant_id)
 
 
 async def warm_up_connections(
@@ -541,3 +640,49 @@ def provide_iam_token(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> 
         region = os.getenv("AWS_REGION_NAME", "us-east-2")
         # Configure for psycopg2 with IAM token
         configure_psycopg2_iam_auth(cparams, host, port, user, region)
+
+
+@contextmanager
+def get_db_readonly_user_session_with_current_tenant() -> (
+    Generator[Session, None, None]
+):
+    """
+    Generate a database session using a custom database user for the current tenant.
+    The custom user credentials are obtained from environment variables.
+    """
+    tenant_id = get_current_tenant_id()
+
+    readonly_engine = get_readonly_sqlalchemy_engine()
+
+    event.listen(readonly_engine, "checkout", _set_search_path_on_checkout__listener)
+
+    if not is_valid_schema_name(tenant_id):
+        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
+    with readonly_engine.connect() as connection:
+        dbapi_connection = connection.connection
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path = "{tenant_id}"')
+            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
+                cursor.execute(
+                    text(
+                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
+                    )
+                )
+        finally:
+            cursor.close()
+
+        with Session(bind=connection, expire_on_commit=False) as session:
+            try:
+                yield session
+            finally:
+                if MULTI_TENANT:
+                    cursor = dbapi_connection.cursor()
+                    try:
+                        cursor.execute('SET search_path TO "$user", public')
+                    except Exception as e:
+                        logger.warning(f"Failed to reset search path: {e}")
+                        connection.rollback()
+                    finally:
+                        cursor.close()

@@ -6,7 +6,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 
 
 def create_test_document(
@@ -28,7 +28,7 @@ def create_test_document(
     doc_id = doc_id or f"test-doc-{uuid.uuid4()}"
     return Document(
         id=doc_id,
-        sections=[Section(text=text, link=link)],
+        sections=[TextSection(text=text, link=link)],
         source=source,
         semantic_identifier=doc_id,
         doc_updated_at=datetime.now(timezone.utc),

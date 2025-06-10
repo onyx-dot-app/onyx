@@ -16,13 +16,15 @@ export const usePopupFromQuery = (messages: PopupMessages) => {
     const searchParams = new URLSearchParams(window.location.search);
 
     // Get the value for search param with key "message"
-    const messageValue = searchParams.get("message");
+    const messageValue = searchParams?.get("message");
 
     // Check if any key from messages object is present in search params
     if (messageValue && messageValue in messages) {
       const popupMessage = messages[messageValue];
       router.replace(window.location.pathname);
-      setPopup(popupMessage);
+      if (popupMessage !== undefined) {
+        setPopup(popupMessage);
+      }
     }
   }, []);
 

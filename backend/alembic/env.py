@@ -24,6 +24,10 @@ from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
+from onyx.db.engine import SqlEngine
+
+# Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
+# hidden! (defaults to level=WARN)
 
 # Alembic Config object
 config = context.config
@@ -36,6 +40,7 @@ if config.config_file_name is not None and config.attributes.get(
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
 EXCLUDE_TABLES = {"kombu_queue", "kombu_message"}
+
 logger = logging.getLogger(__name__)
 
 ssl_context: ssl.SSLContext | None = None
@@ -64,7 +69,7 @@ def include_object(
     return True
 
 
-def get_schema_options() -> tuple[str, bool, bool]:
+def get_schema_options() -> tuple[str, bool, bool, bool]:
     x_args_raw = context.get_x_argument()
     x_args = {}
     for arg in x_args_raw:
@@ -76,6 +81,10 @@ def get_schema_options() -> tuple[str, bool, bool]:
     create_schema = x_args.get("create_schema", "true").lower() == "true"
     upgrade_all_tenants = x_args.get("upgrade_all_tenants", "false").lower() == "true"
 
+    # continue on error with individual tenant
+    # only applies to online migrations
+    continue_on_error = x_args.get("continue", "false").lower() == "true"
+
     if (
         MULTI_TENANT
         and schema_name == POSTGRES_DEFAULT_SCHEMA
@@ -86,14 +95,12 @@ def get_schema_options() -> tuple[str, bool, bool]:
             "Please specify a tenant-specific schema."
         )
 
-    return schema_name, create_schema, upgrade_all_tenants
+    return schema_name, create_schema, upgrade_all_tenants, continue_on_error
 
 
 def do_run_migrations(
     connection: Connection, schema_name: str, create_schema: bool
 ) -> None:
-    logger.info(f"About to migrate schema: {schema_name}")
-
     if create_schema:
         connection.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
         connection.execute(text("COMMIT"))
@@ -134,7 +141,15 @@ def provide_iam_token_for_alembic(
 
 
 async def run_async_migrations() -> None:
-    schema_name, create_schema, upgrade_all_tenants = get_schema_options()
+    (
+        schema_name,
+        create_schema,
+        upgrade_all_tenants,
+        continue_on_error,
+    ) = get_schema_options()
+
+    # without init_engine, subsequent engine calls fail hard intentionally
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     engine = create_async_engine(
         build_connection_string(),
@@ -151,9 +166,15 @@ async def run_async_migrations() -> None:
 
     if upgrade_all_tenants:
         tenant_schemas = get_all_tenant_ids()
+
+        i_tenant = 0
+        num_tenants = len(tenant_schemas)
         for schema in tenant_schemas:
+            i_tenant += 1
+            logger.info(
+                f"Migrating schema: index={i_tenant} num_tenants={num_tenants} schema={schema}"
+            )
             try:
-                logger.info(f"Migrating schema: {schema}")
                 async with engine.connect() as connection:
                     await connection.run_sync(
                         do_run_migrations,
@@ -162,7 +183,12 @@ async def run_async_migrations() -> None:
                     )
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
-                raise
+                if not continue_on_error:
+                    logger.error("--continue=true is not set, raising exception!")
+                    raise
+
+                logger.warning("--continue=true is set, continuing to next schema.")
+
     else:
         try:
             logger.info(f"Migrating schema: {schema_name}")
@@ -180,7 +206,22 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_offline() -> None:
-    schema_name, _, upgrade_all_tenants = get_schema_options()
+    """
+    NOTE(rkuo): This generates a sql script that can be used to migrate the database ...
+    instead of migrating the db live via an open connection
+
+    Not clear on when this would be used by us or if it even works.
+
+    If it is offline, then why are there calls to the db engine?
+
+    This doesn't really get used when we migrate in the cloud."""
+
+    logger.info("run_migrations_offline starting.")
+
+    # without init_engine, subsequent engine calls fail hard intentionally
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
+
+    schema_name, _, upgrade_all_tenants, continue_on_error = get_schema_options()
     url = build_connection_string()
 
     if upgrade_all_tenants:
@@ -230,6 +271,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    logger.info("run_migrations_online starting.")
     asyncio.run(run_async_migrations())
 
 

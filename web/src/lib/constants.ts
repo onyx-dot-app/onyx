@@ -77,7 +77,8 @@ export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
-  process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true";
+  process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true" &&
+  !NEXT_PUBLIC_CLOUD_ENABLED;
 
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
@@ -91,3 +92,19 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
 
 export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+// Add support for custom URL protocols in markdown links
+export const ALLOWED_URL_PROTOCOLS = [
+  "http:",
+  "https:",
+  "mailto:",
+  "tel:",
+  "slack:",
+  "vscode:",
+  "file:",
+  "sms:",
+  "spotify:",
+  "zoommtg:",
+];
+
+export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;

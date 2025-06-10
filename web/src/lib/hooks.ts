@@ -11,10 +11,10 @@ import {
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
-import { Filters, SourceMetadata } from "./search/interfaces";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { SourceMetadata } from "./search/interfaces";
 import {
-  destructureValue,
+  parseLlmDescriptor,
   findProviderForModel,
   structureValue,
 } from "./llm/utils";
@@ -23,11 +23,8 @@ import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { Persona, PersonaLabel } from "@/app/admin/assistants/interfaces";
-import {
-  isAnthropic,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
-
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
@@ -408,14 +405,14 @@ Relevant test: `llm_ordering.spec.ts`.
 
 Temperature override is set as follows:
 - For existing chat sessions:
-  - If the user has previously overridden the temperature for a specific chat session, 
+  - If the user has previously overridden the temperature for a specific chat session,
     that value is persisted and used when the user returns to that chat.
   - This persistence applies even if the temperature was set before sending the first message in the chat.
 - For new chat sessions:
   - If the search tool is available, the default temperature is set to 0.
   - If the search tool is not available, the default temperature is set to 0.5.
 
-This approach ensures that user preferences are maintained for existing chats while 
+This approach ensures that user preferences are maintained for existing chats while
 providing appropriate defaults for new conversations based on the available tools.
 */
 
@@ -483,10 +480,12 @@ export function useLlmManager(
     modelName: string | null | undefined
   ): LlmDescriptor => {
     if (modelName) {
-      const model = destructureValue(modelName);
+      const model = parseLlmDescriptor(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
-          p.model_names.includes(modelName)
+          p.model_configurations
+            .map((modelConfiguration) => modelConfiguration.name)
+            .includes(modelName)
         );
         if (provider) {
           return {
@@ -498,11 +497,13 @@ export function useLlmManager(
       }
 
       const provider = llmProviders.find((p) =>
-        p.model_names.includes(model.modelName)
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(model.modelName)
       );
 
       if (provider) {
-        return { ...model, name: provider.name };
+        return { ...model, provider: provider.name };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -628,7 +629,7 @@ export function useAuthType(): AuthType | null {
   return data.auth_type;
 }
 
-/* 
+/*
 EE Only APIs
 */
 
@@ -673,8 +674,11 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "o1-mini": "o1 Mini",
   "o1-preview": "o1 Preview",
   o1: "o1",
+  "gpt-4.1": "GPT 4.1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
+  "o4-mini": "o4 Mini",
+  o3: "o3",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
   "gpt-4o-mini": "GPT 4o Mini",
   "gpt-4-0314": "GPT 4 (March 2023)",
@@ -730,19 +734,38 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
 
   // Google Models
-  "gemini-1.5-pro": "Gemini 1.5 Pro",
-  "gemini-1.5-flash": "Gemini 1.5 Flash",
-  "gemini-1.5-pro-001": "Gemini 1.5 Pro",
-  "gemini-1.5-flash-001": "Gemini 1.5 Flash",
-  "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
-  "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
-  "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
-  "gemini-2.0-flash-001": "Gemini 2.0 Flash",
-  "gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite (Prv)",
-  "gemini-2.0-flash-thinking-exp-01-02": "Gemini 2.0 Flash Thinking (Exp)",
-  "gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Exp)",
+
+  // 2.5 pro models
+  "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
+
+  // 2.0 flash lite models
+  "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
+  "gemini-2.0-flash-lite-001": "Gemini 2.0 Flash Lite (v1)",
+  // "gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite (Prv)",
+  // "gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Exp)",
+
+  // 2.0 flash models
   "gemini-2.0-flash": "Gemini 2.0 Flash",
-  "gemini-2.0-flash-thinking-exp-01-21": "Gemini 2.0 Flash Thinking",
+  "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
+  "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+  "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
+  // "gemini-2.0-flash-thinking-exp-01-02":
+  //   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
+  // "gemini-2.0-flash-thinking-exp-01-21":
+  //   "Gemini 2.0 Flash Thinking (Experimental January 21st)",
+
+  // 1.5 pro models
+  "gemini-1.5-pro": "Gemini 1.5 Pro",
+  "gemini-1.5-pro-latest": "Gemini 1.5 Pro (Latest)",
+  "gemini-1.5-pro-001": "Gemini 1.5 Pro (v1)",
+  "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
+
+  // 1.5 flash models
+  "gemini-1.5-flash": "Gemini 1.5 Flash",
+  "gemini-1.5-flash-latest": "Gemini 1.5 Flash (Latest)",
+  "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
+  "gemini-1.5-flash-001": "Gemini 1.5 Flash (v1)",
+
   // Mistral Models
   "mistral-large-2411": "Mistral Large 24.11",
   "mistral-large@2411": "Mistral Large 24.11",
@@ -788,14 +811,29 @@ export function getDisplayNameForModel(modelName: string): string {
   if (modelName.startsWith("bedrock/")) {
     const parts = modelName.split("/");
     const lastPart = parts[parts.length - 1];
-    return MODEL_DISPLAY_NAMES[lastPart] || lastPart;
+    if (lastPart === undefined) {
+      return "";
+    }
+
+    const displayName = MODEL_DISPLAY_NAMES[lastPart];
+    return displayName || lastPart;
   }
 
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 
 export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: ["gpt-4", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "o1"],
+  openai: [
+    "gpt-4",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4.1",
+    "o3-mini",
+    "o1-mini",
+    "o1",
+    "o4-mini",
+    "o3",
+  ],
   bedrock: [
     "meta.llama3-1-70b-instruct-v1:0",
     "meta.llama3-1-8b-instruct-v1:0",

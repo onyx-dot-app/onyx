@@ -92,7 +92,7 @@ export default function UpgradingPage({
         (a.latest_index_attempt?.id || 0) - (b.latest_index_attempt?.id || 0)
       );
     });
-  }, [ongoingReIndexingStatus]);
+  }, [ongoingReIndexingStatus, statusOrder]);
 
   if (isLoadingConnectors || isLoadingOngoingReIndexingStatus) {
     return <ThreeDotsLoader />;

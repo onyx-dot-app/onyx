@@ -132,3 +132,10 @@ if _LITELLM_EXTRA_BODY_RAW:
         LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
     except Exception:
         pass
+
+# Whether and how to lower scores for short chunks w/o relevant context
+# Evaluated via custom ML model
+
+USE_INFORMATION_CONTENT_CLASSIFICATION = (
+    os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION", "false").lower() == "true"
+)

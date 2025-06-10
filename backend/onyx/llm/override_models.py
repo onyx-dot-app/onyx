@@ -3,6 +3,7 @@
 NOTE: these models are used in many places, so have to be
 kepy in a separate file to avoid circular imports.
 """
+
 from pydantic import BaseModel
 
 

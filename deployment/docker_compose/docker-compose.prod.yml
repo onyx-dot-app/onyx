@@ -37,6 +37,9 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    volumes:
+      - api_server_logs:/var/log
+
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
@@ -73,6 +76,8 @@ services:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - background_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -115,6 +120,7 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
+    shm_size: 1g
     command: -c 'max_connections=250'
     restart: always
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
@@ -140,7 +146,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: on-failure
+    restart: always
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
@@ -148,6 +154,8 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/root/.cache/huggingface/
+      # optional, only for debugging purposes
+      - inference_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -166,7 +174,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: on-failure
+    restart: always
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
@@ -176,6 +184,8 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      # optional, only for debugging purposes
+      - indexing_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -184,8 +194,10 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.277.17
+    image: vespaengine/vespa:8.526.15
     restart: always
+    environment:
+      - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
       - "19071:19071"
       - "8081:8081"
@@ -260,3 +272,8 @@ volumes:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  # for logs that we don't want to lose on container restarts
+  api_server_logs:
+  background_logs:
+  inference_model_server_logs:
+  indexing_model_server_logs:

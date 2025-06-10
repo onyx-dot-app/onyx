@@ -1,4 +1,3 @@
-import { FaXRay } from "react-icons/fa";
 import { CheckmarkIcon, XIcon } from "./icons/icons";
 
 export const CustomCheckbox = ({

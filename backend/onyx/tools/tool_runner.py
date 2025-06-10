@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
+from typing import Generic
+from typing import TypeVar
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
@@ -11,10 +13,16 @@ from onyx.tools.tool import Tool
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
-class ToolRunner:
-    def __init__(self, tool: Tool, args: dict[str, Any]):
+R = TypeVar("R")
+
+
+class ToolRunner(Generic[R]):
+    def __init__(
+        self, tool: Tool[R], args: dict[str, Any], override_kwargs: R | None = None
+    ):
         self.tool = tool
         self.args = args
+        self.override_kwargs = override_kwargs
 
         self._tool_responses: list[ToolResponse] | None = None
 
@@ -27,7 +35,9 @@ class ToolRunner:
             return
 
         tool_responses: list[ToolResponse] = []
-        for tool_response in self.tool.run(**self.args):
+        for tool_response in self.tool.run(
+            override_kwargs=self.override_kwargs, **self.args
+        ):
             yield tool_response
             tool_responses.append(tool_response)
 

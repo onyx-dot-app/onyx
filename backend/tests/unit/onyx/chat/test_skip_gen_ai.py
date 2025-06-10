@@ -11,8 +11,8 @@ from onyx.chat.answer import Answer
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.context.search.models import SearchRequest
 from onyx.llm.interfaces import LLM
+from onyx.llm.utils import get_max_input_tokens
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from tests.regression.answer_quality.run_qa import _process_and_write_query_results
@@ -39,20 +39,34 @@ def test_skip_gen_ai_answer_generation_flag(
     mocker: MockerFixture,
 ) -> None:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
+
     question = config["question"]
     skip_gen_ai_answer_generation = config["skip_gen_ai_answer_generation"]
 
+    model_provider = "gpt-4o-mini"
+    model_name = "gpt-4o-mini"
+
     mock_llm = Mock(spec=LLM)
     mock_llm.config = Mock()
-    mock_llm.config.model_name = "gpt-4o-mini"
+    mock_llm.config.model_name = model_name
+    mock_llm.config.max_input_tokens = get_max_input_tokens(
+        model_provider=model_provider,
+        model_name=model_name,
+    )
     mock_llm.stream = Mock()
     mock_llm.stream.return_value = [Mock()]
 
+    # Set up the mock database session
+    mock_db_session = Mock(spec=Session)
+    mock_query = Mock()
+    mock_db_session.query.return_value = mock_query
+    mock_query.all.return_value = []  # Return empty list for KGConfig query
+
     answer = Answer(
-        db_session=Mock(spec=Session),
+        db_session=mock_db_session,
         answer_style_config=answer_style_config,
         llm=mock_llm,
         fast_llm=mock_llm,
@@ -64,7 +78,8 @@ def test_skip_gen_ai_answer_generation_flag(
         ),
         skip_explicit_tool_calling=True,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-        search_request=SearchRequest(query=question),
+        persona=None,
+        rerank_settings=None,
         prompt_builder=AnswerPromptBuilder(
             user_message=HumanMessage(content=question),
             message_history=[],
@@ -79,7 +94,7 @@ def test_skip_gen_ai_answer_generation_flag(
     for res in results:
         print(res)
 
-    expected_count = 4 if skip_gen_ai_answer_generation else 5
+    expected_count = 3 if skip_gen_ai_answer_generation else 4
     assert len(results) == expected_count
     if not skip_gen_ai_answer_generation:
         mock_llm.stream.assert_called_once()

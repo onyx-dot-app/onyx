@@ -18,7 +18,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 
 
@@ -81,13 +81,13 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         return Document(
             id="book__" + str(book.get("id")),
-            sections=[Section(link=url, text=text)],
+            sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Book: " + title,
             title=title,
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "book"},
         )
 
@@ -110,13 +110,13 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         return Document(
             id="chapter__" + str(chapter.get("id")),
-            sections=[Section(link=url, text=text)],
+            sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Chapter: " + title,
             title=title,
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "chapter"},
         )
 
@@ -134,13 +134,13 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         return Document(
             id="shelf:" + str(shelf.get("id")),
-            sections=[Section(link=url, text=text)],
+            sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Shelf: " + title,
             title=title,
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "shelf"},
         )
 
@@ -167,13 +167,13 @@ class BookstackConnector(LoadConnector, PollConnector):
         time.sleep(0.1)
         return Document(
             id="page:" + page_id,
-            sections=[Section(link=url, text=text)],
+            sections=[TextSection(link=url, text=text)],
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Page: " + str(title),
             title=str(title),
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "page"},
         )
 

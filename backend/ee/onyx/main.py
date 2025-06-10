@@ -1,3 +1,6 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
@@ -7,6 +10,7 @@ from ee.onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from ee.onyx.configs.app_configs import OPENID_CONFIG_URL
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
+from ee.onyx.server.documents.cc_pair import router as ee_document_cc_pair_router
 from ee.onyx.server.enterprise_settings.api import (
     admin_router as enterprise_settings_admin_router,
 )
@@ -14,7 +18,11 @@ from ee.onyx.server.enterprise_settings.api import (
     basic_router as enterprise_settings_router,
 )
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
-from ee.onyx.server.middleware.tenant_tracking import add_tenant_id_middleware
+
+from ee.onyx.server.middleware.tenant_tracking import (
+    add_api_server_tenant_id_middleware, add_tenant_id_middleware
+)
+
 from ee.onyx.server.oauth.api import router as ee_oauth_router
 from ee.onyx.server.query_and_chat.chat_backend import (
     router as chat_router,
@@ -44,11 +52,27 @@ from onyx.configs.constants import AuthType
 from onyx.main import get_application as get_application_base
 from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
+from onyx.main import lifespan as lifespan_base
+from onyx.main import use_route_function_names_as_operation_ids
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Small wrapper around the lifespan of the MIT application.
+    Basically just calls the base lifespan, and then adds EE-only
+    steps after."""
+
+    async with lifespan_base(app):
+        # seed the Onyx environment with LLMs, Assistants, etc. based on an optional
+        # environment variable. Used to automate deployment for multiple environments.
+        seed_db()
+
+        yield
 
 
 def get_application() -> FastAPI:
@@ -58,13 +82,21 @@ def get_application() -> FastAPI:
 
     test_encryption()
 
-    application = get_application_base()
+    application = get_application_base(lifespan_override=lifespan)
 
     if MULTI_TENANT:
-        add_tenant_id_middleware(application, logger)
+        add_api_server_tenant_id_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
-        oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+        # For Google OAuth, refresh tokens are requested by:
+        # 1. Adding the right scopes
+        # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
+        oauth_client = GoogleOAuth2(
+            OAUTH_CLIENT_ID,
+            OAUTH_CLIENT_SECRET,
+            # Use standard scopes that include profile and email
+            scopes=["openid", "email", "profile"],
+        )
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
@@ -87,6 +119,16 @@ def get_application() -> FastAPI:
         )
 
     if AUTH_TYPE == AuthType.OIDC:
+        # Ensure we request offline_access for refresh tokens
+        try:
+            oidc_scopes = list(OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
+            if "offline_access" not in oidc_scopes:
+                oidc_scopes.append("offline_access")
+        except Exception as e:
+            logger.warning(f"Error configuring OIDC scopes: {e}")
+            # Fall back to default scopes if there's an error
+            oidc_scopes = BASE_SCOPES
+
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
@@ -94,8 +136,8 @@ def get_application() -> FastAPI:
                     OAUTH_CLIENT_ID,
                     OAUTH_CLIENT_SECRET,
                     OPENID_CONFIG_URL,
-                    # BASE_SCOPES is the same as not setting this
-                    base_scopes=OIDC_SCOPE_OVERRIDE or BASE_SCOPES,
+                    # Use the configured scopes
+                    base_scopes=oidc_scopes,
                 ),
                 auth_backend,
                 USER_AUTH_SECRET,
@@ -129,6 +171,8 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
+    include_router_with_global_prefix_prepended(application, ee_document_cc_pair_router)
+
 
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(
@@ -148,12 +192,10 @@ def get_application() -> FastAPI:
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_ee_router_auth(application)
 
-    # seed the Onyx environment with LLMs, Assistants, etc. based on an optional
-    # environment variable. Used to automate deployment for multiple environments.
-    seed_db()
-
     # for debugging discovered routes
     # for route in application.router.routes:
     #     print(f"Path: {route.path}, Methods: {route.methods}")
+
+    use_route_function_names_as_operation_ids(application)
 
     return application

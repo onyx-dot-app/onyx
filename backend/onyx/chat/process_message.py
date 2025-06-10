@@ -1,9 +1,12 @@
+import time
 import traceback
 from collections import defaultdict
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
-from functools import partial
 from typing import cast
+from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -29,7 +32,6 @@ from onyx.chat.models import LLMRelevanceFilterResponse
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import RefinedAnswerImprovement
@@ -37,24 +39,25 @@ from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
+from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.user_files.parse_user_files import parse_user_files
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
 from onyx.configs.constants import AGENT_SEARCH_INITIAL_KEY
 from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
-from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SearchRequest
 from onyx.context.search.retrieval.search_runner import (
     inference_sections_from_ids,
 )
@@ -65,6 +68,7 @@ from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import attach_files_to_chat_message
 from onyx.db.chat import create_db_search_doc
 from onyx.db.chat import create_new_chat_message
+from onyx.db.chat import create_search_doc_from_user_file
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_db_search_doc_by_id
@@ -73,20 +77,35 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
+from onyx.db.models import ChatMessage
+from onyx.db.models import Persona
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
+from onyx.kg.clustering.clustering import kg_clustering
+from onyx.kg.configuration import populate_default_account_employee_definitions
+from onyx.kg.configuration import populate_default_grounded_entity_types
+from onyx.kg.extractions.extraction_processing import kg_extraction
+from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
+from onyx.kg.resets.reset_index import reset_full_kg_index
+from onyx.kg.resets.reset_normalizations import reset_normalization_kg_index
+from onyx.kg.resets.reset_source import reset_source_kg_index
+from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -98,6 +117,7 @@ from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
@@ -130,7 +150,6 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
-from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -150,6 +169,25 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
 
+COMMON_TOOL_RESPONSE_TYPES = {
+    "image": ChatFileType.IMAGE,
+    "csv": ChatFileType.CSV,
+}
+
+
+class PartialResponse(Protocol):
+    def __call__(
+        self,
+        message: str,
+        rephrased_query: str | None,
+        reference_docs: list[DbSearchDoc] | None,
+        files: list[FileDescriptor],
+        token_count: int,
+        citations: dict[int, int] | None,
+        error: str | None,
+        tool_call: ToolCall | None,
+    ) -> ChatMessage: ...
+
 
 def _translate_citations(
     citations_list: list[CitationInfo], db_docs: list[DbSearchDoc]
@@ -164,9 +202,9 @@ def _translate_citations(
     citation_to_saved_doc_id_map: dict[int, int] = {}
     for citation in citations_list:
         if citation.citation_num not in citation_to_saved_doc_id_map:
-            citation_to_saved_doc_id_map[
-                citation.citation_num
-            ] = doc_id_to_saved_doc_id_map[citation.document_id]
+            citation_to_saved_doc_id_map[citation.citation_num] = (
+                doc_id_to_saved_doc_id_map[citation.document_id]
+            )
 
     return MessageSpecificCitations(citation_map=citation_to_saved_doc_id_map)
 
@@ -176,13 +214,16 @@ def _handle_search_tool_response_summary(
     db_session: Session,
     selected_search_docs: list[DbSearchDoc] | None,
     dedupe_docs: bool = False,
+    user_files: list[UserFile] | None = None,
+    loaded_user_files: list[InMemoryChatFile] | None = None,
 ) -> tuple[QADocsResponse, list[DbSearchDoc], list[int] | None]:
-    response_sumary = cast(SearchResponseSummary, packet.response)
+    response_summary = cast(SearchResponseSummary, packet.response)
 
     is_extended = isinstance(packet, ExtendedToolResponse)
     dropped_inds = None
+
     if not selected_search_docs:
-        top_docs = chunks_or_sections_to_search_docs(response_sumary.top_sections)
+        top_docs = chunks_or_sections_to_search_docs(response_summary.top_sections)
 
         deduped_docs = top_docs
         if (
@@ -194,8 +235,30 @@ def _handle_search_tool_response_summary(
             create_db_search_doc(server_search_doc=doc, db_session=db_session)
             for doc in deduped_docs
         ]
+
     else:
         reference_db_search_docs = selected_search_docs
+
+    doc_ids = {doc.id for doc in reference_db_search_docs}
+    if user_files is not None and loaded_user_files is not None:
+        for user_file in user_files:
+            if user_file.id in doc_ids:
+                continue
+
+            associated_chat_file = next(
+                (
+                    file
+                    for file in loaded_user_files
+                    if file.file_id == str(user_file.file_id)
+                ),
+                None,
+            )
+            # Use create_search_doc_from_user_file to properly add the document to the database
+            if associated_chat_file is not None:
+                db_doc = create_search_doc_from_user_file(
+                    user_file, associated_chat_file, db_session
+                )
+                reference_db_search_docs.append(db_doc)
 
     response_docs = [
         translate_db_search_doc_to_server_search_doc(db_search_doc)
@@ -207,13 +270,13 @@ def _handle_search_tool_response_summary(
         level, question_num = packet.level, packet.level_question_num
     return (
         QADocsResponse(
-            rephrased_query=response_sumary.rephrased_query,
+            rephrased_query=response_summary.rephrased_query,
             top_documents=response_docs,
-            predicted_flow=response_sumary.predicted_flow,
-            predicted_search=response_sumary.predicted_search,
-            applied_source_filters=response_sumary.final_filters.source_type,
-            applied_time_cutoff=response_sumary.final_filters.time_cutoff,
-            recency_bias_multiplier=response_sumary.recency_bias_multiplier,
+            predicted_flow=response_summary.predicted_flow,
+            predicted_search=response_summary.predicted_search,
+            applied_source_filters=response_summary.final_filters.source_type,
+            applied_time_cutoff=response_summary.final_filters.time_cutoff,
+            recency_bias_multiplier=response_summary.recency_bias_multiplier,
             level=level,
             level_question_num=question_num,
         ),
@@ -254,7 +317,9 @@ def _handle_internet_search_tool_response_summary(
 
 
 def _get_force_search_settings(
-    new_msg_req: CreateChatMessageRequest, tools: list[Tool]
+    new_msg_req: CreateChatMessageRequest,
+    tools: list[Tool],
+    search_tool_override_kwargs: SearchToolOverrideKwargs | None,
 ) -> ForceUseTool:
     internet_search_available = any(
         isinstance(tool, InternetSearchTool) for tool in tools
@@ -264,18 +329,12 @@ def _get_force_search_settings(
     if not internet_search_available and not search_tool_available:
         # Does not matter much which tool is set here as force is false and neither tool is available
         return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
-
-    tool_name = SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
     # Currently, the internet search tool does not support query override
     args = (
         {"query": new_msg_req.query_override}
-        if new_msg_req.query_override and tool_name == SearchTool._NAME
+        if new_msg_req.query_override and search_tool_available
         else None
     )
-
-    if new_msg_req.file_descriptors:
-        # If user has uploaded files they're using, don't run any of the search tools
-        return ForceUseTool(force_use=False, tool_name=tool_name)
 
     should_force_search = any(
         [
@@ -285,21 +344,65 @@ def _get_force_search_settings(
             new_msg_req.search_doc_ids,
             new_msg_req.query_override is not None,
             DISABLE_LLM_CHOOSE_SEARCH,
+            search_tool_override_kwargs is not None,
         ]
     )
 
     if should_force_search:
         # If we are using selected docs, just put something here so the Tool doesn't need to build its own args via an LLM call
         args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
-        return ForceUseTool(force_use=True, tool_name=tool_name, args=args)
 
-    return ForceUseTool(force_use=False, tool_name=tool_name, args=args)
+        return ForceUseTool(
+            force_use=True,
+            tool_name=SearchTool._NAME,
+            args=args,
+            override_kwargs=search_tool_override_kwargs,
+        )
+
+    return ForceUseTool(
+        force_use=False,
+        tool_name=(
+            SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
+        ),
+        args=args,
+        override_kwargs=None,
+    )
+
+
+def _get_persona_for_chat_session(
+    new_msg_req: CreateChatMessageRequest,
+    user: User | None,
+    db_session: Session,
+    default_persona: Persona,
+) -> Persona:
+    if new_msg_req.alternate_assistant_id is not None:
+        # Allows users to specify a temporary persona (assistant) in the chat session
+        # this takes highest priority since it's user specified
+        persona = get_persona_by_id(
+            new_msg_req.alternate_assistant_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+        )
+    elif new_msg_req.persona_override_config:
+        # Certain endpoints allow users to specify arbitrary persona settings
+        # this should never conflict with the alternate_assistant_id
+        persona = create_temporary_persona(
+            db_session=db_session,
+            persona_config=new_msg_req.persona_override_config,
+            user=user,
+        )
+    else:
+        persona = default_persona
+
+    if not persona:
+        raise RuntimeError("No persona specified or found for chat session")
+    return persona
 
 
 ChatPacket = (
     StreamingError
     | QADocsResponse
-    | OnyxContexts
     | LLMRelevanceFilterResponse
     | FinalUsedContextDocsResponse
     | ChatMessageDetail
@@ -313,8 +416,118 @@ ChatPacket = (
     | AgenticMessageResponseIDInfo
     | StreamStopInfo
     | AgentSearchPacket
+    | UserKnowledgeFilePacket
 )
 ChatPacketStream = Iterator[ChatPacket]
+
+
+def _process_tool_response(
+    packet: ToolResponse,
+    db_session: Session,
+    selected_db_search_docs: list[DbSearchDoc] | None,
+    info_by_subq: dict[SubQuestionKey, AnswerPostInfo],
+    retrieval_options: RetrievalDetails | None,
+    user_file_files: list[UserFile] | None,
+    user_files: list[InMemoryChatFile] | None,
+) -> Generator[ChatPacket, None, dict[SubQuestionKey, AnswerPostInfo]]:
+    level, level_question_num = (
+        (packet.level, packet.level_question_num)
+        if isinstance(packet, ExtendedToolResponse)
+        else BASIC_KEY
+    )
+
+    assert level is not None
+    assert level_question_num is not None
+    info = info_by_subq[SubQuestionKey(level=level, question_num=level_question_num)]
+
+    # TODO: don't need to dedupe here when we do it in agent flow
+    if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
+        (
+            info.qa_docs_response,
+            info.reference_db_search_docs,
+            info.dropped_indices,
+        ) = _handle_search_tool_response_summary(
+            packet=packet,
+            db_session=db_session,
+            selected_search_docs=selected_db_search_docs,
+            # Deduping happens at the last step to avoid harming quality by dropping content early on
+            dedupe_docs=bool(retrieval_options and retrieval_options.dedupe_docs),
+            user_files=[],
+            loaded_user_files=[],
+        )
+
+        yield info.qa_docs_response
+    elif packet.id == SECTION_RELEVANCE_LIST_ID:
+        relevance_sections = packet.response
+
+        if info.reference_db_search_docs is None:
+            logger.warning("No reference docs found for relevance filtering")
+            return info_by_subq
+
+        llm_indices = relevant_sections_to_indices(
+            relevance_sections=relevance_sections,
+            items=[
+                translate_db_search_doc_to_server_search_doc(doc)
+                for doc in info.reference_db_search_docs
+            ],
+        )
+
+        if info.dropped_indices:
+            llm_indices = drop_llm_indices(
+                llm_indices=llm_indices,
+                search_docs=info.reference_db_search_docs,
+                dropped_indices=info.dropped_indices,
+            )
+
+        yield LLMRelevanceFilterResponse(llm_selected_doc_indices=llm_indices)
+    elif packet.id == FINAL_CONTEXT_DOCUMENTS_ID:
+        yield FinalUsedContextDocsResponse(final_context_docs=packet.response)
+
+    elif packet.id == IMAGE_GENERATION_RESPONSE_ID:
+        img_generation_response = cast(list[ImageGenerationResponse], packet.response)
+
+        file_ids = save_files(
+            urls=[img.url for img in img_generation_response if img.url],
+            base64_files=[
+                img.image_data for img in img_generation_response if img.image_data
+            ],
+        )
+        info.ai_message_files.extend(
+            [
+                FileDescriptor(id=str(file_id), type=ChatFileType.IMAGE)
+                for file_id in file_ids
+            ]
+        )
+        yield FileChatDisplay(file_ids=[str(file_id) for file_id in file_ids])
+    elif packet.id == INTERNET_SEARCH_RESPONSE_ID:
+        (
+            info.qa_docs_response,
+            info.reference_db_search_docs,
+        ) = _handle_internet_search_tool_response_summary(
+            packet=packet,
+            db_session=db_session,
+        )
+        yield info.qa_docs_response
+    elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
+        custom_tool_response = cast(CustomToolCallSummary, packet.response)
+        response_type = custom_tool_response.response_type
+        if response_type in COMMON_TOOL_RESPONSE_TYPES:
+            file_ids = custom_tool_response.tool_result.file_ids
+            file_type = COMMON_TOOL_RESPONSE_TYPES[response_type]
+            info.ai_message_files.extend(
+                [
+                    FileDescriptor(id=str(file_id), type=file_type)
+                    for file_id in file_ids
+                ]
+            )
+            yield FileChatDisplay(file_ids=[str(file_id) for file_id in file_ids])
+        else:
+            yield CustomToolResponse(
+                response=custom_tool_response.tool_result,
+                tool_name=custom_tool_response.tool_name,
+            )
+
+    return info_by_subq
 
 
 def stream_chat_message_objects(
@@ -357,7 +570,60 @@ def stream_chat_message_objects(
 
     llm: LLM
 
+    kg_config_settings = get_kg_config_settings(db_session)
+
+    if kg_config_settings.KG_ENABLED:
+
+        # Temporarily, until we have a draft UI for the KG Operations/Management
+
+        # get Vespa index
+        search_settings = get_current_search_settings(db_session)
+        index_str = search_settings.index_name
+
+        # TODO: Move these special calls  to endpoints
+        if new_msg_req.message == "kg_e":
+            kg_extraction(tenant_id, index_str)
+            raise Exception("Extractions done")
+
+        elif new_msg_req.message == "kg_c":
+            kg_clustering(tenant_id, index_str)
+            raise Exception("Clustering done")
+
+        elif new_msg_req.message == "kg":
+            reset_vespa_kg_index(tenant_id, index_str)
+            reset_full_kg_index()
+            kg_extraction(tenant_id, index_str)
+            kg_clustering(tenant_id, index_str)
+            raise Exception("Full KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_full":
+            reset_full_kg_index()
+            raise Exception("Full KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_extraction":
+            reset_extraction_kg_index()
+            raise Exception("Extraction KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_normalization":
+            reset_normalization_kg_index()
+            raise Exception("Normalization KG index reset done")
+
+        elif new_msg_req.message.startswith("kg_rs_source:"):
+            source_name = new_msg_req.message.split(":")[1].strip()
+            reset_source_kg_index(source_name, tenant_id, index_str)
+            raise Exception(f"KG index reset for source {source_name} done")
+
+        elif new_msg_req.message == "kg_rs_vespa":
+            reset_vespa_kg_index(tenant_id, index_str)
+            raise Exception("Vespa KG index reset done")
+
+        elif new_msg_req.message == "kg_setup":
+            populate_default_grounded_entity_types()
+            populate_default_account_employee_definitions()
+            raise Exception("KG setup done")
+
     try:
+        # Move these variables inside the try block
         user_id = user.id if user is not None else None
 
         chat_session = get_chat_session_by_id(
@@ -371,35 +637,19 @@ def stream_chat_message_objects(
         parent_id = new_msg_req.parent_message_id
         reference_doc_ids = new_msg_req.search_doc_ids
         retrieval_options = new_msg_req.retrieval_options
-        alternate_assistant_id = new_msg_req.alternate_assistant_id
+        new_msg_req.alternate_assistant_id
 
         # permanent "log" store, used primarily for debugging
         long_term_logger = LongTermLogger(
             metadata={"user_id": str(user_id), "chat_session_id": str(chat_session_id)}
         )
 
-        if alternate_assistant_id is not None:
-            # Allows users to specify a temporary persona (assistant) in the chat session
-            # this takes highest priority since it's user specified
-            persona = get_persona_by_id(
-                alternate_assistant_id,
-                user=user,
-                db_session=db_session,
-                is_for_edit=False,
-            )
-        elif new_msg_req.persona_override_config:
-            # Certain endpoints allow users to specify arbitrary persona settings
-            # this should never conflict with the alternate_assistant_id
-            persona = persona = create_temporary_persona(
-                db_session=db_session,
-                persona_config=new_msg_req.persona_override_config,
-                user=user,
-            )
-        else:
-            persona = chat_session.persona
-
-        if not persona:
-            raise RuntimeError("No persona specified or found for chat session")
+        persona = _get_persona_for_chat_session(
+            new_msg_req=new_msg_req,
+            user=user,
+            db_session=db_session,
+            default_persona=chat_session.persona,
+        )
 
         multi_assistant_milestone, _is_new = create_milestone_if_not_exists(
             user=user,
@@ -537,6 +787,33 @@ def stream_chat_message_objects(
         )
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
+        user_file_ids = new_msg_req.user_file_ids or []
+        user_folder_ids = new_msg_req.user_folder_ids or []
+
+        if persona.user_files:
+            for file in persona.user_files:
+                user_file_ids.append(file.id)
+        if persona.user_folders:
+            for folder in persona.user_folders:
+                user_folder_ids.append(folder.id)
+
+        # Load in user files into memory and create search tool override kwargs if needed
+        # if we have enough tokens and no folders, we don't need to use search
+        # we can just pass them into the prompt directly
+        (
+            in_memory_user_files,
+            user_file_models,
+            search_tool_override_kwargs_for_user_files,
+        ) = parse_user_files(
+            user_file_ids=user_file_ids,
+            user_folder_ids=user_folder_ids,
+            db_session=db_session,
+            persona=persona,
+            actual_user_input=message_text,
+            user_id=user_id,
+        )
+        if not search_tool_override_kwargs_for_user_files:
+            latest_query_files.extend(in_memory_user_files)
 
         if user_message:
             attach_files_to_chat_message(
@@ -565,8 +842,13 @@ def stream_chat_message_objects(
                 doc_identifiers=identifier_tuples,
                 document_index=document_index,
             )
+
+            # Add a maximum context size in the case of user-selected docs to prevent
+            # slight inaccuracies in context window size pruning from causing
+            # the entire query to fail
             document_pruning_config = DocumentPruningConfig(
-                is_manually_selected_docs=True
+                is_manually_selected_docs=True,
+                max_window_percentage=SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE,
             )
 
             # In case the search doc is deleted, just don't include it
@@ -597,9 +879,9 @@ def stream_chat_message_objects(
             else reserve_message_id(
                 db_session=db_session,
                 chat_session_id=chat_session_id,
-                parent_message=user_message.id
-                if user_message is not None
-                else parent_message.id,
+                parent_message=(
+                    user_message.id if user_message is not None else parent_message.id
+                ),
                 message_type=MessageType.ASSISTANT,
             )
         )
@@ -612,31 +894,42 @@ def stream_chat_message_objects(
             new_msg_req.llm_override.model_version if new_msg_req.llm_override else None
         )
 
-        # Cannot determine these without the LLM step or breaking out early
-        partial_response = partial(
-            create_new_chat_message,
-            chat_session_id=chat_session_id,
-            # if we're using an existing assistant message, then this will just be an
-            # update operation, in which case the parent should be the parent of
-            # the latest. If we're creating a new assistant message, then the parent
-            # should be the latest message (latest user message)
-            parent_message=(
-                final_msg if existing_assistant_message_id is None else parent_message
-            ),
-            prompt_id=prompt_id,
-            overridden_model=overridden_model,
-            # message=,
-            # rephrased_query=,
-            # token_count=,
-            message_type=MessageType.ASSISTANT,
-            alternate_assistant_id=new_msg_req.alternate_assistant_id,
-            # error=,
-            # reference_docs=,
-            db_session=db_session,
-            commit=False,
-            reserved_message_id=reserved_message_id,
-            is_agentic=new_msg_req.use_agentic_search,
-        )
+        def create_response(
+            message: str,
+            rephrased_query: str | None,
+            reference_docs: list[DbSearchDoc] | None,
+            files: list[FileDescriptor],
+            token_count: int,
+            citations: dict[int, int] | None,
+            error: str | None,
+            tool_call: ToolCall | None,
+        ) -> ChatMessage:
+            return create_new_chat_message(
+                chat_session_id=chat_session_id,
+                parent_message=(
+                    final_msg
+                    if existing_assistant_message_id is None
+                    else parent_message
+                ),
+                prompt_id=prompt_id,
+                overridden_model=overridden_model,
+                message=message,
+                rephrased_query=rephrased_query,
+                token_count=token_count,
+                message_type=MessageType.ASSISTANT,
+                alternate_assistant_id=new_msg_req.alternate_assistant_id,
+                error=error,
+                reference_docs=reference_docs,
+                files=files,
+                citations=citations,
+                tool_call=tool_call,
+                db_session=db_session,
+                commit=False,
+                reserved_message_id=reserved_message_id,
+                is_agentic=new_msg_req.use_agentic_search,
+            )
+
+        partial_response = create_response
 
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
         if new_msg_req.persona_override_config:
@@ -661,10 +954,10 @@ def stream_chat_message_objects(
                 final_msg.prompt,
                 prompt_override=prompt_override,
             )
-        elif final_msg.prompt:
-            prompt_config = PromptConfig.from_model(final_msg.prompt)
         else:
-            prompt_config = PromptConfig.from_model(persona.prompts[0])
+            prompt_config = PromptConfig.from_model(
+                final_msg.prompt or persona.prompts[0]
+            )
 
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
@@ -681,6 +974,11 @@ def stream_chat_message_objects(
             user=user,
             llm=llm,
             fast_llm=fast_llm,
+            run_search_setting=(
+                retrieval_options.run_search
+                if retrieval_options
+                else OptionalSearchSetting.AUTO
+            ),
             search_tool_config=SearchToolConfig(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
@@ -710,36 +1008,24 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
+        force_use_tool = _get_force_search_settings(
+            new_msg_req, tools, search_tool_override_kwargs_for_user_files
+        )
+
         # TODO: unify message history with single message history
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
+        if not search_tool_override_kwargs_for_user_files and in_memory_user_files:
+            yield UserKnowledgeFilePacket(
+                user_files=[
+                    FileDescriptor(
+                        id=str(file.file_id), type=file.file_type, name=file.filename
+                    )
+                    for file in in_memory_user_files
+                ]
+            )
 
-        search_request = SearchRequest(
-            query=final_msg.message,
-            evaluation_type=(
-                LLMEvaluationType.BASIC
-                if persona.llm_relevance_filter
-                else LLMEvaluationType.SKIP
-            ),
-            human_selected_filters=(
-                retrieval_options.filters if retrieval_options else None
-            ),
-            persona=persona,
-            offset=(retrieval_options.offset if retrieval_options else None),
-            limit=retrieval_options.limit if retrieval_options else None,
-            rerank_settings=new_msg_req.rerank_settings,
-            chunks_above=new_msg_req.chunks_above,
-            chunks_below=new_msg_req.chunks_below,
-            full_doc=new_msg_req.full_doc,
-            enable_auto_detect_filters=(
-                retrieval_options.enable_auto_detect_filters
-                if retrieval_options
-                else None
-            ),
-        )
-
-        force_use_tool = _get_force_search_settings(new_msg_req, tools)
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
                 user_query=final_msg.message,
@@ -776,7 +1062,8 @@ def stream_chat_message_objects(
             ),
             fast_llm=fast_llm,
             force_use_tool=force_use_tool,
-            search_request=search_request,
+            persona=persona,
+            rerank_settings=new_msg_req.rerank_settings,
             chat_session_id=chat_session_id,
             current_agent_message_id=reserved_message_id,
             tools=tools,
@@ -784,142 +1071,21 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
         )
 
-        # reference_db_search_docs = None
-        # qa_docs_response = None
-        # # any files to associate with the AI message e.g. dall-e generated images
-        # ai_message_files = []
-        # dropped_indices = None
-        # tool_result = None
-
-        # TODO: different channels for stored info when it's coming from the agent flow
         info_by_subq: dict[SubQuestionKey, AnswerPostInfo] = defaultdict(
             lambda: AnswerPostInfo(ai_message_files=[])
         )
         refined_answer_improvement = True
         for packet in answer.processed_streamed_output:
             if isinstance(packet, ToolResponse):
-                level, level_question_num = (
-                    (packet.level, packet.level_question_num)
-                    if isinstance(packet, ExtendedToolResponse)
-                    else BASIC_KEY
+                info_by_subq = yield from _process_tool_response(
+                    packet=packet,
+                    db_session=db_session,
+                    selected_db_search_docs=selected_db_search_docs,
+                    info_by_subq=info_by_subq,
+                    retrieval_options=retrieval_options,
+                    user_file_files=user_file_models,
+                    user_files=in_memory_user_files,
                 )
-                assert level is not None
-                assert level_question_num is not None
-                info = info_by_subq[
-                    SubQuestionKey(level=level, question_num=level_question_num)
-                ]
-                # TODO: don't need to dedupe here when we do it in agent flow
-                if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
-                    (
-                        info.qa_docs_response,
-                        info.reference_db_search_docs,
-                        info.dropped_indices,
-                    ) = _handle_search_tool_response_summary(
-                        packet=packet,
-                        db_session=db_session,
-                        selected_search_docs=selected_db_search_docs,
-                        # Deduping happens at the last step to avoid harming quality by dropping content early on
-                        dedupe_docs=(
-                            retrieval_options.dedupe_docs
-                            if retrieval_options
-                            else False
-                        ),
-                    )
-                    yield info.qa_docs_response
-                elif packet.id == SECTION_RELEVANCE_LIST_ID:
-                    relevance_sections = packet.response
-
-                    if info.reference_db_search_docs is None:
-                        logger.warning(
-                            "No reference docs found for relevance filtering"
-                        )
-                        continue
-
-                    llm_indices = relevant_sections_to_indices(
-                        relevance_sections=relevance_sections,
-                        items=[
-                            translate_db_search_doc_to_server_search_doc(doc)
-                            for doc in info.reference_db_search_docs
-                        ],
-                    )
-
-                    if info.dropped_indices:
-                        llm_indices = drop_llm_indices(
-                            llm_indices=llm_indices,
-                            search_docs=info.reference_db_search_docs,
-                            dropped_indices=info.dropped_indices,
-                        )
-
-                    yield LLMRelevanceFilterResponse(
-                        llm_selected_doc_indices=llm_indices
-                    )
-                elif packet.id == FINAL_CONTEXT_DOCUMENTS_ID:
-                    yield FinalUsedContextDocsResponse(
-                        final_context_docs=packet.response
-                    )
-
-                elif packet.id == IMAGE_GENERATION_RESPONSE_ID:
-                    img_generation_response = cast(
-                        list[ImageGenerationResponse], packet.response
-                    )
-
-                    file_ids = save_files(
-                        urls=[img.url for img in img_generation_response if img.url],
-                        base64_files=[
-                            img.image_data
-                            for img in img_generation_response
-                            if img.image_data
-                        ],
-                    )
-                    info.ai_message_files.extend(
-                        [
-                            FileDescriptor(id=str(file_id), type=ChatFileType.IMAGE)
-                            for file_id in file_ids
-                        ]
-                    )
-                    yield FileChatDisplay(
-                        file_ids=[str(file_id) for file_id in file_ids]
-                    )
-                elif packet.id == INTERNET_SEARCH_RESPONSE_ID:
-                    (
-                        info.qa_docs_response,
-                        info.reference_db_search_docs,
-                    ) = _handle_internet_search_tool_response_summary(
-                        packet=packet,
-                        db_session=db_session,
-                    )
-                    yield info.qa_docs_response
-                elif packet.id == CUSTOM_TOOL_RESPONSE_ID:
-                    custom_tool_response = cast(CustomToolCallSummary, packet.response)
-
-                    if (
-                        custom_tool_response.response_type == "image"
-                        or custom_tool_response.response_type == "csv"
-                    ):
-                        file_ids = custom_tool_response.tool_result.file_ids
-                        info.ai_message_files.extend(
-                            [
-                                FileDescriptor(
-                                    id=str(file_id),
-                                    type=(
-                                        ChatFileType.IMAGE
-                                        if custom_tool_response.response_type == "image"
-                                        else ChatFileType.CSV
-                                    ),
-                                )
-                                for file_id in file_ids
-                            ]
-                        )
-                        yield FileChatDisplay(
-                            file_ids=[str(file_id) for file_id in file_ids]
-                        )
-                    else:
-                        yield CustomToolResponse(
-                            response=custom_tool_response.tool_result,
-                            tool_name=custom_tool_response.tool_name,
-                        )
-                elif packet.id == SEARCH_DOC_CONTENT_ID and include_contexts:
-                    yield cast(OnyxContexts, packet.response)
 
             elif isinstance(packet, StreamStopInfo):
                 if packet.stop_reason == StreamStopReason.FINISHED:
@@ -940,7 +1106,7 @@ def stream_chat_message_objects(
                     ]
                     info.tool_result = packet
                 yield cast(ChatPacket, packet)
-        logger.debug("Reached end of stream")
+
     except ValueError as e:
         logger.exception("Failed to process chat message.")
 
@@ -956,22 +1122,46 @@ def stream_chat_message_objects(
 
         if isinstance(e, ToolCallException):
             yield StreamingError(error=error_msg, stack_trace=stack_trace)
-        else:
-            if llm:
-                client_error_msg = litellm_exception_to_error_msg(e, llm)
-                if llm.config.api_key and len(llm.config.api_key) > 2:
-                    error_msg = error_msg.replace(
-                        llm.config.api_key, "[REDACTED_API_KEY]"
-                    )
-                    stack_trace = stack_trace.replace(
-                        llm.config.api_key, "[REDACTED_API_KEY]"
-                    )
+        elif llm:
+            client_error_msg = litellm_exception_to_error_msg(e, llm)
+            if llm.config.api_key and len(llm.config.api_key) > 2:
+                client_error_msg = client_error_msg.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
+                stack_trace = stack_trace.replace(
+                    llm.config.api_key, "[REDACTED_API_KEY]"
+                )
 
-                yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
+            yield StreamingError(error=client_error_msg, stack_trace=stack_trace)
 
         db_session.rollback()
         return
 
+    yield from _post_llm_answer_processing(
+        answer=answer,
+        info_by_subq=info_by_subq,
+        tool_dict=tool_dict,
+        partial_response=partial_response,
+        llm_tokenizer_encode_func=llm_tokenizer_encode_func,
+        db_session=db_session,
+        chat_session_id=chat_session_id,
+        refined_answer_improvement=refined_answer_improvement,
+    )
+
+
+def _post_llm_answer_processing(
+    answer: Answer,
+    info_by_subq: dict[SubQuestionKey, AnswerPostInfo],
+    tool_dict: dict[int, list[Tool]],
+    partial_response: PartialResponse,
+    llm_tokenizer_encode_func: Callable[[str], list[int]],
+    db_session: Session,
+    chat_session_id: UUID,
+    refined_answer_improvement: bool | None,
+) -> Generator[ChatPacket, None, None]:
+    """
+    Stores messages in the db and yields some final packets to the frontend
+    """
     # Post-LLM answer processing
     try:
         tool_name_to_tool_id: dict[str, int] = {}
@@ -1022,10 +1212,18 @@ def stream_chat_message_objects(
             error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
-                    tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
-                    tool_name=info.tool_result.tool_name,
-                    tool_arguments=info.tool_result.tool_args,
-                    tool_result=info.tool_result.tool_result,
+                    tool_id=(
+                        tool_name_to_tool_id.get(info.tool_result.tool_name, 0)
+                        if info.tool_result
+                        else None
+                    ),
+                    tool_name=info.tool_result.tool_name if info.tool_result else None,
+                    tool_arguments=(
+                        info.tool_result.tool_args if info.tool_result else None
+                    ),
+                    tool_result=(
+                        info.tool_result.tool_result if info.tool_result else None
+                    ),
                 )
                 if info.tool_result
                 else None
@@ -1055,9 +1253,11 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 files=info.ai_message_files,
                 reference_docs=info.reference_db_search_docs,
-                citations=info.message_specific_citations.citation_map
-                if info.message_specific_citations
-                else None,
+                citations=(
+                    info.message_specific_citations.citation_map
+                    if info.message_specific_citations
+                    else None
+                ),
                 error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
                 refined_answer_improvement=refined_answer_improvement,
                 is_agentic=True,
@@ -1069,6 +1269,8 @@ def stream_chat_message_objects(
             prev_message = next_answer_message
 
         logger.debug("Committing messages")
+        # Explicitly update the timestamp on the chat session
+        update_chat_session_updated_at_timestamp(chat_session_id, db_session)
         db_session.commit()  # actually save user / assistant message
 
         yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)
@@ -1090,6 +1292,7 @@ def stream_chat_message(
     custom_tool_additional_headers: dict[str, str] | None = None,
     is_connected: Callable[[], bool] | None = None,
 ) -> Iterator[str]:
+    start_time = time.time()
     with get_session_context_manager() as db_session:
         objects = stream_chat_message_objects(
             new_msg_req=new_msg_req,
@@ -1100,6 +1303,11 @@ def stream_chat_message(
             is_connected=is_connected,
         )
         for obj in objects:
+            # Check if this is a QADocsResponse with document results
+            if isinstance(obj, QADocsResponse):
+                document_retrieval_latency = time.time() - start_time
+                logger.debug(f"First doc time: {document_retrieval_latency}")
+
             yield get_json_line(obj.model_dump())
 
 

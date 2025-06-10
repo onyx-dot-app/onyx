@@ -60,6 +60,7 @@ def verify_document_content(doc: Document, expected: ExpectedDocument) -> None:
     """Verify a document matches its expected content."""
     assert doc.semantic_identifier == expected.semantic_identifier
     assert len(doc.sections) == 1
+    assert doc.sections[0].text is not None
     assert expected.content in doc.sections[0].text
     verify_document_metadata(doc)
 
@@ -82,6 +83,22 @@ def sharepoint_credentials() -> dict[str, str]:
         "sp_client_secret": os.environ["SHAREPOINT_CLIENT_SECRET"],
         "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
     }
+
+
+def test_sharepoint_connector_all_sites(
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    # Initialize connector with no sites
+    connector = SharepointConnector()
+
+    # Load credentials
+    connector.load_credentials(sharepoint_credentials)
+
+    # Not asserting expected sites because that can change in test tenant at any time
+    # Finding any docs is good enough to verify that the connector is working
+    document_batches = list(connector.load_from_state())
+    assert document_batches, "Should find documents from all sites"
 
 
 def test_sharepoint_connector_specific_folder(

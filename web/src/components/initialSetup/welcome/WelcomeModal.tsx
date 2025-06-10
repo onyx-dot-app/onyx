@@ -19,12 +19,12 @@ function setWelcomeFlowComplete() {
   Cookies.set(COMPLETED_WELCOME_FLOW_COOKIE, "true", { expires: 365 });
 }
 
-export function _CompletedWelcomeFlowDummyComponent() {
+export function CompletedWelcomeFlowDummyComponent() {
   setWelcomeFlowComplete();
   return null;
 }
 
-export function _WelcomeModal({ user }: { user: User | null }) {
+export function WelcomeModal({ user }: { user: User | null }) {
   const router = useRouter();
 
   const [providerOptions, setProviderOptions] = useState<

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from typing import TypeVar
 from urllib.parse import parse_qs
 from urllib.parse import quote
+from urllib.parse import urljoin
 from urllib.parse import urlparse
 
 import requests
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
+from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
 
 if TYPE_CHECKING:
@@ -32,10 +34,13 @@ from onyx.db.models import PGFileStore
 from onyx.db.pg_file_store import create_populate_lobj
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
 from onyx.db.pg_file_store import upsert_pgfilestore
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import (
+    OnyxExtensionType,
+    extract_file_text,
+    is_accepted_file_ext,
+)
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
-from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,22 +58,22 @@ class TokenResponse(BaseModel):
 
 
 def validate_attachment_filetype(
-    attachment: dict[str, Any], llm: LLM | None = None
+    attachment: dict[str, Any],
 ) -> bool:
     """
     Validates if the attachment is a supported file type.
-    If LLM is provided, also checks if it's an image that can be processed.
     """
-    attachment.get("metadata", {})
     media_type = attachment.get("metadata", {}).get("mediaType", "")
-
     if media_type.startswith("image/"):
-        return llm is not None and is_valid_image_type(media_type)
+        return is_valid_image_type(media_type)
 
     # For non-image files, check if we support the extension
     title = attachment.get("title", "")
     extension = Path(title).suffix.lstrip(".").lower() if "." in title else ""
-    return extension in ["pdf", "doc", "docx", "txt", "md", "rtf"]
+
+    return is_accepted_file_ext(
+        "." + extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+    )
 
 
 class AttachmentProcessingResult(BaseModel):
@@ -84,55 +89,111 @@ class AttachmentProcessingResult(BaseModel):
     error: str | None = None
 
 
-def _download_attachment(
-    confluence_client: "OnyxConfluence", attachment: dict[str, Any]
-) -> bytes | None:
-    """
-    Retrieves the raw bytes of an attachment from Confluence. Returns None on error.
-    """
-    download_link = confluence_client.url + attachment["_links"]["download"]
-    resp = confluence_client._session.get(download_link)
-    if resp.status_code != 200:
-        logger.warning(
-            f"Failed to fetch {download_link} with status code {resp.status_code}"
+def _make_attachment_link(
+    confluence_client: "OnyxConfluence",
+    attachment: dict[str, Any],
+    parent_content_id: str | None = None,
+) -> str | None:
+    download_link = ""
+
+    if "api.atlassian.com" in confluence_client.url:
+        # https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/#api-wiki-rest-api-content-id-child-attachment-attachmentid-download-get
+        if not parent_content_id:
+            logger.warning(
+                "parent_content_id is required to download attachments from Confluence Cloud!"
+            )
+            return None
+
+        download_link = (
+            confluence_client.url
+            + f"/rest/api/content/{parent_content_id}/child/attachment/{attachment['id']}/download"
         )
-        return None
-    return resp.content
+    else:
+        download_link = confluence_client.url + attachment["_links"]["download"]
+
+    return download_link
 
 
 def process_attachment(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
-    page_context: str,
-    llm: LLM | None,
+    parent_content_id: str | None,
+    allow_images: bool,
 ) -> AttachmentProcessingResult:
     """
     Processes a Confluence attachment. If it's a document, extracts text,
-    or if it's an image and an LLM is available, summarizes it. Returns a structured result.
+    or if it's an image, stores it for later analysis. Returns a structured result.
     """
     try:
         # Get the media type from the attachment metadata
-        media_type = attachment.get("metadata", {}).get("mediaType", "")
-
+        media_type: str = attachment.get("metadata", {}).get("mediaType", "")
         # Validate the attachment type
-        if not validate_attachment_filetype(attachment, llm):
+        if not validate_attachment_filetype(attachment):
             return AttachmentProcessingResult(
                 text=None,
                 file_name=None,
                 error=f"Unsupported file type: {media_type}",
             )
 
-        # Download the attachment
-        raw_bytes = _download_attachment(confluence_client, attachment)
-        if raw_bytes is None:
+        attachment_link = _make_attachment_link(
+            confluence_client, attachment, parent_content_id
+        )
+        if not attachment_link:
             return AttachmentProcessingResult(
-                text=None, file_name=None, error="Failed to download attachment"
+                text=None, file_name=None, error="Failed to make attachment link"
             )
 
-        # Process image attachments with LLM if available
-        if media_type.startswith("image/") and llm:
+        attachment_size = attachment["extensions"]["fileSize"]
+
+        if media_type.startswith("image/"):
+            if not allow_images:
+                return AttachmentProcessingResult(
+                    text=None,
+                    file_name=None,
+                    error="Image downloading is not enabled",
+                )
+        else:
+            if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+                logger.warning(
+                    f"Skipping {attachment_link} due to size. "
+                    f"size={attachment_size} "
+                    f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+                )
+                return AttachmentProcessingResult(
+                    text=None,
+                    file_name=None,
+                    error=f"Attachment text too long: {attachment_size} chars",
+                )
+
+        logger.info(
+            f"Downloading attachment: "
+            f"title={attachment['title']} "
+            f"length={attachment_size} "
+            f"link={attachment_link}"
+        )
+
+        # Download the attachment
+        resp: requests.Response = confluence_client._session.get(attachment_link)
+        if resp.status_code != 200:
+            logger.warning(
+                f"Failed to fetch {attachment_link} with status code {resp.status_code}"
+            )
+            return AttachmentProcessingResult(
+                text=None,
+                file_name=None,
+                error=f"Attachment download status code is {resp.status_code}",
+            )
+
+        raw_bytes = resp.content
+        if not raw_bytes:
+            return AttachmentProcessingResult(
+                text=None, file_name=None, error="attachment.content is None"
+            )
+
+        # Process image attachments
+        if media_type.startswith("image/"):
             return _process_image_attachment(
-                confluence_client, attachment, page_context, llm, raw_bytes, media_type
+                confluence_client, attachment, raw_bytes, media_type
             )
 
         # Process document attachments
@@ -165,12 +226,10 @@ def process_attachment(
 def _process_image_attachment(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
-    page_context: str,
-    llm: LLM,
     raw_bytes: bytes,
     media_type: str,
 ) -> AttachmentProcessingResult:
-    """Process an image attachment by saving it and generating a summary."""
+    """Process an image attachment by saving it without generating a summary."""
     try:
         # Use the standardized image storage and section creation
         with get_session_with_current_tenant() as db_session:
@@ -180,15 +239,14 @@ def _process_image_attachment(
                 file_name=Path(attachment["id"]).name,
                 display_name=attachment["title"],
                 media_type=media_type,
-                llm=llm,
                 file_origin=FileOrigin.CONNECTOR,
             )
+            logger.info(f"Stored image attachment with file name: {file_name}")
 
-            return AttachmentProcessingResult(
-                text=section.text, file_name=file_name, error=None
-            )
+            # Return empty text but include the file_name for later processing
+            return AttachmentProcessingResult(text="", file_name=file_name, error=None)
     except Exception as e:
-        msg = f"Image summarization failed for {attachment['title']}: {e}"
+        msg = f"Image storage failed for {attachment['title']}: {e}"
         logger.error(msg, exc_info=e)
         return AttachmentProcessingResult(text=None, file_name=None, error=msg)
 
@@ -249,16 +307,16 @@ def _process_text_attachment(
 def convert_attachment_to_content(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
-    page_context: str,
-    llm: LLM | None,
+    page_id: str,
+    allow_images: bool,
 ) -> tuple[str | None, str | None] | None:
     """
     Facade function which:
       1. Validates attachment type
-      2. Extracts or summarizes content
+      2. Extracts content or stores image for later processing
       3. Returns (content_text, stored_file_name) or None if we should skip it
     """
-    media_type = attachment["metadata"]["mediaType"]
+    media_type = attachment.get("metadata", {}).get("mediaType", "")
     # Quick check for unsupported types:
     if media_type.startswith("video/") or media_type == "application/gliffy+json":
         logger.warning(
@@ -266,7 +324,7 @@ def convert_attachment_to_content(
         )
         return None
 
-    result = process_attachment(confluence_client, attachment, page_context, llm)
+    result = process_attachment(confluence_client, attachment, page_id, allow_images)
     if result.error is not None:
         logger.warning(
             f"Attachment {attachment['title']} encountered error: {result.error}"
@@ -290,9 +348,14 @@ def build_confluence_document_id(
     Returns:
         str: The document id
     """
-    if is_cloud and not base_url.endswith("/wiki"):
-        base_url += "/wiki"
-    return f"{base_url}{content_url}"
+
+    # NOTE: urljoin is tricky and will drop the last segment of the base if it doesn't
+    # end with "/" because it believes that makes it a file.
+    final_url = base_url.rstrip("/") + "/"
+    if is_cloud and not final_url.endswith("/wiki/"):
+        final_url = urljoin(final_url, "wiki") + "/"
+    final_url = urljoin(final_url, content_url.lstrip("/"))
+    return final_url
 
 
 def datetime_from_string(datetime_string: str) -> datetime:
@@ -402,6 +465,19 @@ def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
         logger.warning("HTTPError with `None` as response or as headers")
         raise e
 
+    # Confluence Server returns 403 when rate limited
+    if e.response.status_code == 403:
+        FORBIDDEN_MAX_RETRY_ATTEMPTS = 7
+        FORBIDDEN_RETRY_DELAY = 10
+        if attempt < FORBIDDEN_MAX_RETRY_ATTEMPTS:
+            logger.warning(
+                "403 error. This sometimes happens when we hit "
+                f"Confluence rate limits. Retrying in {FORBIDDEN_RETRY_DELAY} seconds..."
+            )
+            return FORBIDDEN_RETRY_DELAY
+
+        raise e
+
     if (
         e.response.status_code != 429
         and RATE_LIMIT_MESSAGE_LOWERCASE not in e.response.text.lower()
@@ -448,9 +524,7 @@ def get_single_param_from_url(url: str, param: str) -> str | None:
 def get_start_param_from_url(url: str) -> int:
     """Get the start parameter from a url"""
     start_str = get_single_param_from_url(url, "start")
-    if start_str is None:
-        return 0
-    return int(start_str)
+    return int(start_str) if start_str else 0
 
 
 def update_param_in_path(path: str, param: str, value: str) -> str:
@@ -479,6 +553,10 @@ def attachment_to_file_record(
         download_link, absolute=True, not_json_response=True
     )
 
+    file_type = attachment.get("metadata", {}).get(
+        "mediaType", "application/octet-stream"
+    )
+
     # Save image to file store
     file_name = f"confluence_attachment_{attachment['id']}"
     lobj_oid = create_populate_lobj(BytesIO(image_data), db_session)
@@ -486,7 +564,7 @@ def attachment_to_file_record(
         file_name=file_name,
         display_name=attachment["title"],
         file_origin=FileOrigin.OTHER,
-        file_type=attachment["metadata"]["mediaType"],
+        file_type=file_type,
         lobj_oid=lobj_oid,
         db_session=db_session,
         commit=True,

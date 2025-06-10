@@ -6,7 +6,7 @@ import {
   usePersonaUniqueUsers,
 } from "../lib";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
@@ -73,9 +73,12 @@ export function PersonaMessagesChart({
           highlightedIndex >= 0 &&
           highlightedIndex < filteredPersonaList.length
         ) {
-          setSelectedPersonaId(filteredPersonaList[highlightedIndex].id);
-          setSearchQuery("");
-          setHighlightedIndex(-1);
+          const filteredPersona = filteredPersonaList[highlightedIndex];
+          if (filteredPersona !== undefined) {
+            setSelectedPersonaId(filteredPersona.id);
+            setSearchQuery("");
+            setHighlightedIndex(-1);
+          }
         }
         break;
       case "Escape":

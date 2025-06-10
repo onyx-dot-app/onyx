@@ -2,7 +2,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import React from "react";
 import { FiBookmark, FiTag, FiX } from "react-icons/fi";
 import { FilterManager } from "@/lib/hooks";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 
 const displayTimeRange = (timeRange: DateRangePickerValue) => {
   if (timeRange.selectValue) {

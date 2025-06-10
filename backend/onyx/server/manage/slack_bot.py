@@ -32,8 +32,14 @@ from onyx.server.manage.models import SlackChannelConfig
 from onyx.server.manage.models import SlackChannelConfigCreationRequest
 from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
+from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
+
+SLACK_API_CHANNELS_PER_PAGE = 100
+SLACK_MAX_RETURNED_CHANNELS = 500
+
+logger = setup_logger()
 
 
 router = APIRouter(prefix="/manage")
@@ -92,13 +98,13 @@ def _form_channel_config(
     if follow_up_tags is not None:
         channel_config["follow_up_tags"] = follow_up_tags
 
-    channel_config[
-        "show_continue_in_web_ui"
-    ] = slack_channel_config_creation_request.show_continue_in_web_ui
+    channel_config["show_continue_in_web_ui"] = (
+        slack_channel_config_creation_request.show_continue_in_web_ui
+    )
 
-    channel_config[
-        "respond_to_bots"
-    ] = slack_channel_config_creation_request.respond_to_bots
+    channel_config["respond_to_bots"] = (
+        slack_channel_config_creation_request.respond_to_bots
+    )
 
     channel_config["is_ephemeral"] = slack_channel_config_creation_request.is_ephemeral
 
@@ -257,9 +263,6 @@ def create_bot(
     # Create a default Slack channel config
     default_channel_config = ChannelConfig(
         channel_name=None,
-        respond_member_group_list=[],
-        answer_filters=[],
-        follow_up_tags=[],
         respond_tag_only=True,
     )
     insert_slack_channel_config(
@@ -354,10 +357,6 @@ def list_bot_configs(
     ]
 
 
-MAX_SLACK_PAGES = 5
-SLACK_API_CHANNELS_PER_PAGE = 100
-
-
 @router.get(
     "/admin/slack-app/bots/{bot_id}/channels",
 )
@@ -367,7 +366,12 @@ def get_all_channels_from_slack_api(
     _: User | None = Depends(current_admin_user),
 ) -> list[SlackChannel]:
     """
-    Fetches channels the bot is a member of from the Slack API.
+    Returns a list of available slack channels for the slack bot, limited to
+    SLACK_MAX_RETURNED_CHANNELS.
+
+    Fetches all channels in the Slack workspace using the conversations_list API.
+    This includes both public and private channels that are visible to the app,
+    not just the ones the bot is a member of.
     Handles pagination with a limit to avoid excessive API calls.
     """
     tokens = fetch_slack_bot_tokens(db_session, bot_id)
@@ -376,26 +380,23 @@ def get_all_channels_from_slack_api(
             status_code=404, detail="Bot token not found for the given bot ID"
         )
 
-    client = WebClient(token=tokens["bot_token"])
-    all_channels = []
+    client = WebClient(token=tokens["bot_token"], timeout=1)
+    all_channels: list[dict] = []
     next_cursor = None
-    current_page = 0
 
     try:
-        # Use users_conversations with limited pagination
-        while current_page < MAX_SLACK_PAGES:
-            current_page += 1
-
+        # Use conversations_list to get all channels in the workspace (including ones the bot is not a member of)
+        while len(all_channels) < SLACK_MAX_RETURNED_CHANNELS:
             # Make API call with cursor if we have one
             if next_cursor:
-                response = client.users_conversations(
+                response = client.conversations_list(
                     types="public_channel,private_channel",
                     exclude_archived=True,
                     cursor=next_cursor,
                     limit=SLACK_API_CHANNELS_PER_PAGE,
                 )
             else:
-                response = client.users_conversations(
+                response = client.conversations_list(
                     types="public_channel,private_channel",
                     exclude_archived=True,
                     limit=SLACK_API_CHANNELS_PER_PAGE,
@@ -412,15 +413,12 @@ def get_all_channels_from_slack_api(
             ):
                 next_cursor = response["response_metadata"]["next_cursor"]
                 if next_cursor:
-                    if current_page == MAX_SLACK_PAGES:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Workspace has too many channels to paginate over in this call.",
-                        )
                     continue
 
             # If we get here, no more pages
             break
+
+        del all_channels[SLACK_MAX_RETURNED_CHANNELS:]  # truncate the list
 
         channels = [
             SlackChannel(id=channel["id"], name=channel["name"])
@@ -431,6 +429,7 @@ def get_all_channels_from_slack_api(
 
     except SlackApiError as e:
         # Handle rate limiting or other API errors
+        logger.exception("Error fetching channels from Slack API")
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching channels from Slack API: {str(e)}",

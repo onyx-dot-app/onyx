@@ -1,5 +1,7 @@
+import re
 from datetime import datetime
 from enum import Enum
+from typing import Any
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -8,7 +10,6 @@ from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
 
-from ee.onyx.server.manage.models import StandardAnswerCategory
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.constants import AuthType
@@ -17,8 +18,11 @@ from onyx.db.models import AllowedAnswerFilters
 from onyx.db.models import ChannelConfig
 from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
+from onyx.db.models import StandardAnswer as StandardAnswerModel
+from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
 from onyx.db.models import User
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
@@ -53,6 +57,16 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
 
 
+class TenantSnapshot(BaseModel):
+    tenant_id: str
+    number_of_users: int
+
+
+class TenantInfo(BaseModel):
+    invitation: TenantSnapshot | None = None
+    new_tenant: TenantSnapshot | None = None
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
@@ -65,9 +79,10 @@ class UserInfo(BaseModel):
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
     is_cloud_superuser: bool = False
-    organization_name: str | None = None
+    team_name: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
+    tenant_info: TenantInfo | None = None
 
     @classmethod
     def from_model(
@@ -76,8 +91,9 @@ class UserInfo(BaseModel):
         current_token_created_at: datetime | None = None,
         expiry_length: int | None = None,
         is_cloud_superuser: bool = False,
-        organization_name: str | None = None,
+        team_name: str | None = None,
         is_anonymous_user: bool | None = None,
+        tenant_info: TenantInfo | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -99,7 +115,7 @@ class UserInfo(BaseModel):
                     temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
-            organization_name=organization_name,
+            team_name=team_name,
             # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
             # where they previously had this set + used OIDC, and now they switched to
             # basic auth are now constantly getting redirected back to the login page
@@ -109,6 +125,7 @@ class UserInfo(BaseModel):
             current_token_expiry_length=expiry_length,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
+            tenant_info=tenant_info,
         )
 
 
@@ -119,6 +136,7 @@ class UserByEmail(BaseModel):
 class UserRoleUpdateRequest(BaseModel):
     user_email: str
     new_role: UserRole
+    explicit_override: bool = False
 
 
 class UserRoleResponse(BaseModel):
@@ -219,7 +237,7 @@ class SlackChannelConfig(BaseModel):
     persona: PersonaSnapshot | None
     channel_config: ChannelConfig
     # XXX this is going away soon
-    standard_answer_categories: list[StandardAnswerCategory]
+    standard_answer_categories: list["StandardAnswerCategory"]
     enable_auto_filters: bool
     is_default: bool
 
@@ -231,7 +249,7 @@ class SlackChannelConfig(BaseModel):
             id=slack_channel_config_model.id,
             slack_bot_id=slack_channel_config_model.slack_bot_id,
             persona=(
-                PersonaSnapshot.from_model(
+                FullPersonaSnapshot.from_model(
                     slack_channel_config_model.persona, allow_deleted=True
                 )
                 if slack_channel_config_model.persona
@@ -292,3 +310,99 @@ class AllUsersResponse(BaseModel):
 class SlackChannel(BaseModel):
     id: str
     name: str
+
+
+"""
+Standard Answer Models
+
+ee only, but needs to be here since it's imported by non-ee models.
+"""
+
+
+class StandardAnswerCategoryCreationRequest(BaseModel):
+    name: str
+
+
+class StandardAnswerCategory(BaseModel):
+    id: int
+    name: str
+
+    @classmethod
+    def from_model(
+        cls, standard_answer_category: StandardAnswerCategoryModel
+    ) -> "StandardAnswerCategory":
+        return cls(
+            id=standard_answer_category.id,
+            name=standard_answer_category.name,
+        )
+
+
+class StandardAnswer(BaseModel):
+    id: int
+    keyword: str
+    answer: str
+    categories: list[StandardAnswerCategory]
+    match_regex: bool
+    match_any_keywords: bool
+
+    @classmethod
+    def from_model(cls, standard_answer_model: StandardAnswerModel) -> "StandardAnswer":
+        return cls(
+            id=standard_answer_model.id,
+            keyword=standard_answer_model.keyword,
+            answer=standard_answer_model.answer,
+            match_regex=standard_answer_model.match_regex,
+            match_any_keywords=standard_answer_model.match_any_keywords,
+            categories=[
+                StandardAnswerCategory.from_model(standard_answer_category_model)
+                for standard_answer_category_model in standard_answer_model.categories
+            ],
+        )
+
+
+class StandardAnswerCreationRequest(BaseModel):
+    keyword: str
+    answer: str
+    categories: list[int]
+    match_regex: bool
+    match_any_keywords: bool
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value: list[int]) -> list[int]:
+        if len(value) < 1:
+            raise ValueError(
+                "At least one category must be attached to a standard answer"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_only_match_any_if_not_regex(self) -> Any:
+        if self.match_regex and self.match_any_keywords:
+            raise ValueError(
+                "Can only match any keywords in keyword mode, not regex mode"
+            )
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_keyword_if_regex(self) -> Any:
+        if not self.match_regex:
+            # no validation for keywords
+            return self
+
+        try:
+            re.compile(self.keyword)
+            return self
+        except re.error as err:
+            if isinstance(err.pattern, bytes):
+                raise ValueError(
+                    f'invalid regex pattern r"{err.pattern.decode()}" in `keyword`: {err.msg}'
+                )
+            else:
+                pattern = f'r"{err.pattern}"' if err.pattern is not None else ""
+                raise ValueError(
+                    " ".join(
+                        ["invalid regex pattern", pattern, f"in `keyword`: {err.msg}"]
+                    )
+                )

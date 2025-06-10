@@ -1,4 +1,4 @@
-<!-- DANSWER_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/web/README.md"} -->
+<!-- ONYX_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/web/README.md"} -->
 
 This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
@@ -41,6 +41,19 @@ pytest -s tests/integration/tests/playwright/test_playwright.py
 ```
 cd web
 npx playwright test
+```
+
+To run a single test:
+```
+npx playwright test landing-page.spec.ts
+```
+
+If running locally, interactive options can help you see exactly what is happening in 
+the test.
+
+```
+npx playwright test --ui
+npx playwright test --headed
 ```
 
 3. Inspect results

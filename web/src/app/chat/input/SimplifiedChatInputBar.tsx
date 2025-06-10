@@ -7,7 +7,7 @@ import {
   InputBarPreview,
   InputBarPreviewImageProvider,
 } from "../files/InputBarPreview";
-import { OpenAIIcon, SendIcon } from "@/components/icons/icons";
+import { SendIcon } from "@/components/icons/icons";
 import { HorizontalSourceSelector } from "@/components/search/filtering/HorizontalSourceSelector";
 import { Tag } from "@/lib/types";
 
@@ -56,8 +56,9 @@ export function SimplifiedChatInputBar({
     if (items) {
       const pastedFiles = [];
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file") {
-          const file = items[i].getAsFile();
+        const item = items[i];
+        if (item && item.kind === "file") {
+          const file = item.getAsFile();
           if (file) pastedFiles.push(file);
         }
       }

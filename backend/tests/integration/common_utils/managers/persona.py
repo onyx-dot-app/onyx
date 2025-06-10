@@ -4,7 +4,7 @@ from uuid import uuid4
 import requests
 
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.server.features.persona.models import PersonaSnapshot
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -67,9 +67,11 @@ class PersonaManager:
         response = requests.post(
             f"{API_SERVER_URL}/persona",
             json=persona_creation_request.model_dump(mode="json"),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         persona_data = response.json()
@@ -148,9 +150,11 @@ class PersonaManager:
         response = requests.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
             json=persona_update_request.model_dump(mode="json"),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         updated_persona_data = response.json()
@@ -181,29 +185,33 @@ class PersonaManager:
     @staticmethod
     def get_all(
         user_performing_action: DATestUser | None = None,
-    ) -> list[PersonaSnapshot]:
+    ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/admin/persona",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
-        return [PersonaSnapshot(**persona) for persona in response.json()]
+        return [FullPersonaSnapshot(**persona) for persona in response.json()]
 
     @staticmethod
     def get_one(
         persona_id: int,
         user_performing_action: DATestUser | None = None,
-    ) -> list[PersonaSnapshot]:
+    ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/{persona_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
-        return [PersonaSnapshot(**response.json())]
+        return [FullPersonaSnapshot(**response.json())]
 
     @staticmethod
     def verify(
@@ -243,7 +251,8 @@ class PersonaManager:
                     and set(user.email for user in fetched_persona.users)
                     == set(persona.users)
                     and set(fetched_persona.groups) == set(persona.groups)
-                    and set(fetched_persona.labels) == set(persona.label_ids)
+                    and {label.id for label in fetched_persona.labels}
+                    == set(persona.label_ids)
                 )
         return False
 
@@ -254,9 +263,11 @@ class PersonaManager:
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/persona/{persona.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         return response.ok
 
@@ -272,9 +283,11 @@ class PersonaLabelManager:
             json={
                 "name": label.name,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         response_data = response.json()
@@ -287,9 +300,11 @@ class PersonaLabelManager:
     ) -> list[DATestPersonaLabel]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/labels",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [DATestPersonaLabel(**label) for label in response.json()]
@@ -304,9 +319,11 @@ class PersonaLabelManager:
             json={
                 "label_name": label.name,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return label
@@ -318,9 +335,11 @@ class PersonaLabelManager:
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         return response.ok
 

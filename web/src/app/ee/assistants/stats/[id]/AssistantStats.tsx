@@ -3,12 +3,12 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
 import {
-  DateRangeSelector,
+  AdminDateRangeSelector,
   DateRange,
-} from "@/app/ee/admin/performance/DateRangeSelector";
+} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { AreaChartDisplay } from "@/components/ui/areaChart";
 
 type AssistantDailyUsageEntry = {
@@ -146,7 +146,10 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <p className="text-base font-normal text-2xl">Assistant Analytics</p>
-        <DateRangeSelector value={dateRange} onValueChange={setDateRange} />
+        <AdminDateRangeSelector
+          value={dateRange}
+          onValueChange={setDateRange}
+        />
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

@@ -329,6 +329,7 @@ def list_runs(
 
 @router.get("/threads/{thread_id}/runs/{run_id}/steps")
 def list_run_steps(
+    thread_id: UUID,
     run_id: str,
     limit: int = 20,
     order: Literal["asc", "desc"] = "desc",

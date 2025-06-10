@@ -128,11 +128,11 @@ def shared_precompare_cleanup(text: str) -> str:
 
 _INITIAL_FILTER = re.compile(
     "["
-    "\U0000FFF0-\U0000FFFF"  # Specials
-    "\U0001F000-\U0001F9FF"  # Emoticons
-    "\U00002000-\U0000206F"  # General Punctuation
-    "\U00002190-\U000021FF"  # Arrows
-    "\U00002700-\U000027BF"  # Dingbats
+    "\U0000fff0-\U0000ffff"  # Specials
+    "\U0001f000-\U0001f9ff"  # Emoticons
+    "\U00002000-\U0000206f"  # General Punctuation
+    "\U00002190-\U000021ff"  # Arrows
+    "\U00002700-\U000027bf"  # Dingbats
     "]+",
     flags=re.UNICODE,
 )

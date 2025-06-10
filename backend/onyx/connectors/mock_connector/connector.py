@@ -2,8 +2,10 @@ from typing import Any
 
 import httpx
 from pydantic import BaseModel
+from typing_extensions import override
 
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.access.models import ExternalAccess
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
@@ -15,14 +17,22 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+EXTERNAL_USER_EMAILS = {"test@example.com", "admin@example.com"}
+EXTERNAL_USER_GROUP_IDS = {"mock-group-1", "mock-group-2"}
+
+
+class MockConnectorCheckpoint(ConnectorCheckpoint):
+    last_document_id: str | None = None
+
+
 class SingleConnectorYield(BaseModel):
     documents: list[Document]
-    checkpoint: ConnectorCheckpoint
+    checkpoint: MockConnectorCheckpoint
     failures: list[ConnectorFailure]
     unhandled_exception: str | None = None
 
 
-class MockConnector(CheckpointConnector):
+class MockConnector(CheckpointedConnectorWithPermSync[MockConnectorCheckpoint]):
     def __init__(
         self,
         mock_server_host: str,
@@ -48,19 +58,20 @@ class MockConnector(CheckpointConnector):
     def _get_mock_server_url(self, endpoint: str) -> str:
         return f"http://{self.mock_server_host}:{self.mock_server_port}/{endpoint}"
 
-    def _save_checkpoint(self, checkpoint: ConnectorCheckpoint) -> None:
+    def _save_checkpoint(self, checkpoint: MockConnectorCheckpoint) -> None:
         response = self.client.post(
             self._get_mock_server_url("add-checkpoint"),
             json=checkpoint.model_dump(mode="json"),
         )
         response.raise_for_status()
 
-    def load_from_checkpoint(
+    def _load_from_checkpoint_common(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-        checkpoint: ConnectorCheckpoint,
-    ) -> CheckpointOutput:
+        checkpoint: MockConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> CheckpointOutput[MockConnectorCheckpoint]:
         if self.connector_yields is None:
             raise ValueError("No connector yields configured")
 
@@ -78,9 +89,48 @@ class MockConnector(CheckpointConnector):
 
         # yield all documents
         for document in current_yield.documents:
+            # If permissions are requested and not already set, add mock permissions
+            if include_permissions and document.external_access is None:
+                # Add mock permissions - make documents accessible to specific users/groups
+                document.external_access = ExternalAccess(
+                    external_user_emails=EXTERNAL_USER_EMAILS,
+                    external_user_group_ids=EXTERNAL_USER_GROUP_IDS,
+                    is_public=False,
+                )
             yield document
 
         for failure in current_yield.failures:
             yield failure
 
         return current_yield.checkpoint
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: MockConnectorCheckpoint,
+    ) -> CheckpointOutput[MockConnectorCheckpoint]:
+        return self._load_from_checkpoint_common(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: MockConnectorCheckpoint,
+    ) -> CheckpointOutput[MockConnectorCheckpoint]:
+        return self._load_from_checkpoint_common(
+            start, end, checkpoint, include_permissions=True
+        )
+
+    @override
+    def build_dummy_checkpoint(self) -> MockConnectorCheckpoint:
+        return MockConnectorCheckpoint(
+            has_more=True,
+            last_document_id=None,
+        )
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> MockConnectorCheckpoint:
+        return MockConnectorCheckpoint.model_validate_json(checkpoint_json)

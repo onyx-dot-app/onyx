@@ -31,6 +31,24 @@ jobs:
         pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
         pip install --retries 5 --timeout 30 -r backend/requirements/model_server.txt
 
+    - name: Generate OpenAPI schema
+      working-directory: ./backend
+      env:
+        PYTHONPATH: "."
+      run: |
+        python scripts/onyx_openapi_schema.py --filename generated/openapi.json
+
+    - name: Generate OpenAPI Python client
+      working-directory: ./backend
+      run: |
+        docker run --rm \
+          -v "${{ github.workspace }}/backend/generated:/local" \
+          openapitools/openapi-generator-cli generate \
+          -i /local/openapi.json \
+          -g python \
+          -o /local/onyx_openapi_client \
+          --package-name onyx_openapi_client
+            
     - name: Run MyPy
       run: |
         cd backend
@@ -44,7 +62,7 @@ jobs:
     - name: Check import order with reorder-python-imports
       run: |
         cd backend
-        find ./danswer -name "*.py" | xargs reorder-python-imports --py311-plus
+        find ./onyx -name "*.py" | xargs reorder-python-imports --py311-plus
 
     - name: Check code formatting with Black
       run: |

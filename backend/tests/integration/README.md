@@ -12,8 +12,8 @@ The idea is that each test can use the manager class to create (.create()) a "te
 ## Instructions for Running Integration Tests Locally
 
 1. Launch onyx (using Docker or running with a debugger), ensuring the API server is running on port 8080.
-   a. If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.
-   b. Onyx MUST be launched with AUTH_TYPE=basic and ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+   - If you'd like to set environment variables, you can do so by creating a `.env` file in the onyx/backend/tests/integration/ directory.
+   - Onyx MUST be launched with AUTH_TYPE=basic and ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
 2. Navigate to `onyx/backend`.
 3. Run the following command in the terminal:
    ```sh
@@ -27,6 +27,14 @@ The idea is that each test can use the manager class to create (.create()) a "te
    ```sh
    pytest -s tests/integration/tests/path_to/test_file.py::test_function_name
    ```
+
+Running some single tests require the `mock_connector_server` container to be running. If the above doesn't work, 
+navigate to `backend/tests/integration/mock_services` and run
+```sh
+docker compose -f docker-compose.mock-it-services.yml -p mock-it-services-stack up -d
+```
+You will have to modify the networks section of the docker-compose file to `<your stack name>_default` if you brought up the standard
+onyx services with a name different from the default `onyx-stack`.
 
 ## Guidelines for Writing Integration Tests
 

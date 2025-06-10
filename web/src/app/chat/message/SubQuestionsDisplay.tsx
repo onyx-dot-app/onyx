@@ -16,15 +16,15 @@ import ReactMarkdown from "react-markdown";
 import { MemoizedAnchor } from "./MemoizedTextComponents";
 import { MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
-
+import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./CodeBlock";
 import { CheckIcon, ChevronDown } from "lucide-react";
 import { PHASE_MIN_MS, useStreamingMessages } from "./StreamingMessages";
 import { CirclingArrowIcon } from "@/components/icons/icons";
 import { handleCopy } from "./copyingUtils";
+import { transformLinkUri } from "@/lib/utils";
 
 export const StatusIndicator = ({ status }: { status: ToggleState }) => {
   return (
@@ -137,7 +137,7 @@ const SubQuestionDisplay: React.FC<{
       }, content);
 
       const lastMatch = matches[matches.length - 1];
-      if (!lastMatch.endsWith("```")) {
+      if (lastMatch && !lastMatch.endsWith("```")) {
         return preprocessLaTeX(content);
       }
     }
@@ -301,6 +301,7 @@ const SubQuestionDisplay: React.FC<{
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
+        urlTransform={transformLinkUri}
       >
         {finalContent}
       </ReactMarkdown>

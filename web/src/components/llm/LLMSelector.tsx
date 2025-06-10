@@ -1,14 +1,12 @@
 import React from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
-  checkLLMSupportsImageInput,
-  destructureValue,
+  parseLlmDescriptor,
+  modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
-import {
-  getProviderIcon,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {
   Select,
   SelectContent,
@@ -35,19 +33,23 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   const seenModelNames = new Set();
 
   const llmOptions = llmProviders.flatMap((provider) => {
-    return (provider.display_model_names || provider.model_names)
-      .filter((modelName) => {
-        const displayName = getDisplayNameForModel(modelName);
+    return provider.model_configurations
+      .filter((modelConfiguration) => {
+        const displayName = getDisplayNameForModel(modelConfiguration.name);
         if (seenModelNames.has(displayName)) {
           return false;
         }
         seenModelNames.add(displayName);
         return true;
       })
-      .map((modelName) => ({
-        name: getDisplayNameForModel(modelName),
-        value: structureValue(provider.name, provider.provider, modelName),
-        icon: getProviderIcon(provider.provider, modelName),
+      .map((modelConfiguration) => ({
+        name: getDisplayNameForModel(modelConfiguration.name),
+        value: structureValue(
+          provider.name,
+          provider.provider,
+          modelConfiguration.name
+        ),
+        icon: getProviderIcon(provider.provider, modelConfiguration.name),
       }));
   });
 
@@ -61,7 +63,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
     : null;
 
   const destructuredCurrentValue = currentLlm
-    ? destructureValue(currentLlm)
+    ? parseLlmDescriptor(currentLlm)
     : null;
 
   const currentLlmName = destructuredCurrentValue?.modelName;
@@ -92,7 +94,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         {llmOptions.map((option) => {
           if (
             !requiresImageGeneration ||
-            checkLLMSupportsImageInput(option.name)
+            modelSupportsImageInput(llmProviders, option.name)
           ) {
             return (
               <SelectItem key={option.value} value={option.value}>
@@ -103,7 +105,6 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
               </SelectItem>
             );
           }
-          return null;
         })}
       </SelectContent>
     </Select>

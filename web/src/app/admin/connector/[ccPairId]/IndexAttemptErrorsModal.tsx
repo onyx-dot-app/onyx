@@ -10,7 +10,6 @@ import {
 import { IndexAttemptError } from "./types";
 import { localizeAndPrettify } from "@/lib/time";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 import { PageSelector } from "@/components/PageSelector";
 
 interface IndexAttemptErrorsModalProps {
@@ -115,8 +114,8 @@ export default function IndexAttemptErrorsModal({
             <div className="flex-1 flex justify-center mb-2">
               <PageSelector
                 totalPages={totalPages}
-                currentPage={currentPage + 1}
-                onPageChange={(page) => onPageChange(page - 1)}
+                currentPage={currentPage}
+                onPageChange={(page) => onPageChange(page)}
               />
             </div>
           )}

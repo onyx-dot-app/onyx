@@ -33,6 +33,7 @@ def _verify_index_attempt_pagination(
         # Verify time ordering within the page (descending order)
         for attempt in paginated_result.items:
             if last_time_started is not None:
+                assert attempt.time_started is not None
                 assert (
                     attempt.time_started <= last_time_started
                 ), "Index attempts not in descending time order"
@@ -57,7 +58,6 @@ def test_index_attempt_pagination(reset: None) -> None:
     # Create an admin user to perform actions
     user_performing_action: DATestUser = UserManager.create(
         name="admin_performing_action",
-        is_first_user=True,
     )
 
     # Create a CC pair to attach index attempts to

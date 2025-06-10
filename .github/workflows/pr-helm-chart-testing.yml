@@ -37,6 +37,11 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
         fi
 
+    # uncomment to force run chart-testing
+#     - name: Force run chart-testing (list-changed)
+#       id: list-changed
+#       run: echo "changed=true" >> $GITHUB_OUTPUT
+        
     # lint all charts if any changes were detected
     - name: Run chart-testing (lint)
       if: steps.list-changed.outputs.changed == 'true'

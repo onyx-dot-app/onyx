@@ -605,7 +605,6 @@ def fetch_document_sets_for_document(
     result = fetch_document_sets_for_documents([document_id], db_session)
     if not result:
         return []
-
     return result[0][1]
 
 

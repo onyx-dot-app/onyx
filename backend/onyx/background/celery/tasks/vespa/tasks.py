@@ -80,7 +80,8 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
     """Runs periodically to check if any document needs syncing.
     Generates sets of tasks for Celery if syncing is needed."""
 
-    # Useful for debugging timing issues with reacquisitions. TODO: remove once more generalized logging is in place
+    # Useful for debugging timing issues with reacquisitions.
+    # TODO: remove once more generalized logging is in place
     task_logger.info("check_for_vespa_sync_task started")
 
     time_start = time.monotonic()
@@ -563,6 +564,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                     access=doc_access,
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    # aggregated_boost_factor=doc.aggregated_boost_factor,
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.
@@ -571,6 +573,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                     tenant_id=tenant_id,
                     chunk_count=doc.chunk_count,
                     fields=fields,
+                    user_fields=None,
                 )
 
                 # update db last. Worst case = we crash right before this and
@@ -637,7 +640,4 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
             f"vespa_metadata_sync_task completed: status={completion_status.value} doc={document_id}"
         )
 
-    if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
-        return False
-
-    return True
+    return completion_status == OnyxCeleryTaskCompletionStatus.SUCCEEDED

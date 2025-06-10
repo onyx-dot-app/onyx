@@ -21,7 +21,7 @@ import { InvitedUserSnapshot } from "@/lib/types";
 import { SearchBar } from "@/components/search/SearchBar";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-
+import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 const UsersTables = ({
   q,
   setPopup,
@@ -44,6 +44,15 @@ const UsersTables = ({
     errorHandlingFetcher
   );
 
+  const {
+    data: pendingUsers,
+    error: pendingUsersError,
+    isLoading: pendingUsersLoading,
+    mutate: pendingUsersMutate,
+  } = useSWR<InvitedUserSnapshot[]>(
+    NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
+    errorHandlingFetcher
+  );
   // Show loading animation only during the initial data fetch
   if (!validDomains) {
     return <ThreeDotsLoader />;
@@ -63,6 +72,9 @@ const UsersTables = ({
       <TabsList>
         <TabsTrigger value="current">Current Users</TabsTrigger>
         <TabsTrigger value="invited">Invited Users</TabsTrigger>
+        {NEXT_PUBLIC_CLOUD_ENABLED && (
+          <TabsTrigger value="pending">Pending Users</TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="current">
@@ -97,6 +109,25 @@ const UsersTables = ({
           </CardContent>
         </Card>
       </TabsContent>
+      {NEXT_PUBLIC_CLOUD_ENABLED && (
+        <TabsContent value="pending">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Users</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PendingUsersTable
+                users={pendingUsers || []}
+                setPopup={setPopup}
+                mutate={pendingUsersMutate}
+                error={pendingUsersError}
+                isLoading={pendingUsersLoading}
+                q={q}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      )}
     </Tabs>
   );
 };
@@ -190,7 +221,7 @@ const AddUserButton = ({
           entityName="your Access Logic"
           onClose={() => setShowConfirmation(false)}
           onSubmit={handleConfirmFirstInvite}
-          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your instance."
+          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your team."
           actionButtonText="Continue"
           variant="action"
         />

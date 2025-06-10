@@ -12,7 +12,7 @@ function Main() {
         <div className="mt-4">
           <Callout type="danger" title="Custom Analytics is not enabled.">
             To set up custom analytics scripts, please work with the team who
-            setup Onyx in your organization to set the{" "}
+            setup Onyx in your team to set the{" "}
             <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable.
           </Callout>
         </div>

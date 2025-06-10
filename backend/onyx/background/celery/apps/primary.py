@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any
 from typing import cast
 
@@ -38,10 +39,11 @@ from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
-from onyx.redis.redis_pool import get_shared_redis_client
+from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
@@ -88,13 +90,14 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     EXTRA_CONCURRENCY = 4  # small extra fudge factor for connection limits
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=EXTRA_CONCURRENCY)  # type: ignore
+    pool_size = cast(int, sender.concurrency)  # type: ignore
+    SqlEngine.init_engine(pool_size=pool_size, max_overflow=EXTRA_CONCURRENCY)
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
     app_base.wait_for_vespa_or_shutdown(sender, **kwargs)
 
-    logger.info("Running as the primary celery worker.")
+    logger.info(f"Running as the primary celery worker: pid={os.getpid()}")
 
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:
@@ -102,16 +105,21 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     # This is singleton work that should be done on startup exactly once
     # by the primary worker. This is unnecessary in the multi tenant scenario
-    r = get_shared_redis_client()
+    r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
 
     # Log the role and slave count - being connected to a slave or slave count > 0 could be problematic
-    info: dict[str, Any] = cast(dict, r.info("replication"))
-    role: str = cast(str, info.get("role"))
-    connected_slaves: int = info.get("connected_slaves", 0)
+    replication_info: dict[str, Any] = cast(dict, r.info("replication"))
+    role: str = cast(str, replication_info.get("role", ""))
+    connected_slaves: int = replication_info.get("connected_slaves", 0)
 
     logger.info(
         f"Redis INFO REPLICATION: role={role} connected_slaves={connected_slaves}"
     )
+
+    memory_info: dict[str, Any] = cast(dict, r.info("memory"))
+    maxmemory_policy: str = cast(str, memory_info.get("maxmemory_policy", ""))
+
+    logger.info(f"Redis INFO MEMORY: maxmemory_policy={maxmemory_policy}")
 
     # For the moment, we're assuming that we are the only primary worker
     # that should be running.
@@ -173,6 +181,9 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
                 f"search_settings={attempt.search_settings_id}"
             )
             logger.warning(failure_reason)
+            logger.exception(
+                f"Marking attempt {attempt.id} as canceled due to validation error 2"
+            )
             mark_attempt_canceled(attempt.id, db_session, failure_reason)
 
 
@@ -235,7 +246,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
 
             lock: RedisLock = worker.primary_worker_lock
 
-            r = get_shared_redis_client()
+            r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
 
             if lock.owned():
                 task_logger.debug("Reacquiring primary worker lock.")
@@ -273,16 +284,20 @@ class HubPeriodicTask(bootsteps.StartStopStep):
 
 celery_app.steps["worker"].add(HubPeriodicTask)
 
+base_bootsteps = app_base.get_bootsteps()
+for bootstep in base_bootsteps:
+    celery_app.steps["worker"].add(bootstep)
+
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.connector_deletion",
         "onyx.background.celery.tasks.indexing",
         "onyx.background.celery.tasks.periodic",
-        "onyx.background.celery.tasks.doc_permission_syncing",
-        "onyx.background.celery.tasks.external_group_syncing",
         "onyx.background.celery.tasks.pruning",
         "onyx.background.celery.tasks.shared",
         "onyx.background.celery.tasks.vespa",
         "onyx.background.celery.tasks.llm_model_update",
+        "onyx.background.celery.tasks.user_file_folder_sync",
+        "onyx.background.celery.tasks.kg_processing",
     ]
 )

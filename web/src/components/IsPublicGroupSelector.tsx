@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
 import Text from "@/components/ui/text";
 import { FiUsers } from "react-icons/fi";
-import { Separator } from "@/components/ui/separator";
 import { UserGroup, UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/admin/connectors/Field";
@@ -40,7 +39,11 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
       if (!isUserAdmin) {
         formikProps.setFieldValue("is_public", false);
       }
-      if (userGroups.length === 1 && !isUserAdmin) {
+      if (
+        userGroups.length === 1 &&
+        userGroups[0] !== undefined &&
+        !isUserAdmin
+      ) {
         formikProps.setFieldValue("groups", [userGroups[0].id]);
         setShouldHideContent(true);
       } else if (formikProps.values.is_public) {
@@ -59,13 +62,21 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
     return null;
   }
 
+  let firstUserGroupName = "Unknown";
+  if (userGroups) {
+    const userGroup = userGroups[0];
+    if (userGroup) {
+      firstUserGroupName = userGroup.name;
+    }
+  }
+
   if (shouldHideContent && enforceGroupSelection) {
     return (
       <>
         {userGroups && (
           <div className="mb-1 font-medium text-base">
             This {objectName} will be assigned to group{" "}
-            <b>{userGroups[0].name}</b>.
+            <b>{firstUserGroupName}</b>.
           </div>
         )}
       </>
@@ -74,7 +85,6 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 
   return (
     <div>
-      <Separator />
       {isAdmin && (
         <>
           <BooleanFormField

@@ -197,23 +197,21 @@ export default function ModifyCredential({
               Are you sure you want to delete this credential? You cannot delete
               credentials that are linked to live connectors.
             </p>
-            <div className="mt-6 flex justify-between">
-              <button
-                className="rounded py-1.5 px-2 bg-background-800 text-text-200"
+            <div className="mt-6 flex gap-x-2 justify-end">
+              <Button
                 onClick={async () => {
                   await onDeleteCredential(confirmDeletionCredential);
                   setConfirmDeletionCredential(null);
                 }}
               >
-                Yes
-              </button>
-              <button
+                Confirm
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setConfirmDeletionCredential(null)}
-                className="rounded py-1.5 px-2 bg-background-150 text-text-800"
               >
-                {" "}
-                No
-              </button>
+                Cancel
+              </Button>
             </div>
           </>
         </Modal>

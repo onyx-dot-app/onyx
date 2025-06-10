@@ -13,7 +13,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 HUBSPOT_BASE_URL = "https://app.hubspot.com/contacts/"
@@ -108,7 +108,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             doc_batch.append(
                 Document(
                     id=ticket.id,
-                    sections=[Section(link=link, text=content_text)],
+                    sections=[TextSection(link=link, text=content_text)],
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
                     # Is already in tzutc, just replacing the timezone format

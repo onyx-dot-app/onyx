@@ -24,12 +24,13 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import detect_encoding
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import is_text_file_extension
-from onyx.file_processing.extract_file_text import is_valid_file_ext
+from onyx.file_processing.extract_file_text import OnyxExtensionType
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
@@ -69,7 +70,9 @@ def _process_egnyte_file(
 
     file_name = file_metadata["name"]
     extension = get_file_ext(file_name)
-    if not is_valid_file_ext(extension):
+    if not is_accepted_file_ext(
+        extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+    ):
         logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
         return None
 
@@ -97,9 +100,9 @@ def _process_egnyte_file(
 
     # Add lock info if present
     if lock_info := file_metadata.get("lock_info"):
-        metadata[
-            "lock_owner"
-        ] = f"{lock_info.get('first_name', '')} {lock_info.get('last_name', '')}"
+        metadata["lock_owner"] = (
+            f"{lock_info.get('first_name', '')} {lock_info.get('last_name', '')}"
+        )
 
     # Create the document owners
     primary_owner = None
@@ -111,7 +114,7 @@ def _process_egnyte_file(
     # Create the document
     return Document(
         id=f"egnyte-{file_metadata['entry_id']}",
-        sections=[Section(text=file_content_raw.strip(), link=web_url)],
+        sections=[TextSection(text=file_content_raw.strip(), link=web_url)],
         source=DocumentSource.EGNYTE,
         semantic_identifier=file_name,
         metadata=metadata,

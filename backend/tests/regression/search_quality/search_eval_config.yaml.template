@@ -1,0 +1,16 @@
+# Search Parameters
+HYBRID_ALPHA: 0.5
+HYBRID_ALPHA_KEYWORD: 0.4
+DOC_TIME_DECAY: 0.5
+NUM_RETURNED_HITS: 50       # Setting to a higher value will improve evaluation quality but increase reranking time
+RANK_PROFILE: 'semantic'
+OFFSET: 0
+TITLE_CONTENT_RATIO: 0.1
+USER_EMAIL: null            # User email to use for testing, modifies access control list, null means only public files
+
+# Evaluation parameters
+SKIP_RERANK: false          # Whether to skip reranking, reranking must be enabled to evaluate the search results
+EVAL_TOPK: 5                # Number of top results from the searcher and reranker to evaluate, lower means stricter evaluation
+
+# Export file, will export a csv file with the results and a json file with the parameters
+EXPORT_FOLDER: "eval-%Y-%m-%d-%H-%M-%S"

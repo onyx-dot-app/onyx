@@ -1,12 +1,10 @@
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.external_perm import fetch_external_groups_for_user
+from ee.onyx.db.external_perm import fetch_public_external_group_ids
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
-from ee.onyx.external_permissions.post_query_censoring import (
-    DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
-)
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
 )
@@ -17,6 +15,10 @@ from onyx.access.utils import prefix_user_group
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
+from onyx.utils.logger import setup_logger
+
+
+logger = setup_logger()
 
 
 def _get_access_for_document(
@@ -63,13 +65,21 @@ def _get_access_for_documents(
         document_ids=document_ids,
     )
 
+    all_public_ext_u_group_ids = set(fetch_public_external_group_ids(db_session))
+
     access_map = {}
     for document_id, non_ee_access in non_ee_access_dict.items():
         document = doc_id_map[document_id]
         source = doc_id_to_source_map.get(document_id)
+        if source is None:
+            logger.error(f"Document {document_id} has no source")
+            continue
+
+        perm_sync_config = get_source_perm_sync_config(source)
         is_only_censored = (
-            source in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
-            and source not in DOC_PERMISSIONS_FUNC_MAP
+            perm_sync_config
+            and perm_sync_config.censoring_config is not None
+            and perm_sync_config.doc_sync_config is None
         )
 
         ext_u_emails = (
@@ -89,16 +99,19 @@ def _get_access_for_documents(
         # If its censored, then it's public anywhere during the search and then permissions are
         # applied after the search
         is_public_anywhere = (
-            document.is_public or non_ee_access.is_public or is_only_censored
+            document.is_public
+            or non_ee_access.is_public
+            or is_only_censored
+            or any(u_group in all_public_ext_u_group_ids for u_group in ext_u_groups)
         )
 
         # To avoid collisions of group namings between connectors, they need to be prefixed
-        access_map[document_id] = DocumentAccess(
-            user_emails=non_ee_access.user_emails,
-            user_groups=set(user_group_info.get(document_id, [])),
+        access_map[document_id] = DocumentAccess.build(
+            user_emails=list(non_ee_access.user_emails),
+            user_groups=user_group_info.get(document_id, []),
             is_public=is_public_anywhere,
-            external_user_emails=ext_u_emails,
-            external_user_group_ids=ext_u_groups,
+            external_user_emails=list(ext_u_emails),
+            external_user_group_ids=list(ext_u_groups),
         )
     return access_map
 

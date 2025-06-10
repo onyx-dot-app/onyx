@@ -1,6 +1,5 @@
 import React from "react";
 import { RadioGroupItem } from "@/components/ui/radio-group";
-import { ErrorMessage } from "formik";
 
 interface RadioGroupItemFieldProps {
   value: string;

@@ -72,3 +72,4 @@ Onyx uses a Postgres database. It's often useful to view the DB directly - here'
    - run `ssh -v <instance-uri> ' ' 2>&1 | grep '^debug1: Connecting to' to get the public external IP address of the instance (or you could get it from GCP)
    - use that IP as your SSH tunnel `host`
    - no need to set `user` or `password`, but make sure you use the private key at `~/.ssh/google_compute_engine` instead of your default one
+

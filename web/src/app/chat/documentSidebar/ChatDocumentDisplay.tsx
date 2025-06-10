@@ -1,5 +1,5 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { FiTag } from "react-icons/fi";
 import { DocumentSelector } from "./DocumentSelector";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
@@ -18,7 +18,7 @@ interface DocumentDisplayProps {
   handleSelect: (documentId: string) => void;
   tokenLimitReached: boolean;
   hideSelection?: boolean;
-  setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
+  setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
 
 export function DocumentMetadataBlock({
