@@ -211,7 +211,7 @@ def get_kg_exposed(db_session: Session) -> bool:
         return False
 
 
-def reset_kg(db_session: Session): ...
+def reset_kg(db_session: Session) -> None: ...
 
 
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:
