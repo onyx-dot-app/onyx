@@ -1,5 +1,3 @@
-from pydantic import BaseModel
-
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import KGEntityType
@@ -9,9 +7,8 @@ from onyx.kg.models import KGDefaultEntityDefinition
 from onyx.kg.models import KGGroundingType
 
 
-class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
-
-    LINEAR: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+KG_DEFAULT_PRIMARY_GROUNDED_ENTITIES = {
+    "LINEAR": KGDefaultEntityDefinition(
         description="A formal Linear ticket about a product issue or improvement request.",
         attributes={
             "metadata_attributes": {
@@ -26,9 +23,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.LINEAR,
-    )
-
-    JIRA__EPIC: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "JIRA-EPIC": KGDefaultEntityDefinition(
         description=(
             "A formal Jira ticket describing large bodies of work that can be broken down into "
             "a number of smaller Jira Tasks, Stories, or Bugs."
@@ -47,9 +43,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.JIRA,
-    )
-
-    JIRA__STORY: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "JIRA-STORY": KGDefaultEntityDefinition(
         description=(
             "Also called 'user stories', these are Jira tickets describing short requirements or requests "
             "written from the perspective of the end user."
@@ -68,9 +63,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.JIRA,
-    )
-
-    JIRA__BUG: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "JIRA-BUG": KGDefaultEntityDefinition(
         description=("A Jira ticket describing a bug."),
         attributes={
             "metadata_attributes": {
@@ -86,9 +80,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.JIRA,
-    )
-
-    JIRA__TASK: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "JIRA-TASK": KGDefaultEntityDefinition(
         description=("A Jira ticket describing a unit of work."),
         attributes={
             "metadata_attributes": {
@@ -104,9 +97,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.JIRA,
-    )
-
-    JIRA__SUBTASK: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "JIRA-SUBTASK": KGDefaultEntityDefinition(
         description=("A Jira ticket describing a sub-unit of work."),
         attributes={
             "metadata_attributes": {
@@ -122,9 +114,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.JIRA,
-    )
-
-    GITHUB__PR: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "GITHUB-PR": KGDefaultEntityDefinition(
         description="Our (---vendor_name---) Engineering PRs describing what was actually implemented.",
         attributes={
             "metadata_attributes": {
@@ -144,9 +135,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.GITHUB,
-    )
-
-    GITHUB__ISSUE: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "GITHUB-ISSUE": KGDefaultEntityDefinition(
         description="Our (---vendor_name---) Engineering issues describing what needs to be implemented.",
         attributes={
             "metadata_attributes": {
@@ -162,9 +152,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.GITHUB,
-    )
-
-    FIREFLIES: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "FIREFLIES": KGDefaultEntityDefinition(
         description=(
             "A phone call transcript between us (---vendor_name---) "
             "and another account or individuals, or an internal meeting."
@@ -198,9 +187,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.FIREFLIES,
-    )
-
-    GONG: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "GONG": KGDefaultEntityDefinition(
         description=(
             "A phone call transcript between us (---vendor_name---) "
             "and another account or individuals, or an internal meeting."
@@ -212,9 +200,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.GONG,
-    )
-
-    GOOGLE_DRIVE: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "GOOGLE_DRIVE": KGDefaultEntityDefinition(
         description="A Google Drive document.",
         attributes={
             "metadata_attributes": {},
@@ -223,9 +210,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.GOOGLE_DRIVE,
-    )
-
-    GMAIL: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "GMAIL": KGDefaultEntityDefinition(
         description="An email.",
         attributes={
             "metadata_attributes": {},
@@ -234,9 +220,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.GMAIL,
-    )
-
-    ACCOUNT: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "ACCOUNT": KGDefaultEntityDefinition(
         description=(
             "A company that was, is, or potentially could be a customer of the vendor "
             "('us, ---vendor_name---'). Note that ---vendor_name--- can never be an ACCOUNT."
@@ -248,9 +233,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.SALESFORCE,
-    )
-
-    OPPORTUNITY: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "OPPORTUNITY": KGDefaultEntityDefinition(
         description="A sales opportunity.",
         attributes={
             "metadata_attributes": {
@@ -271,9 +255,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.SALESFORCE,
-    )
-
-    SLACK: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "SLACK": KGDefaultEntityDefinition(
         description="A Slack conversation.",
         attributes={
             "metadata_attributes": {},
@@ -282,9 +265,8 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.SLACK,
-    )
-
-    WEB: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "WEB": KGDefaultEntityDefinition(
         description="A web page.",
         attributes={
             "metadata_attributes": {},
@@ -293,19 +275,17 @@ class KGDefaultPrimaryGroundedEntityDefinitions(BaseModel):
         },
         grounding=KGGroundingType.GROUNDED,
         grounded_source_name=DocumentSource.WEB,
-    )
+    ),
+}
 
-
-class KGDefaultAccountEmployeeDefinitions(BaseModel):
-
-    VENDOR: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+KG_DEFAULT_ACCOUNT_EMPLOYEE_ENTITIES = {
+    "VENDOR": KGDefaultEntityDefinition(
         description="The Vendor ---vendor_name---, 'us'",
         grounding=KGGroundingType.GROUNDED,
         active=False,
         grounded_source_name=None,
-    )
-
-    ACCOUNT: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "ACCOUNT": KGDefaultEntityDefinition(
         description=(
             "A company that was, is, or potentially could be a customer of the vendor "
             "('us, ---vendor_name---'). Note that ---vendor_name--- can never be an ACCOUNT."
@@ -313,9 +293,8 @@ class KGDefaultAccountEmployeeDefinitions(BaseModel):
         grounding=KGGroundingType.GROUNDED,
         active=False,
         grounded_source_name=None,
-    )
-
-    EMPLOYEE: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+    ),
+    "EMPLOYEE": KGDefaultEntityDefinition(
         description=(
             "A person who speaks on behalf of 'our' company (the VENDOR ---vendor_name---), "
             "NOT of another account. Therefore, employees of other companies "
@@ -324,7 +303,8 @@ class KGDefaultAccountEmployeeDefinitions(BaseModel):
         grounding=KGGroundingType.GROUNDED,
         active=False,
         grounded_source_name=None,
-    )
+    ),
+}
 
 
 def populate_default_entity_types() -> None:
@@ -339,34 +319,31 @@ def populate_default_entity_types() -> None:
 
         # Create an instance of the default definitions
         default_definitions = [
-            KGDefaultPrimaryGroundedEntityDefinitions(),
-            KGDefaultAccountEmployeeDefinitions(),
+            KG_DEFAULT_PRIMARY_GROUNDED_ENTITIES,
+            KG_DEFAULT_ACCOUNT_EMPLOYEE_ENTITIES,
         ]
 
         # Iterate over all attributes in the default definitions
         for default_definition in default_definitions:
-            for id_name, definition in default_definition.model_dump().items():
-                # Replace "__" with "-" for subtypes
-                id_name = id_name.replace("__", "-")
-
+            for id_name, definition in default_definition.items():
                 # Skip if this entity type already exists
                 if id_name in existing_entity_types:
                     continue
 
                 # Create new entity type
-                description = definition["description"].replace(
+                description = definition.description.replace(
                     "---vendor_name---", kg_config_settings.KG_VENDOR
                 )
                 grounded_source_name = (
-                    definition["grounded_source_name"].value
-                    if definition["grounded_source_name"]
+                    definition.grounded_source_name.value
+                    if definition.grounded_source_name
                     else None
                 )
                 new_entity_type = KGEntityType(
                     id_name=id_name,
                     description=description,
-                    attributes=definition["attributes"],
-                    grounding=definition["grounding"],
+                    attributes=definition.attributes,
+                    grounding=definition.grounding,
                     grounded_source_name=grounded_source_name,
                     active=False,
                 )
