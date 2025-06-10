@@ -191,6 +191,19 @@ ENTITY_EXAMPLE_4 = r"""
 {{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[degree: severe]"], "terms": ["performance issue"]}}
 """.strip()
 
+ENTITY_EXAMPLE_5 = r"""
+{{"entities": ["TASK::*--[]"], "terms": []}}
+""".strip()
+
+ENTITY_EXAMPLE_6 = r"""
+{{"entities": ["TASK::T15--[]"], "terms": []}}
+""".strip()
+
+ENTITY_EXAMPLE_7 = r"""
+{{"entities": ["TASK-ENGINEERING::T15--[]"], "terms": []}}
+""".strip()
+
+
 MASTER_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction in order to construct a knowledge graph. You are given a text \
 and asked to extract entities, relationships, and terms from it that you can reliably identify.
@@ -300,7 +313,7 @@ clearly in the question.
 {SEPARATOR_LINE}
 
 Here are some important additional instructions. (For the purpose of illustration, assume that \
- "ACCOUNT", "CONCERN", "EMAIL", and "FEATURE" are all in the list of entity types above, and the \
+"ACCOUNT", "CONCERN", "TASK-ENGINEERING", and "TASK-SALES" are all in the list of entity types above, and the \
 attribute options for "CONCERN" include 'degree' with possible values that include 'severe'. Note that this \
 is just assumed for these examples, but you MUST use only the entities above for the actual extraction!)
 
@@ -327,8 +340,26 @@ Example 3:
 * Then, if we inquire about an entity with a specific attribute :
 'Who reported severe performance issues?'
 then a suitable entity and term extraction could be:
-Example 3:
+Example 4:
 {ENTITY_EXAMPLE_4}
+
+* If the question refers to an entity class in general, like:
+'What tasks are there?'
+then a suitable extraction could be:
+Example 5:
+{ENTITY_EXAMPLE_5}
+
+* If the specific subtype is unclear:
+'Summarize task T15'
+then a suitable extraction could be:
+Example 6:
+{ENTITY_EXAMPLE_6}
+
+* If the subtask is clear, however, such as in the question:
+'Summarize the engineering task T15',
+then a more suitable extraction would be:
+Example 7:
+{ENTITY_EXAMPLE_7}
 
 - Again,
    -  you should only extract entities belonging to the entity types above - but do extract all that you \
