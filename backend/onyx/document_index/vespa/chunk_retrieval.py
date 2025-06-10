@@ -153,7 +153,7 @@ def _vespa_hit_to_inference_chunk(
     )
 
 
-def _get_chunks_via_visit_api(
+def get_chunks_via_visit_api(
     chunk_request: VespaChunkRequest,
     index_name: str,
     filters: IndexFilters,
@@ -188,6 +188,10 @@ def _get_chunks_via_visit_api(
         selection += f" and {index_name}.chunk_id<={chunk_request.max_chunk_ind}"
     if not get_large_chunks:
         selection += f" and {index_name}.large_chunk_reference_ids == null"
+
+    selection += build_vespa_filters(
+        filters=filters, include_hidden=True, remove_trailing_and=True
+    )
 
     # Setting up the selection criteria in the query parameters
     params = {
@@ -248,7 +252,7 @@ def _get_chunks_via_visit_api(
 #     filters: IndexFilters | None = None,
 #     get_large_chunks: bool = False,
 # ) -> list[str]:
-#     document_chunks = _get_chunks_via_visit_api(
+#     document_chunks = get_chunks_via_visit_api(
 #         chunk_request=VespaChunkRequest(document_id=document_id),
 #         index_name=index_name,
 #         filters=filters or IndexFilters(access_control_list=None),
@@ -266,7 +270,7 @@ def parallel_visit_api_retrieval(
 ) -> list[InferenceChunkUncleaned]:
     functions_with_args: list[tuple[Callable, tuple]] = [
         (
-            _get_chunks_via_visit_api,
+            get_chunks_via_visit_api,
             (chunk_request, index_name, filters, get_large_chunks),
         )
         for chunk_request in chunk_requests

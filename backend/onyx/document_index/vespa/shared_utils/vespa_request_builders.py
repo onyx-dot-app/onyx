@@ -22,6 +22,13 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def build_tenant_id_filter(tenant_id: str, include_trailing_and: bool = False) -> str:
+    filter_str = f'({TENANT_ID} contains "{tenant_id}")'
+    if include_trailing_and:
+        filter_str += " and "
+    return filter_str
+
+
 def build_vespa_filters(
     filters: IndexFilters,
     *,
@@ -114,7 +121,9 @@ def build_vespa_filters(
     # TODO: add error condition if MULTI_TENANT and no tenant_id filter is set
     # If running in multi-tenant mode
     if filters.tenant_id and MULTI_TENANT:
-        filter_str += f'({TENANT_ID} contains "{filters.tenant_id}") and '
+        filter_str += build_tenant_id_filter(
+            filters.tenant_id, include_trailing_and=True
+        )
 
     # ACL filters
     if filters.access_control_list is not None:

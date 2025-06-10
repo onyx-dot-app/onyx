@@ -3,7 +3,7 @@ from collections.abc import Generator
 
 from onyx.configs.constants import OnyxCallTypes
 from onyx.db.kg_config import KGConfigSettings
-from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
+from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
 from onyx.kg.models import KGChunkFormat
@@ -36,15 +36,14 @@ def get_document_classification_content_for_kg_processing(
         batch_document_ids = document_ids[i : i + batch_size]
         for document_id in batch_document_ids:
             # ... existing code for getting chunks and processing ...
-            first_num_classification_chunks: list[dict] = _get_chunks_via_visit_api(
+            first_num_classification_chunks: list[dict] = get_chunks_via_visit_api(
                 chunk_request=VespaChunkRequest(
                     document_id=document_id,
                     max_chunk_ind=num_classification_chunks - 1,
                     min_chunk_ind=0,
                 ),
                 index_name=index_name,
-                filters=IndexFilters(access_control_list=None, 
-                                     tenant_id=tenant_id),
+                filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
                 field_names=[
                     "document_id",
                     "chunk_id",
@@ -121,7 +120,7 @@ def get_document_chunks_for_kg_processing(
     current_batch: list[KGChunkFormat] = []
 
     # get all chunks for the document
-    chunks = _get_chunks_via_visit_api(
+    chunks = get_chunks_via_visit_api(
         chunk_request=VespaChunkRequest(document_id=document_id),
         index_name=index_name,
         filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),

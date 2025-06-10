@@ -8,7 +8,7 @@ from onyx.db.models import Connector
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
-from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
+from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
@@ -39,11 +39,10 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
         }
     }
 
-    chunks = _get_chunks_via_visit_api(
+    chunks = get_chunks_via_visit_api(
         VespaChunkRequest(document_id=document_id),
         index_name,
-        IndexFilters(access_control_list=None, 
-                     tenant_id=tenant_id),
+        IndexFilters(access_control_list=None, tenant_id=tenant_id),
         ["chunk_id"],
         False,
     )
