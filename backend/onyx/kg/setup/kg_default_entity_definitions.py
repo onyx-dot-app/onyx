@@ -1,3 +1,5 @@
+from typing import cast
+
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import KGEntityType
@@ -332,7 +334,7 @@ def populate_default_entity_types() -> None:
 
                 # Create new entity type
                 description = definition.description.replace(
-                    "---vendor_name---", kg_config_settings.KG_VENDOR
+                    "---vendor_name---", cast(str, kg_config_settings.KG_VENDOR)
                 )
                 grounded_source_name = (
                     definition.grounded_source_name.value
