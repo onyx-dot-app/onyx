@@ -4,6 +4,7 @@ import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from http import HTTPStatus
 from typing import Any
 from typing import cast
 
@@ -511,7 +512,7 @@ def _collect_documents_for_channel(
 
                     if not cre.response:
                         continue
-                    if cre.response.status_code != 429:
+                    if cre.response.status_code != int(HTTPStatus.TOO_MANY_REQUESTS):
                         continue
 
                     retry_after = int(cre.response.headers.get("Retry-After", 10))
