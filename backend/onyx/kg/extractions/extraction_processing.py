@@ -57,6 +57,7 @@ from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import make_relationship_type_id
 from onyx.kg.utils.formatting_utils import split_entity_id
+from onyx.kg.utils.formatting_utils import split_entity_type
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.kg.utils.formatting_utils import split_relationship_type_id
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
@@ -136,8 +137,21 @@ def get_entity_types_str(active: bool | None = None) -> str:
     with get_session_with_current_tenant() as db_session:
         active_entity_types = get_entity_types(db_session, active)
 
+        entity_classes: set[str] = set()
         entity_types_list: list[str] = []
         for entity_type in active_entity_types:
+            # add entity class as valid entity type whenever we get a subtype
+            entity_type_split = split_entity_type(entity_type.id_name)
+            entity_class = entity_type_split[0]
+
+            if len(entity_type_split) == 2 and entity_class not in entity_classes:
+                entity_classes.add(entity_class)
+                entity_types_list.append(
+                    entity_class
+                    + f"\n - Description: a general {entity_class} entity, used to refer to any or all of its subtypes."
+                    "\n - Attributes: inherits attributes from all its subtypes shown below."
+                )
+
             if entity_type.description:
                 entity_description = "\n  - Description: " + entity_type.description
             else:

@@ -67,7 +67,7 @@ class AnalysisUpdate(LoggerUpdate):
     normalized_core_entities: list[str] = []
     normalized_core_relationships: list[str] = []
     entity_normalization_map: dict[str, str] = {}
-    relationship_normalization_map: dict[str, str] = {}
+    relationship_normalization_map: dict[str, list[str]] = {}
     query_graph_entities_no_attributes: list[str] = []
     query_graph_entities_w_attributes: list[str] = []
     query_graph_relationships: list[str] = []

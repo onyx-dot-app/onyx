@@ -113,7 +113,7 @@ class NormalizedEntities(BaseModel):
 
 class NormalizedRelationships(BaseModel):
     relationships: list[str]
-    relationship_normalization_map: dict[str, str]
+    relationship_normalization_map: dict[str, list[str]]
 
 
 class NormalizedTerms(BaseModel):

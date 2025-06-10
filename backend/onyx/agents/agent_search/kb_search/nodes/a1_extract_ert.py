@@ -140,16 +140,12 @@ def extract_ert(
                 "Failed to parse LLM response as JSON in Entity-Term Extraction"
             )
             entity_extraction_result = KGQuestionEntityExtractionResult(
-                entities=[],
-                terms=[],
-                time_filter="",
+                entities=[], time_filter=""
             )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
         entity_extraction_result = KGQuestionEntityExtractionResult(
-            entities=[],
-            terms=[],
-            time_filter="",
+            entities=[], time_filter=""
         )
 
     # remove the attribute filters from the entities to for the purpose of the relationship
@@ -253,7 +249,7 @@ Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_
         extracted_entities_w_attributes=entity_extraction_result.entities,
         extracted_entities_no_attributes=entities_no_attributes,
         extracted_relationships=relationship_extraction_result.relationships,
-        extracted_terms=entity_extraction_result.terms,
+        extracted_terms=[],  # TODO: fully remove eventually
         time_filter=entity_extraction_result.time_filter,
         kg_doc_temp_view_name=allowed_docs_view_name,
         kg_rel_temp_view_name=kg_relationships_view_name,

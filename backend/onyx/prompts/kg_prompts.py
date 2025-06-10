@@ -37,14 +37,12 @@ identify in the text, each formatted simply as '<term>'>]
 }}
 """.strip()
 
-QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
+QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = """
 {{"entities": [<a list of entities of the prescribed entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization)>. Each entity \
 also should be followed by a list of attribute filters for the entity, if referred to in the \
-question for that entity. Example: 'ACCOUNT::* -- [account_type: customer]' should the question be \
+question for that entity. Example: 'ACCOUNT::*--[account_type: customer]' should the question be \
 'list all customer accounts', and ACCOUNT was an entity type with this attribute key/value allowed.] \
-"terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
-identify in the text, each formatted simply as '<term>'>],
 "time_filter": <if needed, a SQL-like filter for a field called 'event_date'. Do not select anything here \
 unless you are sure that the question asks for that filter. Only apply a time_filter if the question explicitly \
 mentions a specific date, time period, or event that can be directly translated into a date filter. Do not assume \
@@ -175,32 +173,27 @@ Explanation:
 
 
 ENTITY_EXAMPLE_1 = r"""
-{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::*--[]"], "terms": []}}
+{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::*--[]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_2 = r"""
-{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::performance--[]"], "terms": ["performance issue"]}}
+{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::performance--[]"}}
 """.strip()
 
 ENTITY_EXAMPLE_3 = r"""
-{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[]", "CONCERN::user_experience--[]"],
- "terms": ["performance issue", "user experience"]}}
+{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_4 = r"""
-{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[degree: severe]"], "terms": ["performance issue"]}}
+{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[degree: severe]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_5 = r"""
-{{"entities": ["TASK::*--[]"], "terms": []}}
+{{"entities": ["TASK::*--[]", "TASK::T15--[]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_6 = r"""
-{{"entities": ["TASK::T15--[]"], "terms": []}}
-""".strip()
-
-ENTITY_EXAMPLE_7 = r"""
-{{"entities": ["TASK-ENGINEERING::T15--[]"], "terms": []}}
+{{"entities": ["TASK-ENGINEERING::*--[]", "TASK-GENERAL::T15--[]"]}}
 """.strip()
 
 
@@ -282,8 +275,8 @@ Here is the text you are asked to extract knowledge from, if needed with additio
 
 QUERY_ENTITY_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction and using knowledge graphs. You are given a question \
-and asked to extract entities (with attributes if applicable) and terms from it that you can reliably identify and that then \
-can later be matched with a known knowledge graph. You are also asked to extract time filters SHOULD \
+and asked to extract entities (with attributes if applicable) that you can reliably identify that will later \
+be matched with a known entity in the knowledge graph. You are also asked to extract time filters SHOULD \
 there be an explicit mention of a date or time frame in the QUESTION (note: last, first, etc.. DO NOT \
 imply the need for a time filter just because the question asks for something that is not the current date. \
 They will relate to ordering that we will handle separately).
@@ -299,9 +292,9 @@ You can ONLY extract entities of these types:
 
 The list above here is the exclusive, only list of entities you can choose from!
 
-Note that some entity types may have a dash in them, indicating that they are a subtype of an entity class. \
-For example, the types PERSON-EMPLOYEE and PERSON-CUSTOMER are subtypes of the PERSON entity class. \
-The entity class is an implied entity type and are valid entity types to use in the extraction.
+Note that some entity types may have a dash in them, indicating that they are a subtype of another entity type \
+(we will refer to them as entity classes). The entity class of a subtype is the entity type before the dash. \
+For example, the types TASK-ENGINEERING and TASK-SALES are subtypes of the TASK entity class.
 
 Also, note that there are fixed relationship types between these entities. Please consider those \
 as well so to make sure that you are not missing implicit entities! Implicit entities are often \
@@ -313,7 +306,7 @@ clearly in the question.
 {SEPARATOR_LINE}
 
 Here are some important additional instructions. (For the purpose of illustration, assume that \
-"ACCOUNT", "CONCERN", "TASK-ENGINEERING", and "TASK-SALES" are all in the list of entity types above, and the \
+"ACCOUNT", "CONCERN", "TASK-ENGINEERING", and "TASK-GENERAL" are all in the list of entity types above, and the \
 attribute options for "CONCERN" include 'degree' with possible values that include 'severe'. Note that this \
 is just assumed for these examples, but you MUST use only the entities above for the actual extraction!)
 
@@ -321,54 +314,47 @@ is just assumed for these examples, but you MUST use only the entities above for
 * if the entity type is referred to in general, you would use '*' as the entity name in the extraction.
 As an example, if the question would say:
  'Which issues did Nike report?'
-then a valid entity and term extraction could be:
+then a valid entity extraction could be:
 Example 1:
 {ENTITY_EXAMPLE_1}
 
 * If on the other hand the question would say:
 'Did Nike say anything about performance issues?'
-then a much more suitable entity and term extraction could be:
+then a much more suitable entity extraction could be:
 Example 2:
 {ENTITY_EXAMPLE_2}
 
 * Then, if the question is:
 'Who reported performance issues?'
-then a suitable entity and term extraction could be:
+then a suitable entity extraction could be:
 Example 3:
 {ENTITY_EXAMPLE_3}
 
 * Then, if we inquire about an entity with a specific attribute :
 'Who reported severe performance issues?'
-then a suitable entity and term extraction could be:
+then a suitable entity extraction could be:
 Example 4:
 {ENTITY_EXAMPLE_4}
 
-* If the question refers to an entity class in general, like:
-'What tasks are there?'
-then a suitable extraction could be:
+* If the question refers to an entity class in general, or the specific subtype is unclear, like:
+'What tasks are under task T15?'
+then a suitable entity extraction could be:
 Example 5:
 {ENTITY_EXAMPLE_5}
 
-* If the specific subtype is unclear:
-'Summarize task T15'
-then a suitable extraction could be:
+* If the subtask is clear, however, such as in the question:
+'What engineering tasks are under general task T15?',
+then a more suitable extraction would be:
 Example 6:
 {ENTITY_EXAMPLE_6}
-
-* If the subtask is clear, however, such as in the question:
-'Summarize the engineering task T15',
-then a more suitable extraction would be:
-Example 7:
-{ENTITY_EXAMPLE_7}
 
 - Again,
    -  you should only extract entities belonging to the entity types above - but do extract all that you \
 can reliably identify in the text
    - if you refer to all/any/an unspecified entity of an entity type listed above, use '*' as the entity name
-   - if the specific entity subtype is unclear, or you would like to refer to all subtypes, you can use the entity class \
-in place of the entity type (e.g., PERSON::John or PERSON::*)
-   - keep the terms high-level
-   - similarly, if a specific entity type is referred to in general, you should use '*' as the entity name
+   - if the specific entity subtype is unclear, or you would like to refer to all subtypes, use the entity class, \
+instead of referring to all the subtypes
+   - you can extract multiple entities of the same entity type or class
    - you MUST only use the initial list of entities provided! Ignore the entities in the examples unless \
 they are also part of the initial list of entities! This is essential!
    - don't forget to provide answers also to the event filtering and whether documents need to be inspected!
@@ -376,6 +362,8 @@ they are also part of the initial list of entities! This is essential!
    - see whether any of the entities are supposed to be narrowed down by an attribute value. The precise attribute \
 and the value would need to be taken from the specification, as the question may use different words and the \
 actual attribute may be implied.
+   - see whether the entity subtype can be narrowed down by an attribute value. For example, if only one of the subtypes \
+contains the mentioned attribute, then you should use that subtype.
    - don't just look at the entities that are mentioned in the question but also those that the question \
 may be about.
 
@@ -407,9 +395,9 @@ First off as background, here are the entity types that are known to the system:
 ---entity_types---
 {SEPARATOR_LINE}
 
-Note that some entity types may have a dash in them, indicating that they are a subtype of an entity class. \
-For example, the types PERSON-EMPLOYEE and PERSON-CUSTOMER are subtypes of the PERSON entity class. \
-The entity class is an implied entity type and are valid entity types to use in the extraction.
+Note that some entity types may have a dash in them, indicating that they are a subtype of another entity type \
+(we will refer to them as entity classes). The entity class of a subtype is the entity type before the dash. \
+For example, the types TASK-ENGINEERING and TASK-SALES are subtypes of the TASK entity class.
 
 Here are the entities you have identified earlier:
 {SEPARATOR_LINE}
@@ -447,8 +435,6 @@ is just assumed for these examples, but you MUST use only the entities above for
 
 - You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
 * if the entity type is referred to in general, you would use '*' as the entity name in the extraction.
-* if the specific entity subtype is unclear, or you would like to refer to all subtypes, you can use the entity class \
-in place of the entity type (e.g., PERSON::John or PERSON::*)
 
 As an example, if the question would say:
 
@@ -477,7 +463,9 @@ relationships.
    - you can only extract the relationships that match the listed relationship types
    - if in doubt and there are multiple relationships between the same two entities, you can extract \
 all of those that may fit with the question.
-   - use the entity class as the entity type where appropriate.
+   - if the specific entity subtype is unclear, or you would like to refer to all subtypes, use the entity class, \
+instead of referring to all the subtypes.
+   - you can create relationships between the same entity type and class when appropriate.
    - be really thinking through the question which type of relationships should be extracted and which should not.
 
 {SEPARATOR_LINE}

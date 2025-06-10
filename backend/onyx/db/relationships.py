@@ -456,9 +456,9 @@ def delete_relationship_types_by_id_names(
     return deleted_count
 
 
-def get_relationships_for_entity_type_pairs(
-    db_session: Session, entity_type_pairs: list[tuple[str, str]]
-) -> list["KGRelationshipType"]:
+def get_relationship_for_entity_type_pair(
+    db_session: Session, entity_type_pair: tuple[str, str]
+) -> list[KGRelationshipType]:
     """
     Get relationship types from the database based on a list of entity type pairs.
 
@@ -469,16 +469,7 @@ def get_relationships_for_entity_type_pairs(
     Returns:
         List of KGRelationshipType objects where source and target types match the provided pairs
     """
-
-    conditions = [
-        (
-            (KGRelationshipType.source_entity_type_id_name == source_type)
-            & (KGRelationshipType.target_entity_type_id_name == target_type)
-        )
-        for source_type, target_type in entity_type_pairs
-    ]
-
-    return db_session.query(KGRelationshipType).filter(or_(*conditions)).all()
+    return None  # TODO: rei
 
 
 def get_allowed_relationship_type_pairs(

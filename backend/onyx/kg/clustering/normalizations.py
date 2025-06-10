@@ -20,7 +20,8 @@ from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_THRESHOLD
 from onyx.configs.kg_configs import KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import KGEntity
-from onyx.db.relationships import get_relationships_for_entity_type_pairs
+from onyx.db.models import KGRelationshipType
+from onyx.db.relationships import get_relationship_for_entity_type_pair
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
@@ -28,6 +29,7 @@ from onyx.kg.utils.embeddings import encode_string_batch
 from onyx.kg.utils.formatting_utils import format_entity_id_for_models
 from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import replace_entity_type
 from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_entity_type
 from onyx.kg.utils.formatting_utils import split_relationship_id
@@ -184,39 +186,6 @@ def _normalize_one_entity(
     return candidates[0][0]
 
 
-def _get_existing_normalized_relationships(
-    raw_relationships: list[str],
-) -> dict[str, dict[str, list[str]]]:
-    """
-    Get existing normalized relationships from the database.
-    """
-
-    relationship_type_map: dict[str, dict[str, list[str]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
-    relationship_pairs = list(
-        {
-            (
-                get_entity_type(split_relationship_id(relationship)[0]),
-                get_entity_type(split_relationship_id(relationship)[2]),
-            )
-            for relationship in raw_relationships
-        }
-    )
-
-    with get_session_with_current_tenant() as db_session:
-        relationships = get_relationships_for_entity_type_pairs(
-            db_session, relationship_pairs
-        )
-
-    for relationship in relationships:
-        relationship_type_map[relationship.source_entity_type_id_name][
-            relationship.target_entity_type_id_name
-        ].append(relationship.id_name)
-
-    return relationship_type_map
-
-
 def normalize_entities(
     raw_entities_no_attributes: list[str],
     allowed_docs_temp_view_name: str | None = None,
@@ -243,9 +212,9 @@ def normalize_entities(
     for entity, normalized_entity in zip(raw_entities_no_attributes, mapping):
         if normalized_entity is not None:
             normalized_results.append(normalized_entity)
-            normalized_map[format_entity_id_for_models(entity)] = normalized_entity
+            normalized_map[entity] = normalized_entity
         else:
-            normalized_map[format_entity_id_for_models(entity)] = entity
+            normalized_map[entity] = format_entity_id_for_models(entity)
 
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map
@@ -285,6 +254,11 @@ def normalize_relationships(
 ) -> NormalizedRelationships:
     """
     Normalize relationships using entity mappings and relationship string matching.
+    A single raw relationship could get expanded into multiple normalized relationships,
+    e.g., JIRA-EPIC::A1B2__has_subcomponent__JIRA::* could be turn into
+    JIRA-EPIC::A1B2__has_subcomponent__JIRA-TASK::*,
+    JIRA-EPIC::A1B2__has_subcomponent__JIRA-STORY::*, etc.
+    depending on the available relationship types in the KG.
 
     Args:
         relationships: list of relationships in format "source__relation__target"
@@ -293,65 +267,69 @@ def normalize_relationships(
     Returns:
         NormalizedRelationships containing normalized relationships and mapping
     """
-    # Placeholder for normalized relationship structure
-    nor_relationships = _get_existing_normalized_relationships(raw_relationships)
+    normalized_relationships: set[str] = set()
+    normalization_map: dict[str, list[str]] = defaultdict(list)
 
-    normalized_rels: list[str] = []
-    normalization_map: dict[str, str] = {}
+    # list of allowed relationship types for (source type, target type)
+    allowed_relationship_types: dict[tuple[str, str], list[KGRelationshipType]] = (
+        defaultdict(list)
+    )
 
     for raw_rel in raw_relationships:
-        # 1. Split and normalize entities
-        try:
-            source, rel_string, target = split_relationship_id(raw_rel)
-        except ValueError:
-            raise ValueError(f"Invalid relationship format: {raw_rel}")
+        # get normalized source, target, and raw relationship string
+        relationship_split = split_relationship_id(raw_rel)
+        if len(relationship_split) != 3:
+            logger.warning(f"Invalid relationship format: {raw_rel}")
+            continue
 
-        # Check if entities are in normalization map and not None
-        norm_source = entity_normalization_map.get(source)
-        norm_target = entity_normalization_map.get(target)
-
-        if norm_source is None or norm_target is None:
+        raw_source, raw_rel_string, raw_target = relationship_split
+        source = entity_normalization_map.get(raw_source)
+        target = entity_normalization_map.get(raw_target)
+        if source is None or target is None:
             logger.warning(f"No normalized entities found for {raw_rel}")
             continue
 
-        # 2. Find candidate normalized relationships
-        candidate_rels = []
-        norm_source_type = get_entity_type(norm_source)
-        norm_target_type = get_entity_type(norm_target)
-        if (
-            norm_source_type in nor_relationships
-            and norm_target_type in nor_relationships[norm_source_type]
-        ):
-            candidate_rels = [
-                split_relationship_id(rel)[1]
-                for rel in nor_relationships[norm_source_type][norm_target_type]
-            ]
+        # get allowed relationship types
+        entity_type_pairs = (get_entity_type(source), get_entity_type(target))
+        allowed_rels = allowed_relationship_types.get(entity_type_pairs)
 
-        if not candidate_rels:
+        # compute allowed relationship types
+        if allowed_rels is None:
+            with get_session_with_current_tenant() as db_session:
+                allowed_rels = get_relationship_for_entity_type_pair(
+                    db_session, entity_type_pairs
+                )
+                allowed_relationship_types[entity_type_pairs] = allowed_rels
+
+        if len(allowed_rels) == 0:
             logger.warning(f"No candidate relationships found for {raw_rel}")
             continue
 
-        # 3. Encode and find best match
-        strings_to_encode = [rel_string] + candidate_rels
+        # find best relationship string match
+        rel_string_candidates = list({rel_type.name for rel_type in allowed_rels})
+        strings_to_encode = [
+            raw_rel_string,
+            *(rel_string.replace("_", " ") for rel_string in rel_string_candidates),
+        ]
         vectors = encode_string_batch(strings_to_encode)
+        scores = np.dot(vectors[0], vectors[1:])
+        best_rel_string = rel_string_candidates[np.argmax(scores)]
 
-        # Get raw relation vector and candidate vectors
-        raw_vector = vectors[0]
-        candidate_vectors = vectors[1:]
-
-        # Calculate dot products
-        dot_products = np.dot(candidate_vectors, raw_vector)
-        best_match_idx = np.argmax(dot_products)
-
-        # Create normalized relationship
-        norm_rel = make_relationship_id(
-            norm_source, candidate_rels[best_match_idx], norm_target
-        )
-        normalized_rels.append(norm_rel)
-        normalization_map[raw_rel] = norm_rel
+        # add all allowed relationships with name = best_rel_string
+        for rel_type in allowed_rels:
+            if rel_type.name != best_rel_string:
+                continue
+            rel = make_relationship_id(
+                replace_entity_type(source, rel_type.source_type),
+                rel_type.name,
+                replace_entity_type(target, rel_type.target_type),
+            )
+            normalized_relationships.add(rel)
+            normalization_map[raw_rel].append(rel)
 
     return NormalizedRelationships(
-        relationships=normalized_rels, relationship_normalization_map=normalization_map
+        relationships=list(normalized_relationships),
+        relationship_normalization_map=dict(normalization_map),
     )
 
 
