@@ -16,6 +16,7 @@ from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import USER_FILE
 from onyx.document_index.vespa_constants import USER_FOLDER
+from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -61,19 +62,35 @@ def build_vespa_filters(
     ) -> str:
         if not kg_entities and not kg_relationships and not kg_terms:
             return ""
+        kg_entities = kg_entities or []
+        kg_relationships = kg_relationships or []
+        kg_terms = kg_terms or []
 
         filter_parts = []
 
-        # Process each filter type using the same pattern
-        for filter_type, values in [
-            ("kg_entities", kg_entities),
-            ("kg_relationships", kg_relationships),
-            ("kg_terms", kg_terms),
-        ]:
-            if values:
-                filter_parts.append(
-                    " and ".join(f'({filter_type} contains "{val}") ' for val in values)
-                )
+        for kg_entity in kg_entities:
+            kg_entity = f'"{kg_entity}"'
+            if kg_entity.endswith('::*"'):
+                kg_entity = f'({{prefix: true}}{kg_entity[:-4]}")'
+            filter_parts.append(f"kg_entities contains {kg_entity}")
+
+        for kg_relationship in kg_relationships:
+            source, rel_type, target = split_relationship_id(kg_relationship)
+            source = f'"{source}"'
+            target = f'"{target}"'
+            if source.endswith('::*"'):
+                source = f'({{prefix: true}}{source[:-4]}")'
+            if target.endswith('::*"'):
+                target = f'({{prefix: true}}{target[:-4]}")'
+            filter_parts.append(
+                "kg_relationships contains sameElement("
+                f"source contains {source}, "
+                f'rel_type contains "{rel_type}", '
+                f"target contains {target})"
+            )
+
+        for kg_term in kg_terms:
+            filter_parts.append(f'kg_terms contains "{kg_term}"')
 
         return f"({' and '.join(filter_parts)}) and "
 
