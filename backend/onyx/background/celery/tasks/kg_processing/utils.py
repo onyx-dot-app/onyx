@@ -1,4 +1,3 @@
-
 from onyx.background.celery.apps.app_base import task_logger
 
 from onyx.db.engine import get_session_with_current_tenant
@@ -6,6 +5,8 @@ from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.document import check_for_documents_needing_kg_processing
 from onyx.db.kg_config import set_kg_processing_in_progress_status
 from onyx.db.kg_config import KGProcessingType
+from onyx.db.models import KGEntityExtractionStaging
+from onyx.db.models import KGRelationshipExtractionStaging
 
 
 def _update_kg_processing_status(status_update: bool) -> None:
@@ -25,8 +26,7 @@ def _update_kg_processing_status(status_update: bool) -> None:
         db_session.commit()
 
 
-def check_kg_processing_unblocked(tenant_id: str
-) -> bool:
+def check_kg_processing_unblocked() -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created.
     """
@@ -45,12 +45,11 @@ def check_kg_processing_unblocked(tenant_id: str
 
     return True 
 
-def check_kg_processing_requirements(tenant_id: str
-) -> bool:
+def check_kg_processing_requirements() -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created, and then looks for documents that should be indexed.
     """
-    if not check_kg_processing_unblocked(tenant_id):
+    if not check_kg_processing_unblocked():
         return False
 
     with get_session_with_current_tenant() as db_session:
@@ -69,6 +68,23 @@ def check_kg_processing_requirements(tenant_id: str
         return False
 
     return True 
+
+def check_kg_unclustered_extraction_requirements() -> bool:
+    """Checks for any conditions that should block the KG processing task from being
+    created, and then looks for documents that should be indexed.
+    """
+    if not check_kg_processing_unblocked():
+        return False
+
+    with get_session_with_current_tenant() as db_session:
+        # Check if there are any entries in the staging tables
+        has_staging_entities = db_session.query(KGEntityExtractionStaging).first() is not None
+        has_staging_relationships = db_session.query(KGRelationshipExtractionStaging).first() is not None
+        
+        if not has_staging_entities and not has_staging_relationships:
+            return False
+
+    return True
 
 def block_kg_processing_current_tenant() -> None:
     """Blocks KG processing for a tenant."""

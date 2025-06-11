@@ -28,6 +28,7 @@ from onyx.background.celery.tasks.kg_processing.utils import unblock_kg_processi
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
+from onyx.background.celery.tasks.kg_processing.utils import check_kg_unclustered_extraction_requirements
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -131,13 +132,14 @@ def check_for_kg_processing_clustering_only(
     try:
         locked = True
 
-        kg_processing_requirements_met = check_kg_processing_requirements(tenant_id)
+        kg_processing_requirements_met = check_kg_unclustered_extraction_requirements(tenant_id)
 
         if not kg_processing_requirements_met:
 
             task_logger.info(
                 f"Found documents needing KG processing for tenant {tenant_id}"
             )
+            return None
 
         self.app.send_task(
             OnyxCeleryTask.KG_CLUSTERING_ONLY,
@@ -272,13 +274,11 @@ def kg_reset_source_index(self: Task, *,
                               index_name=index_name)
 
     except Exception as e:
-        task_logger.exception(f"Error during kg clustering: {e}")
+        task_logger.exception(f"Error during kg reset: {e}")
     finally:
         unblock_kg_processing_current_tenant()
 
-        task_logger.debug("Completed kg clustering task!")
-
-    task_logger.debug("Completed kg clustering task!")
+        task_logger.debug("Completed kg reset task!")
 
     return None
 

@@ -6,7 +6,7 @@ from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCel
 
 def try_creating_kg_processing_task(
         tenant_id: str,
-) -> str | None:
+) -> None:
     """Checks for any conditions that should block the KG processing task from being
     created, then creates the task.
 
@@ -31,8 +31,6 @@ def try_creating_kg_processing_task(
 
         if not result:
             raise RuntimeError("send_task for kg processing failed.")
-
-        task_id = result.id
 
     except Exception:
         task_logger.exception(
@@ -73,11 +71,9 @@ def try_creating_kg_source_reset_task(
         if not result:
             raise RuntimeError("send_task for kg source reset failed.")
 
-        task_id = result.id
-
     except Exception:
         task_logger.exception(
-            f"try_creating_kg_processing_task - Unexpected exception for tenant={tenant_id}"
+            f"try_creating_kg_source_reset_task - Unexpected exception for tenant={tenant_id}"
         )
 
     return None
