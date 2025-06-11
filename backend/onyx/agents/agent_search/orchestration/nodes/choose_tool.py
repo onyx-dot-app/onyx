@@ -82,6 +82,7 @@ def _expand_query(
 
     return rephrased_query
 
+
 def _expand_query_non_tool_calling_llm(
     expanded_keyword_thread: TimeoutThread[str],
     expanded_semantic_thread: TimeoutThread[str],
