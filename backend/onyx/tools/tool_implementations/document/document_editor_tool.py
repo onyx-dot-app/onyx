@@ -1,10 +1,13 @@
 import json
 from collections.abc import Generator
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Literal, Optional, cast
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.chat.models import AnswerStyleConfig, PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.db.models import Persona, User
+from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.interfaces import LLM
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
@@ -24,6 +27,23 @@ when the user wants to modify the document in some way.
 """
 
 
+class DocumentChange(BaseModel):
+    type: Literal["deletion", "addition"]
+    context_before: str
+    context_after: str
+    text_to_delete: str
+    text_to_add: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DocumentEditResult(BaseModel):
+    changes: list[DocumentChange]
+    summary: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class DocumentEditorTool(Tool):
     """Tool for editing text based on instructions."""
 
@@ -33,7 +53,7 @@ class DocumentEditorTool(Tool):
     _PARAMETERS = {
         SEARCH_RESULTS_FIELD: {
             "type": "string",
-            "description": "Results from our Agentic Search tool to provide context (use "" if none)",
+            "description": "Results from our Agentic Search tool to provide context (use '' if none)",
         },
         INSTRUCTIONS_FIELD: {
             "type": "string",
@@ -110,11 +130,7 @@ class DocumentEditorTool(Tool):
     """For LLMs that don't support tool calling"""
 
     def get_args_for_non_tool_calling_llm(
-        self,
-        query: str,
-        history: list[Any],
-        llm: LLM,
-        force_run: bool = False,
+        self, query: str, history: list[Any], llm: LLM, force_run: bool = False
     ) -> dict[str, Any] | None:
         # Document editor is typically explicitly invoked, not automatically
         return None
@@ -122,10 +138,7 @@ class DocumentEditorTool(Tool):
     """Actual tool execution"""
 
     def _run(
-        self,
-        search_results: str | None,
-        instructions: str,
-        **kwargs: Any,
+        self, search_results: str | None, instructions: str, **kwargs: Any
     ) -> Dict[str, Any]:
         """
         Edit text based on instructions.
@@ -144,20 +157,32 @@ class DocumentEditorTool(Tool):
         You are a document editor assistant. Your task is to edit the provided HTML text according to the instructions.
         Do not add any newlines in the HTML edited_text output. The edited_text should be a valid HTML string.
 
-        IMPORTANT: You must return a diff representation of the changes made to the text with the following format:
-        - Text that is being deleted should be wrapped in <deletion-mark> tags
-        - Text that is being added should be wrapped in <addition-mark> tags
-        - For edited text, use <deletion-mark> immediately followed by <addition-mark>
-        - Do not modify text that remains unchanged
+        IMPORTANT: You must return a list of changes with the following format:
+        - Each change should specify the type (deletion or addition)
+        - For deletions, provide the exact text to be deleted and its context
+        - For additions, provide the exact text to be added and where it should be inserted
+        - For edits, break it up into a deletion and an addition
+        - Include the context around the change to help locate where it should be applied
+        - Do not include any unchanged parts of the document
         - Maintain the original structure of the HTML document
-        - You must add <deletion-mark> tags around sections that are no longer included
-        - You must add <addition-mark> tags around text / sections that are newly included
+        - Return enough context before and after the change to ensure the change is not overlapping with any other part of the document
 
-        YOU MUST RETURN ALL OF THE ORIGINAL HTML IN THE OUTPUT, NOT JUST THE CHANGES.
-
-        Example of a diff representation:
+        Example of a change representation:
         Original: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a sample text.</p> </div>"
-        Edited with diff: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a <deletion-mark>sample</deletion-mark><addition-mark>modified</addition-mark> text.</p> </div>"
+        Changes: [
+            {{"type": "deletion",
+                "context_before": "<p>This is a ",
+                "context_after": " text.</p>",
+                "text_to_delete": "sample",
+                "text_to_add": ""
+            }},
+            {{"type": "addition",
+                "context_before": "<p>This is a ",
+                "context_after": " text.</p>",
+                "text_to_delete": "",
+                "text_to_add": "modified"
+            }}
+        ]
 
         INSTRUCTIONS:
         {instructions}
@@ -179,52 +204,63 @@ class DocumentEditorTool(Tool):
         msg = [HumanMessage(content=document_editor_prompt)]
 
         structured_response_format = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "document_editor",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "edited_text": {
-                                "type": "string",
-                                "description": "The edited version of the original HTML text document content with diff markup. Deleted text should be wrapped in <deletion-mark> tags and added text in <addition-mark> tags. This MUST be compilable HTML."
-                            },
-                            "summary": {
-                                "type": "string",
-                                "description": "A brief summary of the changes made to the text."
-                            }
-                        },
-                        "required": ["edited_text", "summary"],
-                        "additionalProperties": False,
-                    },
-                    "strict": True,
-                }
+            "type": "json_schema",
+            "json_schema": {
+                "name": "document_editor",
+                "schema": DocumentEditResult.model_json_schema(),
+                "strict": True,
+            },
         }
 
         try:
-            # Call the LLM to get the edited text with structured response format
+            # Call the LLM to get the changes with structured response format
             llm_response = self.llm.invoke(
-                msg,
-                structured_response_format=structured_response_format
+                msg, structured_response_format=structured_response_format
             )
 
-            # Get the structured response directly
-            edit_result_str = llm_response.content
+            # Parse the response into our Pydantic model
+            edit_result = DocumentEditResult.model_validate_json(llm_response.content)
 
-            edit_result = json.loads(edit_result_str)
+            # Apply the changes to the original text
+            edited_text = self.document_content
+            changes = edit_result.changes
 
-            # When using structured_response_format, the content is already a dict
-            # Ensure the required fields are present
-            if "edited_text" not in edit_result or "summary" not in edit_result:
-                raise ValueError("LLM response missing required fields: edited_text and/or summary")
+            # Sort changes in reverse order to avoid position shifting issues
+            changes.sort(key=lambda x: len(x.context_before), reverse=True)
+
+            for change in changes:
+                # Find the position to make the change
+                start_pos = edited_text.find(change.context_before)
+                if start_pos == -1:
+                    continue
+
+                start_pos += len(change.context_before)
+                end_pos = edited_text.find(change.context_after, start_pos)
+                if end_pos == -1:
+                    continue
+
+                # Apply the change
+                if change.type == "deletion":
+                    if edited_text[start_pos:end_pos] == change.text_to_delete:
+                        edited_text = (
+                            edited_text[:start_pos]
+                            + f"<deletion-mark>{change.text_to_delete}</deletion-mark>"
+                            + edited_text[end_pos:]
+                        )
+                elif change.type == "addition":
+                    edited_text = (
+                        edited_text[:start_pos]
+                        + f"<addition-mark>{change.text_to_add}</addition-mark>"
+                        + edited_text[start_pos:]
+                    )
 
             # Return the result with required fields
             return {
                 "success": True,
                 "original_text": self.document_content,
-                "edited_text": edit_result.get("edited_text", ""),
-                "message": edit_result.get("summary", ""),
-                "edited": self.document_content != edit_result.get("edited_text", ""),
+                "edited_text": edited_text,
+                "message": edit_result.summary,
+                "edited": self.document_content != edited_text,
             }
 
         except Exception as e:
@@ -246,13 +282,12 @@ class DocumentEditorTool(Tool):
         logger.info(f"Running document editor with instructions: {instructions}")
 
         # Execute the document editing logic
-        edit_result = self._run(search_results=search_results, instructions=instructions)
+        edit_result = self._run(
+            search_results=search_results, instructions=instructions
+        )
 
         # Yield the response
-        yield ToolResponse(
-            id=DOCUMENT_EDITOR_RESPONSE_ID,
-            response=edit_result,
-        )
+        yield ToolResponse(id=DOCUMENT_EDITOR_RESPONSE_ID, response=edit_result)
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         editor_response = next(
@@ -271,3 +306,54 @@ class DocumentEditorTool(Tool):
             prompt_builder.append_message(tool_call_summary.tool_call_request)
             prompt_builder.append_message(tool_call_summary.tool_call_result)
         return prompt_builder
+
+
+if __name__ == "__main__":
+    import os
+
+    from dotenv import load_dotenv
+
+    # Load environment variables
+    load_dotenv()
+
+    # Sample document content
+    sample_document = """
+    <html>
+    <body>
+    <h1>Sample Document</h1>
+    <p>This is a sample document.</p>
+    </body>
+    </html>
+    """
+    # Initialize the LLM
+    llm = DefaultMultiLLM(
+        model_provider="openai",
+        model_name="gpt-4o-mini",
+        temperature=0.0,
+        api_key=os.getenv("OPENAI_API_KEY"),
+        max_input_tokens=10000,
+    )
+
+    # Create the document editor tool
+    editor = DocumentEditorTool(llm=llm, document_content=sample_document)
+
+    # Example instructions
+    instructions = """
+    1. Change the title to "Modified Article"
+    2. Add a new paragraph after the first paragraph
+    3. Remove the third list item
+    """
+
+    # Run the tool
+    logger.info("starting edit")
+    for response in editor.run(instructions=instructions, search_results=""):
+        result = response.response
+        print("\nOriginal text:")
+        print(result["original_text"])
+        print("\nEdited text:")
+        print(result["edited_text"])
+        print("\nSummary of changes:")
+        print(result["message"])
+        print("\nWas the document edited?", result["edited"])
+
+    logger.info("edit complete")
