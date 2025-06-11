@@ -86,9 +86,13 @@ def _expand_query(
 def _expand_query_non_tool_calling_llm(
     expanded_keyword_thread: TimeoutThread[str],
     expanded_semantic_thread: TimeoutThread[str],
-) -> QueryExpansions:
-    keyword_expansion: str = wait_on_background(expanded_keyword_thread)
-    semantic_expansion: str = wait_on_background(expanded_semantic_thread)
+) -> QueryExpansions | None:
+    keyword_expansion: str | None = wait_on_background(expanded_keyword_thread)
+    semantic_expansion: str | None = wait_on_background(expanded_semantic_thread)
+    
+    if keyword_expansion is None or semantic_expansion is None:
+        return None
+    
     return QueryExpansions(
         keywords_expansions=[keyword_expansion],
         semantic_expansions=[semantic_expansion],
@@ -209,6 +213,12 @@ def choose_tool(
                 expanded_keyword_thread=expanded_keyword_thread,
                 expanded_semantic_thread=expanded_semantic_thread,
             )
+        if (USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH and 
+            tool.name == SearchTool._NAME and 
+            override_kwargs.expanded_queries):
+            if (override_kwargs.expanded_queries.keywords_expansions is None or 
+                override_kwargs.expanded_queries.semantic_expansions is None):
+                raise ValueError("No expanded keyword or semantic threads found.")
 
         return ToolChoiceUpdate(
             tool_choice=ToolChoice(
@@ -312,6 +322,12 @@ def choose_tool(
             expanded_keyword_thread=expanded_keyword_thread,
             expanded_semantic_thread=expanded_semantic_thread,
         )
+    if (USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH and 
+        selected_tool.name == SearchTool._NAME and 
+        override_kwargs.expanded_queries):
+        if (override_kwargs.expanded_queries.keywords_expansions is None or 
+            override_kwargs.expanded_queries.semantic_expansions is None):
+            raise ValueError("No expanded keyword or semantic threads found.")
 
     return ToolChoiceUpdate(
         tool_choice=ToolChoice(
