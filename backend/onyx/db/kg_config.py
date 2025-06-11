@@ -9,6 +9,7 @@ from onyx.db.models import KGConfig
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
+from onyx.kg.setup.kg_default_entity_definitions import populate_default_entity_types
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
@@ -19,7 +20,6 @@ log = logger.logging
 
 
 class KGProcessingType(Enum):
-
     EXTRACTION = "extraction"
     CLUSTERING = "clustering"
 
@@ -193,31 +193,15 @@ VALID_ENTITY_TYPE_NAMES = set(
 
 def get_kg_exposed(db_session: Session) -> bool:
     exposed = (
-        db_session.query(KGConfig)
-        .where(KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED)
+        db_session.query(KGConfig.kg_variable_values)
+        .filter(
+            KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED
+            and KGConfig.kg_variable_values == ["true"]
+        )
         .first()
     )
 
-    if not exposed:
-        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
-        return False
-
-    if exposed.kg_variable_name != KGConfigVars.KG_EXPOSED:
-        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
-        return False
-
-    if not exposed.kg_variable_values:
-        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
-        return False
-
-    value = exposed.kg_variable_values[0]
-    if value == "true":
-        return True
-    elif value == "false":
-        return False
-    else:
-        log.warn("Failed to find `KG_EXPOSED`; returned False by default")
-        return False
+    return exposed is not None
 
 
 def reset_kg(db_session: Session) -> None: ...
@@ -232,17 +216,15 @@ def enable_kg(
     db_session: Session,
     enable_req: EnableKGConfigRequest,
 ) -> None:
-    # cannot be empty string
-    if not enable_req.vendor:
-        raise ValueError(
-            f"KG vendor must be specified; instead got {enable_req.vendor=}"
+    validate_kg_settings(
+        KGConfigSettings(
+            KG_ENABLED=enable_req.enabled,
+            KG_VENDOR=enable_req.vendor,
+            KG_VENDOR_DOMAINS=enable_req.vendor_domains,
+            KG_IGNORE_EMAIL_DOMAINS=enable_req.ignore_domains,
+            KG_COVERAGE_START=enable_req.coverage_start,
         )
-
-    # cannot be empty list
-    if not enable_req.vendor_domains:
-        raise ValueError(
-            f"KG vendor domains must be specified; instead got {enable_req.vendor_domains=}"
-        )
+    )
 
     vars = [
         KGConfig(
@@ -315,10 +297,20 @@ def disable_kg(db_session: Session) -> None:
 
 
 def get_kg_entity_types(db_session: Session) -> list[EntityType]:
-    return [
+    existing_entity_types = [
         EntityType.from_model(kg_entity_type)
         for kg_entity_type in db_session.query(KGEntityType)
     ]
+
+    if not existing_entity_types:
+        existing_entity_types = [
+            EntityType.from_model(kg_entity_type)
+            for kg_entity_type in populate_default_entity_types(
+                db_session=db_session,
+            )
+        ]
+
+    return existing_entity_types
 
 
 def update_kg_entity_types(

@@ -1,7 +1,8 @@
-from typing import cast
+from collections.abc import Generator
+
+from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import KGEntityType
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import validate_kg_settings
@@ -309,48 +310,91 @@ KG_DEFAULT_ACCOUNT_EMPLOYEE_ENTITIES = {
 }
 
 
-def populate_default_entity_types() -> None:
-    with get_session_with_current_tenant() as db_session:
-        kg_config_settings = get_kg_config_settings(db_session)
-        validate_kg_settings(kg_config_settings)
+TEMPLATE = "---vendor_name---"
 
-        # Get all existing entity types
-        existing_entity_types = {
-            et.id_name for et in db_session.query(KGEntityType).all()
-        }
 
-        # Create an instance of the default definitions
-        default_definitions = [
-            KG_DEFAULT_PRIMARY_GROUNDED_ENTITIES,
-            KG_DEFAULT_ACCOUNT_EMPLOYEE_ENTITIES,
-        ]
+def sanitize_default(
+    id_name: str, definition: KGDefaultEntityDefinition, vendor_name: str
+) -> KGEntityType:
+    """
+    Sanitizes the "default" Entity Types by string-replacing all instances of `TEMPLATE` (e.g., "---vendor_name---")
+    with the vendor's name.
+    """
 
-        # Iterate over all attributes in the default definitions
-        for default_definition in default_definitions:
-            for id_name, definition in default_definition.items():
-                # Skip if this entity type already exists
-                if id_name in existing_entity_types:
-                    continue
+    description = definition.description.replace(
+        TEMPLATE,
+        vendor_name,
+    )
+    grounded_source_name = (
+        definition.grounded_source_name.value
+        if definition.grounded_source_name
+        else None
+    )
 
-                # Create new entity type
-                description = definition.description.replace(
-                    "---vendor_name---", cast(str, kg_config_settings.KG_VENDOR)
-                )
-                grounded_source_name = (
-                    definition.grounded_source_name.value
-                    if definition.grounded_source_name
-                    else None
-                )
-                new_entity_type = KGEntityType(
-                    id_name=id_name,
-                    description=description,
-                    attributes=definition.attributes,
-                    grounding=definition.grounding,
-                    grounded_source_name=grounded_source_name,
-                    active=False,
-                )
+    return KGEntityType(
+        id_name=id_name,
+        description=description,
+        attributes=definition.attributes,
+        grounding=definition.grounding,
+        grounded_source_name=grounded_source_name,
+        active=False,
+    )
 
-                # Add to session
-                db_session.add(new_entity_type)
-                existing_entity_types.add(id_name)
-        db_session.commit()
+
+def generate_non_existing_entity_types(
+    existing_entity_types: dict[str, KGEntityType],
+    vendor_name: str,
+) -> Generator[KGEntityType]:
+    default_definitions = {
+        **KG_DEFAULT_PRIMARY_GROUNDED_ENTITIES,
+        **KG_DEFAULT_ACCOUNT_EMPLOYEE_ENTITIES,
+    }
+
+    for default_entity_name, default_entity_type in default_definitions.items():
+        if default_entity_name not in existing_entity_types:
+            yield sanitize_default(
+                id_name=default_entity_name,
+                definition=default_entity_type,
+                vendor_name=vendor_name,
+            )
+
+
+def populate_default_entity_types(
+    db_session: Session,
+) -> list[KGEntityType]:
+    """
+    Populates the database with the *missing* Entity Types (if any are missing) into the database after sanitizing them first.
+    Returns the *entire* list of Entity Types.
+
+    # Note
+    Sanitization of "default" Entity Types includes string-replacing all instances of `TEMPLATE` with the vendor's name.
+    """
+
+    kg_config_settings = get_kg_config_settings(db_session)
+    validate_kg_settings(kg_config_settings)
+
+    vendor_name = kg_config_settings.KG_VENDOR
+    existing_entity_types = {
+        et.id_name: et for et in db_session.query(KGEntityType).all()
+    }
+
+    if vendor_name is None:
+        raise ValueError(
+            f"Vendor name must be a non-empty string, instead got {vendor_name}"
+        )
+
+    entity_types = []
+
+    for non_existing_entity_type in generate_non_existing_entity_types(
+        existing_entity_types=existing_entity_types,
+        vendor_name=vendor_name,
+    ):
+        db_session.add(non_existing_entity_type)
+        entity_types.append(non_existing_entity_type)
+
+    db_session.commit()
+
+    for existing_entity_type in existing_entity_types.values():
+        entity_types.append(existing_entity_type)
+
+    return entity_types
