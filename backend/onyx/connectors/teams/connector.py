@@ -517,7 +517,7 @@ def _collect_documents_for_channel(
                     time.sleep(retry_after)
                     retries += 1
 
-            if cre or not replies:
+            if cre or replies is None:
                 failure_message = f"Retrieval of message and its replies failed; {channel.id=} {message.id=}"
                 if cre and cre.response:
                     failure_message = f"{failure_message}; {cre.response.status_code=}"
