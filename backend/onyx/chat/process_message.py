@@ -617,7 +617,7 @@ def stream_chat_message_objects(
             raise Exception("Vespa KG index reset done")
 
         elif new_msg_req.message == "kg_setup":
-            populate_default_entity_types()
+            populate_default_entity_types(db_session=db_session)
             raise Exception("KG setup done")
 
     try:
