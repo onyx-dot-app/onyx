@@ -22,6 +22,10 @@ def get_entity_type(entity_id_name: str) -> str:
 
 
 def split_entity_type(entity_type: str) -> tuple[str, str | None]:
+    """
+    Splits an entity type into its class and subclass.
+    If the entity type is not a subtype, the subclass will be None and entity_class = entity_type.
+    """
     entity_type_split = entity_type.split("-", 1)
     if len(entity_type_split) == 1:
         return entity_type_split[0], None

@@ -745,18 +745,27 @@ It is of the form \
 <source_entity_type>::<source_entity_name>__<relationship_description>__<target_entity_type>::<target_entity_name> \
 [example: ACCOUNT::Nike__has__CONCERN::performance]. Note that this is NOT UNIQUE!
    - source_entity (str): the id of the source ENTITY/NODE in the relationship [example: ACCOUNT::Nike]
+   - source_entity_class (str): the type class of the source entity/node [example: ACCOUNT]. Only the entity \
+classes (entity types without a dash) provided below are valid. Entity-type-based filtering should mostly be done \
+using this column, unless you are interested in a specific subtype.
+   - source_entity_type (str): the specific subtype of the source entity/node [example: TASK-SALES]. Only the \
+entity types provided below are valid.
    - source_entity_attributes (json): the attributes of the source entity/node [example: {{"account_type": "customer"}}]
    - target_entity (str): the id of the target ENTITY/NODE in the relationship [example: CONCERN::performance]
+   - target_entity_class (str): the type class of the target entity/node [example: CONCERN]. Only the entity \
+classes (entity types without a dash) provided below are valid.
+   - target_entity_type (str): the specific subtype of the target entity/node [example: GITHUB-ISSUE]. Only the \
+entity types provided below are valid. Entity-type-based filtering should mostly be done \
+using this column, unless you are interested in a specific subtype.
    - target_entity_attributes (json): the attributes of the target entity/node [example: {{"degree": "severe"}}]
-   - source_entity_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
-   below are valid.
-   - target_entity_type (str): the type of the target entity/node [example: CONCERN]. Only the entity types provided \
-   below are valid.
-   - relationship_type (str): the type of the relationship, formatted as  \
-<source_entity_type>__<relationship_description>__<target_entity_type>.   So the explicit entity_names have \
-been removed. [example: ACCOUNT__has__CONCERN]
-   - source_document (str): the id of the document that contains the relationship. Note that the combination of \
-id_name and source_document IS UNIQUE!
+   - relationship_type (str): the type of the relationship, formatted as \
+<source_entity_type>__<relationship_description>__<target_entity_type>. So the explicit entity_names have \
+been removed. [example: ACCOUNT__has__CONCERN]. Note that the source and target entity types are specific \
+down to the subtype. For example, EMPLOYEE__worked_on__TASK will not match EMPLOYEE__worked_on__TASK-SALES.
+   - relationship_description (str): the description of the relationship, e.g., 'has', 'worked_on', etc. \
+In general, use this column when filtering relationships.
+   - source_document (str): the id of the document that contains the relationship. Note that it is the combination \
+of the relationship and the source_document that is unique!
    - source_date (timestamp): the 'event' date of the source document [example: 2025-04-25 21:43:31.054741+00]
 
 {SEPARATOR_LINE}
@@ -764,6 +773,10 @@ id_name and source_document IS UNIQUE!
 Importantly, here are the entity (node) types that you can use, with a short description of what they mean. You may need to \
 identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
 their values, if provided.
+Note that some entity types may have a dash in them, indicating that they are a subtype of another entity type \
+(we will refer to them as entity classes). The entity class of a subtype is the entity type before the dash. \
+For example, the types TASK-ENGINEERING and TASK-SALES are subtypes of the TASK entity class. Some entity classes \
+may not have any subtypes, in which case they are the same as the entity type.
 {SEPARATOR_LINE}
 ---entity_types---
 {SEPARATOR_LINE}

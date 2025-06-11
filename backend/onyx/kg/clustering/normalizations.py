@@ -251,11 +251,6 @@ def normalize_relationships(
 ) -> NormalizedRelationships:
     """
     Normalize relationships using entity mappings and relationship string matching.
-    A single raw relationship could get expanded into multiple normalized relationships,
-    e.g., JIRA-EPIC::A1B2__has_subcomponent__JIRA::* could be turn into
-    JIRA-EPIC::A1B2__has_subcomponent__JIRA-TASK::*,
-    JIRA-EPIC::A1B2__has_subcomponent__JIRA-STORY::*, etc.
-    depending on the available relationship types in the KG.
 
     Args:
         relationships: list of relationships in format "source__relation__target"
