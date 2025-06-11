@@ -439,6 +439,7 @@ def _convert_drive_item_to_document(
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
+                logger.debug(f"starting advanced parsing for {file.get('name')}")
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
                     docs_service=_get_docs_service(),
@@ -447,6 +448,10 @@ def _convert_drive_item_to_document(
                 if doc_sections:
                     sections = cast(list[TextSection | ImageSection], doc_sections)
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
+                        logger.debug(
+                            f"found smart chips in {file.get('name')},"
+                            " aligning with basic sections"
+                        )
                         basic_sections = _download_and_extract_sections_basic(
                             file, _get_drive_service(), allow_images
                         )

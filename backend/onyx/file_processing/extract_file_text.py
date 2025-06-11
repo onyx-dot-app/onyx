@@ -375,9 +375,25 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
     text_content = []
     for sheet in workbook.worksheets:
         rows = []
+        num_empty_rows = 0
         for row in sheet.iter_rows(min_row=1, values_only=True):
-            row_str = ",".join(str(cell) if cell is not None else "" for cell in row)
-            rows.append(row_str)
+            row_str = ",".join(str(cell or "") for cell in row)
+
+            # Only add the row if there are any values in the cells
+            if len(row_str) >= len(row):
+                rows.append(row_str)
+                num_empty_rows = 0
+            else:
+                logger.debug(f"skipping empty row in {file_name}")
+                num_empty_rows += 1
+
+            if num_empty_rows > 100:
+                # handle massive excel sheets with mostly empty cells
+                logger.warning(
+                    f"Found {num_empty_rows} empty rows in {file_name},"
+                    " skipping rest of file"
+                )
+                break
         sheet_str = "\n".join(rows)
         text_content.append(sheet_str)
     return TEXT_SECTION_SEPARATOR.join(text_content)
