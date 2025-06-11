@@ -23,7 +23,7 @@ from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.onyx.tools.tool import Tool
+from onyx.tools.tool import Tool
 from onyx.auth.users import current_chat_accessible_user, current_user
 from onyx.chat.chat_utils import create_chat_chain, extract_headers
 from onyx.chat.process_message import stream_chat_message
