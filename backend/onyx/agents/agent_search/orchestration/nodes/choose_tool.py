@@ -197,7 +197,6 @@ def choose_tool(
             is_keyword, keywords = wait_on_background(keyword_thread)
             override_kwargs.precomputed_is_keyword = is_keyword
             override_kwargs.precomputed_keywords = keywords
-            
         # dual keyword expansion needs to be added here for non-tool calling LLM case
         if (
             USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH
@@ -207,8 +206,8 @@ def choose_tool(
         ):
             override_kwargs.expanded_queries = _expand_query_non_tool_calling_llm(
                 expanded_keyword_thread=expanded_keyword_thread,
-                expanded_semantic_thread=expanded_semantic_thread,
-        )
+                expanded_semantic_thread=expanded_semantic_thread
+                )
 
         return ToolChoiceUpdate(
             tool_choice=ToolChoice(
