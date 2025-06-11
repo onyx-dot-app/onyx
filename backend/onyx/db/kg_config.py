@@ -211,6 +211,9 @@ def reset_kg(db_session: Session) -> None:
     db_session.commit()
 
 
+def reindex_kg(db_session: Session) -> None: ...
+
+
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:
     config = get_kg_config_settings(db_session=db_session)
     return KGConfigAPIModel.from_kg_config_settings(config)

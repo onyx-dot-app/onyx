@@ -16,6 +16,10 @@ from onyx.server.kg.models import KGConfig
 admin_router = APIRouter(prefix="/admin/kg")
 
 
+# exposed
+# Controls whether or not kg is viewable in the first place.
+
+
 @admin_router.get("/exposed")
 def get_kg_exposed(
     _: User | None = Depends(current_admin_user),
@@ -24,12 +28,26 @@ def get_kg_exposed(
     return kg_config.get_kg_exposed(db_session=db_session)
 
 
+# global resets
+
+
 @admin_router.put("/reset")
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     kg_config.reset_kg(db_session=db_session)
+
+
+@admin_router.put("/reindex")
+def reindex_kg(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    kg_config.reindex_kg(db_session=db_session)
+
+
+# configurations
 
 
 @admin_router.get("/config")
@@ -59,6 +77,9 @@ def enable_or_disable_kg(
         kg_config.enable_kg(db_session=db_session, enable_req=enable_req)
     else:
         kg_config.disable_kg(db_session=db_session)
+
+
+# entity-types
 
 
 @admin_router.get("/entity-types")
