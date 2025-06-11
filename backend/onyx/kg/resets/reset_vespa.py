@@ -11,7 +11,6 @@ from onyx.db.models import KGEntityType
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
-from onyx.db.document import get_num_chunks_for_document
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
