@@ -206,7 +206,7 @@ def choose_tool(
         ):
             override_kwargs.expanded_queries = _expand_query_non_tool_calling_llm(
                 expanded_keyword_thread=expanded_keyword_thread,
-                expanded_semantic_thread=expanded_semantic_thread
+                expanded_semantic_thread=expanded_semantic_thread,
             )
 
         return ToolChoiceUpdate(
