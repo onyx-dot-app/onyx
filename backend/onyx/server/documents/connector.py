@@ -432,12 +432,12 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
                 continue
 
             # Special handling for docx files - only store the plaintext version
-            if file.content_type and file.content_type.startswith(
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            ):
-                file_path = convert_docx_to_txt(file, file_store)
-                deduped_file_paths.append(file_path)
-                continue
+            # if file.content_type and file.content_type.startswith(
+            #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            # ):
+            #     file_path = convert_docx_to_txt(file, file_store)
+            #     deduped_file_paths.append(file_path)
+            #     continue
 
             # Default handling for all other file types
             file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))

@@ -841,16 +841,16 @@ def fetch_chat_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     original_file_name = file_record.display_name
-    if file_record.file_type.startswith(
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ):
-        # Check if a converted text file exists for .docx files
-        txt_file_name = docx_to_txt_filename(original_file_name)
-        txt_file_id = os.path.join(os.path.dirname(file_id), txt_file_name)
-        txt_file_record = file_store.read_file_record(txt_file_id)
-        if txt_file_record:
-            file_record = txt_file_record
-            file_id = txt_file_id
+    # if file_record.file_type.startswith(
+    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    # ):
+    #     # Check if a converted text file exists for .docx files
+    #     txt_file_name = docx_to_txt_filename(original_file_name)
+    #     txt_file_id = os.path.join(os.path.dirname(file_id), txt_file_name)
+    #     txt_file_record = file_store.read_file_record(txt_file_id)
+    #     if txt_file_record:
+    #         file_record = txt_file_record
+    #         file_id = txt_file_id
 
     media_type = file_record.file_type
     file_io = file_store.read_file(file_id, mode="b")
