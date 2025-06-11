@@ -81,7 +81,7 @@ def _expand_query(
     rephrased_query: str = cast(str, response.content)
 
     return rephrased_query
-
+    
 
 def _expand_query_non_tool_calling_llm(
     expanded_keyword_thread: TimeoutThread[str],

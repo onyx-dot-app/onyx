@@ -24,82 +24,76 @@ def reset_source_kg_index(source_name: str| None, tenant_id: str, index_name: st
     # reset vespa for the source
     reset_vespa_kg_index(tenant_id, index_name, source_name)
 
-    # reset the kg stage for the documents
-    with get_session_with_current_tenant() as db_session:
-        db_session.query(Document).update(
-            {"kg_stage": KGStage.NOT_STARTED}
-        )
-        db_session.commit()
+    
 
     if source_name is None:
         reset_full_kg_index()
 
-        return None
+    else:
+        with get_session_with_current_tenant() as db_session:
+            # get all the entity types for the given source
+            entity_types = [
+                et.id_name
+                for et in db_session.query(KGEntityType)
+                .filter(KGEntityType.grounded_source_name == source_name)
+                .all()
+            ]
+            if not entity_types:
+                raise ValueError(f"There are no entity types for the source {source_name}")
 
-    with get_session_with_current_tenant() as db_session:
-        # get all the entity types for the given source
-        entity_types = [
-            et.id_name
-            for et in db_session.query(KGEntityType)
-            .filter(KGEntityType.grounded_source_name == source_name)
-            .all()
-        ]
-        if not entity_types:
-            raise ValueError(f"There are no entity types for the source {source_name}")
+            # delete the entity type from the knowledge graph
+            for entity_type in entity_types:
+                db_session.query(KGRelationship).filter(
+                    or_(
+                        KGRelationship.source_node_type == entity_type,
+                        KGRelationship.target_node_type == entity_type,
+                    )
+                ).delete()
+                db_session.query(KGRelationshipType).filter(
+                    or_(
+                        KGRelationshipType.source_entity_type_id_name == entity_type,
+                        KGRelationshipType.target_entity_type_id_name == entity_type,
+                    )
+                ).delete()
+                db_session.query(KGEntity).filter(
+                    KGEntity.entity_type_id_name == entity_type
+                ).delete()
+                db_session.query(KGRelationshipExtractionStaging).filter(
+                    or_(
+                        KGRelationshipExtractionStaging.source_node_type == entity_type,
+                        KGRelationshipExtractionStaging.target_node_type == entity_type,
+                    )
+                ).delete()
+                db_session.query(KGEntityExtractionStaging).filter(
+                    KGEntityExtractionStaging.entity_type_id_name == entity_type
+                ).delete()
+                db_session.query(KGRelationshipTypeExtractionStaging).filter(
+                    or_(
+                        KGRelationshipTypeExtractionStaging.source_entity_type_id_name
+                        == entity_type,
+                        KGRelationshipTypeExtractionStaging.target_entity_type_id_name
+                        == entity_type,
+                    )
+                ).delete()
+            db_session.commit()
 
-        # delete the entity type from the knowledge graph
-        for entity_type in entity_types:
-            db_session.query(KGRelationship).filter(
-                or_(
-                    KGRelationship.source_node_type == entity_type,
-                    KGRelationship.target_node_type == entity_type,
-                )
-            ).delete()
-            db_session.query(KGRelationshipType).filter(
-                or_(
-                    KGRelationshipType.source_entity_type_id_name == entity_type,
-                    KGRelationshipType.target_entity_type_id_name == entity_type,
-                )
-            ).delete()
-            db_session.query(KGEntity).filter(
-                KGEntity.entity_type_id_name == entity_type
-            ).delete()
-            db_session.query(KGRelationshipExtractionStaging).filter(
-                or_(
-                    KGRelationshipExtractionStaging.source_node_type == entity_type,
-                    KGRelationshipExtractionStaging.target_node_type == entity_type,
-                )
-            ).delete()
-            db_session.query(KGEntityExtractionStaging).filter(
-                KGEntityExtractionStaging.entity_type_id_name == entity_type
-            ).delete()
-            db_session.query(KGRelationshipTypeExtractionStaging).filter(
-                or_(
-                    KGRelationshipTypeExtractionStaging.source_entity_type_id_name
-                    == entity_type,
-                    KGRelationshipTypeExtractionStaging.target_entity_type_id_name
-                    == entity_type,
-                )
-            ).delete()
-        db_session.commit()
+        with get_session_with_current_tenant() as db_session:
+            # get all the documents for the given source
+            kg_connectors = [
+                connector.id
+                for connector in db_session.query(Connector)
+                .filter(Connector.source == DocumentSource(source_name))
+                .all()
+            ]
+            document_ids = [
+                cc_pair.id
+                for cc_pair in db_session.query(DocumentByConnectorCredentialPair)
+                .filter(DocumentByConnectorCredentialPair.connector_id.in_(kg_connectors))
+                .all()
+            ]
 
-    with get_session_with_current_tenant() as db_session:
-        # get all the documents for the given source
-        kg_connectors = [
-            connector.id
-            for connector in db_session.query(Connector)
-            .filter(Connector.source == DocumentSource(source_name))
-            .all()
-        ]
-        document_ids = [
-            cc_pair.id
-            for cc_pair in db_session.query(DocumentByConnectorCredentialPair)
-            .filter(DocumentByConnectorCredentialPair.connector_id.in_(kg_connectors))
-            .all()
-        ]
-
-        # reset the kg stage for the documents
-        db_session.query(Document).filter(Document.id.in_(document_ids)).update(
-            {"kg_stage": KGStage.NOT_STARTED}
-        )
-        db_session.commit()
+            # reset the kg stage for the documents
+            db_session.query(Document).filter(Document.id.in_(document_ids)).update(
+                {"kg_stage": KGStage.NOT_STARTED}
+            )
+            db_session.commit()
