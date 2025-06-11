@@ -113,12 +113,7 @@ class NormalizedEntities(BaseModel):
 
 class NormalizedRelationships(BaseModel):
     relationships: list[str]
-    relationship_normalization_map: dict[str, list[str]]
-
-
-class NormalizedTerms(BaseModel):
-    terms: list[str]
-    term_normalization_map: dict[str, str | None]
+    relationship_normalization_map: dict[str, str]
 
 
 class KGClassificationContent(BaseModel):

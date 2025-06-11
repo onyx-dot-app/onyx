@@ -1,5 +1,4 @@
 import re
-from collections import defaultdict
 from typing import cast
 
 import numpy as np
@@ -21,15 +20,13 @@ from onyx.configs.kg_configs import KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import KGEntity
 from onyx.db.models import KGRelationshipType
-from onyx.db.relationships import get_relationship_for_entity_type_pair
+from onyx.db.relationships import get_allowed_relationship_type
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
-from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
 from onyx.kg.utils.formatting_utils import format_entity_id_for_models
 from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import make_relationship_id
-from onyx.kg.utils.formatting_utils import replace_entity_type
 from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_entity_type
 from onyx.kg.utils.formatting_utils import split_relationship_id
@@ -81,10 +78,10 @@ def _normalize_one_entity(
             autoload_with=db_session.get_bind(),
         )
 
-        # get entity type filter
-        entity_type_split = split_entity_type(entity_type)
-        if len(entity_type_split) == 1:
-            entity_type_filter = KGEntity.entity_class == entity_type
+        # an entity class can normalize to any of its subtypes, but not vice versa
+        entity_class, entity_subtype = split_entity_type(entity_type)
+        if entity_subtype is None:
+            entity_type_filter = KGEntity.entity_class == entity_class
         else:
             entity_type_filter = KGEntity.entity_type_id_name == entity_type
 
@@ -267,13 +264,11 @@ def normalize_relationships(
     Returns:
         NormalizedRelationships containing normalized relationships and mapping
     """
-    normalized_relationships: set[str] = set()
-    normalization_map: dict[str, list[str]] = defaultdict(list)
+    normalized_relationships: list[str] = []
+    normalization_map: dict[str, str] = {}
 
     # list of allowed relationship types for (source type, target type)
-    allowed_relationship_types: dict[tuple[str, str], list[KGRelationshipType]] = (
-        defaultdict(list)
-    )
+    allowed_relationship_types: dict[tuple[str, str], list[KGRelationshipType]] = {}
 
     for raw_rel in raw_relationships:
         # get normalized source, target, and raw relationship string
@@ -296,8 +291,8 @@ def normalize_relationships(
         # compute allowed relationship types
         if allowed_rels is None:
             with get_session_with_current_tenant() as db_session:
-                allowed_rels = get_relationship_for_entity_type_pair(
-                    db_session, entity_type_pairs
+                allowed_rels = get_allowed_relationship_type(
+                    db_session, *entity_type_pairs
                 )
                 allowed_relationship_types[entity_type_pairs] = allowed_rels
 
@@ -305,88 +300,22 @@ def normalize_relationships(
             logger.warning(f"No candidate relationships found for {raw_rel}")
             continue
 
-        # find best relationship string match
-        rel_string_candidates = list({rel_type.name for rel_type in allowed_rels})
+        # find best semantically matching relationship name
+        allowed_rel_names = list({rel_type.name for rel_type in allowed_rels})
         strings_to_encode = [
             raw_rel_string,
-            *(rel_string.replace("_", " ") for rel_string in rel_string_candidates),
+            *(rel_name.replace("_", " ") for rel_name in allowed_rel_names),
         ]
         vectors = encode_string_batch(strings_to_encode)
         scores = np.dot(vectors[0], vectors[1:])
-        best_rel_string = rel_string_candidates[np.argmax(scores)]
+        best_rel_name = allowed_rel_names[np.argmax(scores)]
 
-        # add all allowed relationships with name = best_rel_string
-        for rel_type in allowed_rels:
-            if rel_type.name != best_rel_string:
-                continue
-            rel = make_relationship_id(
-                replace_entity_type(source, rel_type.source_type),
-                rel_type.name,
-                replace_entity_type(target, rel_type.target_type),
-            )
-            normalized_relationships.add(rel)
-            normalization_map[raw_rel].append(rel)
+        # use matched relationship name to make normalized relationship
+        rel = make_relationship_id(source, best_rel_name, target)
+        normalized_relationships.append(rel)
+        normalization_map[raw_rel] = rel
 
     return NormalizedRelationships(
-        relationships=list(normalized_relationships),
-        relationship_normalization_map=dict(normalization_map),
-    )
-
-
-def normalize_terms(raw_terms: list[str]) -> NormalizedTerms:
-    """
-    Normalize terms using semantic similarity matching.
-
-    Args:
-        terms: list of terms to normalize
-
-    Returns:
-        NormalizedTerms containing normalized terms and mapping
-    """
-    # # Placeholder for normalized terms - this would typically come from a predefined list
-    # normalized_term_list = [
-    #     "algorithm",
-    #     "database",
-    #     "software",
-    #     "programming",
-    #     # ... other normalized terms ...
-    # ]
-
-    # normalized_terms: list[str] = []
-    # normalization_map: dict[str, str | None] = {}
-
-    # if not raw_terms:
-    #     return NormalizedTerms(terms=[], term_normalization_map={})
-
-    # # Encode all terms at once for efficiency
-    # strings_to_encode = raw_terms + normalized_term_list
-    # vectors = encode_string_batch(strings_to_encode)
-
-    # # Split vectors into query terms and candidate terms
-    # query_vectors = vectors[:len(raw_terms)]
-    # candidate_vectors = vectors[len(raw_terms):]
-
-    # # Calculate similarity for each term
-    # for i, term in enumerate(raw_terms):
-    #     # Calculate dot products with all candidates
-    #     similarities = np.dot(candidate_vectors, query_vectors[i])
-    #     best_match_idx = np.argmax(similarities)
-    #     best_match_score = similarities[best_match_idx]
-
-    #     # Use a threshold to determine if the match is good enough
-    #     if best_match_score > 0.7:  # Adjust threshold as needed
-    #         normalized_term = normalized_term_list[best_match_idx]
-    #         normalized_terms.append(normalized_term)
-    #         normalization_map[term] = normalized_term
-    #     else:
-    #         # If no good match found, keep original
-    #         normalization_map[term] = None
-
-    # return NormalizedTerms(
-    #     terms=normalized_terms,
-    #     term_normalization_map=normalization_map
-    # )
-
-    return NormalizedTerms(
-        terms=raw_terms, term_normalization_map={term: term for term in raw_terms}
+        relationships=normalized_relationships,
+        relationship_normalization_map=normalization_map,
     )

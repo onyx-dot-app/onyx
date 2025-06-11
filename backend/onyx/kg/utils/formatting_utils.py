@@ -21,12 +21,12 @@ def get_entity_type(entity_id_name: str) -> str:
     return entity_id_name.split("::", 1)[0].upper()
 
 
-def split_entity_type(entity_type: str) -> list[str]:
-    return entity_type.split("-")
-
-
-def replace_entity_type(entity_id_name: str, new_entity_type: str) -> str:
-    return make_entity_id(new_entity_type, split_entity_id(entity_id_name)[1])
+def split_entity_type(entity_type: str) -> tuple[str, str | None]:
+    entity_type_split = entity_type.split("-", 1)
+    if len(entity_type_split) == 1:
+        return entity_type_split[0], None
+    else:
+        return entity_type_split[0], entity_type_split[1]
 
 
 def format_entity_id_for_models(entity_id_name: str) -> str:

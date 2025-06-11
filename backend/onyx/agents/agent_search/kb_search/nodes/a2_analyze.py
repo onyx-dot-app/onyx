@@ -31,7 +31,6 @@ from onyx.db.entities import get_document_id_for_entity
 from onyx.kg.clustering.normalizations import normalize_entities
 from onyx.kg.clustering.normalizations import normalize_entities_w_attributes_from_map
 from onyx.kg.clustering.normalizations import normalize_relationships
-from onyx.kg.clustering.normalizations import normalize_terms
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.prompts.kg_prompts import STRATEGY_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -147,7 +146,7 @@ def analyze(
         state.extracted_entities_no_attributes
     )  # attribute knowledge is not required for this step
     relationships = state.extracted_relationships
-    terms = state.extracted_terms
+    state.extracted_terms
     time_filter = state.time_filter
 
     ## STEP 2 - stream out goals
@@ -168,7 +167,7 @@ def analyze(
     normalized_relationships = normalize_relationships(
         relationships, normalized_entities.entity_normalization_map
     )
-    normalized_terms = normalize_terms(terms)
+
     normalized_time_filter = time_filter
 
     # If single-doc inquiry, send to single-doc processing directly
@@ -280,7 +279,7 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
         query_graph_entities_no_attributes=query_graph_entities,
         query_graph_entities_w_attributes=query_graph_entities_w_attributes,
         query_graph_relationships=query_graph_relationships,
-        normalized_terms=normalized_terms.terms,
+        normalized_terms=[],  # TODO: remove completely later
         normalized_time_filter=normalized_time_filter,
         strategy=search_strategy,
         broken_down_question=broken_down_question,

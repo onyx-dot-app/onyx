@@ -141,10 +141,9 @@ def get_entity_types_str(active: bool | None = None) -> str:
         entity_types_list: list[str] = []
         for entity_type in active_entity_types:
             # add entity class as valid entity type whenever we get a subtype
-            entity_type_split = split_entity_type(entity_type.id_name)
-            entity_class = entity_type_split[0]
+            entity_class, entity_subtype = split_entity_type(entity_type.id_name)
 
-            if len(entity_type_split) == 2 and entity_class not in entity_classes:
+            if entity_subtype is not None and entity_class not in entity_classes:
                 entity_classes.add(entity_class)
                 entity_types_list.append(
                     entity_class

@@ -456,27 +456,42 @@ def delete_relationship_types_by_id_names(
     return deleted_count
 
 
-def get_relationship_for_entity_type_pair(
-    db_session: Session, entity_type_pair: tuple[str, str]
+def get_allowed_relationship_type(
+    db_session: Session, source_type: str, target_type: str
 ) -> list[KGRelationshipType]:
     """
-    Get relationship types from the database based on a list of entity type pairs.
+    Get the allowed relationship type for the given source and target entity types.
 
     Args:
         db_session: SQLAlchemy database session
-        entity_type_pairs: List of tuples where each tuple contains (source_entity_type, target_entity_type)
+        source_type: Source entity type
+        target_type: Target entity type
 
     Returns:
         List of KGRelationshipType objects where source and target types match the provided pairs
     """
-    return None  # TODO: rei
+    return (
+        db_session.query(KGRelationshipType)
+        .filter(
+            # either type matches, or is a subtype of the entity class
+            or_(
+                KGEntityType.id_name == source_type,
+                KGEntityType.id_name.like(f"{source_type}-%"),
+            ),
+            or_(
+                KGEntityType.id_name == target_type,
+                KGEntityType.id_name.like(f"{target_type}-%"),
+            ),
+        )
+        .all()
+    )
 
 
 def get_allowed_relationship_type_pairs(
     db_session: Session, entities: list[str]
 ) -> list[str]:
     """
-    Get the allowed relationship pairs for the given entities.
+    Get the allowed relationship pairs for any pair of the given entities.
 
     Args:
         db_session: SQLAlchemy database session
@@ -490,19 +505,18 @@ def get_allowed_relationship_type_pairs(
 
     for entity in entities:
         entity_type = get_entity_type(entity)
-        entity_type_split = split_entity_type(entity_type)
+        entity_class, entity_subtype = split_entity_type(entity_type)
 
-        # only subtype is allowed
-        if len(entity_type_split) == 2:
+        if entity_subtype is not None:
+            # only the specific subtype is allowed
             allowed_entity_types.add(entity_type)
-            continue
 
-        # all subtypes of the entity class are allowed
-        if entity_type not in allowed_entity_types:
+        elif entity_type not in allowed_entity_types:
+            # all subtypes of the entity class are allowed
             allowed_entity_types.add(entity_type)
             subtypes = (
                 db_session.query(KGEntityType)
-                .filter(KGEntityType.id_name.like(f"{entity_type}-%"))
+                .filter(KGEntityType.id_name.like(f"{entity_class}-%"))
                 .all()
             )
             allowed_entity_types.update(subtype.id_name for subtype in subtypes)
