@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import validate_kg_settings
+from onyx.db.models import KGConfig
+from onyx.kg.models import KGConfigVars
 from onyx.kg.models import KGDefaultEntityDefinition
 from onyx.kg.models import KGGroundingType
 
@@ -359,6 +359,32 @@ def generate_non_existing_entity_types(
             )
 
 
+def get_vendor_name(
+    db_session: Session,
+) -> str:
+    config = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_VENDOR)
+        .first()
+    )
+    if not config:
+        raise RuntimeError("Failed to find the vendor name")
+
+    if len(config.kg_variable_values) != 0:
+        raise RuntimeError(
+            f"Expected vendor name to be a list of length 1, instead got {config.kg_variable_values=}"
+        )
+
+    [vendor_name] = config.kg_variable_values
+
+    if not vendor_name:
+        raise ValueError(
+            f"Vendor name must be a non-empty string, instead got {vendor_name=}"
+        )
+
+    return vendor_name
+
+
 def populate_default_entity_types(
     db_session: Session,
 ) -> list[KGEntityType]:
@@ -370,18 +396,10 @@ def populate_default_entity_types(
     Sanitization of "default" Entity Types includes string-replacing all instances of `TEMPLATE` with the vendor's name.
     """
 
-    kg_config_settings = get_kg_config_settings(db_session)
-    validate_kg_settings(kg_config_settings)
-
-    vendor_name = kg_config_settings.KG_VENDOR
+    vendor_name = get_vendor_name(db_session=db_session)
     existing_entity_types = {
         et.id_name: et for et in db_session.query(KGEntityType).all()
     }
-
-    if vendor_name is None:
-        raise ValueError(
-            f"Vendor name must be a non-empty string, instead got {vendor_name}"
-        )
 
     entity_types = []
 
