@@ -82,6 +82,17 @@ def _expand_query(
 
     return rephrased_query
 
+def _expand_query_non_tool_calling_llm(
+    expanded_keyword_thread: TimeoutThread[str],
+    expanded_semantic_thread: TimeoutThread[str],
+) -> QueryExpansions:
+    keyword_expansion: str = wait_on_background(expanded_keyword_thread)
+    semantic_expansion: str = wait_on_background(expanded_semantic_thread)
+    return QueryExpansions(
+        keywords_expansions=[keyword_expansion],
+        semantic_expansions=[semantic_expansion],
+    )
+
 
 # TODO: break this out into an implementation function
 # and a function that handles extracting the necessary fields
@@ -193,12 +204,10 @@ def choose_tool(
             and expanded_semantic_thread
             and tool.name == SearchTool._NAME
         ):
-            keyword_expansion = wait_on_background(expanded_keyword_thread)
-            semantic_expansion = wait_on_background(expanded_semantic_thread)
-            override_kwargs.expanded_queries = QueryExpansions(
-                keywords_expansions=[keyword_expansion],
-                semantic_expansions=[semantic_expansion],
-            )
+            override_kwargs.expanded_queries = _expand_query_non_tool_calling_llm(
+            expanded_keyword_thread=expanded_keyword_thread,
+            expanded_semantic_thread=expanded_semantic_thread,
+        )
 
         return ToolChoiceUpdate(
             tool_choice=ToolChoice(
@@ -297,11 +306,10 @@ def choose_tool(
         and expanded_keyword_thread
         and expanded_semantic_thread
     ):
-        keyword_expansion = wait_on_background(expanded_keyword_thread)
-        semantic_expansion = wait_on_background(expanded_semantic_thread)
-        override_kwargs.expanded_queries = QueryExpansions(
-            keywords_expansions=[keyword_expansion],
-            semantic_expansions=[semantic_expansion],
+
+        override_kwargs.expanded_queries = _expand_query_non_tool_calling_llm(
+            expanded_keyword_thread=expanded_keyword_thread,
+            expanded_semantic_thread=expanded_semantic_thread,
         )
 
     return ToolChoiceUpdate(
