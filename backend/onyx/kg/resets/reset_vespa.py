@@ -3,17 +3,14 @@ from typing import Any
 from retry import retry
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
-from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
-from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
-from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
-from onyx.db.document import get_num_chunks_for_document
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -42,7 +39,6 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
 
     with get_session_with_current_tenant() as db_session:
         num_chunks = get_num_chunks_for_document(db_session, document_id)
-
 
     vespa_requests: list[KGVespaChunkUpdateRequest] = []
     for chunk_num in range(num_chunks):
