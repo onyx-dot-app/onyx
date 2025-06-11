@@ -214,12 +214,13 @@ def choose_tool(
                 expanded_semantic_thread=expanded_semantic_thread,
             )
         if (
-            USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH and 
-            tool.name == SearchTool._NAME and 
-            override_kwargs.expanded_queries):
+            USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH 
+            and tool.name == SearchTool._NAME 
+            and override_kwargs.expanded_queries
+        ):
             if (
-                override_kwargs.expanded_queries.keywords_expansions is None or 
-                override_kwargs.expanded_queries.semantic_expansions is None
+                override_kwargs.expanded_queries.keywords_expansions is None 
+                or override_kwargs.expanded_queries.semantic_expansions is None
             ):
                 raise ValueError("No expanded keyword or semantic threads found.")
 
@@ -325,11 +326,17 @@ def choose_tool(
             expanded_keyword_thread=expanded_keyword_thread,
             expanded_semantic_thread=expanded_semantic_thread,
         )
-    if (USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH and 
-        selected_tool.name == SearchTool._NAME and 
-        override_kwargs.expanded_queries):
-        if (override_kwargs.expanded_queries.keywords_expansions is None or 
-            override_kwargs.expanded_queries.semantic_expansions is None):
+    if (
+        USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH 
+        and selected_tool.name == SearchTool._NAME 
+        and override_kwargs.expanded_queries
+    ):
+        # TODO: this is a hack to handle the case where the expanded queries are not found.
+        # We should refactor this to be more robust.
+        if (
+            override_kwargs.expanded_queries.keywords_expansions is None 
+            or override_kwargs.expanded_queries.semantic_expansions is None
+        ):
             raise ValueError("No expanded keyword or semantic threads found.")
 
     return ToolChoiceUpdate(
