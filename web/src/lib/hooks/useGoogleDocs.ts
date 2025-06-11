@@ -51,7 +51,12 @@ export interface GoogleSheetResponse {
 export function useGoogleDoc(docId: string | null) {
   const { data, error, isLoading } = useSWR<DocumentBase>(
     docId ? `/api/google/docs/${docId}` : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+    }
   );
 
   return {
@@ -67,7 +72,12 @@ export function useGoogleDoc(docId: string | null) {
 export function useGoogleDocFormatted(docId: string | null) {
   const { data, error, isLoading } = useSWR<FormattedDocumentBase>(
     docId ? `/api/google/docs/${docId}/formatted` : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+    }
   );
 
   return {
@@ -83,7 +93,12 @@ export function useGoogleDocFormatted(docId: string | null) {
 export function useGoogleSheet(sheetId: string | null) {
   const { data, error, isLoading } = useSWR<GoogleSheetResponse>(
     sheetId ? `/api/google/sheets/${sheetId}` : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 5000, // Dedupe requests within 5 seconds
+    }
   );
 
   return {
