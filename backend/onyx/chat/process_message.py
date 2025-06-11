@@ -103,6 +103,9 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
+from onyx.kg.setup.kg_default_entity_definitions import (
+    populate_missing_default_entity_types__commit,
+)
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -595,6 +598,10 @@ def stream_chat_message_objects(
 
             try_creating_kg_source_reset_task(tenant_id, source_name, index_str)
             raise Exception(f"KG index reset for source {source_name} done")
+
+        elif new_msg_req.message == "kg_setup":
+            populate_missing_default_entity_types__commit(db_session=db_session)
+            raise Exception("KG setup done")
 
     try:
         # Move these variables inside the try block

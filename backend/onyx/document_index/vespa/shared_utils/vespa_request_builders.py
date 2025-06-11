@@ -82,7 +82,7 @@ def build_vespa_filters(
             else:
                 return f'"{entity}"'
 
-        # OR the entities
+        # OR the entities (give new design)
         if kg_entities:
             filter_parts = []
             for kg_entity in kg_entities:

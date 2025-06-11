@@ -252,15 +252,16 @@ def normalize_entities(
     for entity, attributes, normalized_entity in zip(
         raw_entities, entity_attributes, mapping
     ):
+
         if normalized_entity is not None:
             normalized_entities.append(normalized_entity)
             normalized_entities_w_attributes.append(
                 make_entity_w_attributes(normalized_entity, attributes)
             )
-            normalized_map[format_entity_id_for_models(entity)] = normalized_entity
+            normalized_map[entity] = format_entity_id_for_models(normalized_entity)
         else:
             logger.warning(f"No normalized entity found for {entity}")
-            normalized_map[format_entity_id_for_models(entity)] = entity
+            normalized_map[entity] = format_entity_id_for_models(entity)
 
     return NormalizedEntities(
         entities=normalized_entities,
@@ -305,8 +306,8 @@ def normalize_relationships(
 
         # 2. Find candidate normalized relationships
         candidate_rels = []
-        norm_source_type = get_entity_type(norm_source)
-        norm_target_type = get_entity_type(norm_target)
+        norm_source_type = get_entity_type(format_entity_id_for_models(norm_source))
+        norm_target_type = get_entity_type(format_entity_id_for_models(norm_target))
         if (
             norm_source_type in nor_relationships
             and norm_target_type in nor_relationships[norm_source_type]

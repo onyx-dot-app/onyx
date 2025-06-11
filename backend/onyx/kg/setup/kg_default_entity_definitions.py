@@ -39,7 +39,6 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
                     "parent": "parent",
                     "status": "status",
                     "priority": "priority",
-                    "reporter": "creator",
                     "project_name": "project",
                     "created": "created_at",
                     "updated": "updated",
@@ -176,16 +175,10 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.SLACK,
         ),
-        "WEB": KGEntityTypeDefinition(
-            description="A web page.",
-            attributes=KGEntityTypeAttributes(),
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.WEB,
-        ),
         "VENDOR": KGEntityTypeDefinition(
             description=f"The Vendor {vendor_name}, 'us'",
             grounding=KGGroundingType.GROUNDED,
-            active=False,
+            active=True,
             grounded_source_name=None,
         ),
         "EMPLOYEE": KGEntityTypeDefinition(
@@ -195,7 +188,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
                 "are NOT included here. If in doubt, do NOT extract."
             ),
             grounding=KGGroundingType.GROUNDED,
-            active=False,
+            active=True,
             grounded_source_name=None,
         ),
     }
@@ -228,7 +221,7 @@ def populate_missing_default_entity_types__commit(db_session: Session) -> None:
             attributes=entity_type_definition.attributes.model_dump(),
             grounding=entity_type_definition.grounding,
             grounded_source_name=grounded_source_name,
-            active=False,
+            active=entity_type_definition.active,
         )
         db_session.add(kg_entity_type)
     db_session.commit()

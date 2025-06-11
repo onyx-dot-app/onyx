@@ -2,17 +2,23 @@ from sqlalchemy import text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.kb_search.models import KGViewNames
 from onyx.configs.app_configs import DB_READONLY_USER
+from onyx.configs.kg_configs import KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX
+from onyx.configs.kg_configs import KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX
+from onyx.configs.kg_configs import KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX
+from onyx.db.engine import get_session_with_current_tenant
 
 
 Base = declarative_base()
 
 
-def get_user_view_names(user_email: str) -> tuple[str, str]:
+def get_user_view_names(user_email: str) -> KGViewNames:
     user_email_cleaned = user_email.replace("@", "_").replace(".", "_")
-    return (
-        f"allowed_docs_{user_email_cleaned}",
-        f"kg_relationships_with_access_{user_email_cleaned}",
+    return KGViewNames(
+        allowed_docs_view_name=f"{KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX}_{user_email_cleaned}",
+        kg_relationships_view_name=f"{KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX}_{user_email_cleaned}",
+        kg_entity_view_name=f"{KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX}_{user_email_cleaned}",
     )
 
 
@@ -20,9 +26,11 @@ def get_user_view_names(user_email: str) -> tuple[str, str]:
 def create_views(
     db_session: Session,
     user_email: str,
-    allowed_docs_view_name: str = "allowed_docs",
-    kg_relationships_view_name: str = "kg_relationships_with_access",
+    allowed_docs_view_name: str,
+    kg_relationships_view_name: str,
+    kg_entity_view_name: str,
 ) -> None:
+
     # Create ALLOWED_DOCS view
     allowed_docs_view = text(
         f"""
@@ -99,7 +107,7 @@ def create_views(
     """
     ).bindparams(user_email=user_email)
 
-    # Create the main view that uses ALLOWED_DOCS
+    # Create the main view that uses ALLOWED_DOCS for Relationships
     kg_relationships_view = text(
         f"""
     CREATE OR REPLACE VIEW {kg_relationships_view_name} AS
@@ -122,14 +130,33 @@ def create_views(
     """
     )
 
+    # Create the main view that uses ALLOWED_DOCS for Entities
+    kg_entity_view = text(
+        f"""
+    CREATE OR REPLACE VIEW {kg_entity_view_name} AS
+    SELECT kge.id_name as entity,
+           kge.entity_type_id_name as entity_type,
+           kge.attributes as entity_attributes,
+           kge.document_id as source_document,
+           d.doc_updated_at as source_date
+    FROM kg_entity kge
+    INNER JOIN {allowed_docs_view_name} AD on AD.allowed_doc_id = kge.document_id
+    JOIN document d on d.id = kge.document_id
+    """
+    )
+
     # Execute the views using the session
     db_session.execute(allowed_docs_view)
     db_session.execute(kg_relationships_view)
+    db_session.execute(kg_entity_view)
 
     # Grant permissions on view to readonly user
 
     db_session.execute(
         text(f"GRANT SELECT ON {kg_relationships_view_name} TO {DB_READONLY_USER}")
+    )
+    db_session.execute(
+        text(f"GRANT SELECT ON {kg_entity_view_name} TO {DB_READONLY_USER}")
     )
 
     db_session.commit()
@@ -138,9 +165,9 @@ def create_views(
 
 
 def drop_views(
-    db_session: Session,
-    allowed_docs_view_name: str = "allowed_docs",
-    kg_relationships_view_name: str = "kg_relationships_with_access",
+    allowed_docs_view_name: str | None = None,
+    kg_relationships_view_name: str | None = None,
+    kg_entity_view_name: str | None = None,
 ) -> None:
     """
     Drops the temporary views created by create_views.
@@ -148,20 +175,32 @@ def drop_views(
     Args:
         db_session: SQLAlchemy session
         allowed_docs_view_name: Name of the allowed_docs view
-        kg_relationships_view_name: Name of the kg_relationships view
+        kg_relationships_view_name: Name of the allowed kg_relationships view
+        kg_entity_view_name: Name of the allowed kg_entity view
     """
-    # First revoke access from the readonly user
-    revoke_kg_relationships = text(
-        f"REVOKE SELECT ON {kg_relationships_view_name} FROM {DB_READONLY_USER}"
-    )
 
-    db_session.execute(revoke_kg_relationships)
+    with get_session_with_current_tenant() as db_drop_session:
+        if kg_relationships_view_name:
+            revoke_kg_relationships = text(
+                f"REVOKE SELECT ON {kg_relationships_view_name} FROM {DB_READONLY_USER}"
+            )
+            db_drop_session.execute(revoke_kg_relationships)
+            drop_kg_relationships = text(
+                f"DROP VIEW IF EXISTS {kg_relationships_view_name}"
+            )
+            db_drop_session.execute(drop_kg_relationships)
 
-    # Drop the views in reverse order of creation to handle dependencies
-    drop_kg_relationships = text(f"DROP VIEW IF EXISTS {kg_relationships_view_name}")
-    drop_allowed_docs = text(f"DROP VIEW IF EXISTS {allowed_docs_view_name}")
+        if kg_entity_view_name:
+            revoke_kg_entities = text(
+                f"REVOKE SELECT ON {kg_entity_view_name} FROM {DB_READONLY_USER}"
+            )
+            db_drop_session.execute(revoke_kg_entities)
+            drop_kg_entities = text(f"DROP VIEW IF EXISTS {kg_entity_view_name}")
+            db_drop_session.execute(drop_kg_entities)
 
-    db_session.execute(drop_kg_relationships)
-    db_session.execute(drop_allowed_docs)
-    db_session.commit()
+        if allowed_docs_view_name:
+            drop_allowed_docs = text(f"DROP VIEW IF EXISTS {allowed_docs_view_name}")
+            db_drop_session.execute(drop_allowed_docs)
+
+        db_drop_session.commit()
     return None

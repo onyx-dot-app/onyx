@@ -536,7 +536,7 @@ And here are the entities and relationships that have been extracted earlier fro
 
 Here are more instructions:
 
-a) Regarding the strategy, there are two aspects to it:
+a) Regarding the strategy, there are three aspects to it:
 
 a1) "Search Type":
 Should the question be answered as a SEARCH ('filtered search'), or as a SQL ('SQL query search')?
@@ -592,6 +592,10 @@ the entities retrieved from the knowledge graph, or questions about the underlyi
 
 Your task is to decide which of the two strategies to use.
 
+a3) "Relationship Detection":
+You need to evaluate whether the question involves any relationships between entities (of the same type) \
+or between entities and relationships.  Respond with 'RELATIONSHIPS' or 'NO_RELATIONSHIPS'.
+
 b) Regarding the format of the answer: there are also two types of formats available to you:
 
 1. LIST: The user would expect an answer as a bullet point list of objects, likely with text associated with each \
@@ -629,14 +633,12 @@ You are supposed to decide whether a divide and conquer strategy would be approp
 that in order to answer the question, it would be good to first analyze one object at a time, and then aggregate the \
 results? Or should the information rather be analyzed as a whole? This would be 'yes' or 'no'.
 
-
-
-
 Please answer in json format in this form:
 
 {{
     "search_type": <see search-type instructions above, answer with "SEARCH" or "SQL">,
     "search_strategy": <see search-strategy instructions above, answer with "DEEP" or "SIMPLE">,
+    "relationship_detection": <see relationship-detection instructions above, answer with "RELATIONSHIPS" or "NO_RELATIONSHIPS">,
     "format": <see format instructions above, answer with "LIST" or "TEXT">,
     "broken_down_question": <see broken-down-question instructions above, answer with the question \
 that should be used to analyze each object/each source (or 'the object' that fits all criteria).>,
@@ -649,10 +651,18 @@ Do not include any other text or explanations.
 SOURCE_DETECTION_PROMPT = f"""
 You are an expert in generating, understanding and analyzing SQL statements.
 
-You are given a SQL statement that returns a list of entities from a table. Your task will be to \
+You are given an original SQL statement that returns a list of entities from a table or \
+an aggregation of entities from a table. Your task will be to \
 identify the source documents that are relevant to what the SQL statement is returning.
 
-The table has this structure:
+The task is actually quite simple. There are two tables involved - kg_relationship and kg_entity. \
+kg_relationship was used to generate the original SQL statement. Again, returning entities \
+or aggregations of entities. The second table, kg_entity contains the entities and \
+the corresponding source_documents. All you need to do is to appropriately join the \
+kg_entity table on the entities that would be retrieved from the original SQL statement, \
+and then return the source_documents from the kg_entity table.
+
+For your orientation, the kg_relationship table has this structure:
  - Table name: kg_relationship
  - Columns:
    - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
@@ -670,18 +680,59 @@ It is of the form \
    - relationship_type (str): the type of the relationship, formatted as  \
 <source_entity_type>__<relationship_description>__<target_entity_type>.   So the explicit entity_names have \
 been removed. [example: ACCOUNT__has__CONCERN]
-   - source_document (str): the id of the document that contains the relationship. Note that the combination of \
-id_name and source_document IS UNIQUE!
    - source_date (str): the 'event' date of the source document [example: 2021-01-01]
 
+The second table, kg_entity, has this structure:
+ - Table name: kg_entity
+ - Columns:
+   - entity (str): The name of the ENTITY, which is unique in this table. source_entity and target_entity \
+in the kg_relationship table are the same as entity in this table.
+   - source_document (str): the id of the document that contains the entity.
+
+Again, ultimately, your task is to join the kg_entity table on the entities that would be retrieved from the \
+original SQL statement, and then return the source_documents from the kg_entity table.
+
+The way to do that is to create a common table expression for the original SQL statement and join the \
+kg_entity table suitably on the entities.
+
+Here is the *original* SQL statement:
+{SEPARATOR_LINE}
+---original_sql_statement---
+{SEPARATOR_LINE}
+
+Please structure your answer using <reasoning>, </reasoning>,<sql>, </sql> start and end tags as in:
+
+<reasoning>[think very briefly through the problem step by step, not more than 2-3 sentences]</reasoning> \
+<sql>[the new SQL statement that returns the source documents involved in the original SQL statement]</sql>
+""".strip()
+
+ENTITY_SOURCE_DETECTION_PROMPT = f"""
+You are an expert in generating, understanding and analyzing SQL statements.
+
+You are given a SQL statement that returned an aggregation of entities in a table. \
+Your task will be to identify the source documents for the entities involved in \
+the answer. For example, should the original SQL statement be \
+'SELECT COUNT(entity) FROM kg_entity where entity_type = "ACCOUNT"' \
+then you should return the source documents that contain the entities of type 'ACCOUNT'.
+
+The table has this structure:
+ - Table name: kg_entity
+ - Columns:
+   - entity (str): The name of the ENTITY, combining the nature of the entity and the id of the entity. \
+It is of the form <entity_type>::<entity_name> [example: ACCOUNT::625482894].
+   - entity_type (str): the type of the entity [example: ACCOUNT].
+   - entity_attributes (json): the attributes of the entity [example: {{"priority": "high", "status": "active"}}]
+   - source_document (str): the id of the document that contains the entity. Note that the combination of \
+id_name and source_document IS UNIQUE!
+   - source_date (timestamp): the 'event' date of the source document [example: 2025-04-25 21:43:31.054741+00]
+
 Specifically, the table contains the 'source_document' column, which is the id of the source document that \
-contains the relationship of the table row. Make sure that you do not return more documents, i.e. if there \
+contains the core information about the entity. Make sure that you do not return more documents, i.e. if there \
 is a limit on source documents in the original SQL statement, the new SQL statement needs to have \
 the same limit.
 
 CRITICAL NOTES:
- - If you want to include a 'order-by' clause, YOU MUST include the the columns in the order-by clause \
-also in the 'distinct' clause!
+ - Only return source documents and nothing else!
 
 Your task is then to create a new SQL statement that returns the source documents that are relevant to what the \
 original SQL statement is returning. So the source document of every row used in the original SQL statement should \
@@ -697,6 +748,7 @@ Please structure your answer using <reasoning>, </reasoning>,<sql>, </sql> start
 <reasoning>[think very briefly through the problem step by step, not more than 2-3 sentences]</reasoning> \
 <sql>[the new SQL statement that returns the source documents involved in the original SQL statement]</sql>
 """.strip()
+
 
 SIMPLE_SQL_PROMPT = f"""
 You are an expert in generating a SQL statement that only uses ONE TABLE that captures RELATIONSHIPS \
@@ -778,7 +830,7 @@ CRITICAL SPECIAL CASE:
 entity of this form, this refers to *any* entity of that type. Correspondingly, the SQL query should use the *entity type*, \
 and possibly the relationship type, but not the entity with the * itself. \
 Example: if you see 'ACCOUNT::*', that means any account matches. So if you are supposed to count the 'ACCOUNT::*', \
-you should count the entities of entity_type_id_name 'ACCOUNT'.
+you should count the entities of entity_type 'ACCOUNT'.
 
 
 IMPORTANT NOTES:
@@ -883,6 +935,119 @@ Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> star
 
 <reasoning>[think briefly through the problem step by step]</reasoning>
 <sql>[the corrected (or original one, if correct) SQL statement]</sql>
+""".strip()
+
+SIMPLE_ENTITY_SQL_PROMPT = f"""
+You are an expert in generating a SQL statement that only uses ONE TABLE that captures ENTITIES \
+and their attributes and other data. The table has the following structure:
+
+{SEPARATOR_LINE}
+ - Table name: kg_entity
+ - Columns:
+   - entity (str): The name of the ENTITY, combining the nature of the entity and the id of the entity. \
+It is of the form <entity_type>::<entity_name> [example: ACCOUNT::625482894].
+   - entity_type (str): the type of the entity [example: ACCOUNT].
+   - entity_attributes (json): the attributes of the entity [example: {{"priority": "high", "status": "active"}}]
+   - source_document (str): the id of the document that contains the entity. Note that the combination of \
+id_name and source_document IS UNIQUE!
+   - source_date (timestamp): the 'event' date of the source document [example: 2025-04-25 21:43:31.054741+00]
+
+
+{SEPARATOR_LINE}
+Importantly, here are the entity (node) types that you can use, with a short description of what they mean. You may need to \
+identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
+their values, if provided. Of particular importance is the 'subtype' attribute, if provided, as this is how \
+the entity type may also often be referred to.
+{SEPARATOR_LINE}
+---entity_types---
+{SEPARATOR_LINE}
+
+
+Here is the question you are supposed to translate into a SQL statement:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+To help you, we already have identified the entities that the SQL statement likely *should* use (but note the \
+exception below!). The entities as written below also contain the list of attributes and attribute values \
+that should specify the entity. \
+The format is <entity_type>::<entity_name>--[<attribute_name_1>:<attribute_value_1>, \
+<attribute_name_2>:<attribute_value_2>, ...].
+{SEPARATOR_LINE}
+Identified entities with attributes in query:
+
+---query_entities_with_attributes---
+
+These are the entities that should be used in the SQL statement. However, \
+note that these are the entities (with potential attributes) that were *matches* of Knowledge Graph identified with the \
+entities originally identified in the original question. As such, they may have id names that may not mean much by themselves, \
+eg ACCOUNT::a74f332. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
+the entities that were matched to them in the Knowledge Graph:
+
+---entity_explanation_string---
+
+--
+
+
+{SEPARATOR_LINE}
+
+CRITICAL SPECIAL CASE:
+  - if an identified entity is of the form <entity_type>::*, or an identified relationship contains an \
+entity of this form, this refers to *any* entity of that type. Correspondingly, the SQL query should use the *entity type*, \
+but not the entity with the * itself. \
+Example: if you see 'ACCOUNT::*', that means any account matches. So if you are supposed to count the 'ACCOUNT::*', \
+you should count the entities of entity_type 'ACCOUNT'.
+
+
+IMPORTANT NOTES:
+- The entities are unique in the table.
+- If the SQL contains a 'SELECT DISTINCT' clause and an ORDER BY clause, then you MUST include the columns from the ORDER BY \
+clause ALSO IN THE SELECT DISTINCT CLAUSE! This is very important! (This is a postgres db., so this is a MUST!). \
+You MUST NOT have a column in the ORDER BY clause that is not ALSO in the SELECT DISTINCT clause!
+- The table cannot be joined on itself.
+- You CAN ONLY return ENTITIES or COUNTS (or other aggregations) of ENTITIES, or you can return \
+source_date (but only if the question asks for event dates or times, and then the \
+corresponding entity must also be returned).
+- Generally, the query can only return ENTITIES or aggregations of ENTITIES:
+   - if individual entities are returned, then you MUST also return the source_document. \
+If the source date was requested, you can return that too.
+   - if aggregations of entities are returned, then you can only aggregate the entities.
+- Attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
+"attributes ->> '<attribute>' = '<attribute value>'".
+- Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \
+of that in the reasoning.
+- Be careful with dates! Often a date will refer to the source data, which is the date when \
+an underlying piece of information was updated. However, if the attributes of an entity may contain \
+time information as well (like 'started_at', 'completed_at', etc.), then you should really look at \
+the wording to see whether you should use a date in the attributes or the event date.
+- Dates are ALWAYS in string format of the form YYYY-MM-DD, for source date as well as for date-like the attributes! \
+So please use that format, particularly if you use data comparisons (>, <, ...)
+- Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
+want to sort by. If the sorting is time-based and there is a limit for example, then you do want to have a suitable date \
+variable as the first column to sort by.
+- When doing a SORT on an attribute value of an entity, you MUST also apply a WHERE clause to filter \
+for entities that have the attribute value set. For example, if you want to sort the target entity \
+by the attribute 'created_date', you must also have a WHERE clause that checks whether the target \
+entity attribute contains 'created_date'. This is vital for proper ordering with null values.
+- Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
+have entities involved in the SELECT clause.
+- You MUST ONLY rely on the entity attributes provided! This is essential! Do not assume \
+other attributes exist...they don't! Note that there will often be a search using the results \
+of this query. So if there is information in the question that does not fit the provided attributes, \
+you should not use it here but rely on the later search!
+- Try to be as efficient as possible.
+
+APPROACH:
+Please think through this step by step. Make sure that you include all columns in the ORDER BY clause \
+also in the SELECT DISTINCT clause, \
+if applicable!
+
+Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
+
+Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
+
+<reasoning>[think through the logic but do so extremely briefly! Not more than 3-4 sentences.]</reasoning>
+<sql>[the SQL statement that you generate to satisfy the task]</sql>
 """.strip()
 
 
@@ -1176,7 +1341,7 @@ KG_SEARCH_PROMPT = f"""
 You are an expert in extracting relevant structured information from a list of documents that \
 should relate to one object. You are presented with a list of documents that have been determined to be \
 relevant to the task of interest. Your goal is to extract the information asked around these topics:
-You should look at the documents - in no particular order! - and extract the information that relates \
+You should look at the documents and extract the information that relates \
 to a question:
 {SEPARATOR_LINE}
 {{question}}
@@ -1186,8 +1351,10 @@ Here are the documents you are supposed to search through:
 --
 {{document_text}}
 {SEPARATOR_LINE}
-Note: in this case, please DO cite your sources. This is very important! Use the format [<document_number>](). \
-Note the important (), please do not forget.
+Note: in this case, please DO cite your sources. This is very important! \
+Use the format [<document number>]. Ie, use [1], [2], and NOT [1,2] if \
+there are two documents to cite, etc. \
+
 
 Please now generate the answer to the question given the documents:
 """.strip()

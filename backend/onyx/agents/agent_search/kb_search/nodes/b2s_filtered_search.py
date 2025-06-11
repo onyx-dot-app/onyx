@@ -68,7 +68,7 @@ def filtered_search(
 
     kg_relationship_filters = state.vespa_filter_results.global_relationship_filters
 
-    logger.info("Starting filtered search")
+    logger.debug("Starting filtered search")
     logger.debug(f"kg_entity_filters: {kg_entity_filters}")
     logger.debug(f"kg_relationship_filters: {kg_relationship_filters}")
 
@@ -95,6 +95,12 @@ def filtered_search(
             inference_sections_only=True,
         ),
     )
+
+    source_link_dict = {
+        num + 1: doc.center_chunk.source_links[0]
+        for num, doc in enumerate(retrieved_docs)
+        if doc.center_chunk.source_links
+    }
 
     answer_generation_documents = get_answer_generation_documents(
         relevant_docs=retrieved_docs,
@@ -146,6 +152,13 @@ def filtered_search(
         )
 
         filtered_search_answer = str(llm_response.content).replace("```json\n", "")
+
+        # TODO: make sure the citations look correct. Currently, they do not.
+        for source_link_num, source_link in source_link_dict.items():
+            if f"[{source_link_num}]" in filtered_search_answer:
+                filtered_search_answer = filtered_search_answer.replace(
+                    f"[{source_link_num}]", f"[{source_link_num}]({source_link})"
+                )
 
     except Exception as e:
         raise ValueError(f"Error in filtered_search: {e}")

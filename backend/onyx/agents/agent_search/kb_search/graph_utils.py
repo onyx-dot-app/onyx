@@ -267,11 +267,9 @@ def rename_entities_in_answer(answer: str) -> str:
 
     # Clean up any spaces around ::
     answer = re.sub(r"::\s+", "::", answer)
-    logger.debug(f"After cleaning spaces: {answer}")
 
     # Pattern to match entity_type::entity_name, with optional quotes
     pattern = r"(?:')?([a-zA-Z0-9-]+)::([a-zA-Z0-9]+)(?:')?"
-    logger.debug(f"Using pattern: {pattern}")
 
     matches = list(re.finditer(pattern, answer))
     logger.debug(f"Found {len(matches)} matches")
@@ -290,10 +288,8 @@ def rename_entities_in_answer(answer: str) -> str:
         entity_type = match.group(1).upper().strip()
         entity_name = match.group(2).strip()
         potential_entity_id_name = make_entity_id(entity_type, entity_name)
-        logger.debug(f"Processing entity: {potential_entity_id_name}")
 
         if entity_type not in active_entity_types:
-            logger.debug(f"Entity type {entity_type} not in active types")
             continue
 
         replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)
@@ -303,14 +299,8 @@ def rename_entities_in_answer(answer: str) -> str:
             processed_refs[match.group(0)] = (
                 replacement_candidate.semantic_linked_entity_name
             )
-            logger.debug(
-                f"Added replacement: {match.group(0)} -> {replacement_candidate.semantic_linked_entity_name}"
-            )
         else:
             processed_refs[match.group(0)] = replacement_candidate.semantic_entity_name
-            logger.debug(
-                f"Added replacement: {match.group(0)} -> {replacement_candidate.semantic_entity_name}"
-            )
 
     # Replace all references in the answer
     for ref, replacement in processed_refs.items():

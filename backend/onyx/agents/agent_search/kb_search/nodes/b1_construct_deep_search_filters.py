@@ -53,10 +53,6 @@ def construct_deep_search_filters(
     else:
         source_document_results_str = "(no source document results generated)"
 
-    logger.info(
-        f"B1 - characters in source_document_results_str: len{source_document_results_str}"
-    )
-
     search_filter_construction_prompt = (
         SEARCH_FILTER_CONSTRUCTION_PROMPT.replace(
             "---entity_type_descriptions---",
@@ -136,7 +132,6 @@ def construct_deep_search_filters(
                 structure=[],
             )
 
-            logger.info(f"B1 - filter_results: {filter_results}")
     except Exception as e:
         logger.error(f"Error in construct_deep_search_filters: {e}")
         filter_results = KGFilterConstructionResults(

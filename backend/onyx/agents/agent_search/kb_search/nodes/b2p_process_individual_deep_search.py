@@ -12,6 +12,7 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
 )
 from onyx.agents.agent_search.kb_search.graph_utils import write_custom_event
 from onyx.agents.agent_search.kb_search.ops import research
+from onyx.agents.agent_search.kb_search.states import KGSourceDivisionType
 from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
 from onyx.agents.agent_search.kb_search.states import ResearchObjectUpdate
 from onyx.agents.agent_search.models import GraphConfig
@@ -23,8 +24,10 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import SubQueryPiece
+from onyx.configs.kg_configs import KG_MAX_SEARCH_DOCUMENTS
 from onyx.configs.kg_configs import KG_OBJECT_SOURCE_RESEARCH_TIMEOUT
 from onyx.context.search.models import InferenceSection
+from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.prompts.kg_prompts import KG_OBJECT_SOURCE_RESEARCH_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -48,51 +51,51 @@ def process_individual_deep_search(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     search_tool = graph_config.tooling.search_tool
     question = state.broken_down_question
-    source_division = state.source_division
-    source_filters = state.source_entity_filters
+    segment_type = state.segment_type
 
     object = state.entity.replace("::", ":: ").lower()
-
-    object_id = object.split("::")[1].strip()
 
     if not search_tool:
         raise ValueError("search_tool is not provided")
 
     research_nr = state.research_nr
 
-    extended_question = f"{question} in regards to {object}"
-    if source_division:
-        extended_question = question
+    if segment_type == KGSourceDivisionType.ENTITY.value:
 
-    raw_kg_entity_filters = copy.deepcopy(
-        list(set((state.vespa_filter_results.global_entity_filters + [state.entity])))
-    )
+        object_id = split_entity_id(object)[1].strip()
+        extended_question = f"{question} in regards to {object}"
+        source_filters = state.source_entity_filters
 
-    kg_entity_filters = []
-    for raw_kg_entity_filter in raw_kg_entity_filters:
-        if "::" not in raw_kg_entity_filter:
-            raw_kg_entity_filter += "::*"
-        kg_entity_filters.append(raw_kg_entity_filter)
+        # TODO: this does not really occur in V1. But needs to be changed for V2
+        raw_kg_entity_filters = copy.deepcopy(
+            list(
+                set((state.vespa_filter_results.global_entity_filters + [state.entity]))
+            )
+        )
 
-    kg_relationship_filters = copy.deepcopy(
-        state.vespa_filter_results.global_relationship_filters
-    )
+        kg_entity_filters = []
+        for raw_kg_entity_filter in raw_kg_entity_filters:
+            if "::" not in raw_kg_entity_filter:
+                raw_kg_entity_filter += "::*"
+            kg_entity_filters.append(raw_kg_entity_filter)
 
-    # if this is a single-object analysis and object is a source,
-    # drop the other filters as they already were included
-    # in the KG query that led to this analysis
+        kg_relationship_filters = copy.deepcopy(
+            state.vespa_filter_results.global_relationship_filters
+        )
 
-    if source_division and source_filters:
-        for source_filter in source_filters:
-            if object_id.lower() == source_filter.lower():
-                source_filters = [source_filter]
-                kg_relationship_filters = []
-                kg_entity_filters = []
-                break
+        logger.debug("Research for object: " + object)
+        logger.debug(f"kg_entity_filters: {kg_entity_filters}")
+        logger.debug(f"kg_relationship_filters: {kg_relationship_filters}")
 
-    logger.info("Research for object: " + object)
-    logger.info(f"kg_entity_filters: {kg_entity_filters}")
-    logger.info(f"kg_relationship_filters: {kg_relationship_filters}")
+    else:
+        # if we came through the entity view route, in KG V1 the state entity
+        # is the document to search for. No need to set other filters then.
+        object_id = state.entity  # source doc in this case
+        extended_question = f"{question}"
+        source_filters = [object_id]
+
+        kg_entity_filters = None
+        kg_relationship_filters = None
 
     # Step 4 - stream out the research query
     write_custom_event(
@@ -105,6 +108,12 @@ def process_individual_deep_search(
         ),
         writer,
     )
+
+    if source_filters and (len(source_filters) > KG_MAX_SEARCH_DOCUMENTS):
+        logger.debug(
+            f"Too many sources ({len(source_filters)}), setting to None and effectively filtered search"
+        )
+        source_filters = None
 
     retrieved_docs = research(
         question=extended_question,

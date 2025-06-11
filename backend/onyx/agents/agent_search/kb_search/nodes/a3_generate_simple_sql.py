@@ -14,6 +14,7 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_step_answer_explicit,
 )
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
+from onyx.agents.agent_search.kb_search.states import KGRelationshipDetection
 from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import SQLSimpleGenerationUpdate
@@ -22,11 +23,17 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.configs.kg_configs import KG_MAX_DEEP_SEARCH_RESULTS
+from onyx.configs.kg_configs import KG_SQL_GENERATION_MAX_TOKENS
 from onyx.configs.kg_configs import KG_SQL_GENERATION_TIMEOUT
+from onyx.configs.kg_configs import KG_SQL_GENERATION_TIMEOUT_OVERRIDE
+from onyx.configs.kg_configs import KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX
+from onyx.configs.kg_configs import KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX
+from onyx.configs.kg_configs import KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX
 from onyx.db.engine import get_db_readonly_user_session_with_current_tenant
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
+from onyx.prompts.kg_prompts import ENTITY_SOURCE_DETECTION_PROMPT
+from onyx.prompts.kg_prompts import SIMPLE_ENTITY_SQL_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_CORRECTION_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
@@ -37,15 +44,64 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 
-def _drop_temp_views(
-    allowed_docs_view_name: str, kg_relationships_view_name: str
-) -> None:
-    with get_session_with_current_tenant() as db_session:
-        drop_views(
-            db_session,
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
+def _raise_error_if_sql_fails_problem_test(
+    sql_statement: str, relationship_view_name: str, entity_view_name: str | None
+) -> bool:
+    """
+    Check if the SQL statement is valid.
+    """
+
+    if entity_view_name is None:
+        raise ValueError("entity_view_name is not set for sql_statement")
+
+    authorized_user_specification = relationship_view_name[
+        len(KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX) :
+    ]
+
+    # remove the proper relationship and entity view names
+    base_sql_statement = sql_statement.replace(relationship_view_name, " ").replace(
+        entity_view_name, " "
+    )
+
+    # check whether other non-authorized relationship or entity viewnames are in sql_statement
+    if any(
+        view_name in base_sql_statement
+        for view_name in [
+            KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX,
+            KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX,
+            KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX,
+        ]
+    ):
+        raise ValueError(
+            f"SQL statement would attempt to access unauthorized views: {sql_statement} for \
+user specification {authorized_user_specification}"
         )
+
+    # check whether the sql statement would attempt to do unauthorized operations
+    # (the restrivtive db priviledges would preclude this anyway, but we check for safety and reporting)
+    UNAUTHORIZED_SQL_OPERATIONS = [
+        "INSERT ",
+        "UPDATE ",
+        "DELETE ",
+        "CREATE ",
+        "DROP ",
+        "ALTER ",
+        "TRUNCATE ",
+        "RENAME ",
+        "GRANT ",
+        "REVOKE ",
+        "DENY ",
+    ]
+
+    if any(
+        operation.upper() in base_sql_statement.upper()
+        for operation in UNAUTHORIZED_SQL_OPERATIONS
+    ):
+        raise ValueError(
+            f"SQL statement would attempt to do unauthorized operations: {sql_statement}"
+        )
+
+    return True
 
 
 def _build_entity_explanation_str(entity_normalization_map: dict[str, str]) -> str:
@@ -62,13 +118,14 @@ def _build_entity_explanation_str(entity_normalization_map: dict[str, str]) -> s
 def _sql_is_aggregate_query(sql_statement: str) -> bool:
     return any(
         agg_func in sql_statement.upper()
-        for agg_func in ["COUNT(", "MAX(", "MIN(", "AVG(", "SUM("]
+        for agg_func in ["COUNT(", "MAX(", "MIN(", "AVG(", "SUM(", "GROUP BY"]
     )
 
 
 def _get_source_documents(
     sql_statement: str,
     llm: LLM,
+    focus: str | None,
     allowed_docs_view_name: str,
     kg_relationships_view_name: str,
 ) -> str | None:
@@ -76,7 +133,13 @@ def _get_source_documents(
     Generate SQL to retrieve source documents based on the input sql statement.
     """
 
-    source_detection_prompt = SOURCE_DETECTION_PROMPT.replace(
+    base_prompt = (
+        SOURCE_DETECTION_PROMPT
+        if (focus == KGRelationshipDetection.RELATIONSHIPS.value or focus is None)
+        else ENTITY_SOURCE_DETECTION_PROMPT
+    )
+
+    source_detection_prompt = base_prompt.replace(
         "---original_sql_statement---", sql_statement
     )
 
@@ -92,8 +155,8 @@ def _get_source_documents(
             KG_SQL_GENERATION_TIMEOUT,
             llm.invoke,
             prompt=msg,
-            timeout_override=25,
-            max_tokens=1200,
+            timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
+            max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
         )
 
         cleaned_response = (
@@ -193,22 +256,33 @@ def generate_simple_sql(
 
         doc_temp_view = state.kg_doc_temp_view_name
         rel_temp_view = state.kg_rel_temp_view_name
+        ent_temp_view = state.kg_entity_temp_view_name
 
-        simple_sql_prompt = (
-            SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
-            .replace("---relationship_types---", relationship_types_str)
-            .replace("---question---", question)
-            .replace("---entity_explanation_string---", entity_explanation_str)
-            .replace(
-                "---query_entities_with_attributes---",
-                "\n".join(state.query_graph_entities_w_attributes),
+        if state.query_type == KGRelationshipDetection.NO_RELATIONSHIPS.value:
+            simple_sql_prompt = (
+                SIMPLE_ENTITY_SQL_PROMPT.replace(
+                    "---entity_types---", entities_types_str
+                )
+                .replace("---question---", question)
+                .replace("---entity_explanation_string---", entity_explanation_str)
             )
-            .replace(
-                "---query_relationships---", "\n".join(state.query_graph_relationships)
+        else:
+            simple_sql_prompt = (
+                SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
+                .replace("---relationship_types---", relationship_types_str)
+                .replace("---question---", question)
+                .replace("---entity_explanation_string---", entity_explanation_str)
+                .replace(
+                    "---query_entities_with_attributes---",
+                    "\n".join(state.query_graph_entities_w_attributes),
+                )
+                .replace(
+                    "---query_relationships---",
+                    "\n".join(state.query_graph_relationships),
+                )
+                .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
+                .replace("---user_name---", f"EMPLOYEE:{user_name}")
             )
-            .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
-            .replace("---user_name---", f"EMPLOYEE:{user_name}")
-        )
 
         # prepare SQL query generation
 
@@ -238,6 +312,8 @@ def generate_simple_sql(
             sql_statement = sql_statement.split(";")[0].strip() + ";"
             sql_statement = sql_statement.replace("sql", "").strip()
             sql_statement = sql_statement.replace("kg_relationship", rel_temp_view)
+            if ent_temp_view:
+                sql_statement = sql_statement.replace("kg_entity", ent_temp_view)
 
             reasoning = (
                 cleaned_response.split("<reasoning>")[1]
@@ -249,72 +325,92 @@ def generate_simple_sql(
             # TODO: restructure with broader node rework
             logger.error(f"Error in SQL generation: {e}")
 
-            _drop_temp_views(
+            drop_views(
                 allowed_docs_view_name=doc_temp_view,
                 kg_relationships_view_name=rel_temp_view,
+                kg_entity_view_name=ent_temp_view,
             )
             raise e
 
-        logger.debug(f"A3 - sql_statement: {sql_statement}")
+        if state.query_type == KGRelationshipDetection.RELATIONSHIPS.value:
+            # Correction if needed:
 
-        # Correction if needed:
-
-        correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
-            "---draft_sql---", sql_statement
-        )
-
-        msg = [
-            HumanMessage(
-                content=correction_prompt,
-            )
-        ]
-
-        try:
-            llm_response = run_with_timeout(
-                KG_SQL_GENERATION_TIMEOUT,
-                primary_llm.invoke,
-                prompt=msg,
-                timeout_override=25,
-                max_tokens=1500,
+            correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
+                "---draft_sql---", sql_statement
             )
 
-            cleaned_response = (
-                str(llm_response.content).replace("```json\n", "").replace("\n```", "")
-            )
+            msg = [
+                HumanMessage(
+                    content=correction_prompt,
+                )
+            ]
 
-            sql_statement = (
-                cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
-            )
-            sql_statement = sql_statement.split(";")[0].strip() + ";"
-            sql_statement = sql_statement.replace("sql", "").strip()
+            try:
+                llm_response = run_with_timeout(
+                    KG_SQL_GENERATION_TIMEOUT,
+                    primary_llm.invoke,
+                    prompt=msg,
+                    timeout_override=25,
+                    max_tokens=1500,
+                )
 
-        except Exception as e:
-            logger.error(
-                f"Error in generating the sql correction: {e}. Original model response: {cleaned_response}"
-            )
+                cleaned_response = (
+                    str(llm_response.content)
+                    .replace("```json\n", "")
+                    .replace("\n```", "")
+                )
 
-            _drop_temp_views(
-                allowed_docs_view_name=doc_temp_view,
-                kg_relationships_view_name=rel_temp_view,
-            )
+                sql_statement = (
+                    cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
+                )
+                sql_statement = sql_statement.split(";")[0].strip() + ";"
+                sql_statement = sql_statement.replace("sql", "").strip()
 
-            raise e
+            except Exception as e:
+                logger.error(
+                    f"Error in generating the sql correction: {e}. Original model response: {cleaned_response}"
+                )
+
+                drop_views(
+                    allowed_docs_view_name=doc_temp_view,
+                    kg_relationships_view_name=rel_temp_view,
+                    kg_entity_view_name=ent_temp_view,
+                )
+
+                raise e
 
         logger.debug(f"A3 - sql_statement after correction: {sql_statement}")
 
         # Get SQL for source documents
 
-        source_documents_sql = _get_source_documents(
-            sql_statement,
-            llm=primary_llm,
-            allowed_docs_view_name=doc_temp_view,
-            kg_relationships_view_name=rel_temp_view,
-        )
+        source_documents_sql = None
 
-        logger.info(f"A3 source_documents_sql: {source_documents_sql}")
+        if (
+            state.query_type == KGRelationshipDetection.RELATIONSHIPS.value
+            or _sql_is_aggregate_query(sql_statement)
+        ):
+            source_documents_sql = _get_source_documents(
+                sql_statement,
+                llm=primary_llm,
+                focus=state.query_type,
+                allowed_docs_view_name=doc_temp_view,
+                kg_relationships_view_name=rel_temp_view,
+            )
+
+            if source_documents_sql and ent_temp_view:
+                source_documents_sql = source_documents_sql.replace(
+                    "kg_entity", ent_temp_view
+                )
+
+            logger.debug(f"A3 source_documents_sql: {source_documents_sql}")
 
         scalar_result = None
         query_results = None
+
+        # check sql, just in case
+        _raise_error_if_sql_fails_problem_test(
+            sql_statement, rel_temp_view, ent_temp_view
+        )
 
         with get_db_readonly_user_session_with_current_tenant() as db_session:
             try:
@@ -337,8 +433,16 @@ def generate_simple_sql(
                 raise e
 
         source_document_results = None
+
         if source_documents_sql is not None and source_documents_sql != sql_statement:
+
+            # check source document sql, just in case
+            _raise_error_if_sql_fails_problem_test(
+                source_documents_sql, rel_temp_view, ent_temp_view
+            )
+
             with get_db_readonly_user_session_with_current_tenant() as db_session:
+
                 try:
                     result = db_session.execute(text(source_documents_sql))
                     rows = result.fetchall()
@@ -353,14 +457,25 @@ def generate_simple_sql(
                     logger.error(f"Error executing Individualized SQL query: {e}")
 
         else:
-            source_document_results = None
 
-        _drop_temp_views(
+            if state.query_type == KGRelationshipDetection.NO_RELATIONSHIPS.value:
+                # source documents should be returned for entity queries
+                source_document_results = [
+                    x["source_document"]
+                    for x in query_results
+                    if "source_document" in x
+                ]
+
+            else:
+                source_document_results = None
+
+        drop_views(
             allowed_docs_view_name=doc_temp_view,
             kg_relationships_view_name=rel_temp_view,
+            kg_entity_view_name=ent_temp_view,
         )
 
-        logger.info(f"A3 - Number of query_results: {len(query_results)}")
+        logger.debug(f"A3 - Number of query_results: {len(query_results)}")
 
         # Stream out reasoning and SQL query
 

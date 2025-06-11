@@ -25,7 +25,10 @@ def reset_full_kg_index__commit(db_session: Session) -> None:
     # Update all connectors to disable KG processing
     db_session.query(Connector).update({"kg_processing_enabled": False})
 
-    db_session.query(KGEntityType).update({"active": False})
+    # Only reset grounded entity types
+    db_session.query(KGEntityType).filter(
+        KGEntityType.grounded_source_name.isnot(None)
+    ).update({"active": False})
 
     reset_all_document_kg_stages(db_session)
 

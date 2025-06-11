@@ -80,13 +80,14 @@ def extract_ert(
     stream_write_step_activities(writer, _KG_STEP_NR)
 
     # Create temporary views. TODO: move into parallel step, if ultimately materialized
-    allowed_docs_view_name, kg_relationships_view_name = get_user_view_names(user_email)
+    kg_views = get_user_view_names(user_email)
     with get_session_with_current_tenant() as db_session:
         create_views(
             db_session,
             user_email=user_email,
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
+            allowed_docs_view_name=kg_views.allowed_docs_view_name,
+            kg_relationships_view_name=kg_views.kg_relationships_view_name,
+            kg_entity_view_name=kg_views.kg_entity_view_name,
         )
 
     ### get the entities, terms, and filters
@@ -249,8 +250,9 @@ Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_
         extracted_entities_no_attributes=entities_no_attributes,
         extracted_relationships=relationship_extraction_result.relationships,
         time_filter=entity_extraction_result.time_filter,
-        kg_doc_temp_view_name=allowed_docs_view_name,
-        kg_rel_temp_view_name=kg_relationships_view_name,
+        kg_doc_temp_view_name=kg_views.allowed_docs_view_name,
+        kg_rel_temp_view_name=kg_views.kg_relationships_view_name,
+        kg_entity_temp_view_name=kg_views.kg_entity_view_name,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

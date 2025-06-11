@@ -310,18 +310,8 @@ def _get_batch_metadata(
                     source_type_classification_extraction_instructions[doc_entity]
                 )
 
-                # add select metadata keys into kg attributes
                 kg_document_meta_data_dict[document_id].document_attributes = (
-                    {
-                        entity_instructions.metadata_attribute_conversion[
-                            chunk_attr
-                        ]: chunk_attr_val
-                        for chunk_attr, chunk_attr_val in chunk_attributes.items()
-                        if chunk_attr
-                        in entity_instructions.metadata_attribute_conversion
-                    }
-                    if chunk_attributes
-                    else None
+                    chunk_attributes
                 )
                 kg_document_meta_data_dict[document_id].classification_enabled = (
                     entity_instructions.classification_instructions.classification_enabled
@@ -447,13 +437,15 @@ def kg_extraction(
             logger.info(f"Processing document batch {document_batch_counter}")
 
             # First, identify which entity we are processing for each document
-
+            entity_type_instructions = (
+                document_classification_extraction_instructions.get(
+                    connector_source, {}
+                )
+            )
             batch_metadata: dict[str, KGEnhancedDocumentMetadata] = _get_batch_metadata(
                 unprocessed_document_batch,
                 connector_source,
-                document_classification_extraction_instructions.get(
-                    connector_source, {}
-                ),
+                entity_type_instructions,
                 index_name,
                 kg_config_settings,
                 processing_chunk_batch_size,
@@ -811,6 +803,15 @@ def kg_extraction(
                                             if value
                                         }
                                     )
+                            # only keep selected attributes (and translate the attribute names)
+                            attribute_conversions = entity_type_instructions[
+                                entity_type
+                            ].metadata_attribute_conversion
+                            keep_attributes = {
+                                attribute_conversions[attr_name]: attr_val
+                                for attr_name, attr_val in entity_attributes.items()
+                                if attr_name in attribute_conversions
+                            }
 
                             upserted_entity = upsert_staging_entity(
                                 db_session=db_session,
@@ -818,7 +819,7 @@ def kg_extraction(
                                 entity_type=entity_type,
                                 document_id=document_id,
                                 occurrences=extraction_count,
-                                attributes=entity_attributes,
+                                attributes=keep_attributes,
                                 event_time=event_time,
                             )
                             metadata_tracker.track_metadata(

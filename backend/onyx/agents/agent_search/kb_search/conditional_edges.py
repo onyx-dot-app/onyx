@@ -6,8 +6,13 @@ from langgraph.types import Send
 
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import KGSearchType
+from onyx.agents.agent_search.kb_search.states import KGSourceDivisionType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
+from onyx.configs.kg_configs import KG_MAX_DECOMPOSITION_SEGMENTS
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class KGAnalysisPath(str, Enum):
@@ -44,6 +49,17 @@ def research_individual_object(
         and state.strategy == KGAnswerStrategy.DEEP
     ):
 
+        if state.source_filters and state.source_division:
+            segments = state.source_filters
+            segment_type = KGSourceDivisionType.SOURCE.value
+        else:
+            segments = state.div_con_entities
+            segment_type = KGSourceDivisionType.ENTITY.value
+
+        if segments and (len(segments) > KG_MAX_DECOMPOSITION_SEGMENTS):
+            logger.debug(f"Too many sources ({len(segments)}), usingfiltered search")
+            return "filtered_search"
+
         return [
             Send(
                 "process_individual_deep_search",
@@ -54,13 +70,14 @@ def research_individual_object(
                     vespa_filter_results=state.vespa_filter_results,
                     source_division=state.source_division,
                     source_entity_filters=state.source_filters,
+                    segment_type=segment_type,
                     log_messages=[
                         f"{edge_start_time} -- Main Edge - Parallelize Initial Sub-question Answering"
                     ],
                     step_results=[],
                 ),
             )
-            for research_nr, entity in enumerate(state.div_con_entities)
+            for research_nr, entity in enumerate(segments)
         ]
     elif state.search_type == KGSearchType.SEARCH:
         return "filtered_search"

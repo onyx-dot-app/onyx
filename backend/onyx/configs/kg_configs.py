@@ -24,6 +24,27 @@ KG_STRATEGY_GENERATION_TIMEOUT: int = int(
 
 KG_SQL_GENERATION_TIMEOUT: int = int(os.environ.get("KG_SQL_GENERATION_TIMEOUT", "25"))
 
+KG_SQL_GENERATION_TIMEOUT_OVERRIDE: int = int(
+    os.environ.get("KG_SQL_GENERATION_TIMEOUT_OVERRIDE", "25")
+)
+
+KG_SQL_GENERATION_MAX_TOKENS: int = int(
+    os.environ.get("KG_SQL_GENERATION_MAX_TOKENS", "1200")
+)
+
+KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX: str = os.environ.get(
+    "KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX", "allowed_docs"
+)
+
+KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX: str = os.environ.get(
+    "KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX", "kg_relationships_with_access"
+)
+
+KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX: str = os.environ.get(
+    "KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX", "kg_entities_with_access"
+)
+
+
 KG_FILTER_CONSTRUCTION_TIMEOUT: int = int(
     os.environ.get("KG_FILTER_CONSTRUCTION_TIMEOUT", "15")
 )
@@ -112,4 +133,10 @@ KG_CLUSTERING_RETRIEVE_THRESHOLD: float = float(
 
 KG_CLUSTERING_THRESHOLD: float = float(
     os.environ.get("KG_CLUSTERING_THRESHOLD", "0.96")
+)
+
+KG_MAX_SEARCH_DOCUMENTS: int = int(os.environ.get("KG_MAX_SEARCH_DOCUMENTS", "15"))
+
+KG_MAX_DECOMPOSITION_SEGMENTS: int = int(
+    os.environ.get("KG_MAX_DECOMPOSITION_SEGMENTS", "10")
 )
