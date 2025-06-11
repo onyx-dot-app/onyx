@@ -11,6 +11,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.orchestration.nodes.call_tool import ToolCallException
+from onyx.background.celery.tasks.kg_processing.kg_indexing import (
+    try_creating_kg_processing_task,
+)
+from onyx.background.celery.tasks.kg_processing.kg_indexing import (
+    try_creating_kg_source_reset_task,
+)
 from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
@@ -97,18 +103,9 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
-from onyx.kg.clustering.clustering import kg_clustering
-from onyx.kg.extractions.extraction_processing import kg_extraction
-from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
-from onyx.kg.resets.reset_index import reset_full_kg_index
-from onyx.kg.resets.reset_normalizations import reset_normalization_kg_index
-from onyx.kg.resets.reset_source import reset_source_kg_index
-from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
-from onyx.kg.setup.kg_default_entity_definitions import populate_default_entity_types
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
-from onyx.background.celery.tasks.kg_processing.kg_indexing import try_creating_kg_processing_task
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
@@ -165,7 +162,6 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
-from onyx.background.celery.tasks.kg_processing.kg_indexing import try_creating_kg_source_reset_task
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
@@ -592,8 +588,10 @@ def stream_chat_message_objects(
                 raise Exception("Invalid format for a source reset command")
             elif len(msg_split) == 2:
                 source_name = msg_split[1].strip()
-            else:
+            elif len(msg_split) == 1:
                 source_name = None
+            else:
+                raise Exception("Invalid format for a source reset command")
 
             try_creating_kg_source_reset_task(tenant_id, source_name, index_str)
             raise Exception(f"KG index reset for source {source_name} done")

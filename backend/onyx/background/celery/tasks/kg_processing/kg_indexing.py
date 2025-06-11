@@ -1,11 +1,18 @@
-from onyx.background.celery.tasks.kg_processing.utils import check_kg_processing_requirements, check_kg_processing_unblocked
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.apps.client import celery_app
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.background.celery.tasks.kg_processing.utils import (
+    check_kg_processing_requirements,
+)
+from onyx.background.celery.tasks.kg_processing.utils import (
+    check_kg_processing_unblocked,
+)
+from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryQueues
+from onyx.configs.constants import OnyxCeleryTask
 
 
 def try_creating_kg_processing_task(
-        tenant_id: str,
+    tenant_id: str,
 ) -> None:
     """Checks for any conditions that should block the KG processing task from being
     created, then creates the task.
@@ -37,13 +44,13 @@ def try_creating_kg_processing_task(
             f"try_creating_kg_processing_task - Unexpected exception for tenant={tenant_id}"
         )
 
-    return None
+    return
 
 
 def try_creating_kg_source_reset_task(
-        tenant_id: str,
-        source_name: str | None,
-        index_name: str,
+    tenant_id: str,
+    source_name: str | None,
+    index_name: str,
 ) -> str | None:
     """Checks for any conditions that should block the KG source reset task from being
     created, then creates the task.
