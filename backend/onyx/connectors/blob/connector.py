@@ -19,6 +19,7 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -27,11 +28,13 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import OnyxExtensionType
@@ -304,19 +307,78 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 # Handle text and document files
                 try:
                     downloaded_file = self._download_object(key)
-                    text = extract_file_text(
-                        BytesIO(downloaded_file),
-                        file_name=file_name,
-                        break_on_unprocessable=False,
+                    extraction_result = extract_text_and_images(
+                        BytesIO(downloaded_file), file_name=file_name
                     )
+
+                    # Process metadata
+                    # User specified link takes precedence
+                    final_link = extraction_result.metadata.get("link") or link
+                    p_owner_names = extraction_result.metadata.get("primary_owners")
+                    p_owners = (
+                        [BasicExpertInfo(display_name=name) for name in p_owner_names]
+                        if p_owner_names
+                        else None
+                    )
+
+                    s_owner_names = extraction_result.metadata.get("secondary_owners")
+                    s_owners = (
+                        [BasicExpertInfo(display_name=name) for name in s_owner_names]
+                        if s_owner_names
+                        else None
+                    )
+
+                    dt_str = extraction_result.metadata.get("doc_updated_at")
+                    final_time_updated = (
+                        time_str_to_utc(dt_str) if dt_str else last_modified
+                    )
+
+                    file_display_name = (
+                        extraction_result.metadata.get("file_display_name") or file_name
+                    )
+
+                    metadata_tags = {
+                        k: v
+                        for k, v in extraction_result.metadata.items()
+                        if k
+                        not in [
+                            "document_id",
+                            "time_updated",
+                            "doc_updated_at",
+                            "link",
+                            "primary_owners",
+                            "secondary_owners",
+                            "filename",
+                            "file_display_name",
+                            "title",
+                            "connector_type",
+                            "pdf_password",
+                            "mime_type",
+                        ]
+                    }
+
+                    sections: list[TextSection | ImageSection] = []
+                    if extraction_result.text_content.strip():
+                        logger.debug(
+                            f"Creating TextSection for {file_name} with link: {link}"
+                        )
+                        sections.append(
+                            TextSection(
+                                link=final_link,
+                                text=extraction_result.text_content.strip(),
+                            )
+                        )
+
                     batch.append(
                         Document(
                             id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                            sections=[TextSection(link=link, text=text)],
+                            sections=sections,
                             source=DocumentSource(self.bucket_type.value),
-                            semantic_identifier=file_name,
-                            doc_updated_at=last_modified,
-                            metadata={},
+                            semantic_identifier=file_display_name,
+                            doc_updated_at=final_time_updated,
+                            metadata=metadata_tags,
+                            primary_owners=p_owners,
+                            secondary_owners=s_owners,
                         )
                     )
                     if len(batch) == self.batch_size:
