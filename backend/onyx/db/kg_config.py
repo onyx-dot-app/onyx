@@ -97,6 +97,15 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
     return kg_config_settings
 
 
+def validate_kg_settings(kg_config_settings: KGConfigSettings) -> None:
+    if not kg_config_settings.KG_ENABLED:
+        raise ValueError("KG is not enabled")
+    if not kg_config_settings.KG_VENDOR:
+        raise ValueError("KG_VENDOR is not set")
+    if not kg_config_settings.KG_VENDOR_DOMAINS:
+        raise ValueError("KG_VENDOR_DOMAINS is not set")
+
+
 def set_kg_processing_in_progress_status(
     db_session: Session, processing_type: KGProcessingType, in_progress: bool
 ) -> None:

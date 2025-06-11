@@ -406,7 +406,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             doc_metadata_list.extend(
                 SlimDocument(
                     id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
-                    perm_sync_data={},
+                    external_access=None,
                 )
                 for instance_dict in query_result["records"]
             )

@@ -27,6 +27,7 @@ from slack_sdk.http_retry.builtin_interval_calculators import (
 )
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import SLACK_NUM_THREADS
@@ -35,7 +36,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
@@ -51,9 +52,15 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.connectors.slack.access import get_channel_access
+from onyx.connectors.slack.models import ChannelType
+from onyx.connectors.slack.models import MessageType
+from onyx.connectors.slack.models import ThreadType
 from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.onyx_slack_web_client import OnyxSlackWebClient
-from onyx.connectors.slack.utils import expert_info_from_slack_id
+from onyx.connectors.slack.utils import (
+    expert_info_from_slack_id,
+)
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call
 from onyx.connectors.slack.utils import SlackTextCleaner
@@ -66,12 +73,6 @@ logger = setup_logger()
 _SLACK_LIMIT = 900
 
 
-ChannelType = dict[str, Any]
-MessageType = dict[str, Any]
-# list of messages in a thread
-ThreadType = list[MessageType]
-
-
 class SlackCheckpoint(ConnectorCheckpoint):
     channel_ids: list[str] | None  # e.g. C8E6WHE2X
 
@@ -80,6 +81,8 @@ class SlackCheckpoint(ConnectorCheckpoint):
     # since we walk backwards
     channel_completion_map: dict[str, str]
     current_channel: ChannelType | None
+    current_channel_access: ExternalAccess | None
+
     seen_thread_ts: list[
         str
     ]  # apparently we identify threads/messages uniquely by timestamp?
@@ -90,7 +93,7 @@ def _collect_paginated_channels(
     exclude_archived: bool,
     channel_types: list[str],
 ) -> list[ChannelType]:
-    channels: list[dict[str, Any]] = []
+    channels: list[ChannelType] = []
     for result in make_paginated_slack_api_call(
         client.conversations_list,
         exclude_archived=exclude_archived,
@@ -109,7 +112,7 @@ def get_channels(
     get_private: bool = True,
 ) -> list[ChannelType]:
     """Get all channels in the workspace."""
-    channels: list[dict[str, Any]] = []
+    channels: list[ChannelType] = []
     channel_types = []
     if get_public:
         channel_types.append("public_channel")
@@ -140,7 +143,7 @@ def get_channels(
 
 def get_channel_messages(
     client: WebClient,
-    channel: dict[str, Any],
+    channel: ChannelType,
     oldest: str | None = None,
     latest: str | None = None,
     callback: IndexingHeartbeatInterface | None = None,
@@ -193,6 +196,7 @@ def thread_to_doc(
     slack_cleaner: SlackTextCleaner,
     client: WebClient,
     user_cache: dict[str, BasicExpertInfo | None],
+    channel_access: ExternalAccess | None,
 ) -> Document:
     channel_id = channel["id"]
 
@@ -242,6 +246,7 @@ def thread_to_doc(
         doc_updated_at=get_latest_message_time(thread),
         primary_owners=valid_experts,
         metadata={"Channel": channel["name"]},
+        external_access=channel_access,
     )
 
 
@@ -290,10 +295,10 @@ def default_msg_filter(message: MessageType) -> SlackMessageFilterReason | None:
 
 
 def filter_channels(
-    all_channels: list[dict[str, Any]],
+    all_channels: list[ChannelType],
     channels_to_connect: list[str] | None,
     regex_enabled: bool,
-) -> list[dict[str, Any]]:
+) -> list[ChannelType]:
     if not channels_to_connect:
         return all_channels
 
@@ -393,6 +398,7 @@ def _message_to_doc(
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
     seen_thread_ts: set[str],
+    channel_access: ExternalAccess | None,
     msg_filter_func: Callable[
         [MessageType], SlackMessageFilterReason | None
     ] = default_msg_filter,
@@ -442,6 +448,7 @@ def _message_to_doc(
         slack_cleaner=slack_cleaner,
         client=client,
         user_cache=user_cache,
+        channel_access=channel_access,
     )
     return doc, None
 
@@ -465,9 +472,17 @@ def _get_all_doc_ids(
     filtered_channels = filter_channels(
         all_channels, channels, channel_name_regex_enabled
     )
+    user_cache: dict[str, BasicExpertInfo | None] = {}
 
     for channel in filtered_channels:
         channel_id = channel["id"]
+        # NOTE: external_access is a frozen object, so it's okay to safe to use a single
+        # instance for all documents in the channel
+        external_access = get_channel_access(
+            client=client,
+            channel=channel,
+            user_cache=user_cache,
+        )
         channel_message_batches = get_channel_messages(
             client=client,
             channel=channel,
@@ -490,7 +505,7 @@ def _get_all_doc_ids(
                         id=_build_doc_id(
                             channel_id=channel_id, thread_ts=message["ts"]
                         ),
-                        perm_sync_data={"channel_id": channel_id},
+                        external_access=external_access,
                     )
                 )
 
@@ -517,6 +532,7 @@ def _process_message(
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
     seen_thread_ts: set[str],
+    channel_access: ExternalAccess | None,
     msg_filter_func: Callable[
         [MessageType], SlackMessageFilterReason | None
     ] = default_msg_filter,
@@ -536,6 +552,7 @@ def _process_message(
             slack_cleaner=slack_cleaner,
             user_cache=user_cache,
             seen_thread_ts=seen_thread_ts,
+            channel_access=channel_access,
             msg_filter_func=msg_filter_func,
         )
         return ProcessedSlackMessage(
@@ -564,7 +581,9 @@ def _process_message(
 
 
 class SlackConnector(
-    SlimConnector, CredentialsConnector, CheckpointedConnector[SlackCheckpoint]
+    SlimConnector,
+    CredentialsConnector,
+    CheckpointedConnectorWithPermSync[SlackCheckpoint],
 ):
     FAST_TIMEOUT = 1
 
@@ -729,11 +748,12 @@ class SlackConnector(
             callback=callback,
         )
 
-    def load_from_checkpoint(
+    def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: SlackCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[SlackCheckpoint]:
         """Rough outline:
 
@@ -773,6 +793,15 @@ class SlackConnector(
                 return checkpoint
 
             checkpoint.current_channel = filtered_channels[0]
+            if include_permissions:
+                # checkpoint.current_channel is guaranteed to be non-None here since we just assigned it
+                assert checkpoint.current_channel is not None
+                channel_access = get_channel_access(
+                    client=self.client,
+                    channel=checkpoint.current_channel,
+                    user_cache=self.user_cache,
+                )
+                checkpoint.current_channel_access = channel_access
             checkpoint.has_more = True
             return checkpoint
 
@@ -850,6 +879,7 @@ class SlackConnector(
                             slack_cleaner=self.text_cleaner,
                             user_cache=self.user_cache,
                             seen_thread_ts=seen_thread_ts,
+                            channel_access=checkpoint.current_channel_access,
                         )
                     )
 
@@ -924,9 +954,7 @@ class SlackConnector(
                     )
                     has_more_in_channel = False
 
-            if has_more_in_channel:
-                checkpoint.current_channel = channel
-            else:
+            if not has_more_in_channel:
                 num_channels_remaining -= 1
 
                 new_channel_id = next(
@@ -941,6 +969,13 @@ class SlackConnector(
                 if new_channel_id:
                     new_channel = _get_channel_by_id(self.client, new_channel_id)
                     checkpoint.current_channel = new_channel
+                    if include_permissions:
+                        channel_access = get_channel_access(
+                            client=self.client,
+                            channel=new_channel,
+                            user_cache=self.user_cache,
+                        )
+                        checkpoint.current_channel_access = channel_access
                 else:
                     checkpoint.current_channel = None
 
@@ -972,6 +1007,26 @@ class SlackConnector(
             )
 
         return checkpoint
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SlackCheckpoint,
+    ) -> CheckpointOutput[SlackCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SlackCheckpoint,
+    ) -> CheckpointOutput[SlackCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
 
     def validate_connector_settings(self) -> None:
         """
@@ -1073,6 +1128,7 @@ class SlackConnector(
             channel_ids=None,
             channel_completion_map={},
             current_channel=None,
+            current_channel_access=None,
             seen_thread_ts=[],
             has_more=True,
         )
@@ -1108,7 +1164,9 @@ if __name__ == "__main__":
     checkpoint = connector.build_dummy_checkpoint()
 
     gen = connector.load_from_checkpoint(
-        one_day_ago, current, cast(SlackCheckpoint, checkpoint)
+        one_day_ago,
+        current,
+        cast(SlackCheckpoint, checkpoint),
     )
     try:
         for document_or_failure in gen:

@@ -77,6 +77,7 @@ class StageCompletion(BaseModel):
     stage: DriveRetrievalStage
     completed_until: SecondsSinceUnixEpoch
     current_folder_or_drive_id: str | None = None
+    next_page_token: str | None = None
 
     # only used for shared drives
     processed_drive_ids: set[str] = set()

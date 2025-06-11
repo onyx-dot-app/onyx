@@ -21,14 +21,9 @@ from tenacity import retry_if_exception
 from tenacity import stop_after_delay
 from tenacity import wait_random_exponential
 
-from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSION_SYNC_PERIODS
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
-from ee.onyx.external_permissions.sync_params import (
-    DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
-)
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
@@ -105,16 +100,29 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
+    sync_config = get_source_perm_sync_config(cc_pair.connector.source)
+    if sync_config is None:
+        logger.error(f"No sync config found for {cc_pair.connector.source}")
+        return False
+
+    if sync_config.doc_sync_config is None:
+        logger.error(f"No doc sync config found for {cc_pair.connector.source}")
+        return False
+
+    # if indexing also does perm sync, don't start running doc_sync until at
+    # least one indexing is done
+    if (
+        sync_config.doc_sync_config.initial_index_should_sync
+        and cc_pair.last_successful_index_time is None
+    ):
+        return False
+
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:
         return True
 
-    source_sync_period = DOC_PERMISSION_SYNC_PERIODS.get(cc_pair.connector.source)
-
-    if not source_sync_period:
-        source_sync_period = DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
-
+    source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
     source_sync_period *= int(OnyxRuntime.get_doc_permission_sync_multiplier())
 
     # If the last sync is greater than the full fetch period, we run the sync
@@ -432,11 +440,15 @@ def connector_permission_sync_generator_task(
                 raise
 
             source_type = cc_pair.connector.source
+            sync_config = get_source_perm_sync_config(source_type)
+            if sync_config is None:
+                logger.error(f"No sync config found for {source_type}")
+                return None
 
-            doc_sync_func = DOC_PERMISSIONS_FUNC_MAP.get(source_type)
-            if doc_sync_func is None:
-                if source_type in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION:
+            if sync_config.doc_sync_config is None:
+                if sync_config.censoring_config:
                     return None
+
                 raise ValueError(
                     f"No doc sync func found for {source_type} with cc_pair={cc_pair_id}"
                 )
@@ -468,6 +480,7 @@ def connector_permission_sync_generator_task(
                     credential_id=cc_pair.credential.id,
                 )
 
+            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
             document_external_accesses = doc_sync_func(
                 cc_pair, fetch_all_existing_docs_fn, callback
             )

@@ -58,6 +58,8 @@ def slack_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
+    """NOTE: not used atm. All channel access is done at the
+    individual user level. Leaving in for now in case we need it later."""
 
     provider = OnyxDBCredentialsProvider(tenant_id, "slack", cc_pair.credential.id)
     r = get_redis_client(tenant_id=tenant_id)

@@ -344,7 +344,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             slim_doc_batch.append(
                 SlimDocument(
                     id=id,
-                    perm_sync_data=None,
+                    external_access=None,
                 )
             )
             if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
@@ -431,6 +431,8 @@ if __name__ == "__main__":
         }
     )
     document_batches = connector.load_from_checkpoint(
-        0, float("inf"), JiraConnectorCheckpoint(has_more=True)
+        0,
+        float("inf"),
+        JiraConnectorCheckpoint(has_more=True),
     )
     print(next(document_batches))

@@ -39,7 +39,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
     InCodeToolInfo(
         cls=ImageGenerationTool,
         description=(
-            "The Image Generation Action allows the assistant to use DALL-E 3 to generate images. "
+            "The Image Generation Action allows the assistant to use DALL-E 3 or GPT-IMAGE-1 to generate images. "
             "The action will be used when the user asks the assistant to generate an image."
         ),
         in_code_tool_id=ImageGenerationTool.__name__,

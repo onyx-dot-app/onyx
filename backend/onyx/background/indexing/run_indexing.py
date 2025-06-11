@@ -8,6 +8,7 @@ from datetime import timezone
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.access.access import source_should_fetch_permissions_during_indexing
 from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
 from onyx.background.indexing.checkpointing_utils import get_latest_valid_checkpoint
 from onyx.background.indexing.checkpointing_utils import save_checkpoint
@@ -28,11 +29,13 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import TextSection
+from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -76,6 +79,7 @@ def _get_connector_runner(
     batch_size: int,
     start_time: datetime,
     end_time: datetime,
+    include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
 ) -> ConnectorRunner:
     """
@@ -132,6 +136,7 @@ def _get_connector_runner(
     return ConnectorRunner(
         connector=runnable_connector,
         batch_size=batch_size,
+        include_permissions=include_permissions,
         time_range=(start_time, end_time),
     )
 
@@ -186,6 +191,7 @@ class RunIndexingContext(BaseModel):
     earliest_index_time: float
     from_beginning: bool
     is_primary: bool
+    should_fetch_permissions_during_indexing: bool
     search_settings_status: IndexModelStatus
 
 
@@ -276,6 +282,14 @@ def _run_indexing(
 
         db_connector = index_attempt_start.connector_credential_pair.connector
         db_credential = index_attempt_start.connector_credential_pair.credential
+        is_primary = (
+            index_attempt_start.search_settings.status == IndexModelStatus.PRESENT
+        )
+        from_beginning = index_attempt_start.from_beginning
+        has_successful_attempt = (
+            index_attempt_start.connector_credential_pair.last_successful_index_time
+            is not None
+        )
         ctx = RunIndexingContext(
             index_name=index_attempt_start.search_settings.index_name,
             cc_pair_id=index_attempt_start.connector_credential_pair.id,
@@ -287,11 +301,18 @@ def _run_indexing(
                 if db_connector.indexing_start
                 else 0
             ),
-            from_beginning=index_attempt_start.from_beginning,
+            from_beginning=from_beginning,
             # Only update cc-pair status for primary index jobs
             # Secondary index syncs at the end when swapping
-            is_primary=(
-                index_attempt_start.search_settings.status == IndexModelStatus.PRESENT
+            is_primary=is_primary,
+            should_fetch_permissions_during_indexing=(
+                index_attempt_start.connector_credential_pair.access_type
+                == AccessType.SYNC
+                and source_should_fetch_permissions_during_indexing(db_connector.source)
+                and is_primary
+                # if we've already successfully indexed, let the doc_sync job
+                # take care of doc-level permissions
+                and (from_beginning or not has_successful_attempt)
             ),
             search_settings_status=index_attempt_start.search_settings.status,
         )
@@ -403,6 +424,7 @@ def _run_indexing(
                 batch_size=INDEX_BATCH_SIZE,
                 start_time=window_start,
                 end_time=window_end,
+                include_permissions=ctx.should_fetch_permissions_during_indexing,
             )
 
             # don't use a checkpoint if we're explicitly indexing from
@@ -737,6 +759,8 @@ def _run_indexing(
 
     memory_tracer.stop()
 
+    # we know index attempt is successful (at least partially) at this point,
+    # all other cases have been short-circuited
     elapsed_time = time.monotonic() - start_time
     with get_session_with_current_tenant() as db_session_temp:
         # resolve entity-based errors
@@ -780,6 +804,12 @@ def _run_indexing(
                 credential_id=ctx.credential_id,
                 run_dt=window_end,
             )
+            if ctx.should_fetch_permissions_during_indexing:
+                mark_cc_pair_as_permissions_synced(
+                    db_session=db_session_temp,
+                    cc_pair_id=ctx.cc_pair_id,
+                    start_time=window_end,
+                )
 
 
 def run_indexing_entrypoint(

@@ -1,8 +1,10 @@
 import copy
 import os
+import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from http import HTTPStatus
 from typing import Any
 from typing import cast
 
@@ -492,7 +494,41 @@ def _collect_documents_for_channel(
             continue
 
         try:
-            replies = list(message.replies.get_all().execute_query())
+            MAX_RETRIES = 10
+            retries = 0
+            replies: list[ChatMessage] | None = None
+            cre: ClientRequestException | None = None
+
+            while retries < MAX_RETRIES:
+                try:
+                    replies = list(message.replies.get_all().execute_query())
+                    cre = None
+                    break
+
+                except ClientRequestException as e:
+                    cre = e
+
+                    if not cre.response:
+                        break
+                    if cre.response.status_code != int(HTTPStatus.TOO_MANY_REQUESTS):
+                        break
+
+                    retry_after = int(cre.response.headers.get("Retry-After", 10))
+                    time.sleep(retry_after)
+                    retries += 1
+
+            if cre or not replies:
+                failure_message = f"Retrieval of message and its replies failed; {channel.id=} {message.id=}"
+                if cre and cre.response:
+                    failure_message = f"{failure_message}; {cre.response.status_code=}"
+
+                yield ConnectorFailure(
+                    failed_entity=EntityFailure(entity_id=message.id),
+                    failure_message=failure_message,
+                    exception=cre,
+                )
+                continue
+
             thread = [message]
             thread.extend(replies[::-1])
 

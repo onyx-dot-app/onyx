@@ -21,11 +21,10 @@ from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.connector_credential_pair import get_cc_pairs_by_source
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.db.external_perm import replace_user__ext_group_for_cc_pair
-from ee.onyx.external_permissions.sync_params import EXTERNAL_GROUP_SYNC_PERIODS
-from ee.onyx.external_permissions.sync_params import GROUP_PERMISSIONS_FUNC_MAP
 from ee.onyx.external_permissions.sync_params import (
-    GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC,
+    get_all_cc_pair_agnostic_group_sync_sources,
 )
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
@@ -89,12 +88,20 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
         )
         return False
 
-    # If there is not group sync function for the connector, we don't run the sync
-    # This is fine because all sources dont necessarily have a concept of groups
-    if not GROUP_PERMISSIONS_FUNC_MAP.get(cc_pair.connector.source):
+    sync_config = get_source_perm_sync_config(cc_pair.connector.source)
+    if sync_config is None:
         task_logger.debug(
             f"Skipping group sync for CC Pair {cc_pair.id} - "
-            f"no group sync function for {cc_pair.connector.source}"
+            f"no sync config found for {cc_pair.connector.source}"
+        )
+        return False
+
+    # If there is not group sync function for the connector, we don't run the sync
+    # This is fine because all sources dont necessarily have a concept of groups
+    if sync_config.group_sync_config is None:
+        task_logger.debug(
+            f"Skipping group sync for CC Pair {cc_pair.id} - "
+            f"no group sync config found for {cc_pair.connector.source}"
         )
         return False
 
@@ -103,11 +110,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     if last_ext_group_sync is None:
         return True
 
-    source_sync_period = EXTERNAL_GROUP_SYNC_PERIODS.get(cc_pair.connector.source)
-
-    # If EXTERNAL_GROUP_SYNC_PERIODS is None, we always run the sync.
-    if not source_sync_period:
-        return True
+    source_sync_period = sync_config.group_sync_config.group_sync_frequency
 
     # If the last sync is greater than the full fetch period, we run the sync
     next_sync = last_ext_group_sync + timedelta(seconds=source_sync_period)
@@ -147,9 +150,8 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_all_auto_sync_cc_pairs(db_session)
 
-            # We only want to sync one cc_pair per source type in
-            # GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC
-            for source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC:
+            # For some sources, we only want to sync one cc_pair per source type
+            for source in get_all_cc_pair_agnostic_group_sync_sources():
                 # These are ordered by cc_pair id so the first one is the one we want
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
                     db_session,
@@ -157,8 +159,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                     access_type=AccessType.SYNC,
                     status=ConnectorCredentialPairStatus.ACTIVE,
                 )
-                # We only want to sync one cc_pair per source type
-                # in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC so we dedupe here
+                # dedupe cc_pairs to only keep the first one
                 for cc_pair_to_remove in cc_pairs_to_dedupe[1:]:
                     cc_pairs = [
                         cc_pair
@@ -388,12 +389,20 @@ def connector_external_group_sync_generator_task(
                 )
 
             source_type = cc_pair.connector.source
-
-            ext_group_sync_func = GROUP_PERMISSIONS_FUNC_MAP.get(source_type)
-            if ext_group_sync_func is None:
-                msg = f"No external group sync func found for {source_type} for cc_pair: {cc_pair_id}"
+            sync_config = get_source_perm_sync_config(source_type)
+            if sync_config is None:
+                msg = (
+                    f"No sync config found for {source_type} for cc_pair: {cc_pair_id}"
+                )
                 emit_background_error(msg, cc_pair_id=cc_pair_id)
                 raise ValueError(msg)
+
+            if sync_config.group_sync_config is None:
+                msg = f"No group sync config found for {source_type} for cc_pair: {cc_pair_id}"
+                emit_background_error(msg, cc_pair_id=cc_pair_id)
+                raise ValueError(msg)
+
+            ext_group_sync_func = sync_config.group_sync_config.group_sync_func
 
             logger.info(
                 f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"

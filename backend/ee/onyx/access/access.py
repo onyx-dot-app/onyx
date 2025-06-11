@@ -4,10 +4,7 @@ from ee.onyx.db.external_perm import fetch_external_groups_for_user
 from ee.onyx.db.external_perm import fetch_public_external_group_ids
 from ee.onyx.db.user_group import fetch_user_groups_for_documents
 from ee.onyx.db.user_group import fetch_user_groups_for_user
-from ee.onyx.external_permissions.post_query_censoring import (
-    DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
-)
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.access import (
     _get_access_for_documents as get_access_for_documents_without_groups,
 )
@@ -18,6 +15,10 @@ from onyx.access.utils import prefix_user_group
 from onyx.db.document import get_document_sources
 from onyx.db.document import get_documents_by_ids
 from onyx.db.models import User
+from onyx.utils.logger import setup_logger
+
+
+logger = setup_logger()
 
 
 def _get_access_for_document(
@@ -70,9 +71,15 @@ def _get_access_for_documents(
     for document_id, non_ee_access in non_ee_access_dict.items():
         document = doc_id_map[document_id]
         source = doc_id_to_source_map.get(document_id)
+        if source is None:
+            logger.error(f"Document {document_id} has no source")
+            continue
+
+        perm_sync_config = get_source_perm_sync_config(source)
         is_only_censored = (
-            source in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION
-            and source not in DOC_PERMISSIONS_FUNC_MAP
+            perm_sync_config
+            and perm_sync_config.censoring_config is not None
+            and perm_sync_config.doc_sync_config is None
         )
 
         ext_u_emails = (

@@ -4,6 +4,7 @@ from typing import TypeVar
 
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -48,15 +49,27 @@ def load_everything_from_checkpoint_connector(
     connector: CheckpointedConnector[CT],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    include_permissions: bool = False,
 ) -> list[Document | ConnectorFailure]:
     """Like load_all_docs_from_checkpoint_connector but returns both documents and failures"""
     num_iterations = 0
 
+    if include_permissions and not isinstance(
+        connector, CheckpointedConnectorWithPermSync
+    ):
+        raise ValueError("Connector does not support permission syncing")
+
     checkpoint = connector.build_dummy_checkpoint()
     outputs: list[Document | ConnectorFailure] = []
     while checkpoint.has_more:
+        load_from_checkpoint_generator = (
+            connector.load_from_checkpoint_with_perm_sync
+            if include_permissions
+            and isinstance(connector, CheckpointedConnectorWithPermSync)
+            else connector.load_from_checkpoint
+        )
         doc_batch_generator = CheckpointOutputWrapper[CT]()(
-            connector.load_from_checkpoint(start, end, checkpoint)
+            load_from_checkpoint_generator(start, end, checkpoint)
         )
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:

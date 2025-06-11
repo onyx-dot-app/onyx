@@ -182,8 +182,6 @@ class DiscourseConnector(PollConnector):
                 continue
 
             topic_ids.append(topic["id"])
-            if len(topic_ids) >= self.batch_size:
-                break
 
         return topic_ids
 

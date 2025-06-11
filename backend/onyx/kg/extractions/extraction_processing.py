@@ -19,6 +19,7 @@ from onyx.db.entities import upsert_staging_entity
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import KGConfigSettings
+from onyx.db.kg_config import validate_kg_settings
 from onyx.db.models import Document
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
@@ -27,7 +28,6 @@ from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import upsert_staging_relationship
 from onyx.db.relationships import upsert_staging_relationship_type
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.kg.configuration import validate_kg_settings
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGBatchExtractionStats

@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
 
 
@@ -218,7 +219,7 @@ class KGDefaultEntityDefinition(BaseModel):
     description: str
     grounding: KGGroundingType
     active: bool = False
-    grounded_source_name: str | None
+    grounded_source_name: DocumentSource | None
     attributes: dict = {}
     entity_values: dict = {}
 

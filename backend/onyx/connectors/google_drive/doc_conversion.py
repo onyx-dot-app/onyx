@@ -1,11 +1,14 @@
 import io
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 from typing import cast
 
 from googleapiclient.errors import HttpError  # type: ignore
 from googleapiclient.http import MediaIoBaseDownload  # type: ignore
+from pydantic import BaseModel
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
@@ -16,6 +19,7 @@ from onyx.connectors.google_drive.section_extraction import get_document_section
 from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_google_docs_service
+from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -32,11 +36,12 @@ from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
 from onyx.file_processing.file_validation import is_valid_image_type
-from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_processing.image_utils import store_image_and_create_section
-from onyx.llm.interfaces import LLM
-from onyx.utils.lazy import lazy_eval
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
+from onyx.utils.variable_functionality import noop_fallback
 
 logger = setup_logger()
 
@@ -62,27 +67,17 @@ GOOGLE_MIME_TYPES = {
 }
 
 
+class PermissionSyncContext(BaseModel):
+    """
+    This is the information that is needed to sync permissions for a document.
+    """
+
+    primary_admin_email: str
+    google_domain: str
+
+
 def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     return file[WEB_VIEW_LINK_KEY]
-
-
-def _summarize_drive_image(
-    image_data: bytes, image_name: str, image_analysis_llm: LLM | None
-) -> str:
-    """
-    Summarize the given image using the provided LLM.
-    """
-    if not image_analysis_llm:
-        return ""
-
-    return (
-        summarize_image_with_error_handling(
-            llm=image_analysis_llm,
-            image_data=image_data,
-            context_name=image_name,
-        )
-        or ""
-    )
 
 
 def is_gdrive_image_mime_type(mime_type: str) -> bool:
@@ -151,12 +146,18 @@ def _download_and_extract_sections_basic(
 
     # For other file types, download the file
     # Use the correct API call for downloading files
-    response_call = lazy_eval(lambda: download_request(service, file_id))
+    # lazy evaluation to only download the file if necessary
+    def response_call() -> bytes:
+        return download_request(service, file_id)
 
     # Process based on mime type
     if mime_type == "text/plain":
-        text = response_call().decode("utf-8")
-        return [TextSection(link=link, text=text)]
+        try:
+            text = response_call().decode("utf-8")
+            return [TextSection(link=link, text=text)]
+        except UnicodeDecodeError as e:
+            logger.warning(f"Failed to extract text from {file_name}: {e}")
+            return []
 
     elif (
         mime_type
@@ -311,10 +312,36 @@ def align_basic_advanced(
     return new_sections
 
 
+def _get_external_access_for_raw_gdrive_file(
+    file: GoogleDriveFileType,
+    company_domain: str,
+    drive_service: GoogleDriveService,
+) -> ExternalAccess:
+    """
+    Get the external access for a raw Google Drive file.
+    """
+    external_access_fn = cast(
+        Callable[[GoogleDriveFileType, str, GoogleDriveService], ExternalAccess],
+        fetch_versioned_implementation_with_fallback(
+            "onyx.external_permissions.google_drive.doc_sync",
+            "get_external_access_for_raw_gdrive_file",
+            fallback=noop_fallback,
+        ),
+    )
+    return external_access_fn(
+        file,
+        company_domain,
+        drive_service,
+    )
+
+
 def convert_drive_item_to_document(
     creds: Any,
     allow_images: bool,
     size_threshold: int,
+    # if not specified, we will not sync permissions
+    # will also be a no-op if EE is not enabled
+    permission_sync_context: PermissionSyncContext | None,
     retriever_emails: list[str],
     file: GoogleDriveFileType,
 ) -> Document | ConnectorFailure | None:
@@ -337,7 +364,12 @@ def convert_drive_item_to_document(
             continue
         seen.add(retriever_email)
         doc_or_failure = _convert_drive_item_to_document(
-            creds, allow_images, size_threshold, retriever_email, file
+            creds,
+            allow_images,
+            size_threshold,
+            retriever_email,
+            file,
+            permission_sync_context,
         )
 
         # There are a variety of permissions-based errors that occasionally occur
@@ -380,18 +412,22 @@ def _convert_drive_item_to_document(
     size_threshold: int,
     retriever_email: str,
     file: GoogleDriveFileType,
+    # if not specified, we will not sync permissions
+    # will also be a no-op if EE is not enabled
+    permission_sync_context: PermissionSyncContext | None,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
     """
     sections: list[TextSection | ImageSection] = []
+
     # Only construct these services when needed
-    drive_service = lazy_eval(
-        lambda: get_drive_service(creds, user_email=retriever_email)
-    )
-    docs_service = lazy_eval(
-        lambda: get_google_docs_service(creds, user_email=retriever_email)
-    )
+    def _get_drive_service() -> GoogleDriveService:
+        return get_drive_service(creds, user_email=retriever_email)
+
+    def _get_docs_service() -> GoogleDocsService:
+        return get_google_docs_service(creds, user_email=retriever_email)
+
     doc_id = "unknown"
 
     try:
@@ -405,14 +441,14 @@ def _convert_drive_item_to_document(
             try:
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
-                    docs_service=docs_service(),
+                    docs_service=_get_docs_service(),
                     doc_id=file.get("id", ""),
                 )
                 if doc_sections:
                     sections = cast(list[TextSection | ImageSection], doc_sections)
                     if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
                         basic_sections = _download_and_extract_sections_basic(
-                            file, drive_service(), allow_images
+                            file, _get_drive_service(), allow_images
                         )
                         sections = align_basic_advanced(basic_sections, doc_sections)
 
@@ -437,7 +473,7 @@ def _convert_drive_item_to_document(
         # If we don't have sections yet, use the basic extraction method
         if not sections:
             sections = _download_and_extract_sections_basic(
-                file, drive_service(), allow_images
+                file, _get_drive_service(), allow_images
             )
 
         # If we still don't have any sections, skip this file
@@ -446,6 +482,17 @@ def _convert_drive_item_to_document(
             return None
 
         doc_id = onyx_document_id_from_drive_file(file)
+        external_access = (
+            _get_external_access_for_raw_gdrive_file(
+                file=file,
+                company_domain=permission_sync_context.google_domain,
+                drive_service=get_drive_service(
+                    creds, user_email=permission_sync_context.primary_admin_email
+                ),
+            )
+            if permission_sync_context
+            else None
+        )
 
         # Create the document
         return Document(
@@ -461,8 +508,15 @@ def _convert_drive_item_to_document(
             doc_updated_at=datetime.fromisoformat(
                 file.get("modifiedTime", "").replace("Z", "+00:00")
             ),
+            external_access=external_access,
         )
     except Exception as e:
+        doc_id = "unknown"
+        try:
+            doc_id = onyx_document_id_from_drive_file(file)
+        except Exception as e2:
+            logger.warning(f"Error getting document id from file: {e2}")
+
         file_name = file.get("name")
         error_str = (
             f"Error converting file '{file_name}' to Document as {retriever_email}: {e}"
@@ -488,17 +542,30 @@ def _convert_drive_item_to_document(
         )
 
 
-def build_slim_document(file: GoogleDriveFileType) -> SlimDocument | None:
+def build_slim_document(
+    creds: Any,
+    file: GoogleDriveFileType,
+    # if not specified, we will not sync permissions
+    # will also be a no-op if EE is not enabled
+    permission_sync_context: PermissionSyncContext | None,
+) -> SlimDocument | None:
     if file.get("mimeType") in [DRIVE_FOLDER_TYPE, DRIVE_SHORTCUT_TYPE]:
         return None
+
+    owner_email = file.get("owners", [{}])[0].get("emailAddress")
+    external_access = (
+        _get_external_access_for_raw_gdrive_file(
+            file=file,
+            company_domain=permission_sync_context.google_domain,
+            drive_service=get_drive_service(
+                creds,
+                user_email=owner_email or permission_sync_context.primary_admin_email,
+            ),
+        )
+        if permission_sync_context
+        else None
+    )
     return SlimDocument(
         id=onyx_document_id_from_drive_file(file),
-        perm_sync_data={
-            "doc_id": file.get("id"),
-            "drive_id": file.get("driveId"),
-            "permissions": file.get("permissions", []),
-            "permission_ids": file.get("permissionIds", []),
-            "name": file.get("name"),
-            "owner_email": file.get("owners", [{}])[0].get("emailAddress"),
-        },
+        external_access=external_access,
     )
