@@ -31,8 +31,7 @@ from onyx.tools.tool import Tool
 
 
 def default_build_system_message(
-    prompt_config: PromptConfig,
-    llm_config: LLMConfig,
+    prompt_config: PromptConfig, llm_config: LLMConfig
 ) -> SystemMessage | None:
     system_prompt = prompt_config.system_prompt.strip()
     # See https://simonwillison.net/tags/markdown/ for context on this temporary fix
@@ -103,8 +102,7 @@ class AnswerPromptBuilder:
         self.max_tokens = compute_max_llm_input_tokens(llm_config)
 
         llm_tokenizer = get_tokenizer(
-            provider_type=llm_config.model_provider,
-            model_name=llm_config.model_name,
+            provider_type=llm_config.model_provider, model_name=llm_config.model_name
         )
         self.llm_config = llm_config
         self.llm_tokenizer_encode_func = cast(
@@ -118,8 +116,7 @@ class AnswerPromptBuilder:
         ) = translate_history_to_basemessages(
             message_history,
             exclude_images=not model_supports_image_input(
-                self.llm_config.model_name,
-                self.llm_config.model_provider,
+                self.llm_config.model_name, self.llm_config.model_provider
             ),
         )
 

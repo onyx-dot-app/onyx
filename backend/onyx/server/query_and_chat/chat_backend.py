@@ -19,14 +19,23 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.tools.tool import Tool
+from onyx.agents.agent_search.models import (
+    GraphConfig,
+    GraphInputs,
+    GraphPersistence,
+    GraphSearchConfig,
+    GraphTooling,
+)
+from onyx.agents.agent_search.run_graph import run_document_chat_graph
 from onyx.auth.users import current_chat_accessible_user, current_user
 from onyx.chat.chat_utils import create_chat_chain, extract_headers
+
 from onyx.chat.process_message import stream_chat_message
+
 from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
@@ -39,6 +48,7 @@ from onyx.configs.constants import (
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.connectors.models import InputType
+
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
     create_chat_session,
@@ -51,6 +61,7 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     get_chat_sessions_by_user,
     get_or_create_root_message,
+    reserve_message_id,
     set_as_latest_chat_message,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
@@ -63,7 +74,7 @@ from onyx.db.engine import get_session, get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.feedback import create_chat_message_feedback, create_doc_retrieval_feedback
 from onyx.db.models import User
-from onyx.db.persona import get_persona_by_id
+from onyx.db.persona import get_best_persona_id_for_user, get_persona_by_id
 from onyx.db.user_documents import create_user_files
 from onyx.file_processing.extract_file_text import (
     docx_to_txt_filename,
@@ -71,8 +82,10 @@ from onyx.file_processing.extract_file_text import (
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.file_store.utils import load_all_chat_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms, get_llms_for_persona
+from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.chat_session_naming import get_renamed_conversation_name
 from onyx.server.documents.models import ConnectorBase, CredentialBase
@@ -100,9 +113,12 @@ from onyx.server.query_and_chat.models import (
     UpdateChatSessionThreadRequest,
 )
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.tools.force import ForceUseTool
+from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.document.document_editor_tool import (
     DocumentEditorTool,
 )
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
@@ -275,6 +291,7 @@ def create_new_chat_session(
             or "",  # Leave the naming till later to prevent delay
             user_id=user_id,
             persona_id=chat_session_creation_request.persona_id,
+            document_chat=chat_session_creation_request.document_chat,
         )
     except Exception as e:
         logger.exception(e)
@@ -819,6 +836,16 @@ def handle_document_chat_message(
     Endpoint for document chat using LANGGRAPH agentic workflow.
     Analyzes documents and provides intelligent responses.
     """
+    from onyx.chat.models import (
+        AnswerStyleConfig,
+        CitationConfig,
+        DocumentPruningConfig,
+        PromptConfig,
+    )
+    from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+    from onyx.context.search.enums import LLMEvaluationType
+    from onyx.context.search.models import RetrievalDetails, SearchRequest
+
     logger.debug(f"Received document chat message: {request.message}")
 
     def stream_generator() -> Generator[str, None, None]:
@@ -828,44 +855,56 @@ def handle_document_chat_message(
                     http_request.headers, LITELLM_PASS_THROUGH_HEADERS
                 )
             )
-
-            from langchain_core.messages import HumanMessage
-
-            from onyx.agents.agent_search.models import (
-                GraphConfig,
-                GraphInputs,
-                GraphPersistence,
-                GraphSearchConfig,
-                GraphTooling,
-            )
-            from onyx.chat.models import (
-                AnswerStyleConfig,
-                CitationConfig,
-                DocumentPruningConfig,
-                PromptConfig,
-            )
-            from onyx.chat.prompt_builder.answer_prompt_builder import (
-                AnswerPromptBuilder,
-            )
-            from onyx.context.search.enums import LLMEvaluationType
-            from onyx.context.search.models import RetrievalDetails, SearchRequest
-            from onyx.db.persona import get_best_persona_id_for_user, get_persona_by_id
-            from onyx.tools.force import ForceUseTool
-            from onyx.tools.tool_implementations.search.search_tool import SearchTool
-
             search_request = SearchRequest(query=request.message)
-
-            original_message = "User message: " + request.message
-
             tenant_id = get_current_tenant_id()
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 persona_id = get_best_persona_id_for_user(db_session, user)
                 if not persona_id:
                     raise ValueError("No persona available for document chat")
-
                 persona = get_persona_by_id(
                     persona_id, user, db_session, is_for_edit=False
                 )
+
+                chat_session_uuid = UUID(request.session_id)
+                # Get previous messages or create a root message if none exist
+                chat_messages = get_chat_messages_by_session(
+                    chat_session_id=chat_session_uuid,
+                    db_session=db_session,
+                    user_id=None,
+                    skip_permission_check=True,
+                )
+                if len(chat_messages) == 0:
+                    root_message = get_or_create_root_message(
+                        chat_session_id=chat_session_uuid, db_session=db_session
+                    )
+                    chat_messages = [root_message]
+
+                # Create the user message with token counts
+                tokenizer = get_tokenizer(
+                    model_name=llm.config.model_name,
+                    provider_type=llm.config.model_provider,
+                )
+                token_count = len(tokenizer.encode(request.message))
+                user_chat_message = create_new_chat_message(
+                    chat_session_id=chat_session_uuid,
+                    parent_message=chat_messages[-1],
+                    prompt_id=persona.prompts[0].id
+                    if persona.prompts
+                    else None,
+                    message=request.message,
+                    token_count=token_count,
+                    message_type=MessageType.USER,
+                    db_session=db_session,
+                )
+
+                # Convert messages to proper format for prompt builder
+                files = load_all_chat_files(chat_messages, [], db_session)
+                previous_messages = [
+                    PreviousMessage.from_chat_message(msg, files)
+                    for msg in chat_messages
+                ]
+
+                # Configure tools
                 tools: list[Tool] = []
                 search_tool = SearchTool(
                     db_session=db_session,
@@ -901,8 +940,8 @@ def handle_document_chat_message(
                     inputs=GraphInputs(
                         search_request=search_request,
                         prompt_builder=AnswerPromptBuilder(
-                            user_message=HumanMessage(content=original_message),
-                            message_history=[],
+                            user_message=HumanMessage(content=request.message),
+                            message_history=previous_messages,
                             llm_config=llm.config,
                             raw_user_query=request.message,
                             raw_user_uploaded_files=[],
@@ -923,13 +962,11 @@ def handle_document_chat_message(
                     ),
                     persistence=GraphPersistence(
                         db_session=db_session,
-                        chat_session_id=UUID(request.session_id),
-                        message_id=0,
+                        chat_session_id=chat_session_uuid,
+                        message_id=user_chat_message.id,  # NOTE: No longer used
                     ),
                     behavior=GraphSearchConfig(use_agentic_search=True),
                 )
-
-                from onyx.agents.agent_search.run_graph import run_document_chat_graph
 
                 for packet in run_document_chat_graph(
                     config=config,

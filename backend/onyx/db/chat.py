@@ -1,3 +1,16 @@
+"""
+Document Chat Functionality:
+
+This module now supports two types of chat sessions:
+1. Regular chat sessions (default) - for general conversations
+2. Document chat sessions - for conversations specifically with documents
+
+Use the `document_chats: bool` parameter in functions to specify which type:
+- `document_chats=False` (default): Get/operate on regular chat sessions
+- `document_chats=True`: Get/operate on document chat sessions
+
+The existing functions maintain backward compatibility by defaulting to regular chats.
+"""
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any, Tuple, cast
@@ -148,18 +161,26 @@ def get_valid_messages_from_query_sessions(
 
 
 # Retrieves chat sessions by user
-# Chat sessions do not include onyxbot flows
+# By default, returns regular chat sessions (excludes onyxbot flows and document chats)
 def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
     db_session: Session,
     include_onyxbot_flows: bool = False,
+    document_chats: bool = False,
     limit: int = 50,
 ) -> list[ChatSession]:
     stmt = select(ChatSession).where(ChatSession.user_id == user_id)
 
     if not include_onyxbot_flows:
         stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
+
+    if document_chats:
+        # Return only document chats
+        stmt = stmt.where(ChatSession.document_chat.is_(True))
+    else:
+        # Default behavior: return only regular (non-document) chats
+        stmt = stmt.where(ChatSession.document_chat.is_(False))
 
     stmt = stmt.order_by(desc(ChatSession.time_updated))
 
@@ -238,6 +259,7 @@ def create_chat_session(
     llm_override: LLMOverride | None = None,
     prompt_override: PromptOverride | None = None,
     onyxbot_flow: bool = False,
+    document_chat: bool = False,
     slack_thread_id: str | None = None,
 ) -> ChatSession:
     chat_session = ChatSession(
@@ -247,6 +269,7 @@ def create_chat_session(
         llm_override=llm_override,
         prompt_override=prompt_override,
         onyxbot_flow=onyxbot_flow,
+        document_chat=document_chat,
         slack_thread_id=slack_thread_id,
     )
 
@@ -293,6 +316,8 @@ def duplicate_chat_session_for_user_from_slack(
         prompt_override=chat_session.prompt_override,
         # Chat is in UI now so this is false
         onyxbot_flow=False,
+        # Preserve the document_chat setting from the original session
+        document_chat=chat_session.document_chat,
         # Maybe we want this in the future to track if it was created from Slack
         slack_thread_id=None,
     )
@@ -323,7 +348,10 @@ def update_chat_session(
 
 
 def delete_all_chat_sessions_for_user(
-    user: User | None, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
+    user: User | None,
+    db_session: Session,
+    hard_delete: bool = HARD_DELETE_CHATS,
+    document_chats: bool = False,
 ) -> None:
     user_id = user.id if user is not None else None
 
@@ -331,10 +359,17 @@ def delete_all_chat_sessions_for_user(
         ChatSession.user_id == user_id, ChatSession.onyxbot_flow.is_(False)
     )
 
+    if document_chats:
+        # Delete only document chats
+        query = query.filter(ChatSession.document_chat.is_(True))
+    else:
+        # Default behavior: delete only regular (non-document) chats
+        query = query.filter(ChatSession.document_chat.is_(False))
+
     if hard_delete:
         query.delete(synchronize_session=False)
     else:
-        query.update({ChatSession.deleted: True}, synchronize_session=False)
+        query.update({"deleted": True}, synchronize_session=False)
 
     db_session.commit()
 
@@ -369,7 +404,7 @@ def delete_chat_session(
 
 
 def get_chat_sessions_older_than(
-    days_old: int, db_session: Session
+    days_old: int, db_session: Session, document_chats: bool = False
 ) -> list[tuple[UUID | None, UUID]]:
     """
     Retrieves chat sessions older than a specified number of days.
@@ -385,7 +420,8 @@ def get_chat_sessions_older_than(
     cutoff_time = datetime.utcnow() - timedelta(days=days_old)
     old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
         select(ChatSession.user_id, ChatSession.id).where(
-            ChatSession.time_created < cutoff_time
+            ChatSession.time_created < cutoff_time,
+            ChatSession.document_chat == document_chats,
         )
     ).fetchall()
 

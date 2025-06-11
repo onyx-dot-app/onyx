@@ -35,7 +35,7 @@ def call_tool(
 ) -> ToolCallUpdate:
     """Calls the tool specified in the state and updates the state with the result"""
 
-    cast(GraphConfig, config["metadata"]["config"])
+    cast(GraphConfig, config.get("metadata", {}).get("config"))
 
     tool_choice = state.tool_choice
     if tool_choice is None:

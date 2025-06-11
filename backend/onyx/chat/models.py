@@ -2,7 +2,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,7 +44,7 @@ class SubQuestionIdentifier(BaseModel):
 
     @staticmethod
     def make_dict_by_level(
-        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"],
+        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"]
     ) -> dict[int, list["SubQuestionIdentifier"]]:
         """returns a dict of level to object list (sorted by level_question_num)
         Ordering is asc for readability.
@@ -215,6 +215,10 @@ class CustomToolResponse(BaseModel):
     tool_name: str
 
 
+class ChatCompletionPacket(BaseModel):
+    content: str = "chat_complete"
+
+
 class ToolConfig(BaseModel):
     id: int
 
@@ -367,16 +371,21 @@ class RefinedAnswerImprovement(BaseModel):
     refined_answer_improvement: bool
 
 
-AgentSearchPacket = Union[
+AgentSearchPacket = (
     SubQuestionPiece
     | AgentAnswerPiece
     | SubQueryPiece
     | ExtendedToolResponse
     | RefinedAnswerImprovement
-]
+)
+
 
 AnswerPacket = (
-    AnswerQuestionPossibleReturn | AgentSearchPacket | ToolCallKickoff | ToolResponse
+    AnswerQuestionPossibleReturn
+    | AgentSearchPacket
+    | ToolCallKickoff
+    | ToolResponse
+    | ChatCompletionPacket
 )
 
 

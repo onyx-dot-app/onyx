@@ -51,6 +51,7 @@ class ChatSessionCreationRequest(BaseModel):
     # If not specified, use Onyx default persona
     persona_id: int = 0
     description: str | None = None
+    document_chat: bool = False
 
 
 class CreateChatSessionID(BaseModel):
@@ -325,7 +326,7 @@ class CreateChatResponse(BaseModel):
 class DocumentChatRequest(BaseModel):
     message: str
     document_ids: list[str] = []
-    session_id: str | None = None
+    session_id: str
     document_content: str | None = None
     document_type: str | None = None
     document_title: str | None = None

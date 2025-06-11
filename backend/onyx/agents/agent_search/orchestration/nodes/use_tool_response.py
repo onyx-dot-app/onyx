@@ -27,7 +27,7 @@ logger = setup_logger()
 def basic_use_tool_response(
     state: BasicState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> BasicOutput:
-    agent_config = cast(GraphConfig, config["metadata"]["config"])
+    agent_config = cast(GraphConfig, config.get("metadata", {}).get("config"))
     structured_response_format = agent_config.inputs.structured_response_format
     llm = agent_config.tooling.primary_llm
     tool_choice = state.tool_choice

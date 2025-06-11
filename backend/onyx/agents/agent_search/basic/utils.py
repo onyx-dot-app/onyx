@@ -23,6 +23,7 @@ def process_llm_stream(
     writer: StreamWriter,
     final_search_results: list[LlmDoc] | None = None,
     displayed_search_results: list[LlmDoc] | None = None,
+    return_text_content: bool = False,
 ) -> AIMessageChunk:
     tool_call_chunk = AIMessageChunk(content="")
 
@@ -39,7 +40,6 @@ def process_llm_stream(
     # This stream will be the llm answer if no tool is chosen. When a tool is chosen,
     # the stream will contain AIMessageChunks with tool call information.
     for message in messages:
-
         answer_piece = message.content
         if not isinstance(answer_piece, str):
             # this is only used for logging, so fine to
@@ -50,14 +50,17 @@ def process_llm_stream(
         if isinstance(message, AIMessageChunk) and (
             message.tool_call_chunks or message.tool_calls
         ):
-            tool_call_chunk += message  # type: ignore
+            tool_call_chunk += message
         elif should_stream_answer:
             for response_part in answer_handler.handle_response_part(message, []):
-                write_custom_event(
-                    "basic_response",
-                    response_part,
-                    writer,
-                )
-
+                write_custom_event("basic_response", response_part, writer)
     logger.debug(f"Full answer: {full_answer}")
-    return cast(AIMessageChunk, tool_call_chunk)
+    tool_call_chunk = cast(AIMessageChunk, tool_call_chunk)
+    # If return_text_content is True and no tool calls were made,
+    # return the text content in the AIMessageChunk
+    if return_text_content and not (
+        tool_call_chunk.tool_calls or tool_call_chunk.tool_call_chunks
+    ):
+        return AIMessageChunk(content=full_answer)
+
+    return tool_call_chunk

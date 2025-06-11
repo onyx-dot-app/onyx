@@ -4,7 +4,6 @@ from typing import cast
 
 from langchain_core.runnables.schema import CustomStreamEvent, StreamEvent
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel
 
 from onyx.agents.agent_search.basic.graph_builder import basic_graph_builder
 from onyx.agents.agent_search.basic.states import BasicInput
@@ -16,12 +15,17 @@ from onyx.agents.agent_search.deep_search.main.graph_builder import (
     main_graph_builder as main_graph_builder_a,
 )
 from onyx.agents.agent_search.deep_search.main.states import MainInput as MainInput
+from onyx.agents.agent_search.document_chat.graph_builder import (
+    document_chat_graph_builder,
+)
+from onyx.agents.agent_search.document_chat.states import DocumentChatInput
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.chat.models import (
     AgentAnswerPiece,
     AnswerPacket,
     AnswerStream,
+    ChatCompletionPacket,
     ExtendedToolResponse,
     RefinedAnswerImprovement,
     StreamingError,
@@ -37,6 +41,7 @@ from onyx.configs.agent_configs import (
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
 
@@ -45,13 +50,7 @@ logger = setup_logger()
 _COMPILED_GRAPH: CompiledStateGraph | None = None
 
 
-class ChatCompletionPacket(BaseModel):
-    content: str = "chat_complete"
-
-
-def _parse_agent_event(
-    event: StreamEvent,
-) -> AnswerPacket | None:
+def _parse_agent_event(event: StreamEvent) -> AnswerPacket | None:
     """
     Parse the event into a typed object.
     Return None if we are not interested in the event.
@@ -90,7 +89,7 @@ def _parse_agent_event(
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput | DCMainInput,
+    graph_input: BasicInput | MainInput | DCMainInput | DocumentChatInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -104,7 +103,7 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput | DCMainInput,
+    input: BasicInput | MainInput | DCMainInput | DocumentChatInput,
 ) -> AnswerStream:
     config.behavior.perform_initial_search_decomposition = (
         INITIAL_SEARCH_DECOMPOSITION_ENABLED
@@ -130,9 +129,7 @@ def load_compiled_graph() -> CompiledStateGraph:
     return _COMPILED_GRAPH
 
 
-def run_main_graph(
-    config: GraphConfig,
-) -> AnswerStream:
+def run_main_graph(config: GraphConfig) -> AnswerStream:
     compiled_graph = load_compiled_graph()
 
     input = MainInput(log_messages=[])
@@ -145,57 +142,47 @@ def run_main_graph(
     yield from run_graph(compiled_graph, config, input)
 
 
-def run_basic_graph(
-    config: GraphConfig,
-) -> AnswerStream:
+def run_basic_graph(config: GraphConfig) -> AnswerStream:
     graph = basic_graph_builder()
     compiled_graph = graph.compile()
     input = BasicInput(unused=True)
     return run_graph(compiled_graph, config, input)
 
 
-def run_dc_graph(
-    config: GraphConfig,
-) -> AnswerStream:
+def run_dc_graph(config: GraphConfig) -> AnswerStream:
     graph = divide_and_conquer_graph_builder()
     compiled_graph = graph.compile()
     input = DCMainInput(log_messages=[])
     config.inputs.search_request.query = config.inputs.search_request.query.strip()
     return run_graph(compiled_graph, config, input)
 
+
 def run_document_chat_graph(
-    config: GraphConfig,
-    query: str,
-    document_ids: list[str] = None,
+    config: GraphConfig, query: str, document_ids: list[str] | None = None
 ) -> AnswerStream:
     # Add search_tool and document_editor tool in Config (chat_backend.py)
     if document_ids is None:
         document_ids = []
-    from onyx.agents.agent_search.document_chat.graph_builder import (
-        document_chat_graph_builder,
-    )
-    from onyx.agents.agent_search.document_chat.states import DocumentChatInput
-    from onyx.tools.models import SearchToolOverrideKwargs
 
-    user_file_ids = [int(doc_id) for doc_id in document_ids if doc_id.isdigit()] if document_ids else None
+    user_file_ids = (
+        [int(doc_id) for doc_id in document_ids if doc_id.isdigit()]
+        if document_ids
+        else None
+    )
 
     # If document IDs are provided, configure search tool to use them
     if user_file_ids:
-        config.tooling.search_tool_override_kwargs = SearchToolOverrideKwargs(user_file_ids=user_file_ids)
+        config.tooling.search_tool_override_kwargs = SearchToolOverrideKwargs(  # type: ignore
+            user_file_ids=user_file_ids
+        )
 
     graph = document_chat_graph_builder()
     compiled_graph = graph.compile()
-    input = DocumentChatInput(
-        query=query,
-        document_ids=document_ids,
-    )
+    input = DocumentChatInput(query=query, document_ids=document_ids)
 
     yield ToolCallKickoff(
         tool_name="document_chat",
-        tool_args={
-            "query": query,
-            "document_ids": document_ids,
-        },
+        tool_args={"query": query, "document_ids": document_ids},
     )
     yield from run_graph(compiled_graph, config, input)
 
@@ -218,7 +205,7 @@ if __name__ == "__main__":
             # query="When was Washington born?",
             # query="What is Onyx?",
             # query="What is the difference between astronomy and astrology?",
-            query="Do a search to tell me what is the difference between astronomy and astrology?",
+            query="Do a search to tell me what is the difference between astronomy and astrology?"
         )
 
         with get_session_context_manager() as db_session:

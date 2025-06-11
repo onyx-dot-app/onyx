@@ -102,7 +102,7 @@ def choose_tool(
     """
     should_stream_answer = state.should_stream_answer
 
-    agent_config = cast(GraphConfig, config["metadata"]["config"])
+    agent_config = cast(GraphConfig, config.get("metadata", {}).get("config"))
 
     force_use_tool = agent_config.tooling.force_use_tool
 

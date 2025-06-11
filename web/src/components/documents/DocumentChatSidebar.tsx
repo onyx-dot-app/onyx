@@ -1,22 +1,23 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { SendIcon } from '@/components/icons/icons';
-import { FiMessageSquare, FiPlus } from 'react-icons/fi';
-import { Button } from '@/components/ui/button';
-import { v4 as uuidv4 } from 'uuid';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypePrism from 'rehype-prism-plus';
-import rehypeKatex from 'rehype-katex';
+import { PacketType } from '@/app/chat/lib';
+import { CodeBlock } from '@/app/chat/message/CodeBlock';
 import { MemoizedAnchor, MemoizedParagraph } from '@/app/chat/message/MemoizedTextComponents';
 import { extractCodeText, preprocessLaTeX } from '@/app/chat/message/codeUtils';
-import { CodeBlock } from '@/app/chat/message/CodeBlock';
-import { transformLinkUri } from '@/lib/utils';
+import { useAssistants } from '@/components/context/AssistantsContext';
+import { SendIcon } from '@/components/icons/icons';
+import { Button } from '@/components/ui/button';
+import { AgentAnswerPiece, DocumentEditorResponse, DocumentInfoPacket, OnyxDocument } from '@/lib/search/interfaces';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
-import { PacketType } from '@/app/chat/lib';
-import { AgentAnswerPiece, OnyxDocument, DocumentInfoPacket, DocumentEditorResponse } from '@/lib/search/interfaces';
+import { transformLinkUri } from '@/lib/utils';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FiMessageSquare, FiPlus } from 'react-icons/fi';
+import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import rehypePrism from 'rehype-prism-plus';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import { v4 as uuidv4 } from 'uuid';
 
 interface CitationInfo {
   citation_num: number;
@@ -52,13 +53,47 @@ export function DocumentChatSidebar({
   const citationMapRef = useRef<Map<number, string>>(new Map());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   
+  // Get access to assistants to determine current persona ID
+  const { pinnedAssistants, finalAssistants } = useAssistants();
+  
+  // Use the same logic as ChatPage to determine the live assistant
+  const liveAssistant = pinnedAssistants[0] || finalAssistants[0];
+  const personaId = liveAssistant?.id || 0;
+  
   // Helper function to reset state
-  const resetState = useCallback(() => {
+  const resetState = useCallback(async () => {
     setMessages([]);
     setDocuments([]);
     setCitationMap(new Map());
-    setSessionId(uuidv4());
-  }, []);
+    
+    // Create a new chat session when resetting
+    try {
+      const response = await fetch('/api/chat/create-chat-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          persona_id: personaId, // Use the current persona ID
+          description: 'Document Chat Session',
+          document_chat: true // Mark as document chat session
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSessionId(data.chat_session_id);
+      } else {
+        console.error('Failed to create chat session');
+        // Fallback to UUID if session creation fails
+        setSessionId(uuidv4());
+      }
+    } catch (error) {
+      console.error('Error creating chat session:', error);
+      // Fallback to UUID if session creation fails
+      setSessionId(uuidv4());
+    }
+  }, [personaId]);
 
   // Keep the ref in sync with the state
   useEffect(() => {
@@ -152,10 +187,39 @@ export function DocumentChatSidebar({
     [anchorCallback, paragraphCallback]
   );
 
-  // Generate a session ID once when the component mounts
+  // Create a proper chat session when the component mounts
   useEffect(() => {
-    setSessionId(uuidv4());
-  }, []);
+    const createChatSession = async () => {
+      try {
+        const response = await fetch('/api/chat/create-chat-session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+                  body: JSON.stringify({
+          persona_id: personaId, // Use the current persona ID
+          description: 'Document Chat Session',
+          document_chat: true // Mark as document chat session
+        }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setSessionId(data.chat_session_id);
+        } else {
+          console.error('Failed to create chat session');
+          // Fallback to UUID if session creation fails
+          setSessionId(uuidv4());
+        }
+      } catch (error) {
+        console.error('Error creating chat session:', error);
+        // Fallback to UUID if session creation fails
+        setSessionId(uuidv4());
+      }
+    };
+    
+    createChatSession();
+  }, [personaId]);
 
   // Function to preprocess message text and convert single bracket citations to double bracket format
   const preprocessCitations = (text: string): string => {
@@ -241,11 +305,8 @@ export function DocumentChatSidebar({
       isUser: true
     };
     
-    // Reset all state since we're stateless for now
-    resetState();
-    
-    // Add the user message after resetting state
-    setMessages([newMessage]);
+    // Add the user message to existing messages
+    setMessages(prev => [...prev, newMessage]);
     setMessage('');
     
     try {

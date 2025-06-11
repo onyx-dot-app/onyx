@@ -7,7 +7,7 @@ from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
 
 
 def prepare_tool_input(state: Any, config: RunnableConfig) -> ToolChoiceInput:
-    agent_config = cast(GraphConfig, config["metadata"]["config"])
+    agent_config = cast(GraphConfig, config.get("metadata", {}).get("config"))
     return ToolChoiceInput(
         # NOTE: this node is used at the top level of the agent, so we always stream
         should_stream_answer=True,
