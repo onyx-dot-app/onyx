@@ -54,10 +54,6 @@ KG_MAX_TOKENS_ANSWER_GENERATION: int = int(
     os.environ.get("KG_MAX_TOKENS_ANSWER_GENERATION", "1024")
 )
 
-KG_MAX_TOKENS_ANSWER_GENERATION: int = int(
-    os.environ.get("KG_MAX_TOKENS_ANSWER_GENERATION", "1024")
-)
-
 KG_MAX_DEEP_SEARCH_RESULTS: int = int(
     os.environ.get("KG_MAX_DEEP_SEARCH_RESULTS", "30")
 )
