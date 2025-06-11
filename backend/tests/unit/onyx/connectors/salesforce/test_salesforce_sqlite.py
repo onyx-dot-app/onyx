@@ -1,23 +1,35 @@
 import csv
+import json
 import os
 import shutil
 import tempfile
+import time
 from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
+from typing import cast
 
 import pytest
-from simple_salesforce import Salesforce
 
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
+from onyx.connectors.salesforce.doc_conversion import _extract_section
+from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
+from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import _bulk_retrieve_from_salesforce
-from onyx.connectors.salesforce.salesforce_calls import (
-    _get_all_queryable_fields_of_sf_type,
-)
 from onyx.connectors.salesforce.salesforce_calls import _get_time_filter_for_sf_type
 from onyx.connectors.salesforce.salesforce_calls import _get_time_filtered_query
+from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.utils.logger import setup_logger
+
+# from onyx.connectors.salesforce.onyx_salesforce_type import OnyxSalesforceType
+# from onyx.connectors.salesforce.salesforce_calls import get_children_of_sf_type
 
 logger = setup_logger()
 
@@ -791,27 +803,28 @@ def test_salesforce_bulk_retrieve() -> None:
     password = os.environ["SF_PASSWORD"]
     security_token = os.environ["SF_SECURITY_TOKEN"]
 
-    sf_client = Salesforce(
+    sf_client = OnyxSalesforce(
         username=username,
         password=password,
         security_token=security_token,
         domain=None,
     )
 
-    sf_type = "Contact"
-    intermediate_time = datetime(2024, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
+    # onyx_sf_type = OnyxSalesforceType("Contact", sf_client)
+    sf_object_name = "Contact"
+    queryable_fields = sf_client.get_queryable_fields_by_type(sf_object_name)
 
-    queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
+    intermediate_time = datetime(2024, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
     time_filter = _get_time_filter_for_sf_type(
         queryable_fields, 0, intermediate_time.timestamp()
     )
     assert time_filter
 
-    query = _get_time_filtered_query(queryable_fields, sf_type, time_filter)
+    query = _get_time_filtered_query(queryable_fields, sf_object_name, time_filter)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         object_type, csv_paths = _bulk_retrieve_from_salesforce(
-            sf_type, query, temp_dir, sf_client
+            sf_object_name, query, temp_dir, sf_client
         )
 
         assert csv_paths
@@ -899,8 +912,9 @@ def test_normalize_record() -> None:
         for row in reader:
             assert len(row) == 64
 
-            normalized_str, parent_ids = OnyxSalesforceSQLite.normalize_record(row)
-            assert normalized_str == expected_str
+            normalized_record, parent_ids = OnyxSalesforceSQLite.normalize_record(row)
+            normalized_record_json_str = json.dumps(normalized_record)
+            assert normalized_record_json_str == expected_str
             assert "005bm000002bBHtAAM" in parent_ids
             assert len(parent_ids) == 1
 
@@ -911,172 +925,270 @@ def _get_child_records_by_id_query(
     child_relationships: list[str],
     relationships_to_fields: dict[str, list[str]],
 ) -> str:
-    """Returns a SOQL query given the object id, type and child relationships."""
-    query = "SELECT Id,"
+    """Returns a SOQL query given the object id, type and child relationships.
+
+    When the query is executed, it comes back as result.records[0][child_relationship(s)]
+    """
+
+    SUBQUERY_LIMIT = 10
+
+    query = "SELECT "
     for child_relationship in child_relationships:
-        # TODO(rkuo): what happens if there is a very large list of child records. is that possible
-        # FIELDS(ALL) can include binary fields, so don't use that
-        # FIELDS(CUSTOM) can include aggregate queries, so don't use that
+        # TODO(rkuo): what happens if there is a very large list of child records?
+        # is that possible problem?
+
+        # NOTE: we actually have to list out the subqueries we want.
+        # We can't use the following shortcuts:
+        #   FIELDS(ALL) can include binary fields, so don't use that
+        #   FIELDS(CUSTOM) can include aggregate queries, so don't use that
         fields = relationships_to_fields[child_relationship]
         fields_fragment = ",".join(fields)
-        query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT 10), "
+        query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT {SUBQUERY_LIMIT}), "
 
     query = query.rstrip(", ")
     query += f" FROM {sf_type} WHERE Id = '{object_id}'"
     return query
 
 
-# def test_salesforce_connector_single() -> None:
-#     """Test various manipulations of a single record"""
+def test_salesforce_connector_single() -> None:
+    """Test various manipulations of a single record"""
 
-#     parent_id = "001bm00000eu6n5AAA"
-#     parent_type = "Account"
-#     parent_types = [parent_type]
+    # this record has some opportunity child records
+    parent_id = "001bm00000BXfhEAAT"
+    parent_type = "Account"
+    parent_types = [parent_type]
 
-#     username = os.environ["SF_USERNAME"]
-#     password = os.environ["SF_PASSWORD"]
-#     security_token = os.environ["SF_SECURITY_TOKEN"]
+    username = os.environ["SF_USERNAME"]
+    password = os.environ["SF_PASSWORD"]
+    security_token = os.environ["SF_SECURITY_TOKEN"]
 
-#     sf_client = Salesforce(
-#         username=username,
-#         password=password,
-#         security_token=security_token,
-#         domain=None,
-#     )
+    sf_client = OnyxSalesforce(
+        username=username,
+        password=password,
+        security_token=security_token,
+        domain=None,
+    )
 
-#     child_types: set[str] = set()
-#     parent_to_child_types: dict[str, set[str]] = {}  # map from parent to child types
-#     parent_to_child_relationships: dict[str, set[str]] = {}  # map from parent to child relationships
-#     child_to_parent_types: dict[str, set[str]] = {}  # reverse map from child to parent types
-#     child_relationship_to_queryable_fields: dict[str, list[str]] = {}
+    # onyx_parent_sf_type = OnyxSalesforceType(parent_type, sf_client)
 
-#     # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
+    child_types: set[str] = set()
+    parent_to_child_types: dict[str, set[str]] = {}  # map from parent to child types
+    parent_to_child_relationships: dict[str, set[str]] = (
+        {}
+    )  # map from parent to child relationships
+    child_to_parent_types: dict[str, set[str]] = (
+        {}
+    )  # reverse map from child to parent types
+    child_relationship_to_queryable_fields: dict[str, list[str]] = {}
 
-#     # Step 1 - make a list of all the types to download (parent + direct child + "User")
-#     logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
-#     for parent_type_working in parent_types:
-#         child_types_working = get_children_of_sf_type(sf_client, parent_type_working)
-#         logger.debug(f"Found {len(child_types)} child types for {parent_type_working}")
+    # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
 
-#         for child_type, child_relationship in child_types_working.items():
+    # Step 1 - make a list of all the types to download (parent + direct child + "User")
+    logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
+    for parent_type_working in parent_types:
+        child_types_working = sf_client.get_children_of_sf_type(parent_type_working)
+        logger.debug(f"Found {len(child_types)} child types for {parent_type_working}")
 
-#             # map parent to child type
-#             if parent_type_working not in parent_to_child_types:
-#                 parent_to_child_types[parent_type_working] = set()
-#             parent_to_child_types[parent_type_working].add(child_type)
+        for child_type, child_relationship in child_types_working.items():
+            # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
 
-#             # map parent to child relationship
-#             if parent_type_working not in parent_to_child_relationships:
-#                 parent_to_child_relationships[parent_type_working] = set()
-#             parent_to_child_relationships[parent_type_working].add(child_relationship)
+            # map parent to child type
+            if parent_type_working not in parent_to_child_types:
+                parent_to_child_types[parent_type_working] = set()
+            parent_to_child_types[parent_type_working].add(child_type)
 
-#             # reverse map child to parent
-#             if child_relationship not in child_to_parent_types:
-#                 child_to_parent_types[child_type] = set()
-#             child_to_parent_types[child_type].add(parent_type_working)
+            # map parent to child relationship
+            if parent_type_working not in parent_to_child_relationships:
+                parent_to_child_relationships[parent_type_working] = set()
+            parent_to_child_relationships[parent_type_working].add(child_relationship)
 
-#             child_relationship_to_queryable_fields[child_relationship] =
-#                 _get_all_queryable_fields_of_sf_type(sf_client, child_type)
+            # reverse map child to parent
+            if child_relationship not in child_to_parent_types:
+                child_to_parent_types[child_type] = set()
+            child_to_parent_types[child_type].add(parent_type_working)
 
-#         child_types.update(list(child_types_working.keys()))
-#         logger.info(
-#             f"Child object types: parent={parent_type_working} num={len(child_types_working)} list={child_types_working.keys()}"
-#         )
+            child_relationship_to_queryable_fields[child_relationship] = (
+                sf_client.get_queryable_fields_by_type(child_type)
+            )
 
-#     # queryable_fields_attachment = _get_all_queryable_fields_of_sf_type(sf_client, "Attachment")
-#     # queryable_fields_contact_point_email = _get_all_queryable_fields_of_sf_type(sf_client, "ContactPointEmail")
+        child_types.update(list(child_types_working.keys()))
+        logger.info(
+            f"Child object types: parent={parent_type_working} num={len(child_types_working)} list={child_types_working.keys()}"
+        )
 
-#     # queryable_str = ",".join(queryable_fields_contact_point_email)
-#     queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, parent_type)
+    # queryable_fields_attachment = _get_all_queryable_fields_of_sf_type(sf_client, "Attachment")
+    # queryable_fields_contact_point_email = _get_all_queryable_fields_of_sf_type(sf_client, "ContactPointEmail")
 
-#     query = _get_object_by_id_query(parent_id, parent_type, queryable_fields)
-#     result = sf_client.query(query)
-#     records = result["records"]
-#     record = records[0]
-#     assert record["attributes"]["type"] == "Account"
+    # queryable_str = ",".join(queryable_fields_contact_point_email)
+    sections: list[TextSection] = []
 
-#     time_start = time.monotonic()
+    queryable_fields = sf_client.get_queryable_fields_by_type(parent_type)
+    query = get_object_by_id_query(parent_id, parent_type, queryable_fields)
+    result = sf_client.query(query)
+    records = result["records"]
+    record = records[0]
+    assert record["attributes"]["type"] == "Account"
+    parent_last_modified_date = record.get("LastModifiedDate", "")
+    parent_semantic_identifier = record.get("Name", "Unknown Object")
+    parent_last_modified_by_id = record.get("LastModifiedById")
 
-#     # hardcoded testing with just one parent id
-#     MAX_CHILD_TYPES_IN_QUERY = 20
-#     child_relationships: list[str] = list(parent_to_child_relationships[parent_type])
+    normalized_record, _ = OnyxSalesforceSQLite.normalize_record(record)
+    parent_text_section = _extract_section(
+        normalized_record, f"https://{sf_client.sf_instance}/{parent_id}"
+    )
+    sections.append(parent_text_section)
 
-#     relationship_status: dict[str, bool] = {}
+    time_start = time.monotonic()
 
-#     child_relationships_batch = []
-#     for child_relationship in child_relationships:
+    # hardcoded testing with just one parent id
+    MAX_CHILD_TYPES_IN_QUERY = 20
+    child_relationships: list[str] = list(parent_to_child_relationships[parent_type])
 
-#         # this is binary content, skip it
-#         if child_relationship == "Attachments":
-#             continue
+    # relationship_status - the child object types added to this dict have been queried
+    relationship_status: dict[str, bool] = {}
 
-#         child_relationships_batch.append(child_relationship)
-#         if len(child_relationships_batch) < MAX_CHILD_TYPES_IN_QUERY:
-#             continue
+    child_relationships_batch = []
+    for child_relationship in child_relationships:
 
-#         query = _get_child_records_by_id_query(parent_id,
-#                                                parent_type,
-#                                                child_relationships_batch,
-#                                                child_relationship_to_queryable_fields)
-#         print(f"{query=}")
+        # this is binary content, skip it
+        if child_relationship == "Attachments":
+            continue
 
-#         # sf_type = parent_type
-#         # query = (
-#         #     f"SELECT "
-#         #     f"Id, "
-#         #     f"(SELECT OwnerId,CreatedDate,Id,Name,BestTimeToContactStartTime,ActiveToDate,"
-#         #     f"EmailLatestBounceReasonText,CreatedById,LastModifiedDate,LastModifiedById,"
-#         #     f"PreferenceRank,EmailDomain,BestTimeToContactEndTime,SystemModstamp,EmailMailBox,"
-#         #     f"LastReferencedDate,UsageType,ActiveFromDate,ParentId,LastViewedDate,IsPrimary,"
-#         #     f"EmailAddress,EmailLatestBounceDateTime,IsDeleted,BestTimeToContactTimezone "
-#         #     f"FROM ContactPointEmails LIMIT 10) "
-#         #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
-#         # )
+        child_relationships_batch.append(child_relationship)
+        if len(child_relationships_batch) < MAX_CHILD_TYPES_IN_QUERY:
+            continue
 
-#         # NOTE: Querying STANDARD and CUSTOM when there are no custom fields results in an
-#         # non-descriptive error (only root aggregation)
-#         # sf_type = parent_type
-#         # query = (
-#         #     f"SELECT "
-#         #     f"Id, "
-#         #     f"(SELECT FIELDS(STANDARD) FROM ContactPointEmails LIMIT 10) "
-#         #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
-#         # )
+        query = _get_child_records_by_id_query(
+            parent_id,
+            parent_type,
+            child_relationships_batch,
+            child_relationship_to_queryable_fields,
+        )
+        print(f"{query=}")
 
-#         # query = (
-#         #     f"SELECT "
-#         #     f"{sf_type}.Id "
-#         #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
-#         # )
-#         try:
-#             result = sf_client.query(query)
-#             print(f"{result=}")
-#         except Exception:
-#             logger.exception(f"Query failed: {query=}")
-#             relationship_status[child_relationship] = False
-#         else:
-#             relationship_status[child_relationship] = True
-#         finally:
-#             child_relationships_batch.clear()
+        # sf_type = parent_type
+        # query = (
+        #     f"SELECT "
+        #     f"Id, "
+        #     f"(SELECT OwnerId,CreatedDate,Id,Name,BestTimeToContactStartTime,ActiveToDate,"
+        #     f"EmailLatestBounceReasonText,CreatedById,LastModifiedDate,LastModifiedById,"
+        #     f"PreferenceRank,EmailDomain,BestTimeToContactEndTime,SystemModstamp,EmailMailBox,"
+        #     f"LastReferencedDate,UsageType,ActiveFromDate,ParentId,LastViewedDate,IsPrimary,"
+        #     f"EmailAddress,EmailLatestBounceDateTime,IsDeleted,BestTimeToContactTimezone "
+        #     f"FROM ContactPointEmails LIMIT 10) "
+        #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
+        # )
 
-#     if len(child_relationships_batch) > 0:
-#         query = _get_child_records_by_id_query(
-#             parent_id, parent_types[0], child_relationships_batch, child_relationship_to_queryable_fields
-#         )
-#         print(f"{result=}")
+        # NOTE: Querying STANDARD and CUSTOM when there are no custom fields results in an
+        # non-descriptive error (only root aggregation)
+        # sf_type = parent_type
+        # query = (
+        #     f"SELECT "
+        #     f"Id, "
+        #     f"(SELECT FIELDS(STANDARD) FROM ContactPointEmails LIMIT 10) "
+        #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
+        # )
 
-#         try:
-#             result = sf_client.query(query)
-#             print(f"{result=}")
-#         except Exception:
-#             logger.exception(f"Query failed: {query=}")
-#             relationship_status[child_relationship] = False
-#         else:
-#             relationship_status[child_relationship] = True
-#         finally:
-#             child_relationships_batch.clear()
+        # query = (
+        #     f"SELECT "
+        #     f"{sf_type}.Id "
+        #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
+        # )
 
-#     time_elapsed = time.monotonic() - time_start
-#     print(f"elapsed={time_elapsed:.2f}")
+        try:
+            result = sf_client.query(query)
+            print(f"{result=}")
+        except Exception:
+            logger.exception(f"Query failed: {query=}")
+            for child_relationship in child_relationships_batch:
+                relationship_status[child_relationship] = False
+        else:
+            for child_record_key, child_record in result["records"][0].items():
+                if child_record_key == "attributes":
+                    continue
 
-#     print(f"{relationship_status=}")
+                if child_record:
+                    child_text_section = _extract_section(
+                        child_record,
+                        f"https://{sf_client.sf_instance}/{child_record_key}",
+                    )
+                    sections.append(child_text_section)
+                    relationship_status[child_record_key] = False
+                else:
+                    relationship_status[child_record_key] = False
+        finally:
+            child_relationships_batch.clear()
+
+    if len(child_relationships_batch) > 0:
+        query = _get_child_records_by_id_query(
+            parent_id,
+            parent_types[0],
+            child_relationships_batch,
+            child_relationship_to_queryable_fields,
+        )
+        print(f"{query=}")
+
+        try:
+            result = sf_client.query(query)
+            print(f"{result=}")
+        except Exception:
+            logger.exception(f"Query failed: {query=}")
+            for child_relationship in child_relationships_batch:
+                relationship_status[child_relationship] = False
+        else:
+            for child_record_key, child_record in result["records"][0].items():
+                if child_record_key == "attributes":
+                    continue
+
+                if child_record:
+                    child_text_section = _extract_section(
+                        child_record,
+                        f"https://{sf_client.sf_instance}/{child_record_key}",
+                    )
+                    sections.append(child_text_section)
+                    relationship_status[child_record_key] = False
+                else:
+                    relationship_status[child_record_key] = False
+        finally:
+            child_relationships_batch.clear()
+
+    # get user relationship if present
+    primary_owner_list = None
+    if parent_last_modified_by_id:
+        queryable_user_fields = sf_client.get_queryable_fields_by_type("User")
+        query = get_object_by_id_query(
+            parent_last_modified_by_id, "User", queryable_user_fields
+        )
+        result = sf_client.query(query)
+        user_record = result["records"][0]
+        expert_info = BasicExpertInfo(
+            first_name=user_record.get("FirstName"),
+            last_name=user_record.get("LastName"),
+            email=user_record.get("Email"),
+            display_name=user_record.get("Name"),
+        )
+
+        if (
+            expert_info.first_name
+            or expert_info.last_name
+            or expert_info.email
+            or expert_info.display_name
+        ):
+            primary_owner_list = [expert_info]
+
+    doc = Document(
+        id=ID_PREFIX + parent_id,
+        sections=cast(list[TextSection | ImageSection], sections),
+        source=DocumentSource.SALESFORCE,
+        semantic_identifier=parent_semantic_identifier,
+        doc_updated_at=time_str_to_utc(parent_last_modified_date),
+        primary_owners=primary_owner_list,
+        metadata={},
+    )
+
+    assert doc is not None
+
+    time_elapsed = time.monotonic() - time_start
+    print(f"elapsed={time_elapsed:.2f}")
+
+    print(f"{relationship_status=}")

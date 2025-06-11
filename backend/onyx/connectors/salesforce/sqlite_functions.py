@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.connectors.salesforce.utils import validate_salesforce_id
 from onyx.utils.logger import setup_logger
@@ -26,23 +27,29 @@ class OnyxSalesforceSQLite:
     # might be appropriate here.
     NULL_ID_STRING = "N/A"
 
-    PREFIX_TO_ENTITY: dict[str, str] = {
-        "001": "Account",
-        "002": "Contact",
-        "005": "User",
-        "006": "Opportunity",
-        "007": "Activity",
-        "00D": "Organization",
-    }
-
     def __init__(self, filename: str, isolation_level: str | None = None):
         self.filename = filename
         self.isolation_level = isolation_level
         self._conn: sqlite3.Connection | None = None
+
+        # this is only set on connection. This variable does not change
+        # when a new db is initialized with this class.
         self._existing_db = True
 
     def __del__(self) -> None:
         self.close()
+
+    @property
+    def file_size(self) -> int:
+        """Returns -1 if the file does not exist."""
+        if not self.filename:
+            return -1
+
+        if not os.path.exists(self.filename):
+            return -1
+
+        file_path = Path(self.filename)
+        return file_path.stat().st_size
 
     def connect(self) -> None:
         if self._conn is not None:
@@ -72,6 +79,16 @@ class OnyxSalesforceSQLite:
             raise RuntimeError("Database connection is closed")
 
         return self._conn.cursor()
+
+    def flush(self) -> None:
+        """We're using SQLite in WAL mode sometimes. To flush to the DB we have to
+        call this."""
+        if self._conn is None:
+            raise RuntimeError("Database connection is closed")
+
+        with self._conn:
+            cursor = self._conn.cursor()
+            cursor.execute("PRAGMA wal_checkpoint(FULL)")
 
     def apply_schema(self) -> None:
         """Initialize the SQLite database with required tables if they don't exist.
@@ -351,18 +368,19 @@ class OnyxSalesforceSQLite:
         changed_ids: dict[str, str],
         parent_types: set[str],
         parent_relationship_fields_by_type: dict[str, dict[str, list[str]]],
-    ) -> Iterator[tuple[str, set[str], int]]:
+        prefix_to_type: dict[str, str],
+    ) -> Iterator[tuple[str, str, int]]:
         """
-        Yields tuples of (changed_id, possible_parent_types, num_examined)
+        This function yields back any changed parent id's based on
+        a relationship lookup.
+
+        Yields tuples of (changed_id, parent_type, num_examined)
         changed_id is the id of the changed parent record
-        possible_parent_type is a set of the possible parent records
-        - while unlikely, it is not necessarily known in advance what the type of the parent record is
+        parent_type is the object table/type of the id (based on a prefix lookup)
         num_examined is an integer which signifies our progress through the changed_id's dict
 
         changed_ids is a list of all id's that changed, both parent and children.
-
-        This function yields back any changed parent id's based on
-        a relationship lookup.
+        prent
 
         This is much simpler than get_changed_parent_ids_by_type.
 
@@ -385,7 +403,7 @@ class OnyxSalesforceSQLite:
 
             # if this id is a parent type, yield it directly
             if changed_type in parent_types:
-                yield changed_id, set(changed_type), num_examined
+                yield changed_id, changed_type, num_examined
                 changed_parent_ids.update(changed_id)
                 continue
 
@@ -404,16 +422,27 @@ class OnyxSalesforceSQLite:
             parent_relationship_fields = parent_relationship_fields_by_type[
                 changed_type
             ]
-            for field_name, field_parent_types in parent_relationship_fields.items():
+            for field_name, _ in parent_relationship_fields.items():
+                if field_name not in sf_object.data:
+                    logger.warning(f"{field_name=} not in data for {changed_type=}!")
+                    continue
+
                 parent_id = sf_object.data[field_name]
                 parent_id_prefix = parent_id[:3]
-                if parent_id_prefix in self.PREFIX_TO_ENTITY:
-                    yield parent_id, set(
-                        self.PREFIX_TO_ENTITY[parent_id_prefix]
-                    ), num_examined
-                else:
-                    yield parent_id, set(field_parent_types), num_examined
+
+                if parent_id_prefix not in prefix_to_type:
+                    logger.warning(
+                        f"Could not lookup type for prefix: {parent_id_prefix=}"
+                    )
+                    continue
+
+                parent_type = prefix_to_type[parent_id_prefix]
+                if parent_type not in parent_types:
+                    continue
+
+                yield parent_id, parent_type, num_examined
                 changed_parent_ids.update(parent_id)
+                break
 
     def object_type_count(self, object_type: str) -> int:
         """Check if there is at least one object of the specified type in the database.
@@ -437,11 +466,21 @@ class OnyxSalesforceSQLite:
             return count
 
     @staticmethod
-    def normalize_record(record: dict[str, Any]) -> tuple[str, set[str]]:
+    def normalize_record(
+        original_record: dict[str, Any],
+        remove_ids: bool = True,
+    ) -> tuple[dict[str, Any], set[str]]:
         """Takes a dict of field names to values and removes fields
-        we don't want."""
+        we don't want.
+
+        This means most parent id field's and any fields with null values.
+
+        Return a json string and a list of parent_id's in the record.
+        """
         parent_ids: set[str] = set()
         fields_to_remove: set[str] = set()
+
+        record = original_record.copy()
 
         for field, value in record.items():
             # remove empty fields
@@ -449,10 +488,19 @@ class OnyxSalesforceSQLite:
                 fields_to_remove.add(field)
                 continue
 
-            # remove salesforce id's (and add to parent id set)
-            if field != "Id" and validate_salesforce_id(value):
-                parent_ids.add(value)
+            if field == "attributes":
                 fields_to_remove.add(field)
+                continue
+
+            # remove salesforce id's (and add to parent id set)
+            if (
+                field != "Id"
+                and isinstance(value, str)
+                and validate_salesforce_id(value)
+            ):
+                parent_ids.add(value)
+                if remove_ids:
+                    fields_to_remove.add(field)
                 continue
 
             # this field is real data, leave it alone
@@ -462,13 +510,10 @@ class OnyxSalesforceSQLite:
             if field != "LastModifiedById":
                 del record[field]
 
-        json_string = json.dumps(record)
-        return json_string, parent_ids
+        return record, parent_ids
 
     def update_from_csv(
-        self,
-        object_type: str,
-        csv_download_path: str,
+        self, object_type: str, csv_download_path: str, remove_ids: bool = True
     ) -> list[str]:
         """Update the SF DB with a CSV file using SQLite storage."""
         if self._conn is None:
@@ -491,7 +536,10 @@ class OnyxSalesforceSQLite:
 
                     row_id = row["Id"]
 
-                    json_string, parent_ids = OnyxSalesforceSQLite.normalize_record(row)
+                    normalized_record, parent_ids = (
+                        OnyxSalesforceSQLite.normalize_record(row, remove_ids)
+                    )
+                    normalized_record_json_str = json.dumps(normalized_record)
 
                     # Update main object data
                     # NOTE(rkuo): looks like we take a list and dump it as json into the db
@@ -500,7 +548,7 @@ class OnyxSalesforceSQLite:
                         INSERT OR REPLACE INTO salesforce_objects (id, object_type, data)
                         VALUES (?, ?, ?)
                         """,
-                        (row_id, object_type, json_string),
+                        (row_id, object_type, normalized_record_json_str),
                     )
 
                     # Update relationships using the same connection
@@ -673,3 +721,22 @@ class OnyxSalesforceSQLite:
             AND json_extract(data, '$.Email') IS NOT NULL
             """
         )
+
+    def get_basic_expert_info(
+        self,
+        sf_object: SalesforceObject,
+    ) -> BasicExpertInfo | None:
+        object_dict: dict[str, Any] = sf_object.data
+        if not (last_modified_by_id := object_dict.get("LastModifiedById")):
+            logger.warning(f"No LastModifiedById found for {sf_object.id}")
+            return None
+        if not (last_modified_by := self.get_record(last_modified_by_id)):
+            logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
+            return None
+
+        try:
+            expert_info = BasicExpertInfo.from_dict(last_modified_by.data)
+        except Exception:
+            return None
+
+        return expert_info

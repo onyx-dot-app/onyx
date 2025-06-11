@@ -1,16 +1,16 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Any
 
 from pytz import UTC
 from simple_salesforce import Salesforce
-from simple_salesforce import SFType
 from simple_salesforce.bulk2 import SFBulk2Handler
 from simple_salesforce.bulk2 import SFBulk2Type
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
+
+# from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 
 logger = setup_logger()
 
@@ -41,83 +41,39 @@ def _build_created_date_time_filter_for_salesforce(
     )
 
 
-def _get_sf_type_object_json(sf_client: Salesforce, type_name: str) -> Any:
-    sf_object = SFType(type_name, sf_client.session_id, sf_client.sf_instance)
-    return sf_object.describe()
+# def _sf_type_describe(sf_client: Salesforce, type_name: str) -> Any:
+#     sf_object = SFType(type_name, sf_client.session_id, sf_client.sf_instance)
+#     return sf_object.describe()
 
 
-def _is_valid_child_object(
-    sf_client: Salesforce, child_relationship: dict[str, Any]
-) -> bool:
-    if not child_relationship["childSObject"]:
-        return False
-    if not child_relationship["relationshipName"]:
-        return False
+# def _get_all_queryable_fields_of_sf_type(
+#     sf_client: Salesforce,
+#     sf_type: str,
+# ) -> list[str]:
+#     object_description = _sf_type_describe(sf_client, sf_type)
+#     fields: list[dict[str, Any]] = object_description["fields"]
+#     valid_fields: set[str] = set()
+#     field_names_to_remove: set[str] = set()
+#     for field in fields:
+#         if compound_field_name := field.get("compoundFieldName"):
+#             # We do want to get name fields even if they are compound
+#             if not field.get("nameField"):
+#                 field_names_to_remove.add(compound_field_name)
 
-    sf_type = child_relationship["childSObject"]
-    object_description = _get_sf_type_object_json(sf_client, sf_type)
-    if not object_description["queryable"]:
-        return False
+#         field_name = field.get("name")
+#         field_type = field.get("type")
+#         if field_type in ["base64", "blob", "encryptedstring"]:
+#             # print(f"skipping {sf_type=} {field_name=} {field_type=}")
+#             continue
 
-    if not child_relationship["field"]:
-        return False
+#         # field_custom = field.get("custom")
+#         # if field_custom:
+#         #     print(f"custom field: {sf_type=} {field_name=} {field_type=}")
 
-    if child_relationship["field"] == "RelatedToId":
-        return False
+#         if field_name:
+#             valid_fields.add(field_name)
 
-    return True
-
-
-def get_all_children_of_sf_type(sf_client: Salesforce, sf_type: str) -> set[str]:
-    object_description = _get_sf_type_object_json(sf_client, sf_type)
-
-    index = 0
-    len_relationships = object_description["childRelationships"]
-    child_object_types = set()
-    for child_relationship in object_description["childRelationships"]:
-        if _is_valid_child_object(sf_client, child_relationship):
-            logger.debug(
-                f"{index}/{len_relationships} - Found valid child object: "
-                f"parent={sf_type} child={child_relationship['childSObject']}"
-            )
-            child_object_types.add(child_relationship["childSObject"])
-        else:
-            logger.debug(
-                f"{index}/{len_relationships} - Invalid child object: "
-                f"parent={sf_type} child={child_relationship['childSObject']}"
-            )
-
-    return child_object_types
-
-
-def _get_all_queryable_fields_of_sf_type(
-    sf_client: Salesforce,
-    sf_type: str,
-) -> list[str]:
-    object_description = _get_sf_type_object_json(sf_client, sf_type)
-    fields: list[dict[str, Any]] = object_description["fields"]
-    valid_fields: set[str] = set()
-    field_names_to_remove: set[str] = set()
-    for field in fields:
-        if compound_field_name := field.get("compoundFieldName"):
-            # We do want to get name fields even if they are compound
-            if not field.get("nameField"):
-                field_names_to_remove.add(compound_field_name)
-
-        field_name = field.get("name")
-        field_type = field.get("type")
-        if field_type in ["base64", "blob", "encryptedstring"]:
-            # print(f"skipping {sf_type=} {field_name=} {field_type=}")
-            continue
-
-        # field_custom = field.get("custom")
-        # if field_custom:
-        #     print(f"custom field: {sf_type=} {field_name=} {field_type=}")
-
-        if field_name:
-            valid_fields.add(field_name)
-
-    return list(valid_fields - field_names_to_remove)
+#     return list(valid_fields - field_names_to_remove)
 
 
 def _get_time_filter_for_sf_type(
@@ -142,13 +98,46 @@ def _get_time_filtered_query(
     return query
 
 
-def _get_object_by_id_query(
+def get_object_by_id_query(
     object_id: str, sf_type: str, queryable_fields: list[str]
 ) -> str:
     query = (
         f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"
     )
     return query
+
+    # if len(child_relationships_batch) > 0:
+    #     query = _get_child_records_by_id_query(
+    #         parent_id,
+    #         parent_types[0],
+    #         child_relationships_batch,
+    #         child_relationship_to_queryable_fields,
+    #     )
+    #     print(f"{query=}")
+
+    #     try:
+    #         result = sf_client.query(query)
+    #         print(f"{result=}")
+    #     except Exception:
+    #         logger.exception(f"Query failed: {query=}")
+    #         for child_relationship in child_relationships_batch:
+    #             relationship_status[child_relationship] = False
+    #     else:
+    #         for child_record_key, child_record in result["records"][0].items():
+    #             if child_record_key == "attributes":
+    #                 continue
+
+    #             if child_record:
+    #                 child_text_section = _extract_section(
+    #                     child_record,
+    #                     f"https://{sf_client.sf_instance}/{child_record_key}",
+    #                 )
+    #                 sections.append(child_text_section)
+    #                 relationship_status[child_record_key] = False
+    #             else:
+    #                 relationship_status[child_record_key] = False
+    #     finally:
+    #         child_relationships_batch.clear()
 
 
 def _object_type_has_api_data(
@@ -227,6 +216,7 @@ def _bulk_retrieve_from_salesforce(
 def fetch_all_csvs_in_parallel(
     sf_client: Salesforce,
     all_types_to_filter: dict[str, bool],
+    queryable_fields_by_type: dict[str, list[str]],
     start: SecondsSinceUnixEpoch | None,
     end: SecondsSinceUnixEpoch | None,
     target_dir: str,
@@ -234,35 +224,15 @@ def fetch_all_csvs_in_parallel(
     """
     Fetches all the csvs in parallel for the given object types
     Returns a dict of (sf_type, full_download_path)
+
+    NOTE: We can probably lift object type has api data out of here
     """
-
-    # these types don't query properly and need looking at
-    # problem_types: set[str] = {
-    #     "ContentDocumentLink",
-    #     "RecordActionHistory",
-    #     "PendingOrderSummary",
-    #     "UnifiedActivityRelation",
-    # }
-
-    # these types don't have a LastModifiedDate field and instead use CreatedDate
-    # created_date_types: set[str] = {
-    #     "AccountHistory",
-    #     "AccountTag",
-    #     "EntitySubscription",
-    # }
-
-    # last_modified_time_filter = _build_last_modified_time_filter_for_salesforce(
-    #     start, end
-    # )
-    # created_date_time_filter = _build_created_date_time_filter_for_salesforce(
-    #     start, end
-    # )
 
     type_to_query = {}
 
     # query the available fields for each object type and determine how to filter
     for sf_type, apply_filter in all_types_to_filter.items():
-        queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
+        queryable_fields = queryable_fields_by_type[sf_type]
 
         time_filter = ""
         while True:
