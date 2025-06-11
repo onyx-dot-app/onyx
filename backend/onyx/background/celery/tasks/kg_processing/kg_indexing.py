@@ -9,6 +9,7 @@ from onyx.background.celery.tasks.kg_processing.utils import (
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.engine import get_session_with_current_tenant
 
 
 def try_creating_kg_processing_task(
@@ -23,8 +24,9 @@ def try_creating_kg_processing_task(
 
     try:
 
-        if not check_kg_processing_requirements(tenant_id):
-            return None
+        with get_session_with_current_tenant() as db_session:
+            if not check_kg_processing_requirements(db_session):
+                return None
 
         # Send the KG processing task
         result = celery_app.send_task(
@@ -60,8 +62,9 @@ def try_creating_kg_source_reset_task(
     try:
 
         # if blocked - return None
-        if not check_kg_processing_unblocked(tenant_id):
-            return None
+        with get_session_with_current_tenant() as db_session:
+            if not check_kg_processing_unblocked(db_session):
+                return None
 
         # Send the KG source reset task
         result = celery_app.send_task(
