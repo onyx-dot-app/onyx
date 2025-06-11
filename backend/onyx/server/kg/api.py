@@ -24,7 +24,7 @@ def get_kg_exposed(
     return kg_config.get_kg_exposed(db_session=db_session)
 
 
-@admin_router.get("/reset")
+@admin_router.put("/reset")
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),

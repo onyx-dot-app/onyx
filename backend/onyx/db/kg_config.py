@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
+from sqlalchemy import delete
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -204,7 +205,10 @@ def get_kg_exposed(db_session: Session) -> bool:
     return exposed is not None
 
 
-def reset_kg(db_session: Session) -> None: ...
+def reset_kg(db_session: Session) -> None:
+    # remove all entity types
+    db_session.execute(delete(KGEntityType))
+    db_session.commit()
 
 
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:

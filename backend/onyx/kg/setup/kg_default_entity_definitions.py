@@ -370,7 +370,7 @@ def get_vendor_name(
     if not config:
         raise RuntimeError("Failed to find the vendor name")
 
-    if len(config.kg_variable_values) != 0:
+    if len(config.kg_variable_values) != 1:
         raise RuntimeError(
             f"Expected vendor name to be a list of length 1, instead got {config.kg_variable_values=}"
         )
