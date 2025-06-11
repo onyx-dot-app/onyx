@@ -89,10 +89,10 @@ def _expand_query_non_tool_calling_llm(
 ) -> QueryExpansions | None:
     keyword_expansion: str | None = wait_on_background(expanded_keyword_thread)
     semantic_expansion: str | None = wait_on_background(expanded_semantic_thread)
-    
+
     if keyword_expansion is None or semantic_expansion is None:
         return None
-    
+
     return QueryExpansions(
         keywords_expansions=[keyword_expansion],
         semantic_expansions=[semantic_expansion],
@@ -327,14 +327,14 @@ def choose_tool(
             expanded_semantic_thread=expanded_semantic_thread,
         )
     if (
-        USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH 
-        and selected_tool.name == SearchTool._NAME 
+        USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH
+        and selected_tool.name == SearchTool._NAME
         and override_kwargs.expanded_queries
     ):
         # TODO: this is a hack to handle the case where the expanded queries are not found.
         # We should refactor this to be more robust.
         if (
-            override_kwargs.expanded_queries.keywords_expansions is None 
+            override_kwargs.expanded_queries.keywords_expansions is None
             or override_kwargs.expanded_queries.semantic_expansions is None
         ):
             raise ValueError("No expanded keyword or semantic threads found.")
