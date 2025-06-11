@@ -41,9 +41,6 @@ def check_kg_processing_unblocked(tenant_id: str
         kg_clustering_in_progress = kg_config.KG_CLUSTERING_IN_PROGRESS
 
     if kg_extraction_in_progress or kg_clustering_in_progress:
-        task_logger.info(
-            f"KG processing already in progress for tenant {tenant_id}, skipping"
-        )
         return False
 
     return True 
@@ -69,9 +66,6 @@ def check_kg_processing_requirements(tenant_id: str
         
 
     if not documents_needing_kg_processing:
-        task_logger.info(
-            f"No documents needing KG processing for tenant {tenant_id}, skipping"
-        )
         return False
 
     return True 
