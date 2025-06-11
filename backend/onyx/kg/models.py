@@ -36,6 +36,12 @@ class KGConfigVars(str, Enum):
     KG_BETA_PERSONA_ID = "KG_BETA_PERSONA_ID"
 
 
+class KGChunkRelationship(BaseModel):
+    source: str
+    rel_type: str
+    target: str
+
+
 class KGChunkFormat(BaseModel):
     connector_id: int | None = None
     document_id: str
@@ -46,9 +52,9 @@ class KGChunkFormat(BaseModel):
     secondary_owners: list[str]
     source_type: str
     metadata: dict[str, str | list[str]] | None = None
-    entities: dict[str, int] = {}
-    relationships: dict[str, int] = {}
-    terms: dict[str, int] = {}
+    entities: list[str] = []
+    relationships: list[KGChunkRelationship] = []
+    terms: list[str] = []
     deep_extraction: bool = False
 
 
