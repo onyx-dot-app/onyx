@@ -13,6 +13,7 @@ from onyx.configs.app_configs import AZURE_DALLE_API_BASE
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
+from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
@@ -53,7 +54,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     if llm and llm.config.api_key and llm.config.model_provider == "openai":
         return LLMConfig(
             model_provider=llm.config.model_provider,
-            model_name="gpt-image-1",
+            model_name=IMAGE_MODEL_NAME,
             temperature=GEN_AI_TEMPERATURE,
             api_key=llm.config.api_key,
             api_base=llm.config.api_base,
@@ -90,7 +91,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     return LLMConfig(
         model_provider=openai_provider.provider,
-        model_name="gpt-image-1",
+        model_name=IMAGE_MODEL_NAME,
         temperature=GEN_AI_TEMPERATURE,
         api_key=openai_provider.api_key,
         api_base=openai_provider.api_base,

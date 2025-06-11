@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
 from onyx.configs.tool_configs import IMAGE_GENERATION_OUTPUT_FORMAT
 from onyx.llm.interfaces import LLM
@@ -90,7 +91,7 @@ class ImageGenerationTool(Tool[None]):
         api_key: str,
         api_base: str | None,
         api_version: str | None,
-        model: str = "gpt-image-1",
+        model: str = IMAGE_MODEL_NAME,
         num_imgs: int = 2,
         additional_headers: dict[str, str] | None = None,
         output_format: ImageFormat = _DEFAULT_OUTPUT_FORMAT,
