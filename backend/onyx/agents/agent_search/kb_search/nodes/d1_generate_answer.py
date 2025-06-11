@@ -22,8 +22,10 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import ExtendedToolResponse
-from onyx.configs.kg_configs import KG_ANSWER_GENERATION_TIMEOUT
+from onyx.configs.kg_configs import KG_MAX_TOKENS_ANSWER_GENERATION
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
+from onyx.configs.kg_configs import KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION
+from onyx.configs.kg_configs import KG_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine import get_session_with_current_tenant
@@ -205,7 +207,7 @@ def generate_answer(
     ]
     try:
         run_with_timeout(
-            KG_ANSWER_GENERATION_TIMEOUT,
+            KG_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.fast_llm,
                 prompt=msg,
@@ -214,8 +216,8 @@ def generate_answer(
                 agent_answer_level=0,
                 agent_answer_question_num=0,
                 agent_answer_type="agent_level_answer",
-                timeout_override=30,
-                max_tokens=1000,
+                timeout_override=KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
+                max_tokens=KG_MAX_TOKENS_ANSWER_GENERATION,
             ),
         )
     except Exception as e:
