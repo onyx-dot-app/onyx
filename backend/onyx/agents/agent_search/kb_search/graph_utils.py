@@ -217,31 +217,6 @@ def stream_write_close_steps(writer: StreamWriter, level: int = 0) -> None:
     write_custom_event("stream_finished", stop_event, writer)
 
 
-def stream_write_close_main_answer(writer: StreamWriter, level: int = 0) -> None:
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.MAIN_ANSWER,
-        level=level,
-        level_question_num=0,
-    )
-    write_custom_event("stream_finished", stop_event, writer)
-
-
-def stream_write_main_answer_token(
-    writer: StreamWriter, token: str, level: int = 0, level_question_num: int = 0
-) -> None:
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=token,  # No need to add space as tokenizer handles this
-            level=level,
-            level_question_num=level_question_num,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
-
-
 def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
     """
     Get document information for an entity, including its semantic name and document details.

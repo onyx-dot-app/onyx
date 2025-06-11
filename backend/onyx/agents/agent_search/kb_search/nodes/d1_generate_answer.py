@@ -7,13 +7,7 @@ from langgraph.types import StreamWriter
 
 from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_close_main_answer,
-)
 from onyx.agents.agent_search.kb_search.graph_utils import stream_write_close_steps
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_main_answer_token,
-)
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -21,6 +15,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.calculations import (
     get_answer_generation_documents,
 )
+from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -32,8 +27,6 @@ from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.natural_language_processing.utils import BaseTokenizer
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
 from onyx.tools.tool_implementations.search.search_tool import IndexFilters
@@ -43,17 +36,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
-
-
-def _stream_augmentations(
-    llm_tokenizer: BaseTokenizer, streaming_text: str, writer: StreamWriter
-) -> None:
-
-    # Tokenize and stream the reference results
-    tokens = llm_tokenizer.tokenize(streaming_text)
-    for token in tokens:
-
-        stream_write_main_answer_token(writer, token)
 
 
 def generate_answer(
@@ -221,69 +203,23 @@ def generate_answer(
             content=output_format_prompt,
         )
     ]
-    fast_llm = graph_config.tooling.fast_llm
-
-    dispatch_timings: list[float] = []
-    response: list[str] = []
-
-    def stream_answer() -> list[str]:
-        # Get the LLM's tokenizer
-        llm_tokenizer = get_tokenizer(
-            model_name=fast_llm.config.model_name,
-            provider_type=fast_llm.config.model_provider,
-        )
-
-        for message in fast_llm.stream(
-            prompt=msg,
-            timeout_override=30,
-            max_tokens=1000,
-        ):
-            # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-            content = message.content
-            if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected content to be a string, but got {type(content)}"
-                )
-
-            # Tokenize the content using the LLM's tokenizer
-            tokens = llm_tokenizer.tokenize(content)
-            for token in tokens:
-                start_stream_token = datetime.now()
-                stream_write_main_answer_token(
-                    writer, token, level=0, level_question_num=0
-                )
-                end_stream_token = datetime.now()
-                dispatch_timings.append(
-                    (end_stream_token - start_stream_token).microseconds
-                )
-                response.append(token)
-        return response
-
     try:
-        response = run_with_timeout(
+        run_with_timeout(
             KG_ANSWER_GENERATION_TIMEOUT,
-            stream_answer,
+            lambda: stream_llm_answer(
+                llm=graph_config.tooling.fast_llm,
+                prompt=msg,
+                event_name="initial_agent_answer",
+                writer=writer,
+                agent_answer_level=0,
+                agent_answer_question_num=0,
+                agent_answer_type="agent_level_answer",
+                timeout_override=30,
+                max_tokens=1000,
+            ),
         )
-
-        # llm_tokenizer = get_tokenizer(
-        #     model_name=fast_llm.config.model_name,
-        #     provider_type=fast_llm.config.model_provider,
-        # )
-
-        # TODO: the fake streaming should happen in friont-end. Revisit and then
-        # simply stream out here the full text in one.
-        # if reference_results_str:
-        #     # Get the LLM's tokenizer
-
-        #     _stream_augmentations(llm_tokenizer, reference_results_str, writer)
-
-        # if state.remarks:
-        #     _stream_augmentations(llm_tokenizer, "Comments: \n " + "\n".join(state.remarks), writer)
-
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")
-
-        stream_write_close_main_answer(writer)
 
     return MainOutput(
         log_messages=[
