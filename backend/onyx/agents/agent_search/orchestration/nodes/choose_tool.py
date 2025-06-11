@@ -213,11 +213,14 @@ def choose_tool(
                 expanded_keyword_thread=expanded_keyword_thread,
                 expanded_semantic_thread=expanded_semantic_thread,
             )
-        if (USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH and 
+        if (
+            USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH and 
             tool.name == SearchTool._NAME and 
             override_kwargs.expanded_queries):
-            if (override_kwargs.expanded_queries.keywords_expansions is None or 
-                override_kwargs.expanded_queries.semantic_expansions is None):
+            if (
+                override_kwargs.expanded_queries.keywords_expansions is None or 
+                override_kwargs.expanded_queries.semantic_expansions is None
+            ):
                 raise ValueError("No expanded keyword or semantic threads found.")
 
         return ToolChoiceUpdate(
