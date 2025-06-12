@@ -352,9 +352,9 @@ function KGEntityTypes({
             </p>
             <div className="flex flex-col gap-y-4">
               <p>
-                Resetting the Knowledge Graph will restore all of the defaults
-                back to their original values. It will also perform unfathomable
-                voodoo magic, turning water to wine and flesh to gold.
+                Resetting will delete all extracted entities and relationships
+                and deactivate all entity types. After reset, you can reactivate
+                entity types to begin populating the Knowledge Graph again.
               </p>
               <Button
                 type="button"
