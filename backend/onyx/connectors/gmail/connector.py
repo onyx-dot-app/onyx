@@ -7,11 +7,13 @@ from google.oauth2.credentials import Credentials as OAuthCredentials  # type: i
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import execute_single_retrieval
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_gmail_service
 from onyx.connectors.google_utils.shared_constants import (
@@ -147,7 +149,9 @@ def message_to_section(message: Dict[str, Any]) -> tuple[TextSection, dict[str, 
     return TextSection(link=link, text=message_body_text + message_data), metadata
 
 
-def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:
+def thread_to_document(
+    full_thread: Dict[str, Any], email_used_to_fetch_thread: str
+) -> Document | None:
     all_messages = full_thread.get("messages", [])
     if not all_messages:
         return None
@@ -202,6 +206,11 @@ def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:
         doc_updated_at=updated_at_datetime,
         # Not adding emails to metadata because it's already in the sections
         metadata={},
+        external_access=ExternalAccess(
+            external_user_emails={email_used_to_fetch_thread},
+            external_user_group_ids=set(),
+            is_public=False,
+        ),
     )
 
 
@@ -301,7 +310,7 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 q=query,
                 continue_on_404_or_403=True,
             ):
-                full_threads = execute_paginated_retrieval(
+                full_threads = execute_single_retrieval(
                     retrieval_function=gmail_service.users().threads().get,
                     list_key=None,
                     userId=user_email,
@@ -312,13 +321,15 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 # full_threads is an iterator containing a single thread
                 # so we need to convert it to a list and grab the first element
                 full_thread = list(full_threads)[0]
-                doc = thread_to_document(full_thread)
+                doc = thread_to_document(full_thread, user_email)
                 if doc is None:
                     continue
+
                 doc_batch.append(doc)
                 if len(doc_batch) > self.batch_size:
                     yield doc_batch
                     doc_batch = []
+
         if doc_batch:
             yield doc_batch
 
@@ -344,7 +355,11 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 doc_batch.append(
                     SlimDocument(
                         id=thread["id"],
-                        perm_sync_data={"user_email": user_email},
+                        external_access=ExternalAccess(
+                            external_user_emails={user_email},
+                            external_user_group_ids=set(),
+                            is_public=False,
+                        ),
                     )
                 )
                 if len(doc_batch) > SLIM_BATCH_SIZE:

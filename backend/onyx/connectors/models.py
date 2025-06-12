@@ -7,6 +7,7 @@ from typing import cast
 from pydantic import BaseModel
 from pydantic import model_validator
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.configs.constants import RETURN_SEPARATOR
@@ -87,6 +88,9 @@ class BasicExpertInfo(BaseModel):
             return self.first_name.capitalize()
 
         return "Unknown"
+
+    def get_email(self) -> str | None:
+        return self.email or None
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BasicExpertInfo):
@@ -175,6 +179,9 @@ class DocumentBase(BaseModel):
     # Anything else that may be useful that is specific to this particular connector type that other
     # parts of the code may need. If you're unsure, this can be left as None
     additional_info: Any = None
+
+    # only filled in EE for connectors w/ permission sync enabled
+    external_access: ExternalAccess | None = None
 
     def get_title_for_document_index(
         self,
@@ -297,7 +304,7 @@ class IndexingDocument(Document):
 
 class SlimDocument(BaseModel):
     id: str
-    perm_sync_data: Any | None = None
+    external_access: ExternalAccess | None = None
 
 
 class IndexAttemptMetadata(BaseModel):

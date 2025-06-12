@@ -1,16 +1,3 @@
-import {
-  AnthropicIcon,
-  AmazonIcon,
-  CPUIcon,
-  MicrosoftIconSVG,
-  MistralIcon,
-  MetaIcon,
-  GeminiIcon,
-  IconProps,
-  DeepseekIcon,
-  OpenAISVG,
-} from "@/components/icons/icons";
-
 export interface CustomConfigKey {
   name: string;
   display_name: string;
@@ -18,6 +5,16 @@ export interface CustomConfigKey {
   is_required: boolean;
   is_secret: boolean;
   key_type: "text_input" | "file_input";
+}
+
+export interface ModelConfigurationUpsertRequest {
+  name: string;
+  is_visible: boolean;
+  max_input_tokens: number | null;
+}
+
+export interface ModelConfiguration extends ModelConfigurationUpsertRequest {
+  supports_image_input: boolean;
 }
 
 export interface WellKnownLLMProviderDescriptor {
@@ -31,7 +28,7 @@ export interface WellKnownLLMProviderDescriptor {
 
   single_model_supported: boolean;
   custom_config_keys: CustomConfigKey[] | null;
-  llm_names: string[];
+  model_configurations: ModelConfiguration[];
   default_model: string | null;
   default_fast_model: string | null;
   is_public: boolean;
@@ -67,12 +64,6 @@ export interface LLMProviderView extends LLMProvider {
   icon?: React.FC<{ size?: number; className?: string }>;
 }
 
-export interface ModelConfiguration {
-  name: string;
-  is_visible: boolean;
-  max_input_tokens: number | null;
-}
-
 export interface VisionProvider extends LLMProviderView {
   vision_models: string[];
 }
@@ -87,45 +78,3 @@ export interface LLMProviderDescriptor {
   groups: number[];
   model_configurations: ModelConfiguration[];
 }
-
-export const getProviderIcon = (providerName: string, modelName?: string) => {
-  const iconMap: Record<
-    string,
-    ({ size, className }: IconProps) => JSX.Element
-  > = {
-    amazon: AmazonIcon,
-    phi: MicrosoftIconSVG,
-    mistral: MistralIcon,
-    ministral: MistralIcon,
-    llama: MetaIcon,
-    gemini: GeminiIcon,
-    deepseek: DeepseekIcon,
-    claude: AnthropicIcon,
-    anthropic: AnthropicIcon,
-    openai: OpenAISVG,
-    microsoft: MicrosoftIconSVG,
-    meta: MetaIcon,
-    google: GeminiIcon,
-  };
-
-  // First check if provider name directly matches an icon
-  if (providerName.toLowerCase() in iconMap) {
-    return iconMap[providerName.toLowerCase()];
-  }
-
-  // Then check if model name contains any of the keys
-  if (modelName) {
-    const lowerModelName = modelName.toLowerCase();
-    for (const [key, icon] of Object.entries(iconMap)) {
-      if (lowerModelName.includes(key)) {
-        return icon;
-      }
-    }
-  }
-
-  // Fallback to CPU icon if no matches
-  return CPUIcon;
-};
-
-export const isAnthropic = (provider: string, modelName: string) =>
-  provider === "anthropic" || modelName.toLowerCase().includes("claude");

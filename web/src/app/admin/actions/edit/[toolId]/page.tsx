@@ -27,15 +27,17 @@ export default async function Page(props: {
     );
   } else {
     body = (
-      <div className="w-full my-8">
+      <div className="w-full mt-8 pb-8">
         <div>
           <div>
             <CardSection>
               <ActionEditor tool={tool} />
             </CardSection>
 
-            <Title className="mt-12">Delete Tool</Title>
-            <Text>Click the button below to permanently delete this tool.</Text>
+            <Title className="mt-12">Delete Action</Title>
+            <Text>
+              Click the button below to permanently delete this action.
+            </Text>
             <div className="flex mt-6">
               <DeleteToolButton toolId={tool.id} />
             </div>
@@ -50,7 +52,7 @@ export default async function Page(props: {
       <BackButton />
 
       <AdminPageTitle
-        title="Edit Tool"
+        title="Edit Action"
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 

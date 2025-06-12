@@ -25,7 +25,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
 
   let authType: AuthType;
 
-  // Override fasapi users auth so we can use both
+  // Override fastapi users auth so we can use both
   if (NEXT_PUBLIC_CLOUD_ENABLED) {
     authType = "cloud";
   } else {

@@ -72,8 +72,13 @@ export const FileListItem: React.FC<FileListItemProps> = ({
 
   useEffect(() => {
     const checkStatus = async () => {
-      const status = await getFilesIndexingStatus([file.id]);
-      setIndexingStatus(status[file.id]);
+      const status_by_file_id = await getFilesIndexingStatus([file.id]);
+      if (status_by_file_id) {
+        const status = status_by_file_id[file.id];
+        if (status !== undefined) {
+          setIndexingStatus(status);
+        }
+      }
     };
 
     checkStatus();
@@ -255,7 +260,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
-              className="group-hover:visible invisible h-8 w-8 p-0"
+              className="group-hover:visible mobile:visible invisible h-8 w-8 p-0"
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>

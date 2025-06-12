@@ -100,12 +100,14 @@ export function getUniqueIcons(docs: OnyxDocument[]): JSX.Element[] {
   while (uniqueIcons.length < 3) {
     // The last icon in the array
     const lastIcon = uniqueIcons[uniqueIcons.length - 1];
-    // Clone it with a new key
-    uniqueIcons.push(
-      React.cloneElement(lastIcon, {
-        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
-      })
-    );
+    if (lastIcon) {
+      // Clone it with a new key
+      uniqueIcons.push(
+        React.cloneElement(lastIcon, {
+          key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+        })
+      );
+    }
   }
 
   // Slice to just the first 3 if there are more than 3
@@ -125,7 +127,7 @@ export function SeeMoreBlock({
     <button
       onClick={toggleDocumentSelection}
       className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
-        h-[80px] p-3 border border-[1.5px] border-new-background-light   text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
     >
       <div className="flex items-center gap-1">
         {docs.length > 2 && iconsToRender.map((icon, index) => icon)}
@@ -172,12 +174,14 @@ export function getUniqueFileIcons(files: FileResponse[]): JSX.Element[] {
   while (uniqueIcons.length < 3) {
     // The last icon in the array
     const lastIcon = uniqueIcons[uniqueIcons.length - 1];
-    // Clone it with a new key
-    uniqueIcons.push(
-      React.cloneElement(lastIcon, {
-        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
-      })
-    );
+    if (lastIcon) {
+      // Clone it with a new key
+      uniqueIcons.push(
+        React.cloneElement(lastIcon, {
+          key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+        })
+      );
+    }
   }
 
   // Slice to just the first 3 if there are more than 3
@@ -204,7 +208,7 @@ export function FilesSeeMoreBlock({
     <button
       onClick={toggleDocumentSelection}
       className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
-        h-[80px] p-3 border border-[1.5px] border-new-background-light   text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
     >
       <div className="flex items-center gap-1">
         {files.length > 2 && iconsToRender.map((icon, index) => icon)}

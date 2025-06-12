@@ -5,6 +5,8 @@ from typing import IO
 from typing import Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
@@ -13,6 +15,7 @@ from ee.onyx.server.reporting.usage_export_models import FlowType
 from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from onyx.configs.constants import MessageType
 from onyx.db.models import UsageReport
+from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 
 
@@ -86,15 +89,27 @@ def get_all_empty_chat_message_entries(
 
 
 def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:
+    # Get the user emails
+    usage_reports = db_session.query(UsageReport).all()
+    user_ids = {r.requestor_user_id for r in usage_reports if r.requestor_user_id}
+    user_emails = {
+        user.id: user.email
+        for user in db_session.query(User)
+        .filter(cast(User.id, UUID).in_(user_ids))
+        .all()
+    }
+
     return [
         UsageReportMetadata(
             report_name=r.report_name,
-            requestor=str(r.requestor_user_id) if r.requestor_user_id else None,
+            requestor=(
+                user_emails.get(r.requestor_user_id) if r.requestor_user_id else None
+            ),
             time_created=r.time_created,
             period_from=r.period_from,
             period_to=r.period_to,
         )
-        for r in db_session.query(UsageReport).all()
+        for r in usage_reports
     ]
 
 

@@ -234,6 +234,10 @@ def delete_messages_and_files_from_chat_session(
                 logger.info(f"Deleting file with name: {lobj_name}")
                 delete_lobj_by_name(lobj_name, db_session)
 
+    # Delete ChatMessage records - CASCADE constraints will automatically handle:
+    # - AgentSubQuery records (via AgentSubQuestion)
+    # - AgentSubQuestion records
+    # - ChatMessage__StandardAnswer relationship records
     db_session.execute(
         delete(ChatMessage).where(ChatMessage.chat_session_id == chat_session_id)
     )
@@ -870,7 +874,10 @@ def create_search_doc_from_user_file(
             content_sample = associated_chat_file.content[:100]
             # Remove null bytes which can cause SQL errors
             content_sample = content_sample.replace(b"\x00", b"")
-            blurb = content_sample.decode("utf-8", errors="replace")
+
+            # NOTE(rkuo): this used to be "replace" instead of strict, but
+            # that would bypass the binary handling below
+            blurb = content_sample.decode("utf-8", errors="strict")
         except Exception:
             # If decoding fails completely, provide a generic description
             blurb = f"[Binary file: {db_user_file.name}]"

@@ -18,6 +18,10 @@ export function objectsAreEquivalent(
 
   for (let i = 0; i < aProps.length; i++) {
     const propName = aProps[i];
+    if (propName === undefined) {
+      continue;
+    }
+
     if (a[propName] !== b[propName]) {
       return false;
     }
@@ -41,8 +45,20 @@ export function isEventWithinRef(
   if (!ref.current) return false;
 
   const rect = ref.current.getBoundingClientRect();
-  const clientX = "touches" in event ? event.touches[0].clientX : event.clientX;
-  const clientY = "touches" in event ? event.touches[0].clientY : event.clientY;
+
+  let clientX: number;
+  let clientY: number;
+  if (event instanceof TouchEvent) {
+    const touches_0 = event.touches[0];
+    if (touches_0 === undefined) {
+      throw new Error("Touch event must exist!");
+    }
+    clientX = touches_0.clientX;
+    clientY = touches_0.clientY;
+  } else {
+    clientX = event.clientX;
+    clientY = event.clientY;
+  }
 
   return (
     clientX >= rect.left &&

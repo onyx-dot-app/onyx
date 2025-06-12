@@ -103,7 +103,9 @@ def _summarize_image(
         return message_to_string(llm.invoke(messages))
 
     except Exception as e:
-        raise ValueError(f"Summarization failed. Messages: {messages}") from e
+        error_msg = f"Summarization failed. Messages: {messages}"
+        error_msg = error_msg[:1024]
+        raise ValueError(error_msg) from e
 
 
 def _encode_image_for_llm_prompt(image_data: bytes) -> str:

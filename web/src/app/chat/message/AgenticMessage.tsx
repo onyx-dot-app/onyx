@@ -11,7 +11,7 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
 import {
@@ -35,7 +35,6 @@ import {
   CustomTooltip,
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
-import { ValidSources } from "@/lib/types";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import RegenerateOption from "../RegenerateOption";
@@ -56,7 +55,6 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
-import { StatusRefinement } from "../Refinement";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { ErrorBanner } from "./Resubmit";
 import { transformLinkUri } from "@/lib/utils";
@@ -65,7 +63,6 @@ export const AgenticMessage = ({
   isStreamingQuestions,
   isGenerating,
   docSidebarToggled,
-  isImprovement,
   secondLevelAssistantMessage,
   secondLevelGenerating,
   regenerate,
@@ -79,7 +76,6 @@ export const AgenticMessage = ({
   messageId,
   content,
   files,
-  selectedDocuments,
   query,
   citedDocuments,
   toolCall,
@@ -92,7 +88,6 @@ export const AgenticMessage = ({
   subQuestions,
   agenticDocs,
   secondLevelSubquestions,
-  toggleDocDisplay,
   error,
   resubmit,
 }: {
@@ -100,7 +95,6 @@ export const AgenticMessage = ({
   isStreamingQuestions: boolean;
   isGenerating: boolean;
   docSidebarToggled?: boolean;
-  isImprovement?: boolean | null;
   secondLevelSubquestions?: SubQuestionDetail[] | null;
   agenticDocs?: OnyxDocument[] | null;
   secondLevelGenerating?: boolean;
@@ -111,7 +105,6 @@ export const AgenticMessage = ({
   continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
-  selectedDocuments?: OnyxDocument[] | null;
   toggleDocumentSelection?: (second: boolean) => void;
   docs?: OnyxDocument[] | null;
   alternativeAssistant?: Persona | null;
@@ -127,11 +120,8 @@ export const AgenticMessage = ({
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   setPresentingDocument?: (document: OnyxDocument) => void;
-  toggleDocDisplay?: (agentic: boolean) => void;
   error?: string | null;
 }) => {
-  const [noShowingMessage, setNoShowingMessage] = useState(isComplete);
-
   const [lastKnownContentLength, setLastKnownContentLength] = useState(0);
 
   const [allowStreaming, setAllowStreaming] = useState(isComplete);
@@ -163,7 +153,7 @@ export const AgenticMessage = ({
       }, processed);
 
       const lastMatch = matches[matches.length - 1];
-      if (!lastMatch.endsWith("```")) {
+      if (lastMatch && !lastMatch.endsWith("```")) {
         processed = preprocessLaTeX(processed);
       }
     }
@@ -214,9 +204,8 @@ export const AgenticMessage = ({
     }
   }, [hasThinkingTokens]);
 
-  const [isViewingInitialAnswer, setIsViewingInitialAnswer] = useState(true);
+  const isViewingInitialAnswer = true;
 
-  const [canShowResponse, setCanShowResponse] = useState(isComplete);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
 
@@ -224,8 +213,6 @@ export const AgenticMessage = ({
 
   const settings = useContext(SettingsContext);
 
-  const selectedDocumentIds =
-    selectedDocuments?.map((document) => document.document_id) || [];
   const citedDocumentIds: string[] = [];
 
   citedDocuments?.forEach((doc) => {
@@ -248,27 +235,6 @@ export const AgenticMessage = ({
       return content;
     };
     content = trimIncompleteCodeSection(content);
-  }
-
-  let filteredDocs: FilteredOnyxDocument[] = [];
-
-  if (docs) {
-    filteredDocs = docs
-      .filter(
-        (doc, index, self) =>
-          doc.document_id &&
-          doc.document_id !== "" &&
-          index === self.findIndex((d) => d.document_id === doc.document_id)
-      )
-      .filter((doc) => {
-        return citedDocumentIds.includes(doc.document_id);
-      })
-      .map((doc: OnyxDocument, ind: number) => {
-        return {
-          ...doc,
-          included: selectedDocumentIds.includes(doc.document_id),
-        };
-      });
   }
 
   const paragraphCallback = useCallback(
@@ -331,10 +297,6 @@ export const AgenticMessage = ({
   const currentMessageInd = messageId
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
     : undefined;
-
-  const uniqueSources: ValidSources[] = Array.from(
-    new Set((docs || []).map((doc) => doc.source_type))
-  ).slice(0, 3);
 
   const markdownComponents = useMemo(
     () => ({
@@ -403,6 +365,11 @@ export const AgenticMessage = ({
     otherMessagesCanSwitchTo &&
     otherMessagesCanSwitchTo.length > 1;
 
+  let otherMessage: number | undefined = undefined;
+  if (currentMessageInd && otherMessagesCanSwitchTo) {
+    otherMessage = otherMessagesCanSwitchTo[currentMessageInd - 1];
+  }
+
   useEffect(() => {
     if (!allowStreaming) {
       return;
@@ -410,10 +377,8 @@ export const AgenticMessage = ({
 
     if (typeof finalContent !== "string") return;
 
-    let currentIndex = streamedContent.length;
     let intervalId: NodeJS.Timeout | null = null;
 
-    // if (finalContent.length > currentIndex) {
     intervalId = setInterval(() => {
       setStreamedContent((prev) => {
         if (prev.length < finalContent.length) {
@@ -425,9 +390,6 @@ export const AgenticMessage = ({
         }
       });
     }, 10);
-    // } else {
-    //   setStreamedContent(finalContent);
-    // }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
@@ -516,31 +478,6 @@ export const AgenticMessage = ({
                           <div className="text-black text-lg font-medium">
                             Answer
                           </div>
-
-                          <StatusRefinement
-                            noShowingMessage={noShowingMessage}
-                            canShowResponse={canShowResponse || false}
-                            setCanShowResponse={setCanShowResponse}
-                            isImprovement={isImprovement}
-                            isViewingInitialAnswer={isViewingInitialAnswer}
-                            toggleDocDisplay={toggleDocDisplay!}
-                            secondLevelSubquestions={
-                              secondLevelSubquestions || []
-                            }
-                            secondLevelAssistantMessage={
-                              secondLevelAssistantMessage || ""
-                            }
-                            secondLevelGenerating={
-                              (secondLevelGenerating &&
-                                finalContent.length ==
-                                  streamedContent.length) ||
-                              false
-                            }
-                            subQuestions={subQuestions}
-                            setIsViewingInitialAnswer={
-                              setIsViewingInitialAnswer
-                            }
-                          />
                         </div>
 
                         <div className="px-4">
@@ -587,28 +524,21 @@ export const AgenticMessage = ({
                       >
                         <TooltipGroup>
                           <div className="flex justify-start w-full gap-x-0.5">
-                            {includeMessageSwitcher && (
-                              <div className="-mx-1 mr-auto">
-                                <MessageSwitcher
-                                  currentPage={currentMessageInd + 1}
-                                  totalPages={otherMessagesCanSwitchTo.length}
-                                  handlePrevious={() => {
-                                    onMessageSelection(
-                                      otherMessagesCanSwitchTo[
-                                        currentMessageInd - 1
-                                      ]
-                                    );
-                                  }}
-                                  handleNext={() => {
-                                    onMessageSelection(
-                                      otherMessagesCanSwitchTo[
-                                        currentMessageInd + 1
-                                      ]
-                                    );
-                                  }}
-                                />
-                              </div>
-                            )}
+                            {includeMessageSwitcher &&
+                              otherMessage !== undefined && (
+                                <div className="-mx-1 mr-auto">
+                                  <MessageSwitcher
+                                    currentPage={currentMessageInd + 1}
+                                    totalPages={otherMessagesCanSwitchTo.length}
+                                    handlePrevious={() => {
+                                      onMessageSelection(otherMessage!);
+                                    }}
+                                    handleNext={() => {
+                                      onMessageSelection(otherMessage!);
+                                    }}
+                                  />
+                                </div>
+                              )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
@@ -675,28 +605,21 @@ export const AgenticMessage = ({
                       >
                         <TooltipGroup>
                           <div className="flex justify-start w-full gap-x-0.5">
-                            {includeMessageSwitcher && (
-                              <div className="-mx-1 mr-auto">
-                                <MessageSwitcher
-                                  currentPage={currentMessageInd + 1}
-                                  totalPages={otherMessagesCanSwitchTo.length}
-                                  handlePrevious={() => {
-                                    onMessageSelection(
-                                      otherMessagesCanSwitchTo[
-                                        currentMessageInd - 1
-                                      ]
-                                    );
-                                  }}
-                                  handleNext={() => {
-                                    onMessageSelection(
-                                      otherMessagesCanSwitchTo[
-                                        currentMessageInd + 1
-                                      ]
-                                    );
-                                  }}
-                                />
-                              </div>
-                            )}
+                            {includeMessageSwitcher &&
+                              otherMessage !== undefined && (
+                                <div className="-mx-1 mr-auto">
+                                  <MessageSwitcher
+                                    currentPage={currentMessageInd + 1}
+                                    totalPages={otherMessagesCanSwitchTo.length}
+                                    handlePrevious={() => {
+                                      onMessageSelection(otherMessage!);
+                                    }}
+                                    handleNext={() => {
+                                      onMessageSelection(otherMessage!);
+                                    }}
+                                  />
+                                </div>
+                              )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton

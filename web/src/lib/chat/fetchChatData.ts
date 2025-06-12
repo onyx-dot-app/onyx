@@ -112,7 +112,24 @@ export async function fetchChatData(searchParams: {
       ? `${fullUrl}?${searchParamsString}`
       : fullUrl;
 
-    if (!NEXT_PUBLIC_ENABLE_CHROME_EXTENSION) {
+    // Check the referrer to prevent redirect loops
+    const referrer = headersList.get("referer") || "";
+    const isComingFromLogin = referrer.includes("/auth/login");
+
+    // Also check for the from=login query parameter
+    const isRedirectedFromLogin = searchParams["from"] === "login";
+
+    console.log(
+      `Auth check: authDisabled=${authDisabled}, user=${!!user}, referrer=${referrer}, fromLogin=${isRedirectedFromLogin}`
+    );
+
+    // Only redirect if we're not already coming from the login page
+    if (
+      !NEXT_PUBLIC_ENABLE_CHROME_EXTENSION &&
+      !isComingFromLogin &&
+      !isRedirectedFromLogin
+    ) {
+      console.log("Redirecting to login from chat page");
       return {
         redirect: `/auth/login?next=${encodeURIComponent(redirectUrl)}`,
       };

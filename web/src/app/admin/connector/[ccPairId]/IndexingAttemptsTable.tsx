@@ -82,7 +82,7 @@ export function IndexingAttemptsTable({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help flex items-center">
+                      <span className="flex items-center">
                         Total Docs
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>

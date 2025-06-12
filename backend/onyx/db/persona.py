@@ -3,7 +3,6 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
@@ -168,6 +167,7 @@ def _get_persona_by_name(
 
 def make_persona_private(
     persona_id: int,
+    creator_user_id: UUID | None,
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
     db_session: Session,
@@ -179,15 +179,15 @@ def make_persona_private(
 
         for user_uuid in user_ids:
             db_session.add(Persona__User(persona_id=persona_id, user_id=user_uuid))
-
-            create_notification(
-                user_id=user_uuid,
-                notif_type=NotificationType.PERSONA_SHARED,
-                db_session=db_session,
-                additional_data=PersonaSharedNotificationData(
-                    persona_id=persona_id,
-                ).model_dump(),
-            )
+            if user_uuid != creator_user_id:
+                create_notification(
+                    user_id=user_uuid,
+                    notif_type=NotificationType.PERSONA_SHARED,
+                    db_session=db_session,
+                    additional_data=PersonaSharedNotificationData(
+                        persona_id=persona_id,
+                    ).model_dump(),
+                )
 
         db_session.commit()
 
@@ -262,6 +262,7 @@ def create_update_persona(
         # Privatize Persona
         versioned_make_persona_private(
             persona_id=persona.id,
+            creator_user_id=user.id if user else None,
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
             db_session=db_session,
@@ -297,6 +298,7 @@ def update_persona_shared_users(
     # Privatize Persona
     versioned_make_persona_private(
         persona_id=persona_id,
+        creator_user_id=user.id if user else None,
         user_ids=user_ids,
         group_ids=None,
         db_session=db_session,
@@ -770,8 +772,10 @@ def get_personas_by_ids(
 def delete_persona_by_name(
     persona_name: str, db_session: Session, is_default: bool = True
 ) -> None:
-    stmt = delete(Persona).where(
-        Persona.name == persona_name, Persona.builtin_persona == is_default
+    stmt = (
+        update(Persona)
+        .where(Persona.name == persona_name, Persona.builtin_persona == is_default)
+        .values(deleted=True)
     )
 
     db_session.execute(stmt)

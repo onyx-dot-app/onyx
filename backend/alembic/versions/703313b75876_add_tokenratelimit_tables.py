@@ -6,11 +6,8 @@ Create Date: 2024-04-15 01:36:02.952809
 
 """
 
-import json
-from typing import cast
 from alembic import op
 import sqlalchemy as sa
-from onyx.key_value_store.factory import get_kv_store
 
 # revision identifiers, used by Alembic.
 revision = "703313b75876"
@@ -54,27 +51,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("rate_limit_id", "user_group_id"),
     )
 
-    try:
-        settings_json = cast(str, get_kv_store().load("token_budget_settings"))
-        settings = json.loads(settings_json)
-
-        is_enabled = settings.get("enable_token_budget", False)
-        token_budget = settings.get("token_budget", -1)
-        period_hours = settings.get("period_hours", -1)
-
-        if is_enabled and token_budget > 0 and period_hours > 0:
-            op.execute(
-                f"INSERT INTO token_rate_limit \
-                    (enabled, token_budget, period_hours, scope) VALUES \
-                        ({is_enabled}, {token_budget}, {period_hours}, 'GLOBAL')"
-            )
-
-        # Delete the dynamic config
-        get_kv_store().delete("token_budget_settings")
-
-    except Exception:
-        # Ignore if the dynamic config is not found
-        pass
+    # NOTE: rate limit settings used to be stored in the "token_budget_settings" key in the
+    # KeyValueStore. This will now be lost. The KV store works differently than it used to
+    # so the migration is fairly complicated and likely not worth it to support (pretty much
+    # nobody will have it set)
 
 
 def downgrade() -> None:

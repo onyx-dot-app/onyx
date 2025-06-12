@@ -238,3 +238,14 @@ class CheckpointedConnector(BaseConnector[CT]):
     def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
         """Validate the checkpoint json and return the checkpoint object"""
         raise NotImplementedError
+
+
+class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
+    @abc.abstractmethod
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CT,
+    ) -> CheckpointOutput[CT]:
+        raise NotImplementedError

@@ -1,3 +1,4 @@
+import base64
 import smtplib
 from datetime import datetime
 from email.mime.image import MIMEImage
@@ -6,8 +7,21 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from email.utils import make_msgid
 
+import sendgrid  # type: ignore
+from sendgrid.helpers.mail import Attachment  # type: ignore
+from sendgrid.helpers.mail import Content
+from sendgrid.helpers.mail import ContentId
+from sendgrid.helpers.mail import Disposition
+from sendgrid.helpers.mail import Email
+from sendgrid.helpers.mail import FileContent
+from sendgrid.helpers.mail import FileName
+from sendgrid.helpers.mail import FileType
+from sendgrid.helpers.mail import Mail
+from sendgrid.helpers.mail import To
+
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import EMAIL_FROM
+from onyx.configs.app_configs import SENDGRID_API_KEY
 from onyx.configs.app_configs import SMTP_PASS
 from onyx.configs.app_configs import SMTP_PORT
 from onyx.configs.app_configs import SMTP_SERVER
@@ -18,11 +32,12 @@ from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_SLACK_URL
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
-from onyx.utils.file import FileWithMimeType
+from onyx.utils.logger import setup_logger
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import MULTI_TENANT
 
+logger = setup_logger()
 
 HTML_EMAIL_TEMPLATE = """\
 <!DOCTYPE html>
@@ -176,6 +191,70 @@ def send_email(
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
 
+    if SENDGRID_API_KEY:
+        send_email_with_sendgrid(
+            user_email, subject, html_body, text_body, mail_from, inline_png
+        )
+        return
+
+    send_email_with_smtplib(
+        user_email, subject, html_body, text_body, mail_from, inline_png
+    )
+
+
+def send_email_with_sendgrid(
+    user_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    mail_from: str = EMAIL_FROM,
+    inline_png: tuple[str, bytes] | None = None,
+) -> None:
+    from_email = Email(mail_from) if mail_from else Email("noreply@onyx.app")
+    to_email = To(user_email)
+
+    mail = Mail(
+        from_email=from_email,
+        to_emails=to_email,
+        subject=subject,
+        plain_text_content=Content("text/plain", text_body),
+    )
+
+    # Add HTML content
+    mail.add_content(Content("text/html", html_body))
+
+    if inline_png:
+        image_name, image_data = inline_png
+
+        # Create attachment
+        encoded_image = base64.b64encode(image_data).decode()
+        attachment = Attachment()
+        attachment.file_content = FileContent(encoded_image)
+        attachment.file_name = FileName(image_name)
+        attachment.file_type = FileType("image/png")
+        attachment.disposition = Disposition("inline")
+        attachment.content_id = ContentId(image_name)
+
+        mail.add_attachment(attachment)
+
+    # Get a JSON-ready representation of the Mail object
+    mail_json = mail.get()
+
+    sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+    response = sg.client.mail.send.post(request_body=mail_json)  # can raise
+    if response.status_code != 202:
+        logger.warning(f"Unexpected status code {response.status_code}")
+
+
+def send_email_with_smtplib(
+    user_email: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    mail_from: str = EMAIL_FROM,
+    inline_png: tuple[str, bytes] | None = None,
+) -> None:
+
     # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -210,13 +289,10 @@ def send_email(
         html_part = MIMEText(html_body, "html")
         msg.attach(html_part)
 
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.send_message(msg)
-    except Exception as e:
-        raise e
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
+        s.starttls()
+        s.login(SMTP_USER, SMTP_PASS)
+        s.send_message(msg)
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:
@@ -264,27 +340,13 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     )
 
 
-def send_user_email_invite(
-    user_email: str, current_user: User, auth_type: AuthType
-) -> None:
-    onyx_file: FileWithMimeType | None = None
-
-    try:
-        load_runtime_settings_fn = fetch_versioned_implementation(
-            "onyx.server.enterprise_settings.store", "load_runtime_settings"
-        )
-        settings = load_runtime_settings_fn()
-        application_name = settings.application_name
-    except ModuleNotFoundError:
-        application_name = ONYX_DEFAULT_APPLICATION_NAME
-
-    onyx_file = OnyxRuntime.get_emailable_logo()
-
-    subject = f"Invitation to Join {application_name} Organization"
+def build_user_email_invite(
+    from_email: str, to_email: str, application_name: str, auth_type: AuthType
+) -> tuple[str, str]:
     heading = "You've Been Invited!"
 
     # the exact action taken by the user, and thus the message, depends on the auth type
-    message = f"<p>You have been invited by {current_user.email} to join an organization on {application_name}.</p>"
+    message = f"<p>You have been invited by {from_email} to join an organization on {application_name}.</p>"
     if auth_type == AuthType.CLOUD:
         message += (
             "<p>To join the organization, please click the button below to set a password "
@@ -309,7 +371,7 @@ def send_user_email_invite(
         raise ValueError(f"Invalid auth type: {auth_type}")
 
     cta_text = "Join Organization"
-    cta_link = f"{WEB_DOMAIN}/auth/signup?email={user_email}"
+    cta_link = f"{WEB_DOMAIN}/auth/signup?email={to_email}"
 
     html_content = build_html_email(
         application_name,
@@ -322,12 +384,35 @@ def send_user_email_invite(
     # text content is the fallback for clients that don't support HTML
     # not as critical, so not having special cases for each auth type
     text_content = (
-        f"You have been invited by {current_user.email} to join an organization on {application_name}.\n"
+        f"You have been invited by {from_email} to join an organization on {application_name}.\n"
         "To join the organization, please visit the following link:\n"
-        f"{WEB_DOMAIN}/auth/signup?email={user_email}\n"
+        f"{WEB_DOMAIN}/auth/signup?email={to_email}\n"
     )
     if auth_type == AuthType.CLOUD:
         text_content += "You'll be asked to set a password or login with Google to complete your registration."
+
+    return text_content, html_content
+
+
+def send_user_email_invite(
+    user_email: str, current_user: User, auth_type: AuthType
+) -> None:
+    try:
+        load_runtime_settings_fn = fetch_versioned_implementation(
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
+        )
+        settings = load_runtime_settings_fn()
+        application_name = settings.application_name
+    except ModuleNotFoundError:
+        application_name = ONYX_DEFAULT_APPLICATION_NAME
+
+    onyx_file = OnyxRuntime.get_emailable_logo()
+
+    subject = f"Invitation to Join {application_name} Organization"
+
+    text_content, html_content = build_user_email_invite(
+        current_user.email, user_email, application_name, auth_type
+    )
 
     send_email(
         user_email,

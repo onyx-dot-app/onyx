@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Tag, ValidSources } from "../types";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
@@ -165,6 +165,7 @@ export enum SourceCategory {
   Storage = "Storage",
   Wiki = "Wiki",
   CustomerSupport = "Customer Support",
+  CustomerRelationshipManagement = "Customer Relationship Management",
   Messaging = "Messaging",
   ProjectManagement = "Project Management",
   CodeRepository = "Code Repository",

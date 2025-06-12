@@ -86,3 +86,7 @@ def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:
         # Used for development
         base_domain = CONNECTOR_LOCALHOST_OVERRIDE
     return f"{base_domain.strip('/')}/connector/oauth/callback/{connector_id}"
+
+
+def is_atlassian_date_error(e: Exception) -> bool:
+    return "field 'updated' is invalid" in str(e)

@@ -1,13 +1,13 @@
 from slack_sdk import WebClient
 
-from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
+from onyx.connectors.slack.utils import make_paginated_slack_api_call
 
 
 def fetch_user_id_to_email_map(
     slack_client: WebClient,
 ) -> dict[str, str]:
     user_id_to_email_map = {}
-    for user_info in make_paginated_slack_api_call_w_retries(
+    for user_info in make_paginated_slack_api_call(
         slack_client.users_list,
     ):
         for user in user_info.get("members", []):

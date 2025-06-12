@@ -24,7 +24,7 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page.getByRole("combobox").nth(1).click();
   await page.getByLabel("o3 Mini", { exact: true }).click();
   await page.getByLabel("Close modal").click();
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(5000);
   await verifyCurrentModel(page, "o3 Mini");
   // Test Art Assistant: Should use its own model (GPT 4o)
   await page.reload();
@@ -47,9 +47,9 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await verifyCurrentModel(page, "o3 Mini");
 
   // Test model switching within a chat
-  await switchModel(page, "o1 Mini");
+  await switchModel(page, "GPT 4o Mini");
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "o1 Mini");
+  await verifyCurrentModel(page, "GPT 4o Mini");
 
   // Create a custom assistant with a specific model
   await page.getByRole("button", { name: "Explore Assistants" }).click();

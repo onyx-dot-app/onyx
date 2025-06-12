@@ -40,6 +40,28 @@ logger = setup_logger()
 
 _DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
 
+_DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
+    "Opportunity": {
+        "Account": "account",
+        "FiscalQuarter": "fiscal_quarter",
+        "FiscalYear": "fiscal_year",
+        "IsClosed": "is_closed",
+        "Name": "name",
+        "StageName": "stage_name",
+        "Type": "type",
+        "Amount": "amount",
+        "CloseDate": "close_date",
+        "Probability": "probability",
+        "CreatedDate": "created_date",
+        "LastModifiedDate": "last_modified_date",
+    },
+    "Contact": {
+        "Account": "account",
+        "CreatedDate": "created_date",
+        "LastModifiedDate": "last_modified_date",
+    },
+}
+
 
 class SalesforceCheckpoint(ConnectorCheckpoint):
     initial_sync_complete: bool
@@ -200,10 +222,12 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 num_csvs += 1
                 num_bytes += file_size
                 logger.info(
-                    f"CSV info: object_type={object_type} path={csv_path} bytes={file_size}"
+                    f"CSV download: object_type={object_type} path={csv_path} bytes={file_size}"
                 )
 
-        logger.info(f"CSV info total: total_csvs={num_csvs} total_bytes={num_bytes}")
+        logger.info(
+            f"CSV download total: total_csvs={num_csvs} total_bytes={num_bytes}"
+        )
 
     @staticmethod
     def _load_csvs_to_db(
@@ -265,6 +289,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 for new_id in new_ids:
                     updated_ids[new_id] = object_type
 
+                sf_db.flush()
+
                 logger.debug(
                     f"Added {len(new_ids)} new/updated records for {object_type}"
                 )
@@ -276,36 +302,37 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     f"records={num_records} "
                     f"db_len={sf_db.file_size}"
                 )
-                sf_db.flush()
                 os.remove(csv_path)
 
         return updated_ids
 
-    @staticmethod
-    def _get_child_types(
-        parent_types: list[str], sf_client: OnyxSalesforce
-    ) -> set[str]:
-        all_types: set[str] = set(parent_types)
+    # @staticmethod
+    # def _get_child_types(
+    #     parent_types: list[str], sf_client: OnyxSalesforce
+    # ) -> set[str]:
+    #     all_types: set[str] = set(parent_types)
 
-        # Step 1 - get all object types
-        logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
+    #     # Step 1 - get all object types
+    #     logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
 
-        # This takes like 20 seconds
-        for parent_object_type in parent_types:
-            child_types = sf_client.get_children_of_sf_type(parent_object_type)
-            logger.debug(
-                f"Found {len(child_types)} child types for {parent_object_type}"
-            )
+    #     # This takes like 20 seconds
+    #     for parent_object_type in parent_types:
+    #         child_types = sf_client.get_children_of_sf_type(parent_object_type)
+    #         logger.debug(
+    #             f"Found {len(child_types)} child types for {parent_object_type}"
+    #         )
 
-            all_types.update(child_types.keys())
+    #         all_types.update(child_types.keys())
 
-        # Always want to make sure user is grabbed for permissioning purposes
-        all_types.add("User")
+    #     # Always want to make sure user is grabbed for permissioning purposes
+    #     all_types.add("User")
+    #     # Always want to make sure account is grabbed for reference purposes
+    #     all_types.add("Account")
 
-        logger.info(f"All object types: num={len(all_types)} list={all_types}")
+    #     logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
-        # gc.collect()
-        return all_types
+    #     # gc.collect()
+    #     return all_types
 
     # @staticmethod
     # def _get_all_types(parent_types: list[str], sf_client: Salesforce) -> set[str]:
@@ -341,6 +368,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
+        docs_to_yield: list[Document] = []
+
         changed_ids_to_type: dict[str, str] = {}
         parents_changed = 0
         examined_ids = 0
@@ -358,9 +387,63 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             gc.collect()
 
             # Step 2 - load CSV's to sqlite
-            changed_ids_to_type = SalesforceConnector._load_csvs_to_db(
-                temp_dir, True, sf_db
+            object_type_to_csv_paths = SalesforceConnector.reconstruct_object_types(
+                temp_dir
             )
+
+            total_types = len(object_type_to_csv_paths)
+            logger.info(f"Starting to process {total_types} object types")
+
+            for i, (object_type, csv_paths) in enumerate(
+                object_type_to_csv_paths.items(), 1
+            ):
+                logger.info(f"Processing object type {object_type} ({i}/{total_types})")
+                # If path is None, it means it failed to fetch the csv
+                if csv_paths is None:
+                    continue
+
+                # Go through each csv path and use it to update the db
+                for csv_path in csv_paths:
+                    num_records = 0
+                    with open(csv_path, "r", newline="", encoding="utf-8") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            num_records += 1
+
+                    logger.debug(
+                        f"Processing CSV: object_type={object_type} "
+                        f"csv={csv_path} "
+                        f"len={Path(csv_path).stat().st_size} "
+                        f"records={num_records}"
+                    )
+
+                    # yield an empty list to keep the connector alive
+                    yield docs_to_yield
+
+                    new_ids = sf_db.update_from_csv(
+                        object_type=object_type,
+                        csv_download_path=csv_path,
+                    )
+                    for new_id in new_ids:
+                        changed_ids_to_type[new_id] = object_type
+
+                    sf_db.flush()
+
+                    logger.debug(
+                        f"Added {len(new_ids)} new/updated records for {object_type}"
+                    )
+
+                    logger.info(
+                        f"Processed CSV: object_type={object_type} "
+                        f"csv={csv_path} "
+                        f"len={Path(csv_path).stat().st_size} "
+                        f"records={num_records} "
+                        f"db_len={sf_db.file_size}"
+                    )
+
+                    os.remove(csv_path)
+                    gc.collect()
+
             gc.collect()
 
             logger.info(f"Found {len(changed_ids_to_type)} total updated records")
@@ -369,7 +452,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             )
 
             # Step 3 - extract and index docs
-            docs_to_yield: list[Document] = []
             docs_to_yield_bytes = 0
 
             last_log_time = 0.0
@@ -411,6 +493,18 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     sf_object=parent_object,
                     sf_instance=self.sf_client.sf_instance,
                 )
+
+                doc.metadata["object_type"] = parent_type
+
+                # Add default attributes to the metadata
+                for (
+                    sf_attribute,
+                    canonical_attribute,
+                ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(parent_type, {}).items():
+                    if sf_attribute in parent_object.data:
+                        doc.metadata[canonical_attribute] = parent_object.data[
+                            sf_attribute
+                        ]
 
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
@@ -624,6 +718,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 #     metadata={},
                 # )
 
+                # Add default attributes to the metadata
+                for (
+                    sf_attribute,
+                    canonical_attribute,
+                ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(actual_parent_type, {}).items():
+                    if sf_attribute in record:
+                        doc.metadata[canonical_attribute] = record[sf_attribute]
+
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
                 docs_to_yield.append(doc)
@@ -793,6 +895,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         # NOTE(rkuo): should this be an implicit parent type?
         all_types.add("User")  # Always add User for permissioning purposes
+        all_types.add("Account")  # Always add Account for reference purposes
 
         logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
@@ -893,7 +996,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             doc_metadata_list.extend(
                 SlimDocument(
                     id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",
-                    perm_sync_data={},
+                    external_access=None,
                 )
                 for instance_dict in query_result["records"]
             )

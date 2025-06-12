@@ -11,7 +11,6 @@ from onyx.chat.answer import Answer
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.context.search.models import SearchRequest
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import get_max_input_tokens
 from onyx.tools.force import ForceUseTool
@@ -43,6 +42,7 @@ def test_skip_gen_ai_answer_generation_flag(
         "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
+
     question = config["question"]
     skip_gen_ai_answer_generation = config["skip_gen_ai_answer_generation"]
 
@@ -59,8 +59,14 @@ def test_skip_gen_ai_answer_generation_flag(
     mock_llm.stream = Mock()
     mock_llm.stream.return_value = [Mock()]
 
+    # Set up the mock database session
+    mock_db_session = Mock(spec=Session)
+    mock_query = Mock()
+    mock_db_session.query.return_value = mock_query
+    mock_query.all.return_value = []  # Return empty list for KGConfig query
+
     answer = Answer(
-        db_session=Mock(spec=Session),
+        db_session=mock_db_session,
         answer_style_config=answer_style_config,
         llm=mock_llm,
         fast_llm=mock_llm,
@@ -72,7 +78,8 @@ def test_skip_gen_ai_answer_generation_flag(
         ),
         skip_explicit_tool_calling=True,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-        search_request=SearchRequest(query=question),
+        persona=None,
+        rerank_settings=None,
         prompt_builder=AnswerPromptBuilder(
             user_message=HumanMessage(content=question),
             message_history=[],

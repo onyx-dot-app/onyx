@@ -21,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import SUPER_USERS
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import write_invited_users
@@ -44,7 +43,7 @@ from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
-from onyx.db.auth import get_total_users_count
+from onyx.db.auth import get_live_users_count
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
 from onyx.db.models import User
@@ -72,6 +71,9 @@ from onyx.server.models import MinimalUserSnapshot
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -343,7 +345,7 @@ def bulk_invite_users(
         logger.info("Registering tenant users")
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.billing", "register_tenant_users", None
-        )(tenant_id, get_total_users_count(db_session))
+        )(tenant_id, get_live_users_count(db_session))
 
         return number_of_invited_users
     except Exception as e:
@@ -379,7 +381,7 @@ def remove_invited_user(
         if MULTI_TENANT and not DEV_MODE:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.billing", "register_tenant_users", None
-            )(tenant_id, get_total_users_count(db_session))
+            )(tenant_id, get_live_users_count(db_session))
     except Exception:
         logger.error(
             "Request to update number of seats taken in control plane failed. "
@@ -649,11 +651,19 @@ def verify_user_logged_in(
             "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
         )(user.email)
 
+    super_users_list = cast(
+        list[str],
+        fetch_versioned_implementation_with_fallback(
+            "onyx.configs.app_configs",
+            "SUPER_USERS",
+            [],
+        ),
+    )
     user_info = UserInfo.from_model(
         user,
         current_token_created_at=token_created_at,
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
-        is_cloud_superuser=user.email in SUPER_USERS,
+        is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
         tenant_info=TenantInfo(
             new_tenant=new_tenant,

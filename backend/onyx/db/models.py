@@ -39,6 +39,7 @@ from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
+from sqlalchemy import PrimaryKeyConstraint
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
@@ -69,6 +70,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.context.search.enums import RecencyBiasSetting
+from onyx.kg.models import KGStage
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -354,7 +356,7 @@ class AgentSubQuery__SearchDoc(Base):
     __tablename__ = "agent__sub_query__search_doc"
 
     sub_query_id: Mapped[int] = mapped_column(
-        ForeignKey("agent__sub_query.id"), primary_key=True
+        ForeignKey("agent__sub_query.id", ondelete="CASCADE"), primary_key=True
     )
     search_doc_id: Mapped[int] = mapped_column(
         ForeignKey("search_doc.id"), primary_key=True
@@ -405,7 +407,7 @@ class ChatMessage__StandardAnswer(Base):
     __tablename__ = "chat_message__standard_answer"
 
     chat_message_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id"), primary_key=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
     )
     standard_answer_id: Mapped[int] = mapped_column(
         ForeignKey("standard_answer.id"), primary_key=True
@@ -586,6 +588,17 @@ class Document(Base):
     )
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # tables for the knowledge graph data
+    kg_stage: Mapped[KGStage] = mapped_column(
+        Enum(KGStage, native_enum=False),
+        comment="Status of knowledge graph extraction for this document",
+        index=True,
+    )
+
+    kg_processing_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     retrieval_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="document"
     )
@@ -604,12 +617,643 @@ class Document(Base):
     )
 
 
+# TODO: restructure config management
+class KGConfig(Base):
+    __tablename__ = "kg_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    kg_variable_name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
+    kg_variable_values: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    __table_args__ = (
+        UniqueConstraint("kg_variable_name", name="uq_kg_config_variable_name"),
+    )
+
+
+class KGEntityType(Base):
+    __tablename__ = "kg_entity_type"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        String, primary_key=True, nullable=False, index=True
+    )
+
+    description: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
+
+    grounding: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=False, index=False
+    )
+
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=True,
+        default=dict,
+        server_default="{}",
+        comment="Filtering based on document attribute",
+    )
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    deep_extraction: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    grounded_source_name: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=False, index=False
+    )
+
+    entity_values: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+
+    clustering: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Clustering information for this entity type",
+    )
+
+
+class KGRelationshipType(Base):
+    __tablename__ = "kg_relationship_type"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    source_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    definition: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this relationship type represents a definition",
+    )
+
+    clustering: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Clustering information for this relationship type",
+    )
+
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to EntityType
+    source_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType",
+        foreign_keys=[source_entity_type_id_name],
+        backref="source_relationship_type",
+    )
+    target_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType",
+        foreign_keys=[target_entity_type_id_name],
+        backref="target_relationship_type",
+    )
+
+
+class KGRelationshipTypeExtractionStaging(Base):
+    __tablename__ = "kg_relationship_type_extraction_staging"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    source_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    definition: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this relationship type represents a definition",
+    )
+
+    clustering: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Clustering information for this relationship type",
+    )
+
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    transferred: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    # Tracking fields
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to EntityType
+    source_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType",
+        foreign_keys=[source_entity_type_id_name],
+        backref="source_relationship_type_staging",
+    )
+    target_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType",
+        foreign_keys=[target_entity_type_id_name],
+        backref="target_relationship_type_staging",
+    )
+
+
+class KGEntity(Base):
+    __tablename__ = "kg_entity"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, index=True
+    )
+
+    # Basic entity information
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+    entity_class: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+    entity_key: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+    parent_key: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+    entity_subtype: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    name_trigrams: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String(3)),
+        nullable=True,
+    )
+
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
+
+    document_id: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    alternative_names: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Reference to KGEntityType
+    entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationship to KGEntityType
+    entity_type: Mapped["KGEntityType"] = relationship("KGEntityType", backref="entity")
+
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    keywords: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    # Access control
+    acl: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Boosts - using JSON for flexibility
+    boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
+
+    event_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Time of the event being processed",
+    )
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # Fixed column names in indexes
+        Index("ix_entity_type_acl", entity_type_id_name, acl),
+        Index("ix_entity_name_search", name, entity_type_id_name),
+    )
+
+
+class KGEntityExtractionStaging(Base):
+    __tablename__ = "kg_entity_extraction_staging"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+
+    # Basic entity information
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
+
+    document_id: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    alternative_names: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Reference to KGEntityType
+    entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationship to KGEntityType
+    entity_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType", backref="entity_staging"
+    )
+
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    keywords: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    # Access control
+    acl: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Boosts - using JSON for flexibility
+    boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
+
+    transferred_id_name: Mapped[str | None] = mapped_column(
+        NullFilteredString,
+        nullable=True,
+    )
+
+    # Basic entity information
+    entity_class: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    # Basic entity information
+    entity_key: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    entity_subtype: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    # Basic entity information
+    parent_key: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    event_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Time of the event being processed",
+    )
+
+    # Tracking fields
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # Fixed column names in indexes
+        Index("ix_entity_type_acl", entity_type_id_name, acl),
+        Index("ix_entity_name_search", name, entity_type_id_name),
+    )
+
+
+class KGRelationship(Base):
+    __tablename__ = "kg_relationship"
+
+    # Primary identifier - now part of composite key
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
+    )
+
+    source_document: Mapped[str | None] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+    )
+
+    # Source and target nodes (foreign keys to Entity table)
+    source_node: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+    )
+
+    target_node: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+    )
+
+    source_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationship type
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    # Add new relationship type reference
+    relationship_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_relationship_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Add the SQLAlchemy relationship property
+    relationship_type: Mapped["KGRelationshipType"] = relationship(
+        "KGRelationshipType", backref="relationship"
+    )
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to Entity table
+    source: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[source_node])
+    target: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[target_node])
+    document: Mapped["Document"] = relationship(
+        "Document", foreign_keys=[source_document]
+    )
+
+    __table_args__ = (
+        # Composite primary key
+        PrimaryKeyConstraint("id_name", "source_document"),
+        # Index for querying relationships by type
+        Index("ix_kg_relationship_type", type),
+        # Composite index for source/target queries
+        Index("ix_kg_relationship_nodes", source_node, target_node),
+        # Ensure unique relationships between nodes of a specific type
+        UniqueConstraint(
+            "source_node",
+            "target_node",
+            "type",
+            name="uq_kg_relationship_source_target_type",
+        ),
+    )
+
+
+class KGRelationshipExtractionStaging(Base):
+    __tablename__ = "kg_relationship_extraction_staging"
+
+    # Primary identifier - now part of composite key
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
+    )
+
+    source_document: Mapped[str | None] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+    )
+
+    # Source and target nodes (foreign keys to Entity table)
+    source_node: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_extraction_staging.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_node: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_extraction_staging.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    source_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationship type
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    # Add new relationship type reference
+    relationship_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_relationship_type_extraction_staging.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Add the SQLAlchemy relationship property
+    relationship_type: Mapped["KGRelationshipTypeExtractionStaging"] = relationship(
+        "KGRelationshipTypeExtractionStaging", backref="relationship_staging"
+    )
+
+    occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    transferred: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    # Tracking fields
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to Entity table
+    source: Mapped["KGEntityExtractionStaging"] = relationship(
+        "KGEntityExtractionStaging", foreign_keys=[source_node]
+    )
+    target: Mapped["KGEntityExtractionStaging"] = relationship(
+        "KGEntityExtractionStaging", foreign_keys=[target_node]
+    )
+    document: Mapped["Document"] = relationship(
+        "Document", foreign_keys=[source_document]
+    )
+
+    __table_args__ = (
+        # Composite primary key
+        PrimaryKeyConstraint("id_name", "source_document"),
+        # Index for querying relationships by type
+        Index("ix_kg_relationship_type", type),
+        # Composite index for source/target queries
+        Index("ix_kg_relationship_nodes", source_node, target_node),
+        # Ensure unique relationships between nodes of a specific type
+        UniqueConstraint(
+            "source_node",
+            "target_node",
+            "type",
+            name="uq_kg_relationship_source_target_type",
+        ),
+    )
+
+
+class KGTerm(Base):
+    __tablename__ = "kg_term"
+
+    # Make id_term the primary key
+    id_term: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, nullable=False, index=True
+    )
+
+    # List of entity types this term applies to
+    entity_types: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # Index for searching terms with specific entity types
+        Index("ix_search_term_entities", entity_types),
+        # Index for term lookups
+        Index("ix_search_term_term", id_term),
+    )
+
+
 class ChunkStats(Base):
     __tablename__ = "chunk_stats"
     # NOTE: if more sensitive data is added here for display, make sure to add user/group permission
 
     # this should correspond to the ID of the document
-    # (as is passed around in Onyx)
+    # (as is passed around in Onyx)x
     id: Mapped[str] = mapped_column(
         NullFilteredString,
         primary_key=True,
@@ -691,6 +1335,16 @@ class Connector(Base):
     indexing_start: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+
+    kg_processing_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this connector should extract knowledge graph entities",
+    )
+
+    kg_coverage_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     refresh_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prune_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
@@ -1385,6 +2039,7 @@ class ChatMessage(Base):
     sub_questions: Mapped[list["AgentSubQuestion"]] = relationship(
         "AgentSubQuestion",
         back_populates="primary_message",
+        order_by="(AgentSubQuestion.level, AgentSubQuestion.level_question_num)",
     )
 
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
@@ -1430,7 +2085,9 @@ class AgentSubQuestion(Base):
     __tablename__ = "agent__sub_question"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    primary_question_id: Mapped[int] = mapped_column(ForeignKey("chat_message.id"))
+    primary_question_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id")
     )
@@ -1464,7 +2121,7 @@ class AgentSubQuery(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     parent_question_id: Mapped[int] = mapped_column(
-        ForeignKey("agent__sub_question.id")
+        ForeignKey("agent__sub_question.id", ondelete="CASCADE")
     )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id")
@@ -2368,6 +3025,21 @@ class User__ExternalUserGroupId(Base):
     )
 
 
+class PublicExternalUserGroup(Base):
+    """Stores all public external user "groups".
+
+    For example, things like Google Drive folders that are marked
+    as `Anyone with the link` or `Anyone in the domain`
+    """
+
+    __tablename__ = "public_external_user_group"
+
+    external_user_group_id: Mapped[str] = mapped_column(String, primary_key=True)
+    cc_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"), primary_key=True
+    )
+
+
 class UsageReport(Base):
     """This stores metadata about usage reports generated by admin including user who generated
     them as well las the period they cover. The actual zip file of the report is stored as a lo
@@ -2477,6 +3149,7 @@ class UserFile(Base):
         "ConnectorCredentialPair", back_populates="user_file"
     )
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    content_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 """

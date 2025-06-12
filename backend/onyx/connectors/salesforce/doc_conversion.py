@@ -224,7 +224,7 @@ def convert_sf_object_to_doc(
 
     sections = [_extract_section(sf_object.data, f"{base_url}/{sf_object.id}")]
     for id in sf_db.get_child_ids(sf_object.id):
-        if not (child_object := sf_db.get_record(id)):
+        if not (child_object := sf_db.get_record(id, isChild=True)):
             continue
         sections.append(
             _extract_section(child_object.data, f"{base_url}/{child_object.id}")

@@ -3,6 +3,7 @@ import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -384,6 +385,7 @@ def test_llm(llm: LLM) -> str | None:
     return error_msg
 
 
+@lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
     starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
 
@@ -417,7 +419,7 @@ def _strip_colon_from_model_name(model_name: str) -> str:
     return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
 
 
-def _find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
+def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
     stripped_model_name = _strip_extra_provider_from_model_name(model_name)
 
     model_names = [
@@ -535,7 +537,7 @@ def get_llm_max_tokens(
         return GEN_AI_MAX_TOKENS
 
     try:
-        model_obj = _find_model_obj(
+        model_obj = find_model_obj(
             model_map,
             model_provider,
             model_name,
@@ -644,7 +646,7 @@ def get_max_input_tokens_from_llm_provider(
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
     model_map = get_model_map()
     try:
-        model_obj = _find_model_obj(
+        model_obj = find_model_obj(
             model_map,
             model_provider,
             model_name,
@@ -661,12 +663,34 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         return False
 
 
-def model_is_reasoning_model(model_name: str) -> bool:
-    _REASONING_MODEL_NAMES = [
-        "o1",
-        "o1-mini",
-        "o3-mini",
-        "deepseek-reasoner",
-        "deepseek-r1",
-    ]
-    return model_name.lower() in _REASONING_MODEL_NAMES
+def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
+    model_map = get_model_map()
+    try:
+        model_obj = find_model_obj(
+            model_map,
+            model_provider,
+            model_name,
+        )
+        if model_obj and "supports_reasoning" in model_obj:
+            return model_obj["supports_reasoning"]
+
+        # Fallback: try using litellm.supports_reasoning() for newer models
+        try:
+            logger.debug("Falling back to `litellm.supports_reasoning`")
+            full_model_name = (
+                f"{model_provider}/{model_name}"
+                if model_provider not in model_name
+                else model_name
+            )
+            return litellm.supports_reasoning(model=full_model_name)
+        except Exception:
+            logger.exception(
+                f"Failed to check if {model_provider}/{model_name} supports reasoning"
+            )
+            return False
+
+    except Exception:
+        logger.exception(
+            f"Failed to get model object for {model_provider}/{model_name}"
+        )
+        return False

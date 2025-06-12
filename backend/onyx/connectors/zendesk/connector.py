@@ -634,7 +634,9 @@ if __name__ == "__main__":
     current = time.time()
     one_day_ago = current - 24 * 60 * 60  # 1 day
     document_batches = connector.load_from_checkpoint(
-        one_day_ago, current, connector.build_dummy_checkpoint()
+        one_day_ago,
+        current,
+        connector.build_dummy_checkpoint(),
     )
 
     print(next(document_batches))

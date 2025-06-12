@@ -181,7 +181,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     },
   });
   const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
-
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
@@ -232,6 +231,21 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           <Button onClick={handleBack} variant="outline" className="mt-2">
             Back to My Documents
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedModel === undefined) {
+    return (
+      <div className="min-h-full w-full min-w-0 flex-1 mx-auto max-w-5xl px-4 pb-20 md:pl-8 mt-6 md:pr-8 2xl:pr-14">
+        <div className="text-left space-y-4">
+          <h2 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
+            No Models defined
+          </h2>
+          <p className="text-neutral-600">
+            This page requires models to be available.
+          </p>
         </div>
       </div>
     );
@@ -588,29 +602,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
       {/* Invalid file message */}
 
-      {/* Add a visual overlay when dragging files */}
-      {isDraggingOver && (
-        <div className="fixed inset-0 bg-neutral-950/10 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center transition-all duration-200 ease-in-out">
-          <div className="bg-white dark:bg-neutral-900 rounded-lg p-8 shadow-lg text-center border border-neutral-200 dark:border-neutral-800 max-w-md mx-auto">
-            <div className="bg-neutral-100 dark:bg-neutral-800 p-4 rounded-full w-20 h-20 mx-auto mb-5 flex items-center justify-center">
-              <Upload
-                className="w-10 h-10 text-neutral-600 dark:text-neutral-300"
-                strokeWidth={1.5}
-              />
-            </div>
-            <h3 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-50">
-              Drop files to upload
-            </h3>
-            <p className="text-neutral-500 dark:text-neutral-400 text-sm">
-              Files will be uploaded to{" "}
-              <span className="font-medium text-neutral-900 dark:text-neutral-200">
-                {folderDetails?.name || "this folder"}
-              </span>
-            </p>
-          </div>
-        </div>
-      )}
-
       <DeleteEntityModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
@@ -634,9 +625,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
       <div className="flex  -mt-[1px] flex-col w-full">
         <div className="flex items-center mb-3">
-          <nav className="flex text-lg gap-x-1 items-center">
+          <nav className="flex text-base md:text-lg  gap-x-1 items-center">
             <span
-              className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
+              className="font-medium leading-tight tracking-tight  text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center"
               onClick={handleBack}
             >
               My Documents

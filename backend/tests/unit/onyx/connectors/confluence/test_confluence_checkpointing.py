@@ -41,25 +41,26 @@ def space_key() -> str:
 
 
 @pytest.fixture
-def mock_confluence_client() -> MagicMock:
+def mock_confluence_client() -> OnyxConfluence:
     """Create a mock Confluence client with proper typing"""
-    mock = MagicMock(spec=OnyxConfluence)
-    # Initialize with empty results for common methods
-    mock.paginated_cql_retrieval.return_value = []
-    mock.get_all_spaces = MagicMock()
-    mock.get_all_spaces.return_value = {"results": []}
-    return mock
+    # Server mode just Also updates the start value
+    return OnyxConfluence(
+        is_cloud=False, url="test", credentials_provider=MagicMock(), timeout=None
+    )
 
 
 @pytest.fixture
 def confluence_connector(
-    confluence_base_url: str, space_key: str, mock_confluence_client: MagicMock
+    confluence_base_url: str, space_key: str, mock_confluence_client: OnyxConfluence
 ) -> Generator[ConfluenceConnector, None, None]:
     """Create a Confluence connector with a mock client"""
+    # NOTE: we test with is_cloud=False for all tests, which is generally fine because the behavior
+    # for the two versions is "close enough". If cloud-specific behavior is added, we can parametrize
+    # the connector and client fixtures to allow either.
     connector = ConfluenceConnector(
         wiki_base=confluence_base_url,
         space=space_key,
-        is_cloud=True,
+        is_cloud=False,
         labels_to_skip=["secret", "sensitive"],
         timezone_offset=0.0,
         batch_size=2,
@@ -84,6 +85,7 @@ def create_mock_page() -> Callable[..., dict[str, Any]]:
             "id": id,
             "title": title,
             "version": {"when": updated},
+            "history": {"lastUpdated": {"when": updated}},
             "body": {"storage": {"value": content}},
             "metadata": {
                 "labels": {"results": [{"name": label} for label in (labels or [])]}
@@ -100,7 +102,7 @@ def test_get_cql_query_with_space(confluence_connector: ConfluenceConnector) -> 
     start = datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp()
     end = datetime(2023, 1, 2, tzinfo=timezone.utc).timestamp()
 
-    query = confluence_connector._construct_page_query(start, end)
+    query = confluence_connector._construct_page_cql_query(start, end)
 
     # Check that the space part and time part are both in the query
     assert f"space='{confluence_connector.space}'" in query
@@ -117,7 +119,7 @@ def test_get_cql_query_without_space(confluence_base_url: str) -> None:
     start = datetime(2023, 1, 1, tzinfo=connector.timezone).timestamp()
     end = datetime(2023, 1, 2, tzinfo=connector.timezone).timestamp()
 
-    query = connector._construct_page_query(start, end)
+    query = connector._construct_page_cql_query(start, end)
 
     # Check that only time part is in the query
     assert "space=" not in query
@@ -146,16 +148,28 @@ def test_load_from_checkpoint_happy_path(
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
-    paginated_cql_mock = cast(MagicMock, confluence_client.paginated_cql_retrieval)
-    paginated_cql_mock.side_effect = [
-        [mock_page1, mock_page2, mock_page3],
-        [],  # comments
-        [],  # attachments
-        [],  # comments
-        [],  # attachments
-        [mock_page3],
-        [],  # comments
-        [],  # attachments
+    get_mock = MagicMock()
+    confluence_client.get = get_mock  # type: ignore
+    get_mock.side_effect = [
+        # First page response
+        MagicMock(
+            json=lambda: {
+                "results": [mock_page1, mock_page2],
+                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
+            }
+        ),
+        # links and attachemnts responses
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        # next actual page response
+        MagicMock(json=lambda: {"results": [mock_page3]}),
+        # more links and attachment responses
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
     ]
 
     # Call load_from_checkpoint
@@ -176,9 +190,7 @@ def test_load_from_checkpoint_happy_path(
     assert isinstance(document2, Document)
     assert document2.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
     assert checkpoint_output1.next_checkpoint == ConfluenceCheckpoint(
-        last_updated=first_updated.timestamp(),
-        has_more=True,
-        last_seen_doc_ids=["1", "2"],
+        has_more=True, next_page_url="rest/api/content/search?cql=type%3Dpage&start=2"
     )
 
     checkpoint_output2 = outputs[1]
@@ -186,9 +198,7 @@ def test_load_from_checkpoint_happy_path(
     document3 = checkpoint_output2.items[0]
     assert isinstance(document3, Document)
     assert document3.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/3"
-    assert checkpoint_output2.next_checkpoint == ConfluenceCheckpoint(
-        last_updated=last_updated.timestamp(), has_more=False, last_seen_doc_ids=["3"]
-    )
+    assert not checkpoint_output2.next_checkpoint.has_more
 
 
 def test_load_from_checkpoint_with_page_processing_error(
@@ -203,8 +213,32 @@ def test_load_from_checkpoint_with_page_processing_error(
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
-    paginated_cql_mock = cast(MagicMock, confluence_client.paginated_cql_retrieval)
-    paginated_cql_mock.return_value = [mock_page1, mock_page2]
+    get_mock = MagicMock()
+    confluence_client.get = get_mock  # type: ignore
+    get_mock.side_effect = [
+        # First page response
+        MagicMock(
+            json=lambda: {
+                "results": [mock_page1, mock_page2],
+                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
+            }
+        ),
+        # Comments for page 1
+        MagicMock(json=lambda: {"results": []}),
+        # Attachments for page 1
+        MagicMock(json=lambda: {"results": []}),
+        # Comments for page 2
+        MagicMock(json=lambda: {"results": []}),
+        # Attachments for page 2
+        MagicMock(json=lambda: {"results": []}),
+        # Second page response (empty)
+        MagicMock(
+            json=lambda: {
+                "results": [],
+                "_links": {},
+            }
+        ),
+    ]
 
     # Mock _convert_page_to_document to fail for the second page
     def mock_convert_side_effect(page: dict[str, Any]) -> Document | ConnectorFailure:
@@ -268,12 +302,25 @@ def test_retrieve_all_slim_documents(
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
 
-    paginated_cql_mock = cast(MagicMock, confluence_client.cql_paginate_all_expansions)
-    paginated_cql_mock.side_effect = [[mock_page1, mock_page2], [], []]
+    get_mock = MagicMock()
+    confluence_client.get = get_mock  # type: ignore
+    get_mock.side_effect = [
+        # First page response
+        MagicMock(
+            json=lambda: {
+                "results": [mock_page1, mock_page2],
+                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
+            }
+        ),
+        # links and attachments responses
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+    ]
 
     # Call retrieve_all_slim_documents
     batches = list(confluence_connector.retrieve_all_slim_documents(0, 100))
-    assert paginated_cql_mock.call_count == 3
+    assert get_mock.call_count == 4
 
     # Check that a batch with 2 documents was returned
     assert len(batches) == 1
@@ -340,24 +387,35 @@ def test_checkpoint_progress(
     # Set up mocked pages with different timestamps
     earlier_timestamp = datetime(2023, 1, 1, 12, 0, tzinfo=timezone.utc)
     later_timestamp = datetime(2023, 1, 2, 12, 0, tzinfo=timezone.utc)
+    latest_timestamp = datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc)
     mock_page1 = create_mock_page(
         id="1", title="Page 1", updated=earlier_timestamp.isoformat()
     )
     mock_page2 = create_mock_page(
         id="2", title="Page 2", updated=later_timestamp.isoformat()
     )
+    mock_page3 = create_mock_page(
+        id="3", title="Page 3", updated=latest_timestamp.isoformat()
+    )
 
     # Mock paginated_cql_retrieval to return our mock pages
     confluence_client = confluence_connector._confluence_client
     assert confluence_client is not None, "bad test setup"
-    paginated_cql_mock = cast(MagicMock, confluence_client.paginated_cql_retrieval)
-    paginated_cql_mock.side_effect = [
-        [mock_page1, mock_page2],  # Return both pages
-        [],  # No comments for page 1
-        [],  # No attachments for page 1
-        [],  # No comments for page 2
-        [],  # No attachments for page 2
-        [],  # No more pages
+    get_mock = MagicMock()
+    confluence_client.get = get_mock  # type: ignore
+    get_mock.side_effect = [
+        # First page response
+        MagicMock(
+            json=lambda: {
+                "results": [mock_page1, mock_page2],
+                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
+            }
+        ),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
     ]
 
     # First run - process both pages
@@ -366,15 +424,13 @@ def test_checkpoint_progress(
         confluence_connector, 0, end_time
     )
 
-    assert len(outputs) == 1
-
     first_checkpoint = outputs[0].next_checkpoint
 
-    assert first_checkpoint == ConfluenceCheckpoint(
-        last_updated=later_timestamp.timestamp(),
-        has_more=False,
-        last_seen_doc_ids=["1", "2"],
+    assert (
+        first_checkpoint.next_page_url
+        == "rest/api/content/search?cql=type%3Dpage&start=2"
     )
+    assert not outputs[-1].next_checkpoint.has_more
 
     assert len(outputs[0].items) == 2
     assert isinstance(outputs[0].items[0], Document)
@@ -382,19 +438,19 @@ def test_checkpoint_progress(
     assert isinstance(outputs[0].items[1], Document)
     assert outputs[0].items[1].semantic_identifier == "Page 2"
 
-    latest_timestamp = datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc)
-    mock_page3 = create_mock_page(
-        id="3", title="Page 3", updated=latest_timestamp.isoformat()
-    )
     # Second run - same time range but with checkpoint from first run
     # Reset the mock to return the same pages
-    paginated_cql_mock.side_effect = [
-        [mock_page1, mock_page2, mock_page3],  # Return both pages
-        [],  # No comments for page 1
-        [],  # No attachments for page 1
-        [],  # No comments for page 2
-        [],  # No attachments for page 2
-        [],  # No more pages
+    get_mock.side_effect = [
+        # First page response
+        MagicMock(
+            json=lambda: {
+                "results": [mock_page3],
+                "_links": {"next": "rest/api/content/search?cql=type=page&start=3"},
+            }
+        ),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": []}),
     ]
 
     # Use the checkpoint from first run
@@ -404,12 +460,8 @@ def test_checkpoint_progress(
     )
 
     # Verify only the new page was processed since the others were in last_seen_doc_ids
-    assert len(outputs_with_checkpoint) == 1
+    assert len(outputs_with_checkpoint) == 2
     assert len(outputs_with_checkpoint[0].items) == 1
     assert isinstance(outputs_with_checkpoint[0].items[0], Document)
     assert outputs_with_checkpoint[0].items[0].semantic_identifier == "Page 3"
-    assert outputs_with_checkpoint[0].next_checkpoint == ConfluenceCheckpoint(
-        last_updated=latest_timestamp.timestamp(),
-        has_more=False,
-        last_seen_doc_ids=["3"],
-    )
+    assert not outputs_with_checkpoint[-1].next_checkpoint.has_more

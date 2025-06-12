@@ -47,10 +47,10 @@ def get_tenant_id_for_email(email: str) -> str:
                     mapping.active = True
                     db_session.commit()
                     tenant_id = mapping.tenant_id
-
     except Exception as e:
         logger.exception(f"Error getting tenant id for email {email}: {e}")
         raise exceptions.UserNotExists()
+
     if tenant_id is None:
         raise exceptions.UserNotExists()
     return tenant_id

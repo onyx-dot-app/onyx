@@ -174,7 +174,8 @@ class DATestGatingType(str, Enum):
 class DATestSettings(BaseModel):
     """General settings"""
 
-    maximum_chat_retention_days: int | None = None
+    # is float to allow for fractional days for easier automated testing
+    maximum_chat_retention_days: float | None = None
     gpu_enabled: bool | None = None
     product_gating: DATestGatingType = DATestGatingType.NONE
     anonymous_user_enabled: bool | None = None

@@ -59,11 +59,20 @@ def test_jira_connector_basic(
     assert story.source == DocumentSource.JIRA
     assert story.metadata == {
         "priority": "Medium",
-        "status": "Backlog",
+        "status": "Done",
+        "resolution": "Done",
+        "resolution_date": "2025-05-29T15:33:31.031-0700",
         "reporter": "Chris Weaver",
         "assignee": "Chris Weaver",
         "issuetype": "Story",
         "created": "2025-04-16T16:44:06.716-0700",
+        "reporter_email": "chris@onyx.app",
+        "assignee_email": "chris@onyx.app",
+        "project_name": "DailyConnectorTestProject",
+        "project": "AS",
+        "parent": "AS-4",
+        "key": "AS-3",
+        "updated": "2025-05-29T15:33:31.085-0700",
     }
     assert story.secondary_owners is None
     assert story.title == "AS-3 test123small"
@@ -86,6 +95,12 @@ def test_jira_connector_basic(
         "assignee": "Chris Weaver",
         "issuetype": "Epic",
         "created": "2025-04-16T16:55:53.068-0700",
+        "reporter_email": "founders@onyx.app",
+        "assignee_email": "chris@onyx.app",
+        "project_name": "DailyConnectorTestProject",
+        "project": "AS",
+        "key": "AS-4",
+        "updated": "2025-05-29T14:43:05.312-0700",
     }
     assert epic.secondary_owners is None
     assert epic.title == "AS-4 EPIC"

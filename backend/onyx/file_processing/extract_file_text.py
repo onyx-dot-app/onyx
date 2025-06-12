@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from typing import IO
 from typing import NamedTuple
+from zipfile import BadZipFile
 
 import chardet
 import docx  # type: ignore
@@ -36,6 +37,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
 TEXT_SECTION_SEPARATOR = "\n\n"
 
 ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
@@ -299,7 +301,7 @@ def read_pdf_file(
 
 
 def docx_to_text_and_images(
-    file: IO[Any],
+    file: IO[Any], file_name: str = ""
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx. If embed_images=True, also extract inline images.
@@ -308,7 +310,11 @@ def docx_to_text_and_images(
     paragraphs = []
     embedded_images: list[tuple[bytes, str]] = []
 
-    doc = docx.Document(file)
+    try:
+        doc = docx.Document(file)
+    except BadZipFile as e:
+        logger.warning(f"Failed to extract text from {file_name or 'docx file'}: {e}")
+        return "", []
 
     # Grab text from paragraphs
     for paragraph in doc.paragraphs:
@@ -331,8 +337,13 @@ def docx_to_text_and_images(
     return text_content, embedded_images
 
 
-def pptx_to_text(file: IO[Any]) -> str:
-    presentation = pptx.Presentation(file)
+def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
+    try:
+        presentation = pptx.Presentation(file)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'pptx file'}: {e}"
+        logger.warning(error_str)
+        return ""
     text_content = []
     for slide_number, slide in enumerate(presentation.slides, start=1):
         slide_text = f"\nSlide {slide_number}:\n"
@@ -343,14 +354,46 @@ def pptx_to_text(file: IO[Any]) -> str:
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
-def xlsx_to_text(file: IO[Any]) -> str:
-    workbook = openpyxl.load_workbook(file, read_only=True)
+def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    try:
+        workbook = openpyxl.load_workbook(file, read_only=True)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
+        if file_name.startswith("~"):
+            logger.debug(error_str + " (this is expected for files with ~)")
+        else:
+            logger.warning(error_str)
+        return ""
+    except Exception as e:
+        if "File contains no valid workbook part" in str(e):
+            logger.error(
+                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
+            )
+            return ""
+        raise e
+
     text_content = []
     for sheet in workbook.worksheets:
         rows = []
+        num_empty_consecutive_rows = 0
         for row in sheet.iter_rows(min_row=1, values_only=True):
-            row_str = ",".join(str(cell) if cell is not None else "" for cell in row)
-            rows.append(row_str)
+            row_str = ",".join(str(cell or "") for cell in row)
+
+            # Only add the row if there are any values in the cells
+            if len(row_str) >= len(row):
+                rows.append(row_str)
+                num_empty_consecutive_rows = 0
+            else:
+                logger.debug(f"skipping empty row in {file_name}")
+                num_empty_consecutive_rows += 1
+
+            if num_empty_consecutive_rows > 100:
+                # handle massive excel sheets with mostly empty cells
+                logger.warning(
+                    f"Found {num_empty_consecutive_rows} empty rows in {file_name},"
+                    " skipping rest of file"
+                )
+                break
         sheet_str = "\n".join(rows)
         text_content.append(sheet_str)
     return TEXT_SECTION_SEPARATOR.join(text_content)
@@ -503,13 +546,17 @@ def extract_text_and_images(
         if extension == ".pptx":
             file.seek(0)
             return ExtractionResult(
-                text_content=pptx_to_text(file), embedded_images=[], metadata={}
+                text_content=pptx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
             )
 
         if extension == ".xlsx":
             file.seek(0)
             return ExtractionResult(
-                text_content=xlsx_to_text(file), embedded_images=[], metadata={}
+                text_content=xlsx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
             )
 
         if extension == ".eml":

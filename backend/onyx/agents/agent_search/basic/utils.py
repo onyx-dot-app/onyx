@@ -40,6 +40,7 @@ def process_llm_stream(
     # This stream will be the llm answer if no tool is chosen. When a tool is chosen,
     # the stream will contain AIMessageChunks with tool call information.
     for message in messages:
+
         answer_piece = message.content
         if not isinstance(answer_piece, str):
             # this is only used for logging, so fine to

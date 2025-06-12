@@ -59,7 +59,7 @@ logger = setup_logger()
 test_mode = False
 
 
-def main_graph_builder(test_mode: bool = False) -> StateGraph:
+def agent_search_graph_builder() -> StateGraph:
     """
     LangGraph graph builder for the main agent search process.
     """
@@ -76,7 +76,7 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 
     # Choose the initial tool
     graph.add_node(
-        node="initial_tool_choice",
+        node="choose_tool",
         action=choose_tool,
     )
 
@@ -162,11 +162,11 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 
     graph.add_edge(
         start_key="prepare_tool_input",
-        end_key="initial_tool_choice",
+        end_key="choose_tool",
     )
 
     graph.add_conditional_edges(
-        "initial_tool_choice",
+        "choose_tool",
         route_initial_tool_choice,
         ["call_tool", "start_agent_search", "logging_node"],
     )
@@ -242,7 +242,7 @@ if __name__ == "__main__":
     from onyx.llm.factory import get_default_llms
     from onyx.context.search.models import SearchRequest
 
-    graph = main_graph_builder()
+    graph = agent_search_graph_builder()
     compiled_graph = graph.compile()
     primary_llm, fast_llm = get_default_llms()
 

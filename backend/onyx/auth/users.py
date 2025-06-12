@@ -56,7 +56,6 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -77,6 +76,7 @@ from onyx.configs.app_configs import TRACK_EXTERNAL_IDP_EXPIRY
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
@@ -92,7 +92,7 @@ from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_with_tenant
+from onyx.db.engine import get_async_session_context_manager
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -253,7 +253,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id = fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
         )(user_email)
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
                 tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
@@ -296,48 +296,56 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         user: User
 
-        async with get_async_session_with_tenant(tenant_id) as db_session:
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-            verify_email_is_invited(user_create.email)
-            verify_email_domain(user_create.email)
-            if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
-                    db_session, User, OAuthAccount
-                )
-                self.user_db = tenant_user_db
-                self.database = tenant_user_db
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                verify_email_is_invited(user_create.email)
+                verify_email_domain(user_create.email)
+                if MULTI_TENANT:
+                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                        db_session, User, OAuthAccount
+                    )
+                    self.user_db = tenant_user_db
 
-            if hasattr(user_create, "role"):
-                user_count = await get_user_count()
-                if (
-                    user_count == 0
-                    or user_create.email in get_default_admin_user_emails()
-                ):
-                    user_create.role = UserRole.ADMIN
-                else:
+                if hasattr(user_create, "role"):
                     user_create.role = UserRole.BASIC
-            try:
-                user = await super().create(user_create, safe=safe, request=request)  # type: ignore
-            except exceptions.UserAlreadyExists:
-                user = await self.get_by_email(user_create.email)
-                # Handle case where user has used product outside of web and is now creating an account through web
 
-                if (
-                    not user.role.is_web_login()
-                    and isinstance(user_create, UserCreate)
-                    and user_create.role.is_web_login()
-                ):
+                    user_count = await get_user_count()
+                    if (
+                        user_count == 0
+                        or user_create.email in get_default_admin_user_emails()
+                    ):
+                        user_create.role = UserRole.ADMIN
+
+                try:
+                    user = await super().create(user_create, safe=safe, request=request)  # type: ignore
+                except exceptions.UserAlreadyExists:
+                    user = await self.get_by_email(user_create.email)
+
+                    # we must use the existing user in the session if it matches
+                    # the user we just got by email. Note that this only applies
+                    # to multi-tenant, due to the overwriting of the user_db
+                    if MULTI_TENANT:
+                        user_by_session = await db_session.get(User, user.id)
+                        if user_by_session:
+                            user = user_by_session
+
+                    # Handle case where user has used product outside of web and is now creating an account through web
+                    if (
+                        user.role.is_web_login()
+                        or not isinstance(user_create, UserCreate)
+                        or not user_create.role.is_web_login()
+                    ):
+                        raise exceptions.UserAlreadyExists()
+
                     user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
                         role=user_create.role,
                     )
                     user = await self.update(user_update, user)
-                else:
-                    raise exceptions.UserAlreadyExists()
-
-            finally:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
@@ -402,18 +410,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Proceed with the tenant context
         token = None
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
             verify_email_in_whitelist(account_email, tenant_id)
             verify_email_domain(account_email)
 
+            # NOTE(rkuo): If this UserManager is instantiated per connection
+            # should we even be doing this here?
             if MULTI_TENANT:
                 tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 self.user_db = tenant_user_db
-                self.database = tenant_user_db
 
             oauth_account_dict = {
                 "oauth_name": oauth_name,
@@ -456,15 +465,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     }
 
                     user = await self.user_db.create(user_dict)
-
-                    # Add OAuth account only if user creation was successful
-                    if user is not None:
-                        await self.user_db.add_oauth_account(user, oauth_account_dict)
-                        await self.on_after_register(user, request)
-                    else:
-                        raise HTTPException(
-                            status_code=500, detail="Failed to create user account"
-                        )
+                    await self.user_db.add_oauth_account(user, oauth_account_dict)
+                    await self.on_after_register(user, request)
 
             else:
                 # User exists, update OAuth account if needed
@@ -482,12 +484,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 oauth_account_dict,
                             )
 
-            # Ensure user is not None before proceeding
-            if user is None:
-                raise HTTPException(
-                    status_code=500, detail="Failed to authenticate or create user"
-                )
-
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
             if expires_at and TRACK_EXTERNAL_IDP_EXPIRY:
@@ -498,6 +494,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.role.is_web_login():
+                # We must use the existing user in the session if it matches
+                # the user we just got by email/oauth. Note that this only applies
+                # to multi-tenant, due to the overwriting of the user_db
+                if MULTI_TENANT:
+                    if user.id:
+                        user_by_session = await db_session.get(User, user.id)
+                        if user_by_session:
+                            user = user_by_session
+
                 await self.user_db.update(
                     user,
                     {
@@ -505,7 +510,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "role": UserRole.BASIC,
                     },
                 )
-                user.is_verified = is_verified_by_default
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
@@ -642,7 +646,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return None
 
         # Create a tenant-specific session
-        async with get_async_session_with_tenant(tenant_id) as tenant_session:
+        async with get_async_session_context_manager(tenant_id) as tenant_session:
             tenant_user_db: SQLAlchemyUserDatabase = SQLAlchemyUserDatabase(
                 tenant_session, User
             )

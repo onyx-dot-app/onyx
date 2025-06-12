@@ -230,6 +230,7 @@ export function SlackChannelConfigFormFields({
               <CheckFormField
                 name="disabled"
                 label="Disable Default Configuration"
+                labelClassName="text-neutral-900"
               />
               <p className="mt-2 text-sm text-neutral-600 italic">
                 Warning: Disabling the default configuration means the bot
@@ -565,7 +566,7 @@ export function SlackChannelConfigFormFields({
 
         <AccordionItem className="mt-4" value="general-options">
           <AccordionTrigger>General Configuration</AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent className="overflow-visible">
             <div className="space-y-4">
               <CheckFormField
                 name="show_continue_in_web_ui"

@@ -30,6 +30,7 @@ from onyx.agents.agent_search.shared_graph_utils.constants import (
 from onyx.agents.agent_search.shared_graph_utils.constants import (
     LLM_ANSWER_ERROR_MESSAGE,
 )
+from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
 from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.utils import get_answer_citation_ids
@@ -85,7 +86,7 @@ def generate_sub_answer(
     context_docs = dedup_sort_inference_section_list(context_docs)
 
     persona_contextualized_prompt = get_persona_agent_prompt_expressions(
-        graph_config.inputs.search_request.persona
+        graph_config.inputs.persona
     ).contextualized_prompt
 
     if len(context_docs) == 0:
@@ -106,50 +107,29 @@ def generate_sub_answer(
         fast_llm = graph_config.tooling.fast_llm
         msg = build_sub_question_answer_prompt(
             question=question,
-            original_question=graph_config.inputs.search_request.query,
+            original_question=graph_config.inputs.prompt_builder.raw_user_query,
             docs=context_docs,
             persona_specification=persona_contextualized_prompt,
             config=fast_llm.config,
         )
 
-        dispatch_timings: list[float] = []
         agent_error: AgentErrorLog | None = None
         response: list[str] = []
 
-        def stream_sub_answer() -> list[str]:
-            for message in fast_llm.stream(
-                prompt=msg,
-                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION,
-                max_tokens=AGENT_MAX_TOKENS_SUBANSWER_GENERATION,
-            ):
-                # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-                content = message.content
-                if not isinstance(content, str):
-                    raise ValueError(
-                        f"Expected content to be a string, but got {type(content)}"
-                    )
-                start_stream_token = datetime.now()
-                write_custom_event(
-                    "sub_answers",
-                    AgentAnswerPiece(
-                        answer_piece=content,
-                        level=level,
-                        level_question_num=question_num,
-                        answer_type="agent_sub_answer",
-                    ),
-                    writer,
-                )
-                end_stream_token = datetime.now()
-                dispatch_timings.append(
-                    (end_stream_token - start_stream_token).microseconds
-                )
-                response.append(content)
-            return response
-
         try:
-            response = run_with_timeout(
+            response, _ = run_with_timeout(
                 AGENT_TIMEOUT_LLM_SUBANSWER_GENERATION,
-                stream_sub_answer,
+                lambda: stream_llm_answer(
+                    llm=fast_llm,
+                    prompt=msg,
+                    event_name="sub_answers",
+                    writer=writer,
+                    agent_answer_level=level,
+                    agent_answer_question_num=question_num,
+                    agent_answer_type="agent_sub_answer",
+                    timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION,
+                    max_tokens=AGENT_MAX_TOKENS_SUBANSWER_GENERATION,
+                ),
             )
 
         except (LLMTimeoutError, TimeoutError):

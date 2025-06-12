@@ -69,7 +69,7 @@ const MultiSelectDropdown = ({
   };
 
   return (
-    <div className="flex flex-col space-y-4 mb-4">
+    <div className="flex flex-col text-white space-y-4 mb-4">
       <Label>{label}</Label>
       {creatable ? (
         <CreatableSelect

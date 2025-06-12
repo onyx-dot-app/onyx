@@ -1,25 +1,15 @@
 import json
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import cast
 
-from fastapi import HTTPException
 from redis.client import Redis
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
-from onyx.db.engine import get_sqlalchemy_engine
-from onyx.db.engine import is_valid_schema_name
+from onyx.db.engine import get_session_context_manager
 from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KeyValueStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
-from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -31,26 +21,11 @@ KV_REDIS_KEY_EXPIRATION = 60 * 60 * 24  # 1 Day
 
 class PgRedisKVStore(KeyValueStore):
     def __init__(self, redis_client: Redis | None = None) -> None:
-        self.tenant_id = get_current_tenant_id()
-
         # If no redis_client is provided, fall back to the context var
         if redis_client is not None:
             self.redis_client = redis_client
         else:
-            self.redis_client = get_redis_client(tenant_id=self.tenant_id)
-
-    @contextmanager
-    def _get_session(self) -> Iterator[Session]:
-        engine = get_sqlalchemy_engine()
-        with Session(engine, expire_on_commit=False) as session:
-            if MULTI_TENANT:
-                if self.tenant_id == POSTGRES_DEFAULT_SCHEMA:
-                    raise BasicAuthenticationError(detail="User must authenticate")
-                if not is_valid_schema_name(self.tenant_id):
-                    raise HTTPException(status_code=400, detail="Invalid tenant ID")
-                # Set the search_path to the tenant's schema
-                session.execute(text(f'SET search_path = "{self.tenant_id}"'))
-            yield session
+            self.redis_client = get_redis_client()
 
     def store(self, key: str, val: JSON_ro, encrypt: bool = False) -> None:
         # Not encrypted in Redis, but encrypted in Postgres
@@ -64,8 +39,8 @@ class PgRedisKVStore(KeyValueStore):
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
-        with self._get_session() as session:
-            obj = session.query(KVStore).filter_by(key=key).first()
+        with get_session_context_manager() as db_session:
+            obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = plain_val
                 obj.encrypted_value = encrypted_val
@@ -73,9 +48,9 @@ class PgRedisKVStore(KeyValueStore):
                 obj = KVStore(
                     key=key, value=plain_val, encrypted_value=encrypted_val
                 )  # type: ignore
-                session.query(KVStore).filter_by(key=key).delete()  # just in case
-                session.add(obj)
-            session.commit()
+                db_session.query(KVStore).filter_by(key=key).delete()  # just in case
+                db_session.add(obj)
+            db_session.commit()
 
     def load(self, key: str) -> JSON_ro:
         try:
@@ -86,8 +61,8 @@ class PgRedisKVStore(KeyValueStore):
         except Exception as e:
             logger.error(f"Failed to get value from Redis for key '{key}': {str(e)}")
 
-        with self._get_session() as session:
-            obj = session.query(KVStore).filter_by(key=key).first()
+        with get_session_context_manager() as db_session:
+            obj = db_session.query(KVStore).filter_by(key=key).first()
             if not obj:
                 raise KvKeyNotFoundError
 
@@ -111,8 +86,8 @@ class PgRedisKVStore(KeyValueStore):
         except Exception as e:
             logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
 
-        with self._get_session() as session:
-            result = session.query(KVStore).filter_by(key=key).delete()  # type: ignore
+        with get_session_context_manager() as db_session:
+            result = db_session.query(KVStore).filter_by(key=key).delete()  # type: ignore
             if result == 0:
                 raise KvKeyNotFoundError
-            session.commit()
+            db_session.commit()

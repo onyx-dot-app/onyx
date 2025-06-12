@@ -48,10 +48,14 @@ export async function moveAssistantUp(
 ): Promise<boolean> {
   const index = chosenAssistants.indexOf(assistantId);
   if (index > 0) {
-    [chosenAssistants[index - 1], chosenAssistants[index]] = [
-      chosenAssistants[index],
-      chosenAssistants[index - 1],
-    ];
+    const chosenAssistantPrev = chosenAssistants[index - 1];
+    const chosenAssistant = chosenAssistants[index];
+    if (chosenAssistantPrev === undefined || chosenAssistant === undefined) {
+      return false;
+    }
+
+    chosenAssistants[index - 1] = chosenAssistant;
+    chosenAssistants[index] = chosenAssistantPrev;
     return updateUserAssistantList(chosenAssistants);
   }
   return false;
@@ -63,10 +67,15 @@ export async function moveAssistantDown(
 ): Promise<boolean> {
   const index = chosenAssistants.indexOf(assistantId);
   if (index < chosenAssistants.length - 1) {
-    [chosenAssistants[index + 1], chosenAssistants[index]] = [
-      chosenAssistants[index],
-      chosenAssistants[index + 1],
-    ];
+    const chosenAssistantNext = chosenAssistants[index + 1];
+    const chosenAssistant = chosenAssistants[index];
+    if (chosenAssistantNext === undefined || chosenAssistant === undefined) {
+      return false;
+    }
+
+    chosenAssistants[index + 1] = chosenAssistant;
+    chosenAssistants[index] = chosenAssistantNext;
+
     return updateUserAssistantList(chosenAssistants);
   }
   return false;

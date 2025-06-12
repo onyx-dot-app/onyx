@@ -1,6 +1,15 @@
 from googleapiclient.errors import HttpError  # type: ignore
+from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.google_drive.folder_retrieval import (
+    get_folder_permissions_by_ids,
+)
+from ee.onyx.external_permissions.google_drive.folder_retrieval import (
+    get_modified_folders,
+)
+from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
+from ee.onyx.external_permissions.google_drive.models import PermissionType
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import AdminService
@@ -10,6 +19,87 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+"""
+Folder Permission Sync.
+
+Each folder is treated as a group. Each file has all ancestor folders
+as groups.
+"""
+
+
+class FolderInfo(BaseModel):
+    id: str
+    permissions: list[GoogleDrivePermission]
+
+
+def _get_all_folders(
+    google_drive_connector: GoogleDriveConnector, skip_folders_without_permissions: bool
+) -> list[FolderInfo]:
+    """Have to get all folders since the group syncing system assumes all groups
+    are returned every time.
+
+    TODO: tweak things so we can fetch deltas.
+    """
+    all_folders: list[FolderInfo] = []
+    seen_folder_ids: set[str] = set()
+
+    user_emails = google_drive_connector._get_all_user_emails()
+    for user_email in user_emails:
+        drive_service = get_drive_service(
+            google_drive_connector.creds,
+            user_email,
+        )
+
+        for folder in get_modified_folders(
+            service=drive_service,
+        ):
+            folder_id = folder["id"]
+            if folder_id in seen_folder_ids:
+                logger.debug(f"Folder {folder_id} has already been seen. Skipping.")
+                continue
+
+            seen_folder_ids.add(folder_id)
+
+            # Check if the folder has permission IDs but no permissions
+            permission_ids = folder.get("permissionIds", [])
+            raw_permissions = folder.get("permissions", [])
+
+            if not raw_permissions and permission_ids:
+                # Fetch permissions using the IDs
+                permissions = get_folder_permissions_by_ids(
+                    drive_service, folder_id, permission_ids
+                )
+            else:
+                permissions = [
+                    GoogleDrivePermission.from_drive_permission(permission)
+                    for permission in raw_permissions
+                ]
+
+            # Don't include inherited permissions, those will be captured
+            # by the folder/shared drive itself
+            permissions = [
+                permission
+                for permission in permissions
+                if permission.inherited_from is None
+            ]
+
+            if not permissions and skip_folders_without_permissions:
+                logger.debug(f"Folder {folder_id} has no permissions. Skipping.")
+                continue
+
+            all_folders.append(
+                FolderInfo(
+                    id=folder_id,
+                    permissions=permissions,
+                )
+            )
+
+    return all_folders
+
+
+"""Individual Shared Drive / My Drive Permission Sync"""
 
 
 def _get_drive_members(
@@ -51,15 +141,17 @@ def _get_drive_members(
                 drive_service.permissions().list,
                 list_key="permissions",
                 fileId=drive_id,
-                fields="permissions(emailAddress, type)",
+                fields="permissions(emailAddress, type),nextPageToken",
                 supportsAllDrives=True,
                 # can only set `useDomainAdminAccess` to true if the user
                 # is an admin
                 useDomainAdminAccess=is_admin,
             ):
-                if permission["type"] == "group":
+                # NOTE: don't need to check for PermissionType.ANYONE since
+                # you can't share a drive with the internet
+                if permission["type"] == PermissionType.GROUP:
                     group_emails.add(permission["emailAddress"])
-                elif permission["type"] == "user":
+                elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
         except HttpError as e:
             if e.status_code == 404:
@@ -87,7 +179,7 @@ def _get_all_groups(
         admin_service.groups().list,
         list_key="groups",
         domain=google_domain,
-        fields="groups(email)",
+        fields="groups(email),nextPageToken",
     ):
         group_emails.add(group["email"])
     return group_emails
@@ -107,7 +199,7 @@ def _map_group_email_to_member_emails(
             admin_service.members().list,
             list_key="members",
             groupKey=group_email,
-            fields="members(email)",
+            fields="members(email),nextPageToken",
         ):
             group_member_emails.add(member["email"])
 
@@ -118,6 +210,7 @@ def _map_group_email_to_member_emails(
 def _build_onyx_groups(
     drive_id_to_members_map: dict[str, tuple[set[str], set[str]]],
     group_email_to_member_emails_map: dict[str, set[str]],
+    folder_info: list[FolderInfo],
 ) -> list[ExternalUserGroup]:
     onyx_groups: list[ExternalUserGroup] = []
 
@@ -125,13 +218,52 @@ def _build_onyx_groups(
     # This is because having drive level access means you have
     # irrevocable access to all the files in the drive.
     for drive_id, (group_emails, user_emails) in drive_id_to_members_map.items():
-        all_member_emails: set[str] = user_emails
+        drive_member_emails: set[str] = user_emails
         for group_email in group_emails:
-            all_member_emails.update(group_email_to_member_emails_map[group_email])
+            if group_email not in group_email_to_member_emails_map:
+                logger.warning(
+                    f"Group email {group_email} for drive {drive_id} not found in "
+                    "group_email_to_member_emails_map"
+                )
+                continue
+            drive_member_emails.update(group_email_to_member_emails_map[group_email])
         onyx_groups.append(
             ExternalUserGroup(
                 id=drive_id,
-                user_emails=list(all_member_emails),
+                user_emails=list(drive_member_emails),
+            )
+        )
+
+    # Convert all folder permissions to onyx groups
+    for folder in folder_info:
+        anyone_can_access = False
+        folder_member_emails: set[str] = set()
+        for permission in folder.permissions:
+            if permission.type == PermissionType.USER:
+                if permission.email_address is None:
+                    logger.warning(
+                        f"User email is None for folder {folder.id} permission {permission}"
+                    )
+                    continue
+                folder_member_emails.add(permission.email_address)
+            elif permission.type == PermissionType.GROUP:
+                if permission.email_address not in group_email_to_member_emails_map:
+                    logger.warning(
+                        f"Group email {permission.email_address} for folder {folder.id} "
+                        "not found in group_email_to_member_emails_map"
+                    )
+                    continue
+                folder_member_emails.update(
+                    group_email_to_member_emails_map[permission.email_address]
+                )
+            elif permission.type == PermissionType.ANYONE:
+                anyone_can_access = True
+
+        onyx_groups.append(
+            ExternalUserGroup(
+                id=folder.id,
+                user_emails=list(folder_member_emails),
+                gives_anyone_access=anyone_can_access,
             )
         )
 
@@ -168,6 +300,12 @@ def gdrive_group_sync(
         admin_service, google_drive_connector.google_domain
     )
 
+    # Get all folder permissions
+    folder_info = _get_all_folders(
+        google_drive_connector=google_drive_connector,
+        skip_folders_without_permissions=True,
+    )
+
     # Map group emails to their members
     group_email_to_member_emails_map = _map_group_email_to_member_emails(
         admin_service, all_group_emails
@@ -177,6 +315,7 @@ def gdrive_group_sync(
     onyx_groups = _build_onyx_groups(
         drive_id_to_members_map=drive_id_to_members_map,
         group_email_to_member_emails_map=group_email_to_member_emails_map,
+        folder_info=folder_info,
     )
 
     return onyx_groups

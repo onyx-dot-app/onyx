@@ -16,7 +16,7 @@ env:
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
-
+  PLATFORM_PAIR: linux-amd64
 jobs:
   integration-tests-mit:
     # See https://runs-on.com/runners/linux/
@@ -24,7 +24,38 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+      - run: |
+          python -m pip install --upgrade pip
+          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
+          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
 
+      - name: Generate OpenAPI schema
+        working-directory: ./backend
+        env:
+          PYTHONPATH: "."
+        run: |
+          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
+
+      - name: Generate OpenAPI Python client
+        working-directory: ./backend
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/backend/generated:/local" \
+            openapitools/openapi-generator-cli generate \
+            -i /local/openapi.json \
+            -g python \
+            -o /local/onyx_openapi_client \
+            --package-name onyx_openapi_client
+            
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -61,8 +92,8 @@ jobs:
           tags: onyxdotapp/onyx-backend:test
           push: false
           load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/backend/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/backend/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
       - name: Build Model Server Docker image
         uses: ./.github/actions/custom-build-and-push
@@ -73,8 +104,8 @@ jobs:
           tags: onyxdotapp/onyx-model-server:test
           push: false
           load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/model-server/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
       - name: Build integration test Docker image
         uses: ./.github/actions/custom-build-and-push
@@ -85,8 +116,8 @@ jobs:
           tags: onyxdotapp/onyx-integration:test
           push: false
           load: true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/mit-integration-tests/integration-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       - name: Start Docker containers
@@ -152,6 +183,8 @@ jobs:
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=postgres \
+            -e DB_READONLY_USER=db_readonly_user \
+            -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_POOL_PRE_PING=true \
             -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \

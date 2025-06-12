@@ -1,3 +1,4 @@
+import gc
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -169,18 +170,29 @@ def _bulk_retrieve_from_salesforce(
     2. the list of CSV's written into the target directory
     """
 
-    bulk_2_handler = SFBulk2Handler(
+    bulk_2_handler: SFBulk2Handler | None = SFBulk2Handler(
         session_id=sf_client.session_id,
         bulk2_url=sf_client.bulk2_url,
         proxies=sf_client.proxies,
         session=sf_client.session,
     )
-    bulk_2_type = SFBulk2Type(
+    if not bulk_2_handler:
+        return sf_type, None
+
+    # NOTE(rkuo): there are signs this download is allocating large
+    # amounts of memory instead of streaming the results to disk.
+    # we're doing a gc.collect to try and mitigate this.
+
+    # see https://github.com/simple-salesforce/simple-salesforce/issues/428 for a
+    # possible solution
+    bulk_2_type: SFBulk2Type | None = SFBulk2Type(
         object_name=sf_type,
         bulk2_url=bulk_2_handler.bulk2_url,
         headers=bulk_2_handler.headers,
         session=bulk_2_handler.session,
     )
+    if not bulk_2_type:
+        return sf_type, None
 
     logger.info(f"Downloading {sf_type}")
 
@@ -191,7 +203,7 @@ def _bulk_retrieve_from_salesforce(
         results = bulk_2_type.download(
             query=query,
             path=target_dir,
-            max_records=1000000,
+            max_records=500000,
         )
 
         # prepend each downloaded csv with the object type (delimiter = '.')
@@ -203,14 +215,19 @@ def _bulk_retrieve_from_salesforce(
             new_file_path = os.path.join(directory, new_filename)
             os.rename(original_file_path, new_file_path)
             all_download_paths.append(new_file_path)
-        logger.info(f"Downloaded {sf_type} to {all_download_paths}")
-        return sf_type, all_download_paths
     except Exception as e:
         logger.error(
             f"Failed to download salesforce csv for object type {sf_type}: {e}"
         )
         logger.warning(f"Exceptioning query for object type {sf_type}: {query}")
         return sf_type, None
+    finally:
+        bulk_2_handler = None
+        bulk_2_type = None
+        gc.collect()
+
+    logger.info(f"Downloaded {sf_type} to {all_download_paths}")
+    return sf_type, all_download_paths
 
 
 def fetch_all_csvs_in_parallel(
@@ -268,7 +285,8 @@ def fetch_all_csvs_in_parallel(
     )
 
     # Run the bulk retrieve in parallel
-    with ThreadPoolExecutor() as executor:
+    # limit to 4 to help with memory usage
+    with ThreadPoolExecutor(max_workers=4) as executor:
         results = executor.map(
             lambda object_type: _bulk_retrieve_from_salesforce(
                 sf_type=object_type,

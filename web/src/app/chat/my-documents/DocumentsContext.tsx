@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import * as documentsService from "@/services/documentsService";
-import { FileDescriptor } from "../interfaces";
+import { ChatFileType, FileDescriptor } from "../interfaces";
 
 export interface FolderResponse {
   id: number;
@@ -29,6 +29,7 @@ export enum FileStatus {
   REINDEXING = "REINDEXING",
 }
 
+// this maps to UserFileSnapshot on the back end
 export type FileResponse = {
   id: number;
   name: string;
@@ -45,6 +46,7 @@ export type FileResponse = {
   file_type?: string;
   link_url?: string | null;
   status: FileStatus;
+  chat_file_type: ChatFileType;
 };
 
 export interface FileUploadResponse {
@@ -160,6 +162,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
 
   const refreshFolders = async () => {
     try {
+      console.log("fetching folders");
       const data = await documentsService.fetchFolders();
       setFolders(data);
     } catch (error) {

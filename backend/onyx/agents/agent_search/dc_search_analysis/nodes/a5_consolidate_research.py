@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import cast
 
 from langchain_core.messages import HumanMessage
@@ -12,6 +11,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
 )
+from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.prompts.agents.dc_prompts import DC_FORMATTING_NO_BASE_DATA_PROMPT
@@ -28,10 +28,8 @@ def consolidate_research(
     """
     LangGraph node to start the agentic search process.
     """
-    datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
 
     search_tool = graph_config.tooling.search_tool
 
@@ -46,11 +44,11 @@ def consolidate_research(
         writer,
     )
 
-    if search_tool is None or graph_config.inputs.search_request.persona is None:
+    if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     # Populate prompt
-    instructions = graph_config.inputs.search_request.persona.prompts[0].system_prompt
+    instructions = graph_config.inputs.persona.prompts[0].system_prompt
 
     try:
         agent_5_instructions = extract_section(
@@ -115,42 +113,20 @@ def consolidate_research(
         )
     ]
 
-    dispatch_timings: list[float] = []
-
-    primary_model = graph_config.tooling.primary_llm
-
-    def stream_initial_answer() -> list[str]:
-        response: list[str] = []
-        for message in primary_model.stream(msg, timeout_override=30, max_tokens=None):
-            # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-            content = message.content
-            if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected content to be a string, but got {type(content)}"
-                )
-            start_stream_token = datetime.now()
-
-            write_custom_event(
-                "initial_agent_answer",
-                AgentAnswerPiece(
-                    answer_piece=content,
-                    level=0,
-                    level_question_num=0,
-                    answer_type="agent_level_answer",
-                ),
-                writer,
-            )
-            end_stream_token = datetime.now()
-            dispatch_timings.append(
-                (end_stream_token - start_stream_token).microseconds
-            )
-            response.append(content)
-        return response
-
     try:
         _ = run_with_timeout(
             60,
-            stream_initial_answer,
+            lambda: stream_llm_answer(
+                llm=graph_config.tooling.primary_llm,
+                prompt=msg,
+                event_name="initial_agent_answer",
+                writer=writer,
+                agent_answer_level=0,
+                agent_answer_question_num=0,
+                agent_answer_type="agent_level_answer",
+                timeout_override=30,
+                max_tokens=None,
+            ),
         )
 
     except Exception as e:

@@ -40,6 +40,10 @@ def create_user_files(
     db_session: Session,
     link_url: str | None = None,
 ) -> list[UserFile]:
+    """NOTE(rkuo): This function can take -1 (RECENT_DOCS_FOLDER_ID for folder_id.
+    Document what this does?
+    """
+
     # NOTE: At the moment, zip metadata is not used for user files.
     # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(files, db_session)
@@ -54,6 +58,7 @@ def create_user_files(
             name=file.filename,
             token_count=None,
             link_url=link_url,
+            content_type=file.content_type,
         )
         db_session.add(new_file)
         user_files.append(new_file)
@@ -61,14 +66,17 @@ def create_user_files(
     return user_files
 
 
-def create_user_file_with_indexing(
+def upload_files_to_user_files_with_indexing(
     files: List[UploadFile],
     folder_id: int | None,
     user: User,
     db_session: Session,
     trigger_index: bool = True,
 ) -> list[UserFile]:
-    """Create user files and trigger immediate indexing"""
+    """NOTE(rkuo): This function can take -1 (RECENT_DOCS_FOLDER_ID for folder_id.
+    Document what this does?
+
+    Create user files and trigger immediate indexing"""
     # Create the user files first
     user_files = create_user_files(files, folder_id, user, db_session)
 

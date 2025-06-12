@@ -201,7 +201,6 @@ export function TextFormField({
   maxWidth,
   removeLabel,
   min,
-  includeForgotPassword,
   onChange,
   width,
   vertical,
@@ -229,7 +228,6 @@ export function TextFormField({
   explanationLink?: string;
   small?: boolean;
   min?: number;
-  includeForgotPassword?: boolean;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   width?: string;
   vertical?: boolean;
@@ -339,14 +337,6 @@ export function TextFormField({
           placeholder={placeholder}
           autoComplete={autoCompleteDisabled ? "off" : undefined}
         />
-        {includeForgotPassword && (
-          <Link
-            href="/auth/forgot-password"
-            className="absolute right-3 top-1/2 mt-[3px] transform -translate-y-1/2 text-xs text-blue-500 cursor-pointer"
-          >
-            Forgot password?
-          </Link>
-        )}
       </div>
 
       {explanationText && (

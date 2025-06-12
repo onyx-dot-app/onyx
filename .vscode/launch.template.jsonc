@@ -412,6 +412,46 @@
           "group": "3"
         }
       },
+    {
+      // script to generate the openapi schema
+      "name": "Onyx OpenAPI Schema Generator",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "scripts/onyx_openapi_schema.py",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "--filename",
+        "generated/openapi.json",
+      ]
+    },
+    {
+      // script to debug multi tenant db issues
+      "name": "Onyx DB Manager (Top Chunks)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "scripts/debugging/onyx_db.py",
+      "cwd": "${workspaceFolder}/backend",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": "."
+      },
+      "args": [
+        "--password",
+        "your_password_here",
+        "--port",
+        "5433",
+        "--report",
+        "top-chunks",
+        "--filename",
+        "generated/tenants_by_num_docs.csv"
+      ]
+    },
       {
         "name": "Debug React Web App in Chrome",
         "type": "chrome",

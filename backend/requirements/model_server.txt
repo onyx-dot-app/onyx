@@ -14,7 +14,7 @@ torch==2.6.0
 transformers==4.49.0
 uvicorn==0.21.1
 voyageai==0.2.3
-litellm==1.66.3
+litellm==1.72.2
 sentry-sdk[fastapi,celery,starlette]==2.14.0
 aioboto3==14.0.0
 prometheus_fastapi_instrumentator==7.1.0

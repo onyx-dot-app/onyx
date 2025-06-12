@@ -89,9 +89,12 @@ def on_setup_logging(
     app_base.on_setup_logging(loglevel, logfile, format, colorize, **kwargs)
 
 
+base_bootsteps = app_base.get_bootsteps()
+for bootstep in base_bootsteps:
+    celery_app.steps["worker"].add(bootstep)
+
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.monitoring",
-        "onyx.background.celery.tasks.tenant_provisioning",
     ]
 )

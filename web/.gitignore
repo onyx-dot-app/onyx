@@ -41,4 +41,5 @@ next-env.d.ts
 /build-archive.log
 /test-results
 
+# generated clients ... in particular, the API to the Onyx backend itself!
 /src/lib/generated

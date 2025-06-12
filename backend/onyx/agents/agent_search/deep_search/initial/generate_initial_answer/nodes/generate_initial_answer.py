@@ -37,6 +37,7 @@ from onyx.agents.agent_search.shared_graph_utils.constants import (
 from onyx.agents.agent_search.shared_graph_utils.constants import (
     AgentLLMErrorType,
 )
+from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
 from onyx.agents.agent_search.shared_graph_utils.models import InitialAgentResultStats
 from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
@@ -105,7 +106,7 @@ def generate_initial_answer(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     prompt_enrichment_components = get_prompt_enrichment_components(graph_config)
 
     # get all documents cited in sub-questions
@@ -275,46 +276,24 @@ def generate_initial_answer(
 
         agent_error: AgentErrorLog | None = None
 
-        def stream_initial_answer() -> list[str]:
-            response: list[str] = []
-            for message in model.stream(
-                msg,
-                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
-                max_tokens=(
-                    AGENT_MAX_TOKENS_ANSWER_GENERATION
-                    if _should_restrict_tokens(model.config)
-                    else None
-                ),
-            ):
-                # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-                content = message.content
-                if not isinstance(content, str):
-                    raise ValueError(
-                        f"Expected content to be a string, but got {type(content)}"
-                    )
-                start_stream_token = datetime.now()
-
-                write_custom_event(
-                    "initial_agent_answer",
-                    AgentAnswerPiece(
-                        answer_piece=content,
-                        level=0,
-                        level_question_num=0,
-                        answer_type="agent_level_answer",
-                    ),
-                    writer,
-                )
-                end_stream_token = datetime.now()
-                dispatch_timings.append(
-                    (end_stream_token - start_stream_token).microseconds
-                )
-                response.append(content)
-            return response
-
         try:
-            streamed_tokens = run_with_timeout(
+            streamed_tokens, dispatch_timings = run_with_timeout(
                 AGENT_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
-                stream_initial_answer,
+                lambda: stream_llm_answer(
+                    llm=model,
+                    prompt=msg,
+                    event_name="initial_agent_answer",
+                    writer=writer,
+                    agent_answer_level=0,
+                    agent_answer_question_num=0,
+                    agent_answer_type="agent_level_answer",
+                    timeout_override=AGENT_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
+                    max_tokens=(
+                        AGENT_MAX_TOKENS_ANSWER_GENERATION
+                        if _should_restrict_tokens(model.config)
+                        else None
+                    ),
+                ),
             )
 
         except (LLMTimeoutError, TimeoutError):

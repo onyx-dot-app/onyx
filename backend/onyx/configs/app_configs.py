@@ -120,8 +120,10 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", "your-email@gmail.com")
 SMTP_PASS = os.environ.get("SMTP_PASS", "your-gmail-password")
-EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
+
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
+EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS]) or SENDGRID_API_KEY
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
@@ -180,6 +182,13 @@ POSTGRES_API_SERVER_POOL_SIZE = int(
 )
 POSTGRES_API_SERVER_POOL_OVERFLOW = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
+)
+
+POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 10
+)
+POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 5
 )
 
 # defaults to False
@@ -307,6 +316,11 @@ try:
 except ValueError:
     CELERY_WORKER_INDEXING_CONCURRENCY = CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT
 
+
+CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
+)
+
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 1024
 
@@ -351,6 +365,11 @@ NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP = (
     == "true"
 )
 
+
+#####
+# Confluence Connector Configs
+#####
+
 CONFLUENCE_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("CONFLUENCE_CONNECTOR_LABELS_TO_SKIP", "").split(
@@ -372,6 +391,26 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
 # large files from freezing indexing. 200,000 is ~100 google doc pages.
 CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
     os.environ.get("CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD", 200_000)
+)
+
+# A JSON-formatted array. Each item in the array should have the following structure:
+# {
+#     "user_id": "1234567890",
+#     "username": "bob",
+#     "display_name": "Bob Fitzgerald",
+#     "email": "bob@example.com",
+#     "type": "known"
+# }
+_RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = os.environ.get(
+    "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE", ""
+)
+CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
+    list[dict[str, str]] | None,
+    (
+        json.loads(_RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE)
+        if _RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+        else None
+    ),
 )
 
 # Due to breakages in the confluence API, the timezone offset must be specified client side
@@ -520,7 +559,7 @@ INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 # Enable multi-threaded embedding model calls for parallel processing
 # Note: only applies for API-based embedding models
 INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
-    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 1
+    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
 
 # During an indexing attempt, specifies the number of batches which are allowed to
@@ -628,6 +667,8 @@ AZURE_DALLE_API_KEY = os.environ.get("AZURE_DALLE_API_KEY")
 AZURE_DALLE_API_BASE = os.environ.get("AZURE_DALLE_API_BASE")
 AZURE_DALLE_DEPLOYMENT_NAME = os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
 
+# configurable image model
+IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
 
 # Use managed Vespa (Vespa Cloud). If set, must also set VESPA_CLOUD_URL, VESPA_CLOUD_CERT_PATH and VESPA_CLOUD_KEY_PATH
 MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
@@ -645,6 +686,21 @@ EXPECTED_API_KEY = os.environ.get(
 # API configuration
 CONTROL_PLANE_API_BASE_URL = os.environ.get(
     "CONTROL_PLANE_API_BASE_URL", "http://localhost:8082"
+)
+
+OAUTH_SLACK_CLIENT_ID = os.environ.get("OAUTH_SLACK_CLIENT_ID", "")
+OAUTH_SLACK_CLIENT_SECRET = os.environ.get("OAUTH_SLACK_CLIENT_SECRET", "")
+OAUTH_CONFLUENCE_CLOUD_CLIENT_ID = os.environ.get(
+    "OAUTH_CONFLUENCE_CLOUD_CLIENT_ID", ""
+)
+OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET = os.environ.get(
+    "OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET", ""
+)
+OAUTH_JIRA_CLOUD_CLIENT_ID = os.environ.get("OAUTH_JIRA_CLOUD_CLIENT_ID", "")
+OAUTH_JIRA_CLOUD_CLIENT_SECRET = os.environ.get("OAUTH_JIRA_CLOUD_CLIENT_SECRET", "")
+OAUTH_GOOGLE_DRIVE_CLIENT_ID = os.environ.get("OAUTH_GOOGLE_DRIVE_CLIENT_ID", "")
+OAUTH_GOOGLE_DRIVE_CLIENT_SECRET = os.environ.get(
+    "OAUTH_GOOGLE_DRIVE_CLIENT_SECRET", ""
 )
 
 # JWT configuration
@@ -703,4 +759,10 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
+)
+
+# Knowledge Graph Read Only User Configuration
+DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
+DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
+    os.environ.get("DB_READONLY_PASSWORD") or "password"
 )

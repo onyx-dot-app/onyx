@@ -367,21 +367,23 @@ def monitor_ccpair_indexing_taskset(
 
     redis_connector_index.reset()
 
-    # mark the CC Pair as `ACTIVE` if it's not already
+    # mark the CC Pair as `ACTIVE` if the attempt was a success and the
+    # CC Pair is not active not already
+    # This should never technically be in this state, but we'll handle it anyway
+    index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
+    index_attempt_is_successful = index_attempt and index_attempt.status.is_successful()
     if (
-        # it should never technically be in this state, but we'll handle it anyway
-        cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
+        index_attempt_is_successful
+        and cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
         or cc_pair.status == ConnectorCredentialPairStatus.INITIAL_INDEXING
     ):
         cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
         db_session.commit()
 
     # if the index attempt is successful, clear the repeated error state
-    if cc_pair.in_repeated_error_state:
-        index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
-        if index_attempt and index_attempt.status.is_successful():
-            cc_pair.in_repeated_error_state = False
-            db_session.commit()
+    if cc_pair.in_repeated_error_state and index_attempt_is_successful:
+        cc_pair.in_repeated_error_state = False
+        db_session.commit()
 
 
 @shared_task(
@@ -507,7 +509,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         search_settings_instance.id
                     )
                     if redis_connector_index.fenced:
-                        task_logger.info(
+                        task_logger.debug(
                             f"check_for_indexing - Skipping fenced connector: "
                             f"cc_pair={cc_pair_id} search_settings={search_settings_instance.id}"
                         )
@@ -529,14 +531,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
                     ):
-                        task_logger.info(
+                        task_logger.debug(
                             f"check_for_indexing - Not indexing cc_pair_id: {cc_pair_id} "
                             f"search_settings={search_settings_instance.id}, "
                             f"secondary_index_building={len(search_settings_list) > 1}"
                         )
                         continue
                     else:
-                        task_logger.info(
+                        task_logger.debug(
                             f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
                             f"search_settings={search_settings_instance.id}, "
                             f"secondary_index_building={len(search_settings_list) > 1}"
@@ -896,7 +898,16 @@ def connector_indexing_task(
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
-        raise e
+
+        # special bulletproofing ... truncate long exception messages
+        # for exception types that require more args, this will fail
+        # thus the try/except
+        try:
+            sanitized_e = type(e)(str(e)[:1024])
+            sanitized_e.__traceback__ = e.__traceback__
+            raise sanitized_e
+        except Exception:
+            raise e
 
     finally:
         if lock.owned():

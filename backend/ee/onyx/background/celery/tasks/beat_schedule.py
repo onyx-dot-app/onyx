@@ -1,6 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
+from ee.onyx.configs.app_configs import CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS
 from onyx.background.celery.tasks.beat_schedule import (
     beat_cloud_tasks as base_beat_system_tasks,
 )
@@ -13,6 +14,7 @@ from onyx.background.celery.tasks.beat_schedule import (
     get_tasks_to_schedule as base_get_tasks_to_schedule,
 )
 from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from shared_configs.configs import MULTI_TENANT
 
@@ -33,10 +35,20 @@ ee_beat_task_templates.extend(
         {
             "name": "check-ttl-management",
             "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
+            "schedule": timedelta(hours=CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
+            "name": "export-query-history-cleanup-task",
+            "task": OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
             "schedule": timedelta(hours=1),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
+                "queue": OnyxCeleryQueues.CSV_GENERATION,
             },
         },
     ]
@@ -58,10 +70,20 @@ if not MULTI_TENANT:
         {
             "name": "check-ttl-management",
             "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
+            "schedule": timedelta(hours=CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
+            "name": "export-query-history-cleanup-task",
+            "task": OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
             "schedule": timedelta(hours=1),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
+                "queue": OnyxCeleryQueues.CSV_GENERATION,
             },
         },
     ]

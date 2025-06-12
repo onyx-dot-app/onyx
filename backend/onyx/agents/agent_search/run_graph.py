@@ -13,11 +13,13 @@ from onyx.agents.agent_search.dc_search_analysis.graph_builder import (
 )
 from onyx.agents.agent_search.dc_search_analysis.states import MainInput as DCMainInput
 from onyx.agents.agent_search.deep_search.main.graph_builder import (
-    main_graph_builder as main_graph_builder_a,
+    agent_search_graph_builder as agent_search_graph_builder,
 )
 from onyx.agents.agent_search.deep_search.main.states import (
     MainInput as MainInput,
 )
+from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
+from onyx.agents.agent_search.kb_search.states import MainInput as KBMainInput
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.chat.models import AgentAnswerPiece
@@ -30,8 +32,6 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
 from onyx.chat.models import ToolResponse
-from onyx.configs.agent_configs import ALLOW_REFINEMENT
-from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
@@ -51,7 +51,6 @@ def _parse_agent_event(
     Parse the event into a typed object.
     Return None if we are not interested in the event.
     """
-
     event_type = event["event"]
 
     # We always just yield the event data, but this piece is useful for two development reasons:
@@ -80,13 +79,18 @@ def _parse_agent_event(
             return cast(RefinedAnswerImprovement, event["data"])
         elif event["name"] == "refined_sub_question_creation_error":
             return cast(StreamingError, event["data"])
+        else:
+            logger.error(f"Unknown event name: {event['name']}")
+            return None
+
+    logger.error(f"Unknown event type: {event_type}")
     return None
 
 
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput | DCMainInput,
+    graph_input: BasicInput | MainInput | DCMainInput | KBMainInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -100,12 +104,8 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput | DCMainInput,
+    input: BasicInput | MainInput | DCMainInput | KBMainInput,
 ) -> AnswerStream:
-    config.behavior.perform_initial_search_decomposition = (
-        INITIAL_SEARCH_DECOMPOSITION_ENABLED
-    )
-    config.behavior.allow_refinement = ALLOW_REFINEMENT
 
     for event in manage_sync_streaming(
         compiled_graph=compiled_graph, config=config, graph_input=input
@@ -121,22 +121,21 @@ def run_graph(
 def load_compiled_graph() -> CompiledStateGraph:
     global _COMPILED_GRAPH
     if _COMPILED_GRAPH is None:
-        graph = main_graph_builder_a()
+        graph = agent_search_graph_builder()
         _COMPILED_GRAPH = graph.compile()
     return _COMPILED_GRAPH
 
 
-def run_main_graph(
+def run_agent_search_graph(
     config: GraphConfig,
 ) -> AnswerStream:
     compiled_graph = load_compiled_graph()
 
     input = MainInput(log_messages=[])
-
     # Agent search is not a Tool per se, but this is helpful for the frontend
     yield ToolCallKickoff(
         tool_name="agent_search_0",
-        tool_args={"query": config.inputs.search_request.query},
+        tool_args={"query": config.inputs.prompt_builder.raw_user_query},
     )
     yield from run_graph(compiled_graph, config, input)
 
@@ -150,13 +149,30 @@ def run_basic_graph(
     return run_graph(compiled_graph, config, input)
 
 
+def run_kb_graph(
+    config: GraphConfig,
+) -> AnswerStream:
+    graph = kb_graph_builder()
+    compiled_graph = graph.compile()
+    input = KBMainInput(log_messages=[])
+
+    yield ToolCallKickoff(
+        tool_name="agent_search_0",
+        tool_args={"query": config.inputs.prompt_builder.raw_user_query},
+    )
+
+    yield from run_graph(compiled_graph, config, input)
+
+
 def run_dc_graph(
     config: GraphConfig,
 ) -> AnswerStream:
     graph = divide_and_conquer_graph_builder()
     compiled_graph = graph.compile()
     input = DCMainInput(log_messages=[])
-    config.inputs.search_request.query = config.inputs.search_request.query.strip()
+    config.inputs.prompt_builder.raw_user_query = (
+        config.inputs.prompt_builder.raw_user_query.strip()
+    )
     return run_graph(compiled_graph, config, input)
 
 
@@ -164,7 +180,7 @@ if __name__ == "__main__":
     for _ in range(1):
         query_start_time = datetime.now()
         logger.debug(f"Start at {query_start_time}")
-        graph = main_graph_builder_a()
+        graph = agent_search_graph_builder()
         compiled_graph = graph.compile()
         query_end_time = datetime.now()
         logger.debug(f"Graph compiled in {query_end_time - query_start_time} seconds")

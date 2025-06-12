@@ -92,9 +92,8 @@ const SortableFolder: React.FC<SortableFolderProps> = (props) => {
       className="pr-3 ml-4 overflow-visible flex items-start"
       style={style}
       {...attributes}
-      {...listeners}
     >
-      <FolderDropdown ref={ref} {...props} />
+      <FolderDropdown {...listeners} ref={ref} {...props} />
     </div>
   );
 };

@@ -26,7 +26,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import SearchRequest
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
@@ -51,15 +50,21 @@ def answer_instance(
         "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
-    return _answer_fixture_impl(mock_llm, answer_style_config, prompt_config)
+    return _answer_fixture_impl(mock_llm, answer_style_config, prompt_config, mocker)
 
 
 def _answer_fixture_impl(
     mock_llm: LLM,
     answer_style_config: AnswerStyleConfig,
     prompt_config: PromptConfig,
+    mocker: MockerFixture,
     rerank_settings: RerankingDetails | None = None,
 ) -> Answer:
+    mock_db_session = Mock(spec=Session)
+    mock_query = Mock()
+    mock_query.all.return_value = []
+    mock_db_session.query.return_value = mock_query
+
     return Answer(
         prompt_builder=AnswerPromptBuilder(
             user_message=default_build_user_message(
@@ -74,12 +79,13 @@ def _answer_fixture_impl(
             raw_user_query=QUERY,
             raw_user_uploaded_files=[],
         ),
-        db_session=Mock(spec=Session),
+        db_session=mock_db_session,
         answer_style_config=answer_style_config,
         llm=mock_llm,
         fast_llm=mock_llm,
         force_use_tool=ForceUseTool(force_use=False, tool_name="", args=None),
-        search_request=SearchRequest(query=QUERY, rerank_settings=rerank_settings),
+        persona=None,
+        rerank_settings=rerank_settings,
         chat_session_id=UUID("123e4567-e89b-12d3-a456-426614174000"),
         current_agent_message_id=0,
     )
@@ -404,13 +410,14 @@ def test_no_slow_reranking(
         )
     )
     answer_instance = _answer_fixture_impl(
-        mock_llm, answer_style_config, prompt_config, rerank_settings=rerank_settings
+        mock_llm,
+        answer_style_config,
+        prompt_config,
+        mocker,
+        rerank_settings=rerank_settings,
     )
 
-    assert (
-        answer_instance.graph_config.inputs.search_request.rerank_settings
-        == rerank_settings
-    )
+    assert answer_instance.graph_config.inputs.rerank_settings == rerank_settings
     assert (
         answer_instance.graph_config.behavior.allow_agent_reranking == gpu_enabled
         or not is_local_model

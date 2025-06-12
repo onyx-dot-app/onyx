@@ -1,5 +1,5 @@
-import React, { useContext, useEffect, useRef, useState } from "react";
-import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FiPlusCircle, FiPlus, FiX, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
-import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
+import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
@@ -37,8 +37,9 @@ import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { getProviderIcon } from "@/app/admin/configuration/llm/interfaces";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
+import { UploadIntent } from "../ChatPage";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -237,6 +238,13 @@ export function ChatInputBar({
     setCurrentMessageFiles,
   } = useDocumentsContext();
 
+  // Create a Set of IDs from currentMessageFiles for efficient lookup
+  // Assuming FileDescriptor.id corresponds conceptually to FileResponse.file_id or FileResponse.id
+  const currentMessageFileIds = useMemo(
+    () => new Set(currentMessageFiles.map((f) => String(f.id))), // Ensure IDs are strings for comparison
+    [currentMessageFiles]
+  );
+
   const settings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -254,8 +262,9 @@ export function ChatInputBar({
     if (items) {
       const pastedFiles = [];
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file") {
-          const file = items[i].getAsFile();
+        const item = items[i];
+        if (item && item.kind === "file") {
+          const file = item.getAsFile();
           if (file) pastedFiles.push(file);
         }
       }
@@ -352,26 +361,35 @@ export function ChatInputBar({
     handlePromptInput(text);
   };
 
+  let startFilterAt = "";
+  if (message !== undefined) {
+    const message_segments = message
+      .slice(message.lastIndexOf("@") + 1)
+      .split(/\s/);
+    if (message_segments[0]) {
+      startFilterAt = message_segments[0].toLowerCase();
+    }
+  }
+
   const assistantTagOptions = assistantOptions.filter((assistant) =>
-    assistant.name.toLowerCase().startsWith(
-      message
-        .slice(message.lastIndexOf("@") + 1)
-        .split(/\s/)[0]
-        .toLowerCase()
-    )
+    assistant.name.toLowerCase().startsWith(startFilterAt)
   );
+
+  let startFilterSlash = "";
+  if (message !== undefined) {
+    const message_segments = message
+      .slice(message.lastIndexOf("/") + 1)
+      .split(/\s/);
+    if (message_segments[0]) {
+      startFilterSlash = message_segments[0].toLowerCase();
+    }
+  }
 
   const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
   const filteredPrompts = inputPrompts.filter(
     (prompt) =>
-      prompt.active &&
-      prompt.prompt.toLowerCase().startsWith(
-        message
-          .slice(message.lastIndexOf("/") + 1)
-          .split(/\s/)[0]
-          .toLowerCase()
-      )
+      prompt.active && prompt.prompt.toLowerCase().startsWith(startFilterSlash)
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -394,25 +412,28 @@ export function ChatInputBar({
         if (showPrompts) {
           const selectedPrompt =
             filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
-          updateInputPrompt(selectedPrompt);
+          if (selectedPrompt) {
+            updateInputPrompt(selectedPrompt);
+          }
         } else {
           const option =
             assistantTagOptions[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
-          updatedTaggedAssistant(option);
+          if (option) {
+            updatedTaggedAssistant(option);
+          }
         }
       }
     }
+
     if (!showPrompts && !showSuggestions) {
       return;
     }
-
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setTabbingIconIndex((tabbingIconIndex) =>
         Math.min(
           tabbingIconIndex + 1,
-          // showPrompts ? filteredPrompts.length :
-          assistantTagOptions.length
+          showPrompts ? filteredPrompts.length : assistantTagOptions.length
         )
       );
     } else if (e.key === "ArrowUp") {
@@ -422,6 +443,45 @@ export function ChatInputBar({
       );
     }
   };
+
+  // Combine selectedFiles and currentMessageFiles for unified rendering
+  const allFiles = useMemo(() => {
+    const combined: Array<{
+      id: string;
+      name: string;
+      chatFileType: ChatFileType;
+      isUploading?: boolean;
+      source: "selected" | "current";
+      originalFile: any;
+    }> = [];
+
+    // Add selected files (excluding those already in currentMessageFiles)
+    selectedFiles.forEach((file) => {
+      if (!currentMessageFileIds.has(String(file.file_id || file.id))) {
+        combined.push({
+          id: String(file.file_id || file.id),
+          name: file.name,
+          chatFileType: file.chat_file_type,
+          source: "selected",
+          originalFile: file,
+        });
+      }
+    });
+
+    // Add current message files
+    currentMessageFiles.forEach((file, index) => {
+      combined.push({
+        id: file.id,
+        name: file.name || `File${file.id}`,
+        chatFileType: file.type,
+        isUploading: file.isUploading,
+        source: "current",
+        originalFile: file,
+      });
+    });
+
+    return combined;
+  }, [selectedFiles, currentMessageFiles, currentMessageFileIds]);
 
   return (
     <div id="onyx-chat-input">
@@ -440,13 +500,14 @@ export function ChatInputBar({
               ref={suggestionsRef}
               className="text-sm absolute w-[calc(100%-2rem)] top-0 transform -translate-y-full"
             >
-              <div className="rounded-lg py-1 sm-1.5 bg-input-background border border-border dark:border-none shadow-lg px-1.5 mt-2 z-10">
+              <div className="rounded-lg py-1 overflow-y-auto max-h-[200px] sm-1.5 bg-input-background border border-border dark:border-none shadow-lg px-1.5 mt-2 z-10">
                 {assistantTagOptions.map((currentAssistant, index) => (
                   <button
                     key={index}
                     className={`px-2 ${
-                      tabbingIconIndex == index && "bg-neutral-200"
-                    } rounded items-center rounded-lg content-start flex gap-x-1 py-2 w-full hover:bg-neutral-200/90 cursor-pointer`}
+                      tabbingIconIndex == index &&
+                      "bg-neutral-200 dark:bg-neutral-800"
+                    } rounded items-center rounded-lg content-start flex gap-x-1 py-2 w-full hover:bg-neutral-200/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                     onClick={() => {
                       updatedTaggedAssistant(currentAssistant);
                     }}
@@ -468,8 +529,8 @@ export function ChatInputBar({
                   target="_self"
                   className={`${
                     tabbingIconIndex == assistantTagOptions.length &&
-                    "bg-neutral-200"
-                  } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full items-center hover:bg-neutral-200/90 cursor-pointer`}
+                    "bg-neutral-200 dark:bg-neutral-800"
+                  } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full items-center hover:bg-neutral-200/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                   href="/assistants/new"
                 >
                   <FiPlus size={17} />
@@ -484,14 +545,15 @@ export function ChatInputBar({
               ref={suggestionsRef}
               className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full"
             >
-              <div className="rounded-lg py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
+              <div className="rounded-lg overflow-y-auto max-h-[200px] py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
                 {filteredPrompts.map(
                   (currentPrompt: InputPrompt, index: number) => (
                     <button
                       key={index}
                       className={`px-2 ${
-                        tabbingIconIndex == index && "bg-background-dark/75"
-                      } rounded content-start flex gap-x-1 py-1.5 w-full hover:bg-background-dark/90 cursor-pointer`}
+                        tabbingIconIndex == index &&
+                        "bg-background-dark/75 dark:bg-neutral-800/75"
+                      } rounded content-start flex gap-x-1 py-1.5 w-full hover:bg-background-dark/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                       onClick={() => {
                         updateInputPrompt(currentPrompt);
                       }}
@@ -509,8 +571,8 @@ export function ChatInputBar({
                   target="_self"
                   className={`${
                     tabbingIconIndex == filteredPrompts.length &&
-                    "bg-background-dark/75"
-                  } px-3 flex gap-x-1 py-2 w-full rounded-lg items-center hover:bg-background-dark/90 cursor-pointer`}
+                    "bg-background-dark/75 dark:bg-neutral-800/75"
+                  } px-3 flex gap-x-1 py-2 w-full rounded-lg items-center hover:bg-background-dark/90 dark:hover:bg-neutral-800/90 cursor-pointer`}
                   href="/chat/input-prompts"
                 >
                   <FiPlus size={17} />
@@ -520,7 +582,9 @@ export function ChatInputBar({
             </div>
           )}
 
-          <UnconfiguredProviderText showConfigureAPIKey={showConfigureAPIKey} />
+          <UnconfiguredLlmProviderText
+            showConfigureAPIKey={showConfigureAPIKey}
+          />
           <div className="w-full h-[10px]"></div>
           <div
             className="
@@ -552,21 +616,6 @@ export function ChatInputBar({
                     {alternativeAssistant.name}
                   </p>
                   <div className="flex gap-x-1 ml-auto">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button>
-                            <Hoverable icon={FiInfo} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-xs flex flex-wrap">
-                            {alternativeAssistant.description}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
                     <Hoverable
                       icon={FiX}
                       onClick={() => setAlternativeAssistant(null)}
@@ -661,14 +710,61 @@ export function ChatInputBar({
                       />
                     ))}
 
-                  {selectedFiles.map((file) => (
-                    <SourceChip
-                      key={file.id}
-                      icon={<FileIcon size={16} />}
-                      title={file.name}
-                      onRemove={() => removeSelectedFile(file)}
-                    />
-                  ))}
+                  {/* Unified file rendering section for both selected and current message files */}
+                  {allFiles.map((file, index) =>
+                    file.chatFileType === ChatFileType.IMAGE ? (
+                      <SourceChip
+                        key={`${file.source}-${file.id}-${index}`}
+                        icon={
+                          file.isUploading ? (
+                            <FiLoader className="animate-spin" />
+                          ) : (
+                            <img
+                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
+                              src={buildImgUrl(file.id)}
+                              alt={file.name || "File image"}
+                            />
+                          )
+                        }
+                        title={file.name}
+                        onRemove={() => {
+                          if (file.source === "selected") {
+                            removeSelectedFile(file.originalFile);
+                          } else {
+                            setCurrentMessageFiles(
+                              currentMessageFiles.filter(
+                                (fileInFilter) => fileInFilter.id !== file.id
+                              )
+                            );
+                          }
+                        }}
+                      />
+                    ) : (
+                      <SourceChip
+                        key={`${file.source}-${file.id}-${index}`}
+                        icon={
+                          <FileIcon
+                            className={
+                              file.source === "current" ? "text-red-500" : ""
+                            }
+                            size={16}
+                          />
+                        }
+                        title={file.name}
+                        onRemove={() => {
+                          if (file.source === "selected") {
+                            removeSelectedFile(file.originalFile);
+                          } else {
+                            setCurrentMessageFiles(
+                              currentMessageFiles.filter(
+                                (fileInFilter) => fileInFilter.id !== file.id
+                              )
+                            );
+                          }
+                        }}
+                      />
+                    )
+                  )}
                   {selectedFolders.map((folder) => (
                     <SourceChip
                       key={folder.id}
@@ -736,45 +832,6 @@ export function ChatInputBar({
                       title={`${selectedDocuments.length} selected`}
                       onRemove={removeDocs}
                     />
-                  )}
-                  {currentMessageFiles.map((file, index) =>
-                    file.type === ChatFileType.IMAGE ? (
-                      <SourceChip
-                        key={`file-${index}`}
-                        icon={
-                          file.isUploading ? (
-                            <FiLoader className="animate-spin" />
-                          ) : (
-                            <img
-                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
-                              src={buildImgUrl(file.id)}
-                              alt={file.name || "Uploaded image"}
-                            />
-                          )
-                        }
-                        title={file.name || "File" + file.id}
-                        onRemove={() => {
-                          setCurrentMessageFiles(
-                            currentMessageFiles.filter(
-                              (fileInFilter) => fileInFilter.id !== file.id
-                            )
-                          );
-                        }}
-                      />
-                    ) : (
-                      <SourceChip
-                        key={`file-${index}`}
-                        icon={<FileIcon className="text-red-500" size={16} />}
-                        title={file.name || "File"}
-                        onRemove={() => {
-                          setCurrentMessageFiles(
-                            currentMessageFiles.filter(
-                              (fileInFilter) => fileInFilter.id !== file.id
-                            )
-                          );
-                        }}
-                      />
-                    )
                   )}
                 </div>
               </div>

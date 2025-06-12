@@ -16,11 +16,11 @@ from fastapi import status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
-from sqlalchemy.orm import Session
 from starlette.types import Lifespan
 
 from onyx import __version__
@@ -41,11 +41,14 @@ from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE
 from onyx.configs.app_configs import SYSTEM_RECURSION_LIMIT
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import SqlEngine
 from onyx.db.engine import warm_up_connections
 from onyx.server.api_key.api import router as api_key_router
@@ -157,6 +160,20 @@ def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+def use_route_function_names_as_operation_ids(app: FastAPI) -> None:
+    """
+    OpenAPI generation defaults to naming the operation with the
+    function + route + HTTP method, which usually looks very redundant.
+
+    This function changes the operation IDs to be just the function name.
+
+    Should be called only after all routes have been added.
+    """
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            route.operation_id = route.name
+
+
 def include_router_with_global_prefix_prepended(
     application: FastAPI, router: APIRouter, **kwargs: Any
 ) -> None:
@@ -206,7 +223,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
     )
-    engine = SqlEngine.get_engine()
+    SqlEngine.get_engine()
+
+    SqlEngine.init_readonly_engine(
+        pool_size=POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
+    )
 
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
@@ -230,7 +252,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
-        with Session(engine) as db_session:
+        with get_session_context_manager() as db_session:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
     else:
         setup_multitenant_onyx()
@@ -308,7 +330,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_query_router)
     include_router_with_global_prefix_prepended(application, admin_router)
     include_router_with_global_prefix_prepended(application, connector_router)
-    include_router_with_global_prefix_prepended(application, user_router)
     include_router_with_global_prefix_prepended(application, credential_router)
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
@@ -443,6 +464,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     # Initialize and instrument the app
     Instrumentator().instrument(application).expose(application)
+
+    use_route_function_names_as_operation_ids(application)
 
     return application
 

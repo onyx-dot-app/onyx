@@ -10,11 +10,97 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from onyx.llm.llm_provider_options import (
+    fetch_model_names_for_provider_as_set,
+    fetch_visible_model_names_for_provider_as_set,
+)
+
 # revision identifiers, used by Alembic.
 revision = "7a70b7664e37"
 down_revision = "d961aca62eb3"
 branch_labels = None
 depends_on = None
+
+
+def _resolve(
+    provider_name: str,
+    model_names: list[str] | None,
+    display_model_names: list[str] | None,
+    default_model_name: str,
+    fast_default_model_name: str | None,
+) -> set[tuple[str, bool]]:
+    models = set(model_names) if model_names else None
+    display_models = set(display_model_names) if display_model_names else None
+
+    # If both are defined, we need to make sure that `model_names` is a superset of `display_model_names`.
+    if models and display_models:
+        models = display_models.union(models)
+
+    # If only `model_names` is defined, then:
+    #   - If default-model-names are available for the `provider_name`, then set `display_model_names` to it
+    #     and set `model_names` to the union of those default-model-names with itself.
+    #   - If no default-model-names are available, then set `display_models` to `models`.
+    #
+    # This preserves the invariant that `display_models` is a subset of `models`.
+    elif models and not display_models:
+        visible_default_models = fetch_visible_model_names_for_provider_as_set(
+            provider_name=provider_name
+        )
+        if visible_default_models:
+            display_models = set(visible_default_models)
+            models = display_models.union(models)
+        else:
+            display_models = set(models)
+
+    # If only the `display_model_names` are defined, then set `models` to the union of `display_model_names`
+    # and the default-model-names for that provider.
+    #
+    # This will also preserve the invariant that `display_models` is a subset of `models`.
+    elif not models and display_models:
+        default_models = fetch_model_names_for_provider_as_set(
+            provider_name=provider_name
+        )
+        if default_models:
+            models = display_models.union(default_models)
+        else:
+            models = set(display_models)
+
+    # If neither are defined, then set `models` and `display_models` to the default-model-names for the given provider.
+    #
+    # This will also preserve the invariant that `display_models` is a subset of `models`.
+    else:
+        default_models = fetch_model_names_for_provider_as_set(
+            provider_name=provider_name
+        )
+        visible_default_models = fetch_visible_model_names_for_provider_as_set(
+            provider_name=provider_name
+        )
+
+        if default_models:
+            if not visible_default_models:
+                raise RuntimeError
+                raise RuntimeError(
+                    "If `default_models` is non-None, `visible_default_models` must be non-None too."
+                )
+            models = default_models
+            display_models = visible_default_models
+
+        # This is not a well-known llm-provider; we can't provide any model suggestions.
+        # Therefore, we set to the empty set and continue
+        else:
+            models = set()
+            display_models = set()
+
+    # It is possible that `default_model_name` is not in `models` and is not in `display_models`.
+    # It is also possible that `fast_default_model_name` is not in `models` and is not in `display_models`.
+    models.add(default_model_name)
+    if fast_default_model_name:
+        models.add(fast_default_model_name)
+    display_models.add(default_model_name)
+    if fast_default_model_name:
+        display_models.add(fast_default_model_name)
+
+    return set([(model, model in display_models) for model in models])
 
 
 def upgrade() -> None:
@@ -36,8 +122,11 @@ def upgrade() -> None:
     llm_provider_table = sa.sql.table(
         "llm_provider",
         sa.column("id", sa.Integer),
+        sa.column("provider", sa.Integer),
         sa.column("model_names", postgresql.ARRAY(sa.String)),
         sa.column("display_model_names", postgresql.ARRAY(sa.String)),
+        sa.column("default_model_name", sa.String),
+        sa.column("fast_default_model_name", sa.String),
     )
     model_configuration_table = sa.sql.table(
         "model_configuration",
@@ -51,21 +140,31 @@ def upgrade() -> None:
     llm_providers = connection.execute(
         sa.select(
             llm_provider_table.c.id,
+            llm_provider_table.c.provider,
             llm_provider_table.c.model_names,
             llm_provider_table.c.display_model_names,
+            llm_provider_table.c.default_model_name,
+            llm_provider_table.c.fast_default_model_name,
         )
     ).fetchall()
 
     for llm_provider in llm_providers:
         provider_id = llm_provider[0]
-        model_names_set = set(llm_provider[1] or [])
-        display_names_set = set(llm_provider[2] or [])
+        provider_name = llm_provider[1]
+        model_names = llm_provider[2]
+        display_model_names = llm_provider[3]
+        default_model_name = llm_provider[4]
+        fast_default_model_name = llm_provider[5]
 
-        # Insert all models from model_names
-        for model_name in model_names_set:
-            # If model is in display_model_names, set is_visible to True
-            is_visible = model_name in display_names_set
+        model_configurations = _resolve(
+            provider_name=provider_name,
+            model_names=model_names,
+            display_model_names=display_model_names,
+            default_model_name=default_model_name,
+            fast_default_model_name=fast_default_model_name,
+        )
 
+        for model_name, is_visible in model_configurations:
             connection.execute(
                 model_configuration_table.insert().values(
                     llm_provider_id=provider_id,

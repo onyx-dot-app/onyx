@@ -30,6 +30,7 @@ from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
@@ -76,6 +77,7 @@ from onyx.secondary_llm_flows.chat_session_naming import (
 )
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -96,6 +98,7 @@ from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -201,6 +204,7 @@ def update_chat_session_model(
 def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
+    include_deleted: bool = False,
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
@@ -211,6 +215,7 @@ def get_chat_session(
             user_id=user_id,
             db_session=db_session,
             is_shared=is_shared,
+            include_deleted=include_deleted,
         )
     except ValueError:
         raise ValueError("Chat session does not exist or has been deleted")
@@ -251,6 +256,7 @@ def get_chat_session(
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
+        deleted=chat_session.deleted,
     )
 
 
@@ -355,12 +361,19 @@ def delete_all_chat_sessions(
 @router.delete("/delete-chat-session/{session_id}")
 def delete_chat_session_by_id(
     session_id: UUID,
+    hard_delete: bool | None = None,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id if user is not None else None
     try:
-        delete_chat_session(user_id, session_id, db_session)
+        # Use the provided hard_delete parameter if specified, otherwise use the default config
+        actual_hard_delete = (
+            hard_delete if hard_delete is not None else HARD_DELETE_CHATS
+        )
+        delete_chat_session(
+            user_id, session_id, db_session, hard_delete=actual_hard_delete
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -661,51 +674,45 @@ def upload_files_for_chat(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> dict[str, list[FileDescriptor]]:
-    image_content_types = {"image/jpeg", "image/png", "image/webp"}
-    csv_content_types = {"text/csv"}
-    text_content_types = {
-        "text/plain",
-        "text/markdown",
-        "text/x-markdown",
-        "text/x-config",
-        "text/tab-separated-values",
-        "application/json",
-        "application/xml",
-        "text/xml",
-        "application/x-yaml",
-    }
-    document_content_types = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "message/rfc822",
-        "application/epub+zip",
-    }
 
-    allowed_content_types = (
-        image_content_types.union(text_content_types)
-        .union(document_content_types)
-        .union(csv_content_types)
-    )
+    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
+    # image_content_types = {"image/jpeg", "image/png", "image/webp"}
+    # csv_content_types = {"text/csv"}
+    # text_content_types = {
+    #     "text/plain",
+    #     "text/markdown",
+    #     "text/x-markdown",
+    #     "text/x-config",
+    #     "text/tab-separated-values",
+    #     "application/json",
+    #     "application/xml",
+    #     "text/xml",
+    #     "application/x-yaml",
+    # }
+    # document_content_types = {
+    #     "application/pdf",
+    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    #     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    #     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    #     "message/rfc822",
+    #     "application/epub+zip",
+    # }
+
+    # allowed_content_types = (
+    #     image_content_types.union(text_content_types)
+    #     .union(document_content_types)
+    #     .union(csv_content_types)
+    # )
 
     for file in files:
         if not file.content_type:
             raise HTTPException(status_code=400, detail="File content type is required")
 
-        if file.content_type not in allowed_content_types:
-            if file.content_type in image_content_types:
-                error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
-            elif file.content_type in text_content_types:
-                error_detail = "Unsupported text file type."
-            elif file.content_type in csv_content_types:
-                error_detail = "Unsupported CSV file type."
-            else:
-                error_detail = "Unsupported document file type."
-            raise HTTPException(status_code=400, detail=error_detail)
+        if file.content_type not in UploadMimeTypes.ALLOWED_MIME_TYPES:
+            raise HTTPException(status_code=400, detail="Unsupported file type.")
 
         if (
-            file.content_type in image_content_types
+            file.content_type in UploadMimeTypes.IMAGE_MIME_TYPES
             and file.size
             and file.size > 20 * 1024 * 1024
         ):
@@ -718,19 +725,7 @@ def upload_files_for_chat(
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        file_type = (
-            ChatFileType.IMAGE
-            if file.content_type in image_content_types
-            else (
-                ChatFileType.CSV
-                if file.content_type in csv_content_types
-                else (
-                    ChatFileType.DOC
-                    if file.content_type in document_content_types
-                    else ChatFileType.PLAIN_TEXT
-                )
-            )
-        )
+        file_type = mime_type_to_chat_file_type(file.content_type)
 
         file_content = file.file.read()  # Read the file content
 

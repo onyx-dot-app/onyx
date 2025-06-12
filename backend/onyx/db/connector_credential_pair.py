@@ -14,17 +14,18 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
+from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
-from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
@@ -269,50 +270,52 @@ def get_connector_credential_pair_from_id(
     return result.scalar_one_or_none()
 
 
-def get_last_successful_attempt_time(
-    connector_id: int,
-    credential_id: int,
+def get_connector_credential_pairs_for_source(
+    db_session: Session,
+    source: DocumentSource,
+) -> list[ConnectorCredentialPair]:
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(ConnectorCredentialPair.connector)
+        .where(Connector.source == source)
+    )
+    return list(db_session.scalars(stmt).unique().all())
+
+
+def get_last_successful_attempt_poll_range_end(
+    cc_pair_id: int,
     earliest_index: float,
     search_settings: SearchSettings,
     db_session: Session,
 ) -> float:
-    """Gets the timestamp of the last successful index run stored in
-    the CC Pair row in the database"""
-    if search_settings.status == IndexModelStatus.PRESENT:
-        connector_credential_pair = get_connector_credential_pair(
-            db_session=db_session,
-            connector_id=connector_id,
-            credential_id=credential_id,
-        )
-        if (
-            connector_credential_pair is None
-            or connector_credential_pair.last_successful_index_time is None
-        ):
-            return earliest_index
+    """Used to get the latest `poll_range_end` for a given connector and credential.
 
-        return connector_credential_pair.last_successful_index_time.timestamp()
+    This can be used to determine the next "start" time for a new index attempt.
 
-    # For Secondary Index we don't keep track of the latest success, so have to calculate it live
-    attempt = (
+    Note that the attempts time_started is not necessarily correct - that gets set
+    separately and is similar but not exactly the same as the `poll_range_end`.
+    """
+    latest_successful_index_attempt = (
         db_session.query(IndexAttempt)
         .join(
             ConnectorCredentialPair,
             IndexAttempt.connector_credential_pair_id == ConnectorCredentialPair.id,
         )
         .filter(
-            ConnectorCredentialPair.connector_id == connector_id,
-            ConnectorCredentialPair.credential_id == credential_id,
+            ConnectorCredentialPair.id == cc_pair_id,
             IndexAttempt.search_settings_id == search_settings.id,
             IndexAttempt.status == IndexingStatus.SUCCESS,
         )
-        .order_by(IndexAttempt.time_started.desc())
+        .order_by(IndexAttempt.poll_range_end.desc())
         .first()
     )
-
-    if not attempt or not attempt.time_started:
+    if (
+        not latest_successful_index_attempt
+        or not latest_successful_index_attempt.poll_range_end
+    ):
         return earliest_index
 
-    return attempt.time_started.timestamp()
+    return latest_successful_index_attempt.poll_range_end.timestamp()
 
 
 """Updates"""
@@ -699,3 +702,11 @@ def get_connector_credential_pairs_with_user_files(
         .distinct()
         .all()
     )
+
+
+def delete_userfiles_for_cc_pair__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+) -> None:
+    stmt = delete(UserFile).where(UserFile.cc_pair_id == cc_pair_id)
+    db_session.execute(stmt)

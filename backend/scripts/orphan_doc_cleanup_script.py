@@ -16,6 +16,7 @@ from onyx.context.search.models import IndexFilters  # noqa: E402
 from onyx.document_index.interfaces import VespaChunkRequest  # noqa: E402
 from onyx.db.engine import get_session_context_manager  # noqa: E402
 from onyx.db.document import delete_documents_complete__no_commit  # noqa: E402
+from onyx.db.tag import delete_orphan_tags__no_commit  # noqa: E402
 from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.document_index.vespa.index import VespaIndex  # noqa: E402
 from onyx.db.document import get_document  # noqa: E402
@@ -128,6 +129,7 @@ def main() -> None:
                 delete_documents_complete__no_commit(
                     db_session, successfully_vespa_deleted_doc_ids
                 )
+                delete_orphan_tags__no_commit(db_session)
                 db_session.commit()
             except Exception as e:
                 print(f"Error deleting documents from Postgres: {e}")

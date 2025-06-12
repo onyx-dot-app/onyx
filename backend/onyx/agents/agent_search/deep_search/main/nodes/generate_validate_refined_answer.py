@@ -40,6 +40,7 @@ from onyx.agents.agent_search.shared_graph_utils.constants import (
 from onyx.agents.agent_search.shared_graph_utils.constants import (
     AgentLLMErrorType,
 )
+from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.models import AgentErrorLog
 from onyx.agents.agent_search.shared_graph_utils.models import LLMNodeErrorStrings
 from onyx.agents.agent_search.shared_graph_utils.models import RefinedAgentStats
@@ -63,7 +64,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     remove_document_citations,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import StreamingError
 from onyx.configs.agent_configs import AGENT_ANSWER_GENERATION_BY_FAST_LLM
@@ -124,7 +124,7 @@ def generate_validate_refined_answer(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     prompt_enrichment_components = get_prompt_enrichment_components(graph_config)
 
     persona_contextualized_prompt = (
@@ -301,45 +301,24 @@ def generate_validate_refined_answer(
     dispatch_timings: list[float] = []
     agent_error: AgentErrorLog | None = None
 
-    def stream_refined_answer() -> list[str]:
-        for message in model.stream(
-            msg,
-            timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
-            max_tokens=(
-                AGENT_MAX_TOKENS_ANSWER_GENERATION
-                if _should_restrict_tokens(model.config)
-                else None
-            ),
-        ):
-            # TODO: in principle, the answer here COULD contain images, but we don't support that yet
-            content = message.content
-            if not isinstance(content, str):
-                raise ValueError(
-                    f"Expected content to be a string, but got {type(content)}"
-                )
-
-            start_stream_token = datetime.now()
-            write_custom_event(
-                "refined_agent_answer",
-                AgentAnswerPiece(
-                    answer_piece=content,
-                    level=1,
-                    level_question_num=0,
-                    answer_type="agent_level_answer",
-                ),
-                writer,
-            )
-            end_stream_token = datetime.now()
-            dispatch_timings.append(
-                (end_stream_token - start_stream_token).microseconds
-            )
-            streamed_tokens.append(content)
-        return streamed_tokens
-
     try:
-        streamed_tokens = run_with_timeout(
+        streamed_tokens, dispatch_timings = run_with_timeout(
             AGENT_TIMEOUT_LLM_REFINED_ANSWER_GENERATION,
-            stream_refined_answer,
+            lambda: stream_llm_answer(
+                llm=model,
+                prompt=msg,
+                event_name="refined_agent_answer",
+                writer=writer,
+                agent_answer_level=1,
+                agent_answer_question_num=0,
+                agent_answer_type="agent_level_answer",
+                timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
+                max_tokens=(
+                    AGENT_MAX_TOKENS_ANSWER_GENERATION
+                    if _should_restrict_tokens(model.config)
+                    else None
+                ),
+            ),
         )
 
     except (LLMTimeoutError, TimeoutError):

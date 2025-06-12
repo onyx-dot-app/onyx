@@ -26,9 +26,7 @@ interface SharedFolderItemProps {
   onClick: (folderId: number) => void;
   description?: string;
   lastUpdated?: string;
-  onRename: () => void;
   onDelete: () => void;
-  onMove: () => void;
 }
 
 export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
@@ -36,9 +34,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
   onClick,
   description,
   lastUpdated,
-  onRename,
   onDelete,
-  onMove,
 }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -99,7 +95,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
-                className={`group-hover:visible invisible h-8 w-8 p-0 ${
+                className={`group-hover:visible mobile:visible invisible h-8 w-8 p-0 ${
                   folder.id === -1 ? "!invisible pointer-events-none" : ""
                 }`}
               >
@@ -108,14 +104,6 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
             </PopoverTrigger>
             <PopoverContent className="!p-0 w-40">
               <div className="space-y-0">
-                {/* <Button variant="menu" onClick={onMove}>
-                  <FiArrowDown className="h-4 w-4" />
-                  Move
-                </Button>
-                <Button variant="menu" onClick={onRename}>
-                  <FiEdit className="h-4 w-4" />
-                  Rename
-                </Button> */}
                 <Button variant="menu" onClick={handleDeleteClick}>
                   <FiTrash className="h-4 w-4" />
                   Delete

@@ -3,9 +3,9 @@ import { Modal } from "@/components/Modal";
 import { getDisplayNameForModel, LlmDescriptor } from "@/lib/hooks";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
-import { destructureValue, structureValue } from "@/lib/llm/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 import { setUserDefaultModel } from "@/lib/users/UserSettings";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { Separator } from "@/components/ui/separator";
@@ -96,7 +96,7 @@ export function UserSettingsModal({
   }, [onClose]);
 
   const defaultModelDestructured = defaultModel
-    ? destructureValue(defaultModel)
+    ? parseLlmDescriptor(defaultModel)
     : null;
   const modelOptionsByProvider = new Map<
     string,
@@ -125,14 +125,17 @@ export function UserSettingsModal({
     llmProvider.model_configurations.forEach((modelConfiguration) => {
       if (!uniqueModelNames.has(modelConfiguration.name)) {
         uniqueModelNames.add(modelConfiguration.name);
-        llmOptionsByProvider[llmProvider.provider].push({
-          name: modelConfiguration.name,
-          value: structureValue(
-            llmProvider.name,
-            llmProvider.provider,
-            modelConfiguration.name
-          ),
-        });
+        const llmOptions = llmOptionsByProvider[llmProvider.provider];
+        if (llmOptions) {
+          llmOptions.push({
+            name: modelConfiguration.name,
+            value: structureValue(
+              llmProvider.name,
+              llmProvider.provider,
+              modelConfiguration.name
+            ),
+          });
+        }
       }
     });
   });
@@ -143,7 +146,7 @@ export function UserSettingsModal({
 
       if (response.ok) {
         if (defaultModel && setCurrentLlm) {
-          setCurrentLlm(destructureValue(defaultModel));
+          setCurrentLlm(parseLlmDescriptor(defaultModel));
         }
         setPopup({
           message: "Default model updated successfully",
@@ -207,6 +210,8 @@ export function UserSettingsModal({
       setIsLoading(false);
     }
   };
+  const pathname = usePathname();
+
   const showPasswordSection = user?.password_configured;
 
   const handleDeleteAllChats = async () => {
@@ -219,7 +224,9 @@ export function UserSettingsModal({
           type: "success",
         });
         refreshChatSessions();
-        router.push("/chat");
+        if (pathname.includes("/chat")) {
+          router.push("/chat");
+        }
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
@@ -357,9 +364,9 @@ export function UserSettingsModal({
                     currentLlm={
                       defaultModel
                         ? structureValue(
-                            destructureValue(defaultModel).provider,
+                            parseLlmDescriptor(defaultModel).provider,
                             "",
-                            destructureValue(defaultModel).modelName
+                            parseLlmDescriptor(defaultModel).modelName
                           )
                         : null
                     }
@@ -369,7 +376,7 @@ export function UserSettingsModal({
                         handleChangedefaultModel(null);
                       } else {
                         const { modelName, provider, name } =
-                          destructureValue(selected);
+                          parseLlmDescriptor(selected);
                         if (modelName && name) {
                           handleChangedefaultModel(
                             structureValue(provider, "", modelName)
@@ -382,7 +389,7 @@ export function UserSettingsModal({
                 <div className="pt-4 border-t border-border">
                   {!showDeleteConfirmation ? (
                     <div className="space-y-3">
-                      <p className="text-sm text-neutral-600 ">
+                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
                         This will permanently delete all your chat sessions and
                         cannot be undone.
                       </p>
@@ -397,7 +404,7 @@ export function UserSettingsModal({
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <p className="text-sm text-neutral-600 ">
+                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
                         Are you sure you want to delete all your chat sessions?
                       </p>
                       <div className="flex gap-2">

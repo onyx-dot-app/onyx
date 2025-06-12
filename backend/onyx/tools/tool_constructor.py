@@ -13,9 +13,11 @@ from onyx.configs.app_configs import AZURE_DALLE_API_BASE
 from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
+from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
+from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
@@ -52,7 +54,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     if llm and llm.config.api_key and llm.config.model_provider == "openai":
         return LLMConfig(
             model_provider=llm.config.model_provider,
-            model_name="dall-e-3",
+            model_name=IMAGE_MODEL_NAME,
             temperature=GEN_AI_TEMPERATURE,
             api_key=llm.config.api_key,
             api_base=llm.config.api_base,
@@ -89,7 +91,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
 
     return LLMConfig(
         model_provider=openai_provider.provider,
-        model_name="dall-e-3",
+        model_name=IMAGE_MODEL_NAME,
         temperature=GEN_AI_TEMPERATURE,
         api_key=openai_provider.api_key,
         api_base=openai_provider.api_base,
@@ -141,12 +143,11 @@ def construct_tools(
     user: User | None,
     llm: LLM,
     fast_llm: LLM,
-    use_file_search: bool,
+    run_search_setting: OptionalSearchSetting,
     search_tool_config: SearchToolConfig | None = None,
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
-    user_knowledge_present: bool = False,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
@@ -163,7 +164,10 @@ def construct_tools(
             )
 
             # Handle Search Tool
-            if tool_cls.__name__ == SearchTool.__name__ and not user_knowledge_present:
+            if (
+                tool_cls.__name__ == SearchTool.__name__
+                and run_search_setting != OptionalSearchSetting.NEVER
+            ):
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 
@@ -255,33 +259,6 @@ def construct_tools(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
-
-    if use_file_search:
-        search_tool_config = SearchToolConfig()
-
-        search_tool = SearchTool(
-            db_session=db_session,
-            user=user,
-            persona=persona,
-            retrieval_options=search_tool_config.retrieval_options,
-            prompt_config=prompt_config,
-            llm=llm,
-            fast_llm=fast_llm,
-            pruning_config=search_tool_config.document_pruning_config,
-            answer_style_config=search_tool_config.answer_style_config,
-            selected_sections=search_tool_config.selected_sections,
-            chunks_above=search_tool_config.chunks_above,
-            chunks_below=search_tool_config.chunks_below,
-            full_doc=search_tool_config.full_doc,
-            evaluation_type=(
-                LLMEvaluationType.BASIC
-                if persona.llm_relevance_filter
-                else LLMEvaluationType.SKIP
-            ),
-            rerank_settings=search_tool_config.rerank_settings,
-            bypass_acl=search_tool_config.bypass_acl,
-        )
-        tool_dict[1] = [search_tool]
 
     # factor in tool definition size when pruning
     if search_tool_config:

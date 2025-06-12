@@ -28,7 +28,7 @@ export function transformLinkUri(href: string) {
     ) {
       return url;
     }
-  } catch (e) {
+  } catch {
     // If it's not a valid URL with protocol, return the original href
     return href;
   }

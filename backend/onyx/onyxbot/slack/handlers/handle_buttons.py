@@ -137,7 +137,10 @@ def handle_generate_answer_button(
         raise ValueError("Missing thread_ts in the payload")
 
     thread_messages = read_slack_thread(
-        channel=channel_id, thread=thread_ts, client=client.web_client
+        tenant_id=client._tenant_id,
+        channel=channel_id,
+        thread=thread_ts,
+        client=client.web_client,
     )
     # remove all assistant messages till we get to the last user message
     # we want the new answer to be generated off of the last "question" in
