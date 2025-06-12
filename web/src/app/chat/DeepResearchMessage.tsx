@@ -16,7 +16,17 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { DeepAction } from "./deepResearchAction";
 
 const RenderAction = ({ action }: { action: DeepAction }) => {
-  return <div>{action.type}</div>;
+  const Inner = ({ action }: { action: DeepAction }): JSX.Element => {
+    switch (action.type) {
+      case "remove":
+        return <div>Remove</div>;
+      case "run_command":
+        return <div>Run command</div>;
+      default:
+        return action satisfies never; // ensure all deep action types are rendered
+    }
+  };
+  return <div>{<Inner action={action} />}</div>;
 };
 
 type DeepResearchMessageProps = Pick<
@@ -73,18 +83,10 @@ export const DeepResearchMessage = (props: DeepResearchMessageProps) => {
             <div className="max-w-message-max break-words">
               <div className="w-full">
                 <div className="max-w-message-max break-words">
-                  {/* Only show the message content once thinking is complete or if there's no thinking */}
                   {props.content ? (
                     <>
                       {typeof props.content === "string" ? (
                         <div className="overflow-x-visible max-w-content-max">
-                          {/* <div */}
-                          {/*   ref={markdownRef} */}
-                          {/*   className="focus:outline-none cursor-text select-text" */}
-                          {/*   onCopy={(e) => handleCopy(e, markdownRef)} */}
-                          {/* > */}
-                          {/*   {renderedMarkdown} */}
-                          {/* </div> */}
                           {props.content}
                         </div>
                       ) : (

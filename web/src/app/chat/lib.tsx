@@ -35,10 +35,7 @@ import { Settings } from "../admin/settings/interfaces";
 import { INTERNET_SEARCH_TOOL_ID } from "./tools/constants";
 import { SEARCH_TOOL_ID } from "./tools/constants";
 import { IIMAGE_GENERATION_TOOL_ID } from "./tools/constants";
-import {
-  DeepResearchActionPacket,
-  DeepResearchMessage,
-} from "./deepResearchAction";
+import { DeepResearchActionPacket } from "./deepResearchAction";
 
 interface ChatRetentionInfo {
   chatRetentionDays: number;
