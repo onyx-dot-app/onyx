@@ -47,6 +47,7 @@ from onyx.document_index.vespa_constants import SECTION_CONTINUATION
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
 from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
+from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
@@ -176,6 +177,12 @@ def get_chunks_via_visit_api(
         and acl_fieldset_entry not in field_set_list
     ):
         field_set_list.append(acl_fieldset_entry)
+
+    if MULTI_TENANT:
+        tenant_id_fieldset_entry = f"{TENANT_ID}"
+        if tenant_id_fieldset_entry not in field_set_list:
+            field_set_list.append(tenant_id_fieldset_entry)
+
     if field_set_list:
         field_set = f"{index_name}:" + ",".join(field_set_list)
     else:
@@ -237,6 +244,15 @@ def get_chunks_via_visit_api(
                         for user_acl_entry in filters.access_control_list
                     ):
                         continue
+
+                if MULTI_TENANT:
+                    if filters.tenant_id:
+                        document_tenant_id = document["fields"].get(TENANT_ID)
+                        if document_tenant_id != filters.tenant_id:
+                            continue
+                    else:
+                        raise ValueError("Tenant ID is required for multi-tenant")
+
                 document_chunks.append(document)
 
         # Check for continuation token to handle pagination
