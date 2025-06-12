@@ -22,15 +22,34 @@ export const WebSearchAction: DeepActionRenderer<
   DeepActionType<"web_search">
 > = ({ action }) => {
   return (
-    <div className="">
-      <div>Searching the web for: {action.query}</div>
-      {action.results.map((result) => (
-        <div key={result.url}>
-          <a href={result.url} target="_blank" rel="noreferrer">
-            {result.title}
+    <div className="space-y-2">
+      <div className="text-sm text-neutral-400">
+        Searching the web for: {action.query}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {action.results.map((result) => (
+          <a
+            key={result.url}
+            href={result.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex-shrink-0 w-48 p-3 rounded-lg border border-neutral-500 hover:border-gray-300 transition-colors"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${
+                  new URL(result.url).hostname
+                }`}
+                alt=""
+                className="w-4 h-4"
+              />
+              <div className="text-sm font-medium line-clamp-2">
+                {result.title}
+              </div>
+            </div>
           </a>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };

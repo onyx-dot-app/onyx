@@ -35,7 +35,11 @@ const RenderAction = ({ action }: { action: DeepAction }) => {
         return action satisfies never; // ensure all deep action types are rendered
     }
   };
-  return <div className="py-1">{<Inner action={action} />}</div>;
+  return (
+    <div className="mb-4 pl-4 border-l-neutral-500 border-l-2">
+      {<Inner action={action} />}
+    </div>
+  );
 };
 
 type DeepResearchMessageProps = Pick<
