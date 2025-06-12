@@ -342,13 +342,14 @@ def populate_default_entity_types(
     existing_entity_types = {
         et.id_name: et for et in db_session.query(KGEntityType).all()
     }
+    non_existing_entity_types = _generate_non_existing_entity_types(
+        existing_entity_types=existing_entity_types,
+        vendor_name=vendor_name,
+    )
 
     entity_types = []
 
-    for non_existing_entity_type in _generate_non_existing_entity_types(
-        existing_entity_types=existing_entity_types,
-        vendor_name=vendor_name,
-    ):
+    for non_existing_entity_type in non_existing_entity_types:
         db_session.add(non_existing_entity_type)
         entity_types.append(non_existing_entity_type)
 
