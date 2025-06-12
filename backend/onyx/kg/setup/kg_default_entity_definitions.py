@@ -355,7 +355,6 @@ def populate_default_entity_types(
 
     db_session.commit()
 
-    for existing_entity_type in existing_entity_types.values():
-        entity_types.append(existing_entity_type)
+    entity_types.extend(existing_entity_types.values())
 
     return entity_types
