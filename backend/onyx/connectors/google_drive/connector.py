@@ -1129,12 +1129,19 @@ class GoogleDriveConnector(
                     list[Document | ConnectorFailure | None],
                     run_functions_tuples_in_parallel(func_with_args, max_workers=8),
                 )
+                logger.debug(
+                    f"finished processing batch {batches_complete} with {len(results)} results"
+                )
 
                 docs_and_failures = [result for result in results if result is not None]
+                logger.debug(
+                    f"batch {batches_complete} has {len(docs_and_failures)} docs or failures"
+                )
 
                 if docs_and_failures:
                     yield from docs_and_failures
                     batches_complete += 1
+                logger.debug(f"finished yielding batch {batches_complete}")
 
             for retrieved_file in self._fetch_drive_items(
                 field_type=field_type,

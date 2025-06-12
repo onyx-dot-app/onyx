@@ -3,14 +3,12 @@ from typing import Any
 from retry import retry
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
 from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
-from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
-from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
-from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGVespaChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
@@ -39,26 +37,21 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
         }
     }
 
-    chunks = _get_chunks_via_visit_api(
-        VespaChunkRequest(document_id=document_id),
-        index_name,
-        IndexFilters(access_control_list=None),
-        ["chunk_id"],
-        False,
-    )
+    with get_session_with_current_tenant() as db_session:
+        num_chunks = get_num_chunks_for_document(db_session, document_id)
 
     vespa_requests: list[KGVespaChunkUpdateRequest] = []
-    for chunk in chunks:
+    for chunk_num in range(num_chunks):
         doc_chunk_id = get_uuid_from_chunk_info(
             document_id=document_id,
-            chunk_id=chunk["fields"]["chunk_id"],
+            chunk_id=chunk_num,
             tenant_id=tenant_id,
             large_chunk_id=None,
         )
         vespa_requests.append(
             KGVespaChunkUpdateRequest(
                 document_id=document_id,
-                chunk_id=chunk["fields"]["chunk_id"],
+                chunk_id=chunk_num,
                 url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=vespa_index.index_name)}/{doc_chunk_id}",
                 update_request=reset_update_dict,
             )

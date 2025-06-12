@@ -34,7 +34,6 @@ from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import parallel_yield
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
@@ -194,7 +193,8 @@ class TeamsConnector(
             team=team,
         )
 
-        docs = [
+        # An iterator of channels, in which each channel is an iterator of docs.
+        channels_docs = [
             _collect_documents_for_channel(
                 graph_client=self.graph_client,
                 team=team,
@@ -205,12 +205,13 @@ class TeamsConnector(
             for channel in channels
         ]
 
-        for doc in parallel_yield(
-            gens=docs,
-            max_workers=self.max_workers,
-        ):
-            if doc:
-                yield doc
+        # Was previously `for doc in parallel_yield(gens=docs, max_workers=self.max_workers): ...`.
+        # However, that lead to some weird exceptions (potentially due to non-thread-safe behaviour in the Teams library).
+        # Reverting back to the non-threaded case for now.
+        for channel_docs in channels_docs:
+            for channel_doc in channel_docs:
+                if channel_doc:
+                    yield channel_doc
 
         logger.info(
             f"Processed team with id {todo_team_id}; {len(todos)} team(s) left to process"
