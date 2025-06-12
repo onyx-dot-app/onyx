@@ -82,7 +82,11 @@ function KGConfiguration({
   const initialValues: KGConfig = {
     enabled: kgConfig.enabled,
     vendor: kgConfig.vendor ?? "",
-    vendor_domains: kgConfig.vendor_domains ?? [""],
+    // vendor_domains: kgConfig.vendor_domains ?? [""],
+    vendor_domains:
+      (kgConfig.vendor_domains?.length ?? 0) > 0
+        ? kgConfig.vendor_domains
+        : [""],
     ignore_domains: kgConfig.ignore_domains ?? [],
     coverage_start: kgConfig.coverage_start,
   };
