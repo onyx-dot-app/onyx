@@ -35,6 +35,10 @@ import { Settings } from "../admin/settings/interfaces";
 import { INTERNET_SEARCH_TOOL_ID } from "./tools/constants";
 import { SEARCH_TOOL_ID } from "./tools/constants";
 import { IIMAGE_GENERATION_TOOL_ID } from "./tools/constants";
+import {
+  DeepResearchActionPacket,
+  DeepResearchMessage,
+} from "./deepResearchAction";
 
 interface ChatRetentionInfo {
   chatRetentionDays: number;
@@ -142,18 +146,19 @@ export const isPacketType = (data: any): data is PacketType => {
 };
 
 export type PacketType =
-  | ToolCallMetadata
+  | DeepResearchActionPacket
+  | ToolCallMetadata // this
   | BackendMessage
-  | AnswerPiecePacket
+  | AnswerPiecePacket // THIS
   | DocumentInfoPacket
-  | DocumentsResponse
+  | DocumentsResponse //?
   | FileChatDisplay
   | StreamingError
   | MessageResponseIDInfo
-  | StreamStopInfo
+  | StreamStopInfo // maybe use
   | ProSearchPacket
   | SubQueryPiece
-  | AgentAnswerPiece
+  | AgentAnswerPiece // for agents
   | SubQuestionPiece
   | ExtendedToolResponse
   | RefinedAnswerImprovement
@@ -180,6 +185,7 @@ export interface SendMessageParams {
   userFileIds?: number[];
   userFolderIds?: number[];
   useLanggraph?: boolean;
+  useDeepResearch?: boolean;
 }
 
 export async function* sendMessage({

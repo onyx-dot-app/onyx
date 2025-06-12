@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+.debug {
+  outline: 1px solid red;
+}
+
 @layer base {
   :root {
     --warning: 38 92% 50%;

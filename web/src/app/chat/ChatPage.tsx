@@ -49,7 +49,6 @@ import {
   setMessageAsLatest,
   updateLlmOverrideForChatSession,
   updateParentChildren,
-  uploadFilesForChat,
   useScrollonStream,
 } from "./lib";
 import {
@@ -137,6 +136,13 @@ import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
+import { mockSendMessage } from "./drewMock";
+import {
+  DeepAction,
+  DeepResearchActionPacket,
+  handleNewAction,
+} from "./deepResearchAction";
+import { DeepResearchMessage } from "./DeepResearchMessage";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -230,11 +236,15 @@ export function ChatPage({
   const [toggleDocSelection, setToggleDocSelection] = useState(false);
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const toggleProSearch = () => {
     Cookies.set(
       PRO_SEARCH_TOGGLED_COOKIE_NAME,
       String(!proSearchEnabled).toLocaleLowerCase()
     );
+    if (!proSearchEnabled) {
+      setDeepResearchEnabled(false);
+    }
     setProSearchEnabled(!proSearchEnabled);
   };
 
@@ -314,10 +324,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-        ? availableAssistants.find(
-            (assistant) => assistant.id === defaultAssistantId
-          )
-        : undefined
+      ? availableAssistants.find(
+          (assistant) => assistant.id === defaultAssistantId
+        )
+      : undefined
   );
   // Gather default temperature settings
   const search_param_temperature = searchParams?.get(
@@ -852,6 +862,7 @@ export function ChatPage({
   const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
     useState<number | null>(null);
 
+  // drew
   const { aiMessage, humanMessage } = selectedMessageForDocDisplay
     ? getHumanAndAIMessageFromMessageNumber(
         messageHistory,
@@ -1088,7 +1099,10 @@ export function ChatPage({
     params: SendMessageParams
   ) {
     try {
-      for await (const packet of sendMessage(params)) {
+      const messagePromise = params.useDeepResearch
+        ? mockSendMessage(params)
+        : sendMessage(params);
+      for await (const packet of messagePromise) {
         if (params.signal?.aborted) {
           throw new Error("AbortError");
         }
@@ -1426,6 +1440,8 @@ export function ChatPage({
     let secondLevelMessageId: number | null = null;
     let isAgentic: boolean = false;
     let files: FileDescriptor[] = [];
+    let actions: DeepAction[] = [];
+    let isDeepResearch: boolean = false;
 
     let initialFetchDetails: null | {
       user_message_id: number;
@@ -1483,6 +1499,7 @@ export function ChatPage({
           settings?.settings.pro_search_enabled &&
           proSearchEnabled &&
           retrievalEnabled,
+        useDeepResearch: deepResearchEnabled,
       });
 
       const delay = (ms: number) => {
@@ -1502,6 +1519,7 @@ export function ChatPage({
           }
           console.log("Packet:", JSON.stringify(packet));
 
+          // drew
           if (!initialFetchDetails) {
             if (!Object.hasOwn(packet, "user_message_id")) {
               console.error(
@@ -1561,6 +1579,7 @@ export function ChatPage({
             };
 
             resetRegenerationState();
+            // drew: For other stuff
           } else {
             const { user_message_id, frozenMessageMap } = initialFetchDetails;
             if (Object.hasOwn(packet, "agentic_message_ids")) {
@@ -1573,6 +1592,14 @@ export function ChatPage({
                 secondLevelMessageId = level1MessageId;
                 includeAgentic = true;
               }
+            }
+
+            // Handle deep research messages
+            if (Object.hasOwn(packet, "deepResearchAction")) {
+              const typedPacket = packet as DeepResearchActionPacket;
+
+              actions = handleNewAction(actions, typedPacket.payload);
+              isDeepResearch = true;
             }
 
             setChatState((prevState) => {
@@ -1842,6 +1869,8 @@ export function ChatPage({
                 second_level_generating: second_level_generating,
                 agentic_docs: agenticDocs,
                 is_agentic: isAgentic,
+                is_deep_research: isDeepResearch,
+                actions: actions,
               },
               ...(includeAgentic
                 ? [
@@ -2705,6 +2734,7 @@ export function ChatPage({
                             // NOTE: temporarily removing this to fix the scroll bug
                             // (hasPerformedInitialScroll ? "" : "invisible")
                           >
+                            {/*drew*/}
                             {messageHistory.map((message, i) => {
                               const messageMap = currentMessageMap(
                                 completeMessageDetail
@@ -3020,6 +3050,25 @@ export function ChatPage({
                                                 ])
                                         }
                                       />
+                                    ) : message.is_deep_research ? (
+                                      // drew: render
+                                      <DeepResearchMessage
+                                        key={messageReactComponentKey}
+                                        content={message.message}
+                                        currentPersona={liveAssistant}
+                                        isComplete={
+                                          i !== messageHistory.length - 1 ||
+                                          (currentSessionChatState !=
+                                            "streaming" &&
+                                            currentSessionChatState !=
+                                              "toolBuilding")
+                                        }
+                                        files={message.files}
+                                        query={
+                                          messageHistory[i]?.query || undefined
+                                        }
+                                        message={message}
+                                      />
                                     ) : (
                                       <AIMessage
                                         userKnowledgeFiles={userFiles}
@@ -3302,6 +3351,13 @@ export function ChatPage({
 
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
                             <ChatInputBar
+                              deepResearchEnabled={deepResearchEnabled}
+                              setDeepResearchEnabled={(e) => {
+                                setDeepResearchEnabled(e);
+                                if (e) {
+                                  setProSearchEnabled(false);
+                                }
+                              }}
                               proSearchEnabled={proSearchEnabled}
                               setProSearchEnabled={() => toggleProSearch()}
                               toggleDocumentSidebar={toggleDocumentSidebar}

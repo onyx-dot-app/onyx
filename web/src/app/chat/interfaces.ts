@@ -9,6 +9,7 @@ import {
   SubQuestionSearchDoc,
   StreamStopInfo,
 } from "@/lib/search/interfaces";
+import { DeepResearchActionPacket } from "./deepResearchAction";
 
 export enum RetrievalType {
   None = "none",
@@ -110,6 +111,7 @@ export interface Message {
   stopReason?: StreamStopReason | null;
   sub_questions?: SubQuestionDetail[] | null;
   is_agentic?: boolean | null;
+  is_deep_research?: boolean | null;
 
   // Streaming only
   second_level_generating?: boolean;
@@ -118,6 +120,9 @@ export interface Message {
   second_level_subquestions?: SubQuestionDetail[] | null;
   isImprovement?: boolean | null;
   isStreamingQuestions?: boolean;
+
+  // Deep Research
+  actions?: DeepResearchActionPacket["payload"][];
 }
 
 export interface BackendChatSession {

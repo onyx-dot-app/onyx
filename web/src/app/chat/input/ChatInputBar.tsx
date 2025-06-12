@@ -40,6 +40,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
 import { UploadIntent } from "../ChatPage";
+import { DeepResearchToggle } from "./DeepResearchToggle";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -197,6 +198,8 @@ interface ChatInputBarProps {
   retrievalEnabled: boolean;
   proSearchEnabled: boolean;
   setProSearchEnabled: (proSearchEnabled: boolean) => void;
+  deepResearchEnabled: boolean;
+  setDeepResearchEnabled: (deepResearchEnabled: boolean) => void;
 }
 
 export function ChatInputBar({
@@ -227,6 +230,8 @@ export function ChatInputBar({
   llmManager,
   proSearchEnabled,
   setProSearchEnabled,
+  deepResearchEnabled,
+  setDeepResearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const {
@@ -901,6 +906,10 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
+                <DeepResearchToggle
+                  enabled={deepResearchEnabled}
+                  setEnabled={setDeepResearchEnabled}
+                />
                 {retrievalEnabled && settings?.settings.pro_search_enabled && (
                   <AgenticToggle
                     proSearchEnabled={proSearchEnabled}
