@@ -365,23 +365,15 @@ function ResetActionButtons({
       <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
         Danger
       </p>
-      <div>
-        <div className="flex flex-col gap-y-4">
-          <p>
-            Resetting the Knowledge Graph will restore all of the defaults back
-            to their original values. It will also perform unfathomable voodoo
-            magic, turning water to wine and flesh to gold.
-          </p>
-          <Button variant="destructive" className="w-min" onClick={reset}>
-            Reset Knowledge Graph
-          </Button>
-        </div>
-        <div className="flex flex-col gap-y-4">
-          <p>Re-indexing the knowledge graph...</p>
-          <Button variant="destructive" className="w-min" onClick={reset}>
-            Reindex Knowledge Graph
-          </Button>
-        </div>
+      <div className="flex flex-col gap-y-4">
+        <p>
+          Resetting the Knowledge Graph will restore all of the defaults back to
+          their original values. It will also perform unfathomable voodoo magic,
+          turning water to wine and flesh to gold.
+        </p>
+        <Button variant="destructive" className="w-min" onClick={reset}>
+          Reset Knowledge Graph
+        </Button>
       </div>
     </div>
   );
