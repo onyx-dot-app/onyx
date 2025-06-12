@@ -30,6 +30,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
+import { redirect } from "next/navigation";
 
 function createDomainField(
   name: string,
@@ -461,6 +462,19 @@ function Main() {
 }
 
 export default function Page() {
+  const { data: kgExposed, isLoading } = useSWR<boolean>(
+    "/api/admin/kg/exposed",
+    errorHandlingFetcher
+  );
+
+  if (isLoading) {
+    return <></>;
+  }
+
+  if (!kgExposed) {
+    redirect("/");
+  }
+
   return (
     <div className="mx-auto container">
       <AdminPageTitle
