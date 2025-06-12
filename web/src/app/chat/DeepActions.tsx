@@ -1,15 +1,34 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { DeepAction, DeepActionType } from "./deepResearchAction";
+import {
+  CollapsibleDeepAction,
+  DeepAction,
+  DeepActionType,
+} from "./deepResearchAction";
+import { Terminal } from "@phosphor-icons/react";
 type DeepActionRenderer<T extends DeepAction> = ({
   action,
-}: {
+}: // onCollapse,
+{
   action: T;
+  // onCollapse?: T extends CollapsibleDeepAction ? (collapsed: boolean) => void : undefined;
 }) => JSX.Element;
 
 export const RunCommandAction: DeepActionRenderer<
   DeepActionType<"run_command">
 > = ({ action }) => {
-  return <div>{action.cmd}</div>;
+  return (
+    <div>
+      <div className="flex items-center opacity-70 gap-2">
+        <Terminal size={18} />
+        <div className="font-mono text-xs">{action.cmd}</div>
+      </div>
+      {!action.collapsed && (
+        <div className="max-h-[100px] bg-neutral-800 p-1 rounded text-sm opacity-70 overflow-y-scroll font-mono">
+          {action.result}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export const DeepThinkingAction: DeepActionRenderer<
@@ -27,30 +46,35 @@ export const WebSearchAction: DeepActionRenderer<
       <div className="text-sm text-neutral-400">
         Searching the web for: {action.query}
       </div>
-      <div ref={parent} className="flex items-start gap-2 overflow-x-auto pb-2">
-        {action.results.map((result) => (
-          <a
-            key={result.url}
-            href={result.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-shrink-0 w-48 p-3 rounded-lg border border-neutral-500 hover:border-gray-300 transition-colors"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <img
-                src={`https://www.google.com/s2/favicons?domain=${
-                  new URL(result.url).hostname
-                }`}
-                alt=""
-                className="w-4 h-4"
-              />
-              <div className="text-sm line-clamp-1 overflow-ellipsis font-medium">
-                {result.title}
+      {!action.collapsed && (
+        <div
+          ref={parent}
+          className="flex items-start gap-2 overflow-x-auto pb-2"
+        >
+          {action.results.map((result) => (
+            <a
+              key={result.url}
+              href={result.url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex-shrink-0 w-48 p-3 rounded-lg border border-neutral-500 hover:border-gray-300 transition-colors"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <img
+                  src={`https://www.google.com/s2/favicons?domain=${
+                    new URL(result.url).hostname
+                  }`}
+                  alt=""
+                  className="w-4 h-4"
+                />
+                <div className="text-sm line-clamp-1 overflow-ellipsis font-medium">
+                  {result.title}
+                </div>
               </div>
-            </div>
-          </a>
-        ))}
-      </div>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

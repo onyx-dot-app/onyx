@@ -620,6 +620,37 @@ export function ChatPage({
     Map<string | null, Map<number, Message>>
   >(new Map());
 
+  const setMessageActionCollapsed = (
+    messageId: number,
+    actionId: string,
+    collapsed: boolean
+  ) => {
+    setCompleteMessageDetail((prevState) => {
+      const newState = new Map(prevState);
+      const currentSessionId = chatSessionIdRef.current;
+      const messageMap = newState.get(currentSessionId);
+
+      if (messageMap) {
+        const message = messageMap.get(messageId);
+        if (message && message.actions) {
+          const updatedActions = message.actions.map((action) => {
+            if (action.id === actionId && "collapsed" in action) {
+              return { ...action, collapsed };
+            }
+            return action;
+          });
+
+          const updatedMessage = { ...message, actions: updatedActions };
+          const newMessageMap = new Map(messageMap);
+          newMessageMap.set(messageId, updatedMessage);
+          newState.set(currentSessionId, newMessageMap);
+        }
+      }
+
+      return newState;
+    });
+  };
+
   const updateCompleteMessageDetail = (
     sessionId: string | null,
     messageMap: Map<number, Message>
@@ -638,6 +669,7 @@ export function ChatPage({
       messageDetail.get(chatSessionIdRef.current) || new Map<number, Message>()
     );
   };
+
   const currentSessionId = (): string => {
     return chatSessionIdRef.current!;
   };
@@ -3053,6 +3085,9 @@ export function ChatPage({
                                     ) : message.is_deep_research ? (
                                       // drew: render
                                       <DeepResearchMessage
+                                        setMessageActionCollapsed={
+                                          setMessageActionCollapsed
+                                        }
                                         key={messageReactComponentKey}
                                         content={message.message}
                                         currentPersona={liveAssistant}

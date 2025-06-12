@@ -15,6 +15,7 @@ type DeepRunCommandAction = {
   id: string;
   result: string;
   type: "run_command";
+  collapsed: boolean;
 };
 
 type DeepSearchWebAction = {
@@ -25,6 +26,7 @@ type DeepSearchWebAction = {
     url: string;
   }[];
   type: "web_search";
+  collapsed: boolean;
 };
 
 type DeepRemoveAction = {
@@ -42,6 +44,17 @@ export type DeepActionType<T extends DeepAction["type"]> = Extract<
   DeepAction,
   { type: T }
 >;
+
+export type CollapsibleDeepAction = Extract<DeepAction, { collapsed: boolean }>;
+
+export const isCollapsible = (
+  action: DeepAction
+): action is CollapsibleDeepAction => {
+  if ("collapsed" in action) {
+    return true;
+  }
+  return false;
+};
 
 export const buildActionPacket = <T extends DeepAction["type"]>(
   type: T,

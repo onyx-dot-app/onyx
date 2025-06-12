@@ -11,16 +11,26 @@ import {
 import { CopyButton } from "@/components/CopyButton";
 import { HoverableIcon } from "@/components/Hoverable";
 import { DislikeFeedback, LikeFeedback } from "@/components/icons/icons";
-import { useContext } from "react";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { DeepAction } from "./deepResearchAction";
+import { DeepAction, isCollapsible } from "./deepResearchAction";
 import {
   DeepThinkingAction,
   RunCommandAction,
   WebSearchAction,
 } from "./DeepActions";
 
-const RenderAction = ({ action }: { action: DeepAction }) => {
+const RenderAction = ({
+  action,
+  messageId,
+  setMessageActionCollapsed,
+}: {
+  action: DeepAction;
+  messageId: number;
+  setMessageActionCollapsed?: (
+    messageId: number,
+    actionId: string,
+    collapsed: boolean
+  ) => void;
+}) => {
   const Inner = ({ action }: { action: DeepAction }): JSX.Element => {
     switch (action.type) {
       case "remove":
@@ -37,6 +47,26 @@ const RenderAction = ({ action }: { action: DeepAction }) => {
   };
   return (
     <div className="mb-4 pl-4 border-l-neutral-500 border-l-2">
+      {isCollapsible(action) && (
+        <div className="flex items-center gap-2 mb-2">
+          <div className="opacity-70">{action.collapsed ? "▶" : "▼"}</div>
+          <div
+            className="cursor-pointer hover:text-neutral-300"
+            onClick={() => {
+              if (setMessageActionCollapsed) {
+                setMessageActionCollapsed(
+                  messageId,
+                  action.id,
+                  !action.collapsed
+                );
+              }
+            }}
+          >
+            {action.collapsed ? "Show" : "Hide"}
+          </div>
+          <div className="opacity-70">Action</div>
+        </div>
+      )}
       {<Inner action={action} />}
     </div>
   );
@@ -58,11 +88,15 @@ type DeepResearchMessageProps = Pick<
   | "otherMessagesCanSwitchTo"
 > & {
   message: Message;
+  setMessageActionCollapsed?: (
+    messageId: number,
+    actionId: string,
+    collapsed: boolean
+  ) => void;
 };
 
 export const DeepResearchMessage = (props: DeepResearchMessageProps) => {
   const actions = props.message.actions ?? [];
-  const settings = useContext(SettingsContext);
   const [parent] = useAutoAnimate();
   return (
     <div
@@ -89,7 +123,12 @@ export const DeepResearchMessage = (props: DeepResearchMessageProps) => {
           </div>
           <div ref={parent} className="py-4">
             {actions.map((action) => (
-              <RenderAction key={action.id} action={action} />
+              <RenderAction
+                key={action.id}
+                action={action}
+                messageId={props.message.messageId}
+                setMessageActionCollapsed={props.setMessageActionCollapsed}
+              />
             ))}
           </div>
           <div className="w-full py-2">
