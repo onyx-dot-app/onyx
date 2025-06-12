@@ -3,7 +3,13 @@ from collections.abc import Generator
 
 from langchain_core.messages import BaseMessage
 
-from onyx.chat.models import CitationInfo, LlmDoc, OnyxAnswerPiece, ResponsePart
+from onyx.chat.models import (
+    CitationInfo,
+    LlmDoc,
+    OnyxAnswerPiece,
+    ResponsePart,
+    ThinkingPiece,
+)
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.utils.logger import setup_logger
@@ -30,6 +36,16 @@ class PassThroughAnswerResponseHandler(AnswerResponseHandler):
     ) -> Generator[ResponsePart, None, None]:
         content = _message_to_str(response_item)
         yield OnyxAnswerPiece(answer_piece=content)
+
+
+class ThinkingResponseHandler(AnswerResponseHandler):
+    def handle_response_part(
+        self,
+        response_item: BaseMessage | str | None,
+        previous_response_items: list[BaseMessage | str],
+    ) -> Generator[ResponsePart, None, None]:
+        content = _message_to_str(response_item)
+        yield ThinkingPiece(thinking_piece=content)
 
 
 class DummyAnswerResponseHandler(AnswerResponseHandler):

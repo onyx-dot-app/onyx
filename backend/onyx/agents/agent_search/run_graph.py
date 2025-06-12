@@ -32,6 +32,7 @@ from onyx.chat.models import (
     StreamStopInfo,
     SubQueryPiece,
     SubQuestionPiece,
+    ThinkingPiece,
     ToolResponse,
 )
 from onyx.configs.agent_configs import (
@@ -79,6 +80,8 @@ def _parse_agent_event(event: StreamEvent) -> AnswerPacket | None:
             return cast(ToolResponse, event["data"])
         elif event["name"] == "basic_response":
             return cast(AnswerPacket, event["data"])
+        elif event["name"] == "thinking_response":
+            return cast(ThinkingPiece, event["data"])
         elif event["name"] == "refined_answer_improvement":
             return cast(RefinedAnswerImprovement, event["data"])
         elif event["name"] == "refined_sub_question_creation_error":

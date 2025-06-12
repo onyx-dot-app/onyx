@@ -1,141 +1,140 @@
 "use client";
 
 import {
-  redirect,
-  usePathname,
-  useRouter,
-  useSearchParams,
+    redirect,
+    usePathname,
+    useRouter,
+    useSearchParams,
 } from "next/navigation";
 import {
-  BackendChatSession,
-  BackendMessage,
-  ChatFileType,
-  ChatSession,
-  ChatSessionSharedStatus,
-  FileDescriptor,
-  FileChatDisplay,
-  Message,
-  MessageResponseIDInfo,
-  RetrievalType,
-  StreamingError,
-  ToolCallMetadata,
-  SubQuestionDetail,
-  constructSubQuestions,
-  DocumentsResponse,
-  AgenticMessageResponseIDInfo,
-  UserKnowledgeFilePacket,
+    AgenticMessageResponseIDInfo,
+    BackendChatSession,
+    BackendMessage,
+    ChatFileType,
+    ChatSession,
+    ChatSessionSharedStatus,
+    constructSubQuestions,
+    DocumentsResponse,
+    FileChatDisplay,
+    FileDescriptor,
+    Message,
+    MessageResponseIDInfo,
+    RetrievalType,
+    StreamingError,
+    SubQuestionDetail,
+    ToolCallMetadata,
+    UserKnowledgeFilePacket,
 } from "./interfaces";
 
-import Prism from "prismjs";
-import Cookies from "js-cookie";
-import { HistorySidebar } from "./sessionSidebar/HistorySidebar";
-import { Persona } from "../admin/assistants/interfaces";
-import { HealthCheckBanner } from "@/components/health/healthcheck";
-import {
-  buildChatUrl,
-  buildLatestMessageChain,
-  createChatSession,
-  getCitedDocumentsFromMessage,
-  getHumanAndAIMessageFromMessageNumber,
-  getLastSuccessfulMessageId,
-  handleChatFeedback,
-  nameChatSession,
-  PacketType,
-  personaIncludesRetrieval,
-  processRawChatHistory,
-  removeMessage,
-  sendMessage,
-  SendMessageParams,
-  setMessageAsLatest,
-  updateLlmOverrideForChatSession,
-  updateParentChildren,
-  uploadFilesForChat,
-  useScrollonStream,
-} from "./lib";
-import {
-  Dispatch,
-  SetStateAction,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
-import { LlmDescriptor, useFilters, useLlmManager } from "@/lib/hooks";
-import { ChatState, FeedbackType, RegenerationState } from "./types";
-import { DocumentResults } from "./documentSidebar/DocumentResults";
-import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
-import { FeedbackModal } from "./modal/FeedbackModal";
-import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
-import { FiArrowDown } from "react-icons/fi";
-import { ChatIntro } from "./ChatIntro";
-import { AIMessage, HumanMessage } from "./message/Messages";
-import { StarterMessages } from "../../components/assistants/StarterMessage";
-import {
-  AnswerPiecePacket,
-  OnyxDocument,
-  DocumentInfoPacket,
-  StreamStopInfo,
-  StreamStopReason,
-  SubQueryPiece,
-  SubQuestionPiece,
-  AgentAnswerPiece,
-  RefinedAnswerImprovement,
-  MinimalOnyxDocument,
-} from "@/lib/search/interfaces";
-import { buildFilters } from "@/lib/search/utils";
-import { SettingsContext } from "@/components/settings/SettingsProvider";
-import Dropzone from "react-dropzone";
-import {
-  getFinalLLM,
-  modelSupportsImageInput,
-  structureValue,
-} from "@/lib/llm/utils";
-import { ChatInputBar } from "./input/ChatInputBar";
-import { useChatContext } from "@/components/context/ChatContext";
-import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
-import {
-  PRO_SEARCH_TOGGLED_COOKIE_NAME,
-  SIDEBAR_TOGGLED_COOKIE_NAME,
-} from "@/components/resizable/constants";
-import FixedLogo from "@/components/logo/FixedLogo";
-import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "./tools/constants";
-import { useUser } from "@/components/user/UserProvider";
-import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
-import BlurBackground from "../../components/chat/BlurBackground";
-import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
-import { useAssistants } from "@/components/context/AssistantsContext";
 import TextView from "@/components/chat/TextView";
+import { useAssistants } from "@/components/context/AssistantsContext";
+import { useChatContext } from "@/components/context/ChatContext";
+import { HealthCheckBanner } from "@/components/health/healthcheck";
+import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
+import FixedLogo from "@/components/logo/FixedLogo";
 import { Modal } from "@/components/Modal";
-import { useSendMessageToParent } from "@/lib/extension/utils";
+import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
+import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
+import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import {
-  CHROME_MESSAGE,
-  SUBMIT_MESSAGE_TYPES,
+    PRO_SEARCH_TOGGLED_COOKIE_NAME,
+    SIDEBAR_TOGGLED_COOKIE_NAME,
+} from "@/components/resizable/constants";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { useUser } from "@/components/user/UserProvider";
+import {
+    CHROME_MESSAGE,
+    SUBMIT_MESSAGE_TYPES,
 } from "@/lib/extension/constants";
+import { useSendMessageToParent } from "@/lib/extension/utils";
+import { LlmDescriptor, useFilters, useLlmManager } from "@/lib/hooks";
+import {
+    getFinalLLM,
+    modelSupportsImageInput,
+    structureValue,
+} from "@/lib/llm/utils";
+import {
+    AgentAnswerPiece,
+    AnswerPiecePacket,
+    DocumentInfoPacket,
+    MinimalOnyxDocument,
+    OnyxDocument,
+    RefinedAnswerImprovement,
+    StreamStopInfo,
+    StreamStopReason,
+    SubQueryPiece,
+    SubQuestionPiece,
+} from "@/lib/search/interfaces";
+import { buildFilters } from "@/lib/search/utils";
+import Cookies from "js-cookie";
+import Prism from "prismjs";
+import {
+    Dispatch,
+    SetStateAction,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
+import Dropzone from "react-dropzone";
+import { FiArrowDown } from "react-icons/fi";
+import { StarterMessages } from "../../components/assistants/StarterMessage";
+import BlurBackground from "../../components/chat/BlurBackground";
+import { Persona } from "../admin/assistants/interfaces";
+import { ChatIntro } from "./ChatIntro";
+import { ChatPopup } from "./ChatPopup";
+import { DocumentResults } from "./documentSidebar/DocumentResults";
+import { ChatInputBar } from "./input/ChatInputBar";
+import {
+    buildChatUrl,
+    buildLatestMessageChain,
+    createChatSession,
+    getCitedDocumentsFromMessage,
+    getHumanAndAIMessageFromMessageNumber,
+    getLastSuccessfulMessageId,
+    handleChatFeedback,
+    nameChatSession,
+    PacketType,
+    personaIncludesRetrieval,
+    processRawChatHistory,
+    removeMessage,
+    sendMessage,
+    SendMessageParams,
+    setMessageAsLatest,
+    updateLlmOverrideForChatSession,
+    updateParentChildren,
+    useScrollonStream
+} from "./lib";
+import { AIMessage, HumanMessage } from "./message/Messages";
+import { FeedbackModal } from "./modal/FeedbackModal";
+import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
+import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
+import { HistorySidebar } from "./sessionSidebar/HistorySidebar";
+import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "./tools/constants";
+import { ChatState, FeedbackType, RegenerationState } from "./types";
 
-import { getSourceMetadata } from "@/lib/sources";
-import { UserSettingsModal } from "./modal/UserSettingsModal";
-import { AgenticMessage } from "./message/AgenticMessage";
-import AssistantModal from "../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
+import { getSourceMetadata } from "@/lib/sources";
+import AssistantModal from "../assistants/mine/AssistantModal";
+import { AgenticMessage } from "./message/AgenticMessage";
+import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
-import {
-  FileResponse,
-  FolderResponse,
-  useDocumentsContext,
-} from "./my-documents/DocumentsContext";
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import {
+    FileResponse,
+    FolderResponse,
+    useDocumentsContext,
+} from "./my-documents/DocumentsContext";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;

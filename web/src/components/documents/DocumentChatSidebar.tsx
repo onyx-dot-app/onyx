@@ -7,11 +7,11 @@ import { extractCodeText, preprocessLaTeX } from '@/app/chat/message/codeUtils';
 import { useAssistants } from '@/components/context/AssistantsContext';
 import { SendIcon } from '@/components/icons/icons';
 import { Button } from '@/components/ui/button';
-import { AgentAnswerPiece, DocumentEditorResponse, DocumentInfoPacket, OnyxDocument } from '@/lib/search/interfaces';
+import { AgentAnswerPiece, DocumentEditorResponse, DocumentInfoPacket, OnyxDocument, ThinkingPiece } from '@/lib/search/interfaces';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
 import { transformLinkUri } from '@/lib/utils';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FiMessageSquare, FiPlus } from 'react-icons/fi';
+import { FiChevronDown, FiChevronRight, FiMessageSquare, FiPlus } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypePrism from 'rehype-prism-plus';
@@ -44,13 +44,14 @@ export function DocumentChatSidebar({
   setContent
 }: DocumentChatSidebarProps) {
   const [message, setMessage] = useState('');
-  const [messages, setMessages] = useState<Array<{id: number, text: string, isUser: boolean, isIntermediateOutput?: boolean, debugLog?: Array<any>}>>([]);
+  const [messages, setMessages] = useState<Array<{id: number, text: string, isUser: boolean, isIntermediateOutput?: boolean, isThinking?: boolean, debugLog?: Array<any>}>>([]);
   const [sessionId, setSessionId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [presentingDocument, setPresentingDocument] = useState<any>(null);
   const [documents, setDocuments] = useState<OnyxDocument[]>([]);
   const [citationMap, setCitationMap] = useState<Map<number, string>>(new Map());
   const citationMapRef = useRef<Map<number, string>>(new Map());
+  const [expandedThinkingMessages, setExpandedThinkingMessages] = useState<Set<number>>(new Set());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   
   // Get access to assistants to determine current persona ID
@@ -331,8 +332,6 @@ export function DocumentChatSidebar({
 
       try {
         for await (const packet of handleSSEStream<PacketType>(response)) {
-          console.log('DocumentChatSidebar packet:', packet);
-          
           if ('answer_piece' in packet) {
             const agentAnswerPiece = packet as AgentAnswerPiece;
             const answerPiece = agentAnswerPiece.answer_piece;
@@ -350,7 +349,7 @@ export function DocumentChatSidebar({
                 const lastMessage = updatedMessages[updatedMessages.length - 1];
                 
                 // If the last message is from the AI and not an intermediate output, append to it
-                if (lastMessage && !lastMessage.isUser && !lastMessage.isIntermediateOutput) {
+                if (lastMessage && !lastMessage.isUser && !lastMessage.isIntermediateOutput && !lastMessage.isThinking) {
                   updatedMessages[updatedMessages.length - 1] = {
                     ...lastMessage,
                     text: lastMessage.text + answerPiece
@@ -362,6 +361,38 @@ export function DocumentChatSidebar({
                     text: answerPiece,
                     isUser: false,
                     isIntermediateOutput: false
+                  });
+                }
+                
+                return updatedMessages;
+              });
+            }
+          } else if ('thinking_piece' in packet) {
+            const thinkingPiece = (packet as ThinkingPiece).thinking_piece;
+            
+            if (thinkingPiece) {
+              console.log('Processing thinking piece:', {
+                thinkingPiece: thinkingPiece.substring(0, 100) + '...',
+              });
+              
+              setMessages(prev => {
+                const updatedMessages = [...prev];
+                const lastMessage = updatedMessages[updatedMessages.length - 1];
+                
+                // If the last message is a thinking bubble, append to it
+                if (lastMessage && !lastMessage.isUser && lastMessage.isThinking) {
+                  updatedMessages[updatedMessages.length - 1] = {
+                    ...lastMessage,
+                    text: lastMessage.text + thinkingPiece
+                  };
+                } else {
+                  // Create a new thinking bubble message
+                  updatedMessages.push({
+                    id: Date.now() + Math.random(),
+                    text: thinkingPiece,
+                    isUser: false,
+                    isIntermediateOutput: false,
+                    isThinking: true
                   });
                 }
                 
@@ -495,6 +526,27 @@ export function DocumentChatSidebar({
     }
   };
 
+  const getThinkingPreview = (text: string, maxLength: number = 100) => {
+    if (text.length <= maxLength) return text;
+    const truncated = text.substring(0, maxLength);
+    const lastSpace = truncated.lastIndexOf(' ');
+    return (lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated) + '...';
+  };
+
+  const toggleThinkingMessage = (messageId: number) => {
+    setExpandedThinkingMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  const isThinkingExpanded = (messageId: number) => expandedThinkingMessages.has(messageId);
+
   return (
     <div
       className={`relative bg-background max-w-full border-l border-t border-sidebar-border dark:border-neutral-700 h-screen`}
@@ -537,10 +589,43 @@ export function DocumentChatSidebar({
                           ? 'bg-accent text-accent-foreground border border-accent/50' 
                           : msg.isIntermediateOutput
                             ? 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-xs font-mono'
-                            : 'bg-background-chat-hover'}`}
+                            : msg.isThinking
+                              ? (isThinkingExpanded(msg.id) 
+                                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 text-blue-800 dark:text-blue-200' 
+                                : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 text-blue-800 dark:text-blue-200 text-xs')
+                              : 'bg-background-chat-hover'}`}
                         style={msg.isIntermediateOutput ? { maxHeight: '300px', overflowY: 'auto' } : {}}
                       >
-                        {msg.isIntermediateOutput ? (
+                        {msg.isThinking ? (
+                          <div>
+                            {/* Clickable header */}
+                            <div 
+                              className={`flex items-center gap-2 text-xs opacity-70 cursor-pointer hover:opacity-90 transition-opacity ${
+                                isThinkingExpanded(msg.id) ? 'mb-2' : 'mb-0'
+                              }`}
+                              onClick={() => toggleThinkingMessage(msg.id)}
+                            >
+                              <span>🧠 Thinking...</span>
+                              {isThinkingExpanded(msg.id) ? (
+                                <FiChevronDown size={12} />
+                              ) : (
+                                <FiChevronRight size={12} />
+                              )}
+                            </div>
+                            {/* Collapsible content */}
+                            {isThinkingExpanded(msg.id) ? (
+                              <ReactMarkdown
+                                className="prose dark:prose-invert max-w-full text-sm"
+                                components={markdownComponents}
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                                rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+                                urlTransform={transformLinkUri}
+                              >
+                                {preprocessLaTeX(preprocessCitations(msg.text))}
+                              </ReactMarkdown>
+                            ) : null}
+                          </div>
+                        ) : msg.isIntermediateOutput ? (
                           <pre className="whitespace-pre-wrap">{msg.text}</pre>
                         ) : (
                           <ReactMarkdown

@@ -123,8 +123,7 @@ def build_doc_context_str(
 
 
 def build_complete_context_str(
-    context_docs: Sequence[LlmDoc | InferenceChunk],
-    include_metadata: bool = True,
+    context_docs: Sequence[LlmDoc | InferenceChunk], include_metadata: bool = True
 ) -> str:
     context_str = ""
     for ind, doc in enumerate(context_docs, start=1):
@@ -170,8 +169,7 @@ def find_last_index(lst: list[int], max_prompt_tokens: int) -> int:
 
 
 def drop_messages_history_overflow(
-    messages_with_token_cnts: list[tuple[BaseMessage, int]],
-    max_allowed_tokens: int,
+    messages_with_token_cnts: list[tuple[BaseMessage, int]], max_allowed_tokens: int
 ) -> list[BaseMessage]:
     """As message history grows, messages need to be dropped starting from the furthest in the past.
     The System message should be kept if at all possible and the latest user input which is inserted in the
@@ -190,11 +188,17 @@ def drop_messages_history_overflow(
     history_msgs = messages[:-1]
     final_msg = messages[-1]
     if final_msg.type != "human":
-        if final_msg.type != "tool":
-            raise ValueError("Last message must be user input OR a tool result")
-        else:
+        if final_msg.type == "tool":
             final_msgs = messages[-3:]
             history_msgs = messages[:-3]
+        elif final_msg.type == "ai":
+            # Allow AI messages (like thinking messages) to be last
+            final_msgs = messages[-2:]
+            history_msgs = messages[:-2]
+        else:
+            raise ValueError(
+                "Last message must be user input, tool result, or AI message"
+            )
     else:
         final_msgs = [final_msg]
 

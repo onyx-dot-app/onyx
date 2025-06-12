@@ -168,13 +168,18 @@ class AnswerPromptBuilder:
             message_history.append(tmp)
         return message_history
 
-    def build(self) -> list[BaseMessage]:
+    def build(self, state_instructions: str | None = None) -> list[BaseMessage]:
         if not self.user_message_and_token_cnt:
             raise ValueError("User message must be set before building prompt")
 
         final_messages_with_tokens: list[tuple[BaseMessage, int]] = []
-        if self.system_message_and_token_cnt:
-            final_messages_with_tokens.append(self.system_message_and_token_cnt)
+        system_message, system_message_token_cnt = self._build_system_message(
+            state_instructions
+        )
+        if system_message:
+            final_messages_with_tokens.append(
+                (system_message, system_message_token_cnt)
+            )
 
         final_messages_with_tokens.extend(
             [
@@ -191,6 +196,24 @@ class AnswerPromptBuilder:
         return drop_messages_history_overflow(
             final_messages_with_tokens, self.max_tokens
         )
+
+    def _build_system_message(
+        self, state_specific_instructions: str | None = None
+    ) -> tuple[SystemMessage | None, int]:
+        message, token_cnt = self.system_message_and_token_cnt or (None, 0)
+        if message is None:
+            if state_specific_instructions:
+                message = SystemMessage(content=state_specific_instructions)
+                token_cnt = check_message_tokens(
+                    message, self.llm_tokenizer_encode_func
+                )
+            return message, token_cnt
+        if not state_specific_instructions:
+            return message, token_cnt
+        message_content = f"<AGENT_INSTRUCTIONS>\n{message.content}\n</AGENT_INSTRUCTIONS>\n\n<STATE_INSTRUCTIONS>\n{state_specific_instructions}\n</STATE_INSTRUCTIONS>"
+        message = SystemMessage(content=message_content)
+        token_cnt = check_message_tokens(message, self.llm_tokenizer_encode_func)
+        return message, token_cnt
 
 
 # Stores some parts of a prompt builder as needed for tool calls

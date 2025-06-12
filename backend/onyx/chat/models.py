@@ -150,6 +150,11 @@ class OnyxAnswerPiece(BaseModel):
     answer_piece: str | None  # if None, specifies the end of an Answer
 
 
+class ThinkingPiece(BaseModel):
+    # A small piece of the thinking process. Used for streaming back LLM reasoning.
+    thinking_piece: str
+
+
 # An intermediate representation of citations, later translated into
 # a mapping of the citation [n] number to SearchDoc
 class CitationInfo(SubQuestionIdentifier):
@@ -254,6 +259,7 @@ class PersonaOverrideConfig(BaseModel):
 
 AnswerQuestionPossibleReturn = (
     OnyxAnswerPiece
+    | ThinkingPiece
     | CitationInfo
     | FileChatDisplay
     | CustomToolResponse
@@ -391,6 +397,7 @@ AnswerPacket = (
 
 ResponsePart = (
     OnyxAnswerPiece
+    | ThinkingPiece
     | CitationInfo
     | ToolCallKickoff
     | ToolResponse

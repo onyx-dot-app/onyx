@@ -10,6 +10,7 @@ from onyx.chat.stream_processing.answer_response_handler import (
     AnswerResponseHandler,
     CitationResponseHandler,
     PassThroughAnswerResponseHandler,
+    ThinkingResponseHandler,
 )
 from onyx.chat.stream_processing.utils import map_document_id_order
 from onyx.utils.logger import setup_logger
@@ -24,28 +25,33 @@ def process_llm_stream(
     final_search_results: list[LlmDoc] | None = None,
     displayed_search_results: list[LlmDoc] | None = None,
     return_text_content: bool = False,
+    is_thinking: bool = False,
 ) -> AIMessageChunk:
     tool_call_chunk = AIMessageChunk(content="")
 
-    if final_search_results and displayed_search_results:
-        answer_handler: AnswerResponseHandler = CitationResponseHandler(
+    # Choose the appropriate handler based on whether this is thinking or regular content
+    if is_thinking:
+        answer_handler: AnswerResponseHandler = ThinkingResponseHandler()
+        event_name = "thinking_response"
+    elif final_search_results and displayed_search_results:
+        answer_handler = CitationResponseHandler(
             context_docs=final_search_results,
             final_doc_id_to_rank_map=map_document_id_order(final_search_results),
             display_doc_id_to_rank_map=map_document_id_order(displayed_search_results),
         )
+        event_name = "basic_response"
     else:
         answer_handler = PassThroughAnswerResponseHandler()
+        event_name = "basic_response"
 
-    full_answer = ""
+    full_content = ""
     # This stream will be the llm answer if no tool is chosen. When a tool is chosen,
     # the stream will contain AIMessageChunks with tool call information.
     for message in messages:
-        answer_piece = message.content
-        if not isinstance(answer_piece, str):
-            # this is only used for logging, so fine to
-            # just add the string representation
-            answer_piece = str(answer_piece)
-        full_answer += answer_piece
+        content_piece = message.content
+        if not isinstance(content_piece, str):
+            content_piece = str(content_piece)
+        full_content += content_piece
 
         if isinstance(message, AIMessageChunk) and (
             message.tool_call_chunks or message.tool_calls
@@ -53,14 +59,18 @@ def process_llm_stream(
             tool_call_chunk += message
         elif should_stream_answer:
             for response_part in answer_handler.handle_response_part(message, []):
-                write_custom_event("basic_response", response_part, writer)
-    logger.debug(f"Full answer: {full_answer}")
+                write_custom_event(event_name, response_part, writer)
+
+    logger.debug(
+        f"Full {'thinking' if is_thinking else 'answer'} content: {full_content}"
+    )
     tool_call_chunk = cast(AIMessageChunk, tool_call_chunk)
+
     # If return_text_content is True and no tool calls were made,
     # return the text content in the AIMessageChunk
     if return_text_content and not (
         tool_call_chunk.tool_calls or tool_call_chunk.tool_call_chunks
     ):
-        return AIMessageChunk(content=full_answer)
+        return AIMessageChunk(content=full_content)
 
     return tool_call_chunk

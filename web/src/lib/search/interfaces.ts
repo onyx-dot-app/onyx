@@ -1,6 +1,6 @@
+import { Persona } from "@/app/admin/assistants/interfaces";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Tag, ValidSources } from "../types";
-import { Persona } from "@/app/admin/assistants/interfaces";
 
 export const FlowType = {
   SEARCH: "search",
@@ -65,6 +65,10 @@ export interface ExtendedToolResponse extends ToolResponse {
 
 export interface AnswerPiecePacket {
   answer_piece: string;
+}
+
+export interface ThinkingPiece {
+  thinking_piece: string;
 }
 
 export enum StreamStopReason {

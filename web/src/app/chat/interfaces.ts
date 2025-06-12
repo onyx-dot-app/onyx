@@ -1,13 +1,13 @@
 import {
-  OnyxDocument,
-  Filters,
-  SearchOnyxDocument,
-  StreamStopReason,
-  SubQuestionPiece,
-  SubQueryPiece,
-  AgentAnswerPiece,
-  SubQuestionSearchDoc,
-  StreamStopInfo,
+    AgentAnswerPiece,
+    Filters,
+    OnyxDocument,
+    SearchOnyxDocument,
+    StreamStopInfo,
+    StreamStopReason,
+    SubQueryPiece,
+    SubQuestionPiece,
+    SubQuestionSearchDoc,
 } from "@/lib/search/interfaces";
 
 export enum RetrievalType {

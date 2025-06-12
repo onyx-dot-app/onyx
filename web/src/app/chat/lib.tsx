@@ -1,40 +1,39 @@
 import {
-  AnswerPiecePacket,
-  OnyxDocument,
-  Filters,
-  DocumentInfoPacket,
-  StreamStopInfo,
-  ProSearchPacket,
-  SubQueryPiece,
-  AgentAnswerPiece,
-  SubQuestionPiece,
-  ExtendedToolResponse,
-  RefinedAnswerImprovement,
+    AgentAnswerPiece,
+    AnswerPiecePacket,
+    DocumentInfoPacket,
+    ExtendedToolResponse,
+    Filters,
+    OnyxDocument,
+    ProSearchPacket,
+    RefinedAnswerImprovement,
+    StreamStopInfo,
+    SubQueryPiece,
+    SubQuestionPiece,
+    ThinkingPiece,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
-import { ChatState, FeedbackType } from "./types";
-import { MutableRefObject, RefObject, useEffect, useRef } from "react";
-import {
-  BackendMessage,
-  ChatSession,
-  DocumentsResponse,
-  FileDescriptor,
-  FileChatDisplay,
-  Message,
-  MessageResponseIDInfo,
-  RetrievalType,
-  StreamingError,
-  ToolCallMetadata,
-  AgenticMessageResponseIDInfo,
-  UserKnowledgeFilePacket,
-} from "./interfaces";
-import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
-import { SEARCH_PARAM_NAMES } from "./searchParams";
+import { MutableRefObject, RefObject, useEffect, useRef } from "react";
+import { Persona } from "../admin/assistants/interfaces";
 import { Settings } from "../admin/settings/interfaces";
-import { INTERNET_SEARCH_TOOL_ID } from "./tools/constants";
-import { SEARCH_TOOL_ID } from "./tools/constants";
-import { IIMAGE_GENERATION_TOOL_ID } from "./tools/constants";
+import {
+    AgenticMessageResponseIDInfo,
+    BackendMessage,
+    ChatSession,
+    DocumentsResponse,
+    FileChatDisplay,
+    FileDescriptor,
+    Message,
+    MessageResponseIDInfo,
+    RetrievalType,
+    StreamingError,
+    ToolCallMetadata,
+    UserKnowledgeFilePacket,
+} from "./interfaces";
+import { SEARCH_PARAM_NAMES } from "./searchParams";
+import { IIMAGE_GENERATION_TOOL_ID, INTERNET_SEARCH_TOOL_ID, SEARCH_TOOL_ID } from "./tools/constants";
+import { ChatState, FeedbackType } from "./types";
 
 interface ChatRetentionInfo {
   chatRetentionDays: number;
@@ -130,6 +129,7 @@ export async function createChatSession(
 export const isPacketType = (data: any): data is PacketType => {
   return (
     data.hasOwnProperty("answer_piece") ||
+    data.hasOwnProperty("thinking_piece") ||
     data.hasOwnProperty("top_documents") ||
     data.hasOwnProperty("tool_name") ||
     data.hasOwnProperty("file_ids") ||
@@ -145,6 +145,7 @@ export type PacketType =
   | ToolCallMetadata
   | BackendMessage
   | AnswerPiecePacket
+  | ThinkingPiece
   | DocumentInfoPacket
   | DocumentsResponse
   | FileChatDisplay
