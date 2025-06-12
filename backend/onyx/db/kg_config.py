@@ -9,7 +9,6 @@ from onyx.db.models import KGConfig
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
-from onyx.kg.setup.kg_default_entity_definitions import populate_default_entity_types
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
@@ -294,6 +293,11 @@ def disable_kg(db_session: Session) -> None:
 
 
 def get_kg_entity_types(db_session: Session) -> list[EntityType]:
+    # Imported here to get rid of circular import.
+    from onyx.kg.setup.kg_default_entity_definitions import (
+        populate_default_entity_types,
+    )
+
     existing_entity_types = [
         EntityType.from_model(kg_entity_type)
         for kg_entity_type in db_session.query(KGEntityType)

@@ -332,8 +332,8 @@ def populate_default_entity_types(
 
     kg_config_settings = get_kg_config_settings(db_session=db_session)
     validate_kg_settings(kg_config_settings)
-
     vendor_name = kg_config_settings.KG_VENDOR
+
     if not vendor_name:
         raise ValueError(
             f"Vendor name must be a non-empty string, instead got {vendor_name=}"
