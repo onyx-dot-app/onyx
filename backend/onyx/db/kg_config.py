@@ -6,6 +6,9 @@ from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.db.connector import get_configured_connector_sources
+from onyx.db.document import DocumentSource
+from onyx.db.models import Connector
 from onyx.db.models import KGConfig
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
@@ -25,6 +28,16 @@ log = logger.logging
 class KGProcessingType(Enum):
     EXTRACTION = "extraction"
     CLUSTERING = "clustering"
+
+
+def _get_connector_sources(db_session: Session) -> list[str]:
+
+    connector_sources = [
+        source.value.lower()
+        for source in get_configured_connector_sources(db_session=db_session)
+    ]
+
+    return connector_sources
 
 
 def _get_boolean_value(
@@ -183,6 +196,7 @@ def get_kg_processing_in_progress_status(
 # server API helpers
 
 
+# TODO: move to db
 VALID_ENTITY_TYPE_NAMES = set(
     [
         "ACCOUNT",
@@ -202,6 +216,12 @@ VALID_ENTITY_TYPE_NAMES = set(
         "SLACK",
         "VENDOR",
         "WEB",
+        "JIRA-EPIC",
+        "JIRA-ISSUE",
+        "JIRA-TASK",
+        "JIRA-SUBTASK",
+        "JIRA-STORY",
+        "JIRA-BUG",
     ]
 )
 
@@ -301,6 +321,13 @@ def get_kg_entity_types(db_session: Session) -> list[EntityType]:
         for kg_entity_type in db_session.query(KGEntityType)
     ]
 
+    configured_connector_sources = _get_connector_sources(db_session=db_session)
+    available_entity_types = [
+        et
+        for et in existing_entity_types
+        if et.grounded_source_name in configured_connector_sources
+    ]
+
     if not existing_entity_types:
         existing_entity_types = [
             EntityType.from_model(kg_entity_type)
@@ -309,13 +336,20 @@ def get_kg_entity_types(db_session: Session) -> list[EntityType]:
             )
         ]
 
-    return existing_entity_types
+        available_entity_types = [
+            et
+            for et in existing_entity_types
+            if et.grounded_source_name in configured_connector_sources
+        ]
+
+    return available_entity_types
 
 
 def update_kg_entity_types(
     db_session: Session,
     updates: list[EntityType],
 ) -> None:
+
     for upd in updates:
         if upd.name not in VALID_ENTITY_TYPE_NAMES:
             raise ValueError(
@@ -333,6 +367,53 @@ def update_kg_entity_types(
 
     db_session.commit()
 
+    # Update connector sources
+
+    configured_entity_types = get_kg_entity_types(db_session=db_session)
+
+    active_entity_type_sources = set(
+        [et.grounded_source_name for et in configured_entity_types if et.active]
+    )
+
+    # Update connectors that should be enabled
+    db_session.execute(
+        update(Connector)
+        .where(
+            Connector.source.in_(
+                [
+                    source
+                    for source in DocumentSource
+                    if source.value.lower() in active_entity_type_sources
+                ]
+            )
+        )
+        .where(~Connector.kg_processing_enabled)
+        .values(kg_processing_enabled=True)
+    )
+
+    # Update connectors that should be disabled
+    db_session.execute(
+        update(Connector)
+        .where(
+            Connector.source.in_(
+                [
+                    source
+                    for source in DocumentSource
+                    if source.value.lower() not in active_entity_type_sources
+                ]
+            )
+        )
+        .where(Connector.kg_processing_enabled)
+        .values(kg_processing_enabled=False)
+    )
+
+    db_session.commit()
+
 
 def bool_to_string(b: bool) -> str:
     return "true" if b else "false"
+
+
+def reset_entity_types(db_session: Session) -> None:
+    db_session.execute(update(KGEntityType).values(active=False))
+    db_session.commit()

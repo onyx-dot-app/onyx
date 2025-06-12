@@ -361,3 +361,9 @@ def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
     except Exception as e:
         logger.error(f"Error fetching unprocessed connector IDs: {str(e)}")
         raise e
+
+
+def get_configured_connector_sources(db_session: Session) -> list[DocumentSource]:
+    stmt = select(Connector.source).distinct()
+    results = db_session.scalars(stmt)
+    return list(results.all())

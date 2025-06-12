@@ -163,29 +163,7 @@ def _get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefi
             attributes={
                 "metadata_attributes": {},
                 "entity_filter_attributes": {},
-                "classification_attributes": {
-                    "customer": {
-                        "extraction": True,
-                        "description": "a call with representatives of one or more customers prospects",
-                    },
-                    "internal": {
-                        "extraction": True,
-                        "description": "a call between employees of the vendor's company (a vendor-internal call)",
-                    },
-                    "interview": {
-                        "extraction": True,
-                        "description": (
-                            "a call with an individual who is interviewed or is discussing potential employment with the vendor"
-                        ),
-                    },
-                    "other": {
-                        "extraction": True,
-                        "description": (
-                            "a call with representatives of companies having a different reason for the call "
-                            "(investment, partnering, etc.)"
-                        ),
-                    },
-                },
+                "classification_attributes": {},
             },
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.FIREFLIES,
@@ -212,16 +190,6 @@ def _get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefi
             },
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.GOOGLE_DRIVE,
-        ),
-        "GMAIL": KGDefaultEntityDefinition(
-            description="An email.",
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.GMAIL,
         ),
         "ACCOUNT": KGDefaultEntityDefinition(
             description=(
@@ -257,26 +225,6 @@ def _get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefi
             },
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.SALESFORCE,
-        ),
-        "SLACK": KGDefaultEntityDefinition(
-            description="A Slack conversation.",
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.SLACK,
-        ),
-        "WEB": KGDefaultEntityDefinition(
-            description="A web page.",
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.WEB,
         ),
         "VENDOR": KGDefaultEntityDefinition(
             description=f"The Vendor {vendor_name}, 'us'",

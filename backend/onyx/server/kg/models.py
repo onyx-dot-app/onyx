@@ -52,6 +52,7 @@ class EntityType(BaseModel):
     name: str
     description: str
     active: bool
+    grounded_source_name: str | None = None
 
     @classmethod
     def from_model(
@@ -62,4 +63,5 @@ class EntityType(BaseModel):
             name=model.id_name,
             description=model.description or "",
             active=model.active,
+            grounded_source_name=model.grounded_source_name,
         )

@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.db import kg_config
 from onyx.db.engine import get_session
+from onyx.db.kg_config import reset_entity_types
 from onyx.db.models import User
+from onyx.kg.resets.reset_index import reset_full_kg_index
 from onyx.server.kg.models import DisableKGConfigRequest
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
@@ -35,7 +37,11 @@ def get_kg_exposed(
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> None: ...
+) -> None:
+    # reset all entity types to inactive
+    reset_entity_types(db_session=db_session)
+    # TODO: before merging, convert to celery task function in other PR
+    reset_full_kg_index()
 
 
 # configurations
