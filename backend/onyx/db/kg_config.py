@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
+from sqlalchemy import and_
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -23,16 +24,28 @@ class KGProcessingType(Enum):
     CLUSTERING = "clustering"
 
 
-def get_kg_enablement(db_session: Session) -> bool:
-    check = (
+def _get_boolean_value(
+    db_session: Session,
+    variable_name: str,
+) -> bool:
+    value = (
         db_session.query(KGConfig.kg_variable_values)
         .filter(
-            KGConfig.kg_variable_name == "KG_ENABLED"
-            and KGConfig.kg_variable_values == ["true"]
+            and_(
+                KGConfig.kg_variable_name == variable_name,
+                KGConfig.kg_variable_values == ["true"],
+            )
         )
         .first()
     )
-    return check is not None
+
+    return value is not None
+
+
+def get_kg_exposed(db_session: Session) -> bool:
+    return _get_boolean_value(
+        db_session=db_session, variable_name=KGConfigVars.KG_EXPOSED
+    )
 
 
 def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
@@ -188,19 +201,6 @@ VALID_ENTITY_TYPE_NAMES = set(
         "WEB",
     ]
 )
-
-
-def get_kg_exposed(db_session: Session) -> bool:
-    exposed = (
-        db_session.query(KGConfig.kg_variable_values)
-        .filter(
-            KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED
-            and KGConfig.kg_variable_values == ["true"]
-        )
-        .first()
-    )
-
-    return exposed is not None
 
 
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:
