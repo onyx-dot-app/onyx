@@ -720,7 +720,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
-    parent_types = set("Account")
+    parent_types = set(["Account"])
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -733,7 +733,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set("Account")
+    parent_types = set(["Account"])
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -746,7 +746,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
-    parent_types = set("Account")
+    parent_types = set(["Account"])
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
@@ -763,7 +763,7 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 4: No matches
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = set("Opportunity")  # Wrong type
+    parent_types = set(["Opportunity"])  # Wrong type
     affected_ids_by_type = defaultdict(set)
     for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
