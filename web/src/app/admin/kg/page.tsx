@@ -29,6 +29,7 @@ import { DataTable } from "@/components/ui/dataTable";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import Title from "@/components/ui/title";
 
 function createDomainField(
   name: string,
@@ -364,15 +365,23 @@ function ResetActionButtons({
       <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
         Danger
       </p>
-      <div className="flex flex-col gap-y-4">
-        <p>
-          Resetting the Knowledge Graph will restore all of the defaults back to
-          their original values. It will also perform unfathomable voodoo magic,
-          turning water to wine and flesh to gold.
-        </p>
-        <Button variant="destructive" className="w-min" onClick={reset}>
-          Reset Knowledge Graph
-        </Button>
+      <div>
+        <div className="flex flex-col gap-y-4">
+          <p>
+            Resetting the Knowledge Graph will restore all of the defaults back
+            to their original values. It will also perform unfathomable voodoo
+            magic, turning water to wine and flesh to gold.
+          </p>
+          <Button variant="destructive" className="w-min" onClick={reset}>
+            Reset Knowledge Graph
+          </Button>
+        </div>
+        <div className="flex flex-col gap-y-4">
+          <p>Re-indexing the knowledge graph...</p>
+          <Button variant="destructive" className="w-min" onClick={reset}>
+            Reindex Knowledge Graph
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -397,21 +406,29 @@ function Main() {
       {popup}
       <CardSection className="max-w-2xl text-text shadow-lg rounded-lg">
         <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-          Knowledge Graph Configuration
+          Knowledge Graph Configuration (Private Beta)
         </p>
         <div className="flex flex-col gap-y-6">
           <p className="text-text-600">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum
-            imperdiet dolor ut nisl ultrices, a tempor massa cursus. Etiam a
-            nisl et nisl venenatis scelerisque vel eu ex. Proin eu dolor vitae
-            risus molestie sodales sed a risus.
+            The Knowledge Graph feature lets you explore your data in new ways.
+            Instead of searching through unstructured text, your data is
+            organized as entities and their relationships, enabling powerful
+            queries like:
+            <div className="p-4">
+              <p>- "Summarize my last 3 calls with account XYZ"</p>
+              <p>
+                - "How many open Jiras are assigned to John Smith, ranked by
+                priority"
+              </p>
+            </div>
+            (To use Knowledge Graph queries, you'll need a dedicated Assistant
+            configured in a specific way. Please contact the Onyx team for setup
+            instructions.)
           </p>
           <p className="text-text-600">
-            Aliquam dignissim nisi quis venenatis venenatis. Suspendisse euismod
-            purus eget ornare pharetra. Nullam aliquet enim ut lectus cursus,
-            eget auctor nunc pulvinar. Maecenas at leo sit amet justo rutrum
-            posuere sed at leo. Vestibulum efficitur leo vitae nunc eleifend
-            egestas. Cras a congue ante, ac imperdiet libero.
+            <Title>Getting Started:</Title>
+            Begin by configuring some high-level attributes, and then define the
+            entities you want to model afterwards.
           </p>
           <Button
             size="lg"
