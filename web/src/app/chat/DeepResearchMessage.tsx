@@ -14,7 +14,11 @@ import { DislikeFeedback, LikeFeedback } from "@/components/icons/icons";
 import { useContext } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { DeepAction } from "./deepResearchAction";
-import { DeepThinkingAction, RunCommandAction } from "./DeepActions";
+import {
+  DeepThinkingAction,
+  RunCommandAction,
+  WebSearchAction,
+} from "./DeepActions";
 
 const RenderAction = ({ action }: { action: DeepAction }) => {
   const Inner = ({ action }: { action: DeepAction }): JSX.Element => {
@@ -25,11 +29,13 @@ const RenderAction = ({ action }: { action: DeepAction }) => {
         return <RunCommandAction action={action} />;
       case "thinking":
         return <DeepThinkingAction action={action} />;
+      case "web_search":
+        return <WebSearchAction action={action} />;
       default:
         return action satisfies never; // ensure all deep action types are rendered
     }
   };
-  return <div>{<Inner action={action} />}</div>;
+  return <div className="py-1">{<Inner action={action} />}</div>;
 };
 
 type DeepResearchMessageProps = Pick<
@@ -77,7 +83,7 @@ export const DeepResearchMessage = (props: DeepResearchMessageProps) => {
             )}
             Deep Research
           </div>
-          <div ref={parent} className="py-2">
+          <div ref={parent} className="py-4">
             {actions.map((action, index) => (
               <RenderAction key={index} action={action} />
             ))}

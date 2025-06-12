@@ -7,6 +7,7 @@ export type DeepResearchActionPacket = {
 export type DeepAction =
   | DeepRemoveAction
   | DeepRunCommandAction
+  | DeepSearchWebAction
   | DeepThinkingAction;
 
 type DeepRunCommandAction = {
@@ -14,6 +15,16 @@ type DeepRunCommandAction = {
   id: string;
   result: string;
   type: "run_command";
+};
+
+type DeepSearchWebAction = {
+  query: string;
+  id: string;
+  results: {
+    title: string;
+    url: string;
+  }[];
+  type: "web_search";
 };
 
 type DeepRemoveAction = {

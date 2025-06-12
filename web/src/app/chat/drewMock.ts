@@ -29,7 +29,26 @@ async function* mockSseStream(
 
   yield buildActionPacket("thinking", {
     id: "first-thinking",
-    thinking: "thinking about the solute",
+    thinking: "Thinking about what makes a shoe good",
+  });
+
+  await delay(1000);
+
+  yield buildActionPacket("web_search", {
+    id: "first-web-search",
+    query: "Best shoes to buy",
+    results: [],
+  });
+  await delay(1000);
+  yield buildActionPacket("web_search", {
+    id: "first-web-search",
+    query: "Best shoes to buy",
+    results: [
+      {
+        title: "(Reddit) Shoe Reviews",
+        url: "https://www.reddit.com/r/ShoeReviews/",
+      },
+    ],
   });
 
   await delay(1000);
