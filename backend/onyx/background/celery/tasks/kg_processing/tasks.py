@@ -266,8 +266,6 @@ def kg_reset_source_index(
 ) -> int | None:
     """a task for KG reset of a source."""
 
-    time.monotonic()
-
     with get_session_with_current_tenant() as db_session:
         block_kg_processing_current_tenant(db_session)
         db_session.commit()
