@@ -14,6 +14,7 @@ import { DislikeFeedback, LikeFeedback } from "@/components/icons/icons";
 import { useContext } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { DeepAction } from "./deepResearchAction";
+import { DeepThinkingAction, RunCommandAction } from "./DeepActions";
 
 const RenderAction = ({ action }: { action: DeepAction }) => {
   const Inner = ({ action }: { action: DeepAction }): JSX.Element => {
@@ -21,7 +22,9 @@ const RenderAction = ({ action }: { action: DeepAction }) => {
       case "remove":
         return <div>Remove</div>;
       case "run_command":
-        return <div>Run command</div>;
+        return <RunCommandAction action={action} />;
+      case "thinking":
+        return <DeepThinkingAction action={action} />;
       default:
         return action satisfies never; // ensure all deep action types are rendered
     }
@@ -50,7 +53,7 @@ type DeepResearchMessageProps = Pick<
 export const DeepResearchMessage = (props: DeepResearchMessageProps) => {
   const actions = props.message.actions ?? [];
   const settings = useContext(SettingsContext);
-  const [parent, enableAnimations] = useAutoAnimate(/* optional config */);
+  const [parent] = useAutoAnimate();
   return (
     <div
       id={props.isComplete ? "onyx-ai-message" : undefined}

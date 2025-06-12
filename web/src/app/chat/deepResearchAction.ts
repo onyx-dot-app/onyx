@@ -4,7 +4,10 @@ export type DeepResearchActionPacket = {
   payload: DeepAction;
 };
 
-export type DeepAction = DeepRemoveAction | DeepRunCommandAction;
+export type DeepAction =
+  | DeepRemoveAction
+  | DeepRunCommandAction
+  | DeepThinkingAction;
 
 type DeepRunCommandAction = {
   cmd: string;
@@ -18,6 +21,30 @@ type DeepRemoveAction = {
   id: string;
 };
 
+type DeepThinkingAction = {
+  type: "thinking";
+  id: string;
+  thinking: string;
+};
+
+export type DeepActionType<T extends DeepAction["type"]> = Extract<
+  DeepAction,
+  { type: T }
+>;
+
+export const buildActionPacket = <T extends DeepAction["type"]>(
+  type: T,
+  data: Omit<DeepActionType<T>, "type">
+): DeepResearchActionPacket => {
+  return {
+    deepResearchAction: "deep_research_action",
+    payload: {
+      type,
+      ...data,
+    } as DeepActionType<T>,
+  };
+};
+
 export const handleNewAction = (prev: DeepAction[], newAction: DeepAction) => {
   // TODO: check for remove action
   switch (newAction.type) {
@@ -28,9 +55,7 @@ export const handleNewAction = (prev: DeepAction[], newAction: DeepAction) => {
     default:
       const existingAction = prev.find((a) => a.id === newAction.id);
       if (existingAction) {
-        return prev.map((a) =>
-          a.id === newAction.id ? { ...a, result: newAction.result } : a
-        );
+        return prev.map((a) => (a.id === newAction.id ? newAction : a));
       } else {
         return [...prev, newAction];
       }
