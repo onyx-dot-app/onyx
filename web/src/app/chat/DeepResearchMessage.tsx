@@ -88,8 +88,8 @@ export const DeepResearchMessage = (props: DeepResearchMessageProps) => {
             Deep Research
           </div>
           <div ref={parent} className="py-4">
-            {actions.map((action, index) => (
-              <RenderAction key={index} action={action} />
+            {actions.map((action) => (
+              <RenderAction key={action.id} action={action} />
             ))}
           </div>
           <div className="w-full py-2">

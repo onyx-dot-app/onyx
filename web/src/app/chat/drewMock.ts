@@ -50,13 +50,29 @@ async function* mockSseStream(
       },
     ],
   });
+  await delay(1000);
+  yield buildActionPacket("web_search", {
+    id: "first-web-search",
+    query: "Best shoes to buy",
+    results: [
+      {
+        title: "(Reddit) Shoe Reviews",
+        url: "https://www.reddit.com/r/ShoeReviews/",
+      },
+      {
+        title: "Nike. Just Do It. Nike.com",
+        url: "https://www.nike.com/",
+      },
+    ],
+  });
 
-  await delay(1000);
-  yield {
-    answer_piece: "Hello",
-  };
-  await delay(1000);
-  yield {
-    answer_piece: "World",
-  };
+  const finalAnswer = "This is a final answer. All shoes are good";
+  const words = finalAnswer.split(" ");
+
+  for (const word of words) {
+    await delay(200);
+    yield {
+      answer_piece: word + " ",
+    };
+  }
 }

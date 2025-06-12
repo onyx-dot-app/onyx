@@ -57,7 +57,6 @@ export const buildActionPacket = <T extends DeepAction["type"]>(
 };
 
 export const handleNewAction = (prev: DeepAction[], newAction: DeepAction) => {
-  // TODO: check for remove action
   switch (newAction.type) {
     case "remove":
       return prev.filter((a) => a.id !== newAction.id);

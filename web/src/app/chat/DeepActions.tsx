@@ -1,5 +1,5 @@
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { DeepAction, DeepActionType } from "./deepResearchAction";
-
 type DeepActionRenderer<T extends DeepAction> = ({
   action,
 }: {
@@ -21,12 +21,13 @@ export const DeepThinkingAction: DeepActionRenderer<
 export const WebSearchAction: DeepActionRenderer<
   DeepActionType<"web_search">
 > = ({ action }) => {
+  const [parent] = useAutoAnimate();
   return (
     <div className="space-y-2">
       <div className="text-sm text-neutral-400">
         Searching the web for: {action.query}
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div ref={parent} className="flex items-start gap-2 overflow-x-auto pb-2">
         {action.results.map((result) => (
           <a
             key={result.url}
@@ -43,7 +44,7 @@ export const WebSearchAction: DeepActionRenderer<
                 alt=""
                 className="w-4 h-4"
               />
-              <div className="text-sm font-medium line-clamp-2">
+              <div className="text-sm line-clamp-1 overflow-ellipsis font-medium">
                 {result.title}
               </div>
             </div>
