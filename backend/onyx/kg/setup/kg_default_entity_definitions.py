@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
-from onyx.db.models import KGConfig
-from onyx.kg.models import KGConfigVars
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import validate_kg_settings
 from onyx.kg.models import KGDefaultEntityDefinition
 from onyx.kg.models import KGGroundingType
 
 
-def get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefinition]:
+def _get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefinition]:
     return {
         "LINEAR": KGDefaultEntityDefinition(
             description="A formal Linear ticket about a product issue or improvement request.",
@@ -299,11 +299,11 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefin
     }
 
 
-def generate_non_existing_entity_types(
+def _generate_non_existing_entity_types(
     existing_entity_types: dict[str, KGEntityType],
     vendor_name: str,
 ) -> Generator[KGEntityType]:
-    default_entity_types = get_default_entity_types(vendor_name=vendor_name)
+    default_entity_types = _get_default_entity_types(vendor_name=vendor_name)
 
     for default_entity_name, default_entity_type in default_entity_types.items():
         if default_entity_name not in existing_entity_types:
@@ -322,32 +322,6 @@ def generate_non_existing_entity_types(
             )
 
 
-def get_vendor_name(
-    db_session: Session,
-) -> str:
-    config = (
-        db_session.query(KGConfig)
-        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_VENDOR)
-        .first()
-    )
-    if not config:
-        raise RuntimeError("Failed to find the vendor name")
-
-    if len(config.kg_variable_values) != 1:
-        raise RuntimeError(
-            f"Expected vendor name to be a list of length 1, instead got {config.kg_variable_values=}"
-        )
-
-    [vendor_name] = config.kg_variable_values
-
-    if not vendor_name:
-        raise ValueError(
-            f"Vendor name must be a non-empty string, instead got {vendor_name=}"
-        )
-
-    return vendor_name
-
-
 def populate_default_entity_types(
     db_session: Session,
 ) -> list[KGEntityType]:
@@ -356,14 +330,22 @@ def populate_default_entity_types(
     Returns the *entire* list of Entity Types.
     """
 
-    vendor_name = get_vendor_name(db_session=db_session)
+    kg_config_settings = get_kg_config_settings(db_session=db_session)
+    validate_kg_settings(kg_config_settings)
+
+    vendor_name = kg_config_settings.KG_VENDOR
+    if not vendor_name:
+        raise ValueError(
+            f"Vendor name must be a non-empty string, instead got {vendor_name=}"
+        )
+
     existing_entity_types = {
         et.id_name: et for et in db_session.query(KGEntityType).all()
     }
 
     entity_types = []
 
-    for non_existing_entity_type in generate_non_existing_entity_types(
+    for non_existing_entity_type in _generate_non_existing_entity_types(
         existing_entity_types=existing_entity_types,
         vendor_name=vendor_name,
     ):
