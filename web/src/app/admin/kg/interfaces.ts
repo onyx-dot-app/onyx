@@ -14,6 +14,14 @@ export type KGConfigRaw = {
   coverage_start: string;
 };
 
+export type EntityTypeValues = { [key: string]: EntityType };
+
+export type EntityType = {
+  name: string;
+  description: string;
+  active: boolean;
+};
+
 export function sanitizeKGConfig(raw: KGConfigRaw): KGConfig {
   const coverage_start = new Date(raw.coverage_start);
 
@@ -23,10 +31,20 @@ export function sanitizeKGConfig(raw: KGConfigRaw): KGConfig {
   };
 }
 
-export type EntityTypeValues = { [key: string]: EntityType };
+export function sanitizeKGEntityTypes(
+  entityTypes: EntityType[]
+): [EntityTypeValues, EntityType[]] {
+  const entityTypeMap: EntityTypeValues = {};
+  for (const entityType of entityTypes) {
+    entityTypeMap[entityType.name.toLowerCase()] = entityType;
+  }
 
-export type EntityType = {
-  name: string;
-  description: string;
-  active: boolean;
-};
+  const sortedData = Object.values(entityTypeMap);
+  sortedData.sort((a, b) => {
+    if (a.name < b.name) return -1;
+    else if (a.name > b.name) return 1;
+    return 0;
+  });
+
+  return [entityTypeMap, sortedData];
+}

@@ -23,6 +23,7 @@ import {
   EntityTypeValues,
   sanitizeKGConfig,
   KGConfigRaw,
+  sanitizeKGEntityTypes,
 } from "./interfaces";
 import { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/dataTable";
@@ -73,11 +74,11 @@ const IgnoreDomains = createDomainField(
 
 function KGConfiguration({
   kgConfig,
-  onSubmitSuccess,
+  refreshKGConfig,
   setPopup,
 }: {
   kgConfig: KGConfig;
-  onSubmitSuccess?: () => void;
+  refreshKGConfig?: () => void;
   setPopup?: (spec: PopupSpec | null) => void;
 }) {
   const initialValues: KGConfig = {
@@ -149,7 +150,7 @@ function KGConfiguration({
       type: "success",
     });
     resetForm({ values });
-    onSubmitSuccess?.();
+    refreshKGConfig?.();
   };
 
   return (
@@ -208,10 +209,16 @@ function KGConfiguration({
   );
 }
 
-function KGEntityType({
+function KGEntityTypes({
+  kgEntityTypes,
+  sortedKGEntityTypes,
   setPopup,
+  refreshKGEntityTypes,
 }: {
+  kgEntityTypes: EntityTypeValues;
+  sortedKGEntityTypes: EntityType[];
   setPopup?: (spec: PopupSpec | null) => void;
+  refreshKGEntityTypes?: () => void;
 }) {
   const columns: ColumnDef<EntityType>[] = [
     {
@@ -239,19 +246,6 @@ function KGEntityType({
     },
   ];
 
-  const {
-    data: rawData,
-    isLoading,
-    mutate,
-  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
-
-  if (isLoading || !rawData) return <></>;
-
-  const data: EntityTypeValues = {};
-  for (const entityType of rawData) {
-    data[entityType.name.toLowerCase()] = entityType;
-  }
-
   const validationSchema = Yup.array(
     Yup.object({
       active: Yup.boolean().required(),
@@ -268,8 +262,8 @@ function KGEntityType({
   ) => {
     const diffs: EntityType[] = [];
 
-    for (const key in data) {
-      const initialValue = data[key]!;
+    for (const key in kgEntityTypes) {
+      const initialValue = kgEntityTypes[key]!;
       const currentValue = values[key]!;
       const equals =
         initialValue.description === currentValue.description &&
@@ -303,51 +297,12 @@ function KGEntityType({
       message: "Successfully updated Entity Types.",
       type: "success",
     });
-    mutate();
+
+    refreshKGEntityTypes?.();
+
     resetForm({ values });
   };
 
-  const sortedData = Object.values(data);
-  sortedData.sort((a, b) => {
-    if (a.name < b.name) return -1;
-    else if (a.name > b.name) return 1;
-    return 0;
-  });
-
-  return (
-    <CardSection className="flex w-min px-10">
-      <Formik
-        initialValues={data}
-        validationSchema={validationSchema}
-        onSubmit={onSubmit}
-      >
-        {(props) => (
-          <Form>
-            <DataTable columns={columns} data={sortedData} />
-            <div className="flex flex-row items-center gap-x-4">
-              <Button type="submit" variant="submit" disabled={!props.dirty}>
-                Save
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!props.dirty}
-                onClick={() => props.resetForm()}
-              >
-                Cancel
-              </Button>
-            </div>
-          </Form>
-        )}
-      </Formik>
-    </CardSection>
-  );
-}
-
-function ResetActionButtons({
-  setPopup,
-}: {
-  setPopup?: (spec: PopupSpec | null) => void;
-}) {
   const reset = async () => {
     const result = await fetch("/api/admin/kg/reset", { method: "PUT" });
 
@@ -363,40 +318,89 @@ function ResetActionButtons({
       message: "Successfully reset Knowledge Graph.",
       type: "success",
     });
+
+    refreshKGEntityTypes?.();
   };
 
   return (
-    <div className="border border-red-700 p-8 rounded-md flex flex-col">
-      <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-        Danger
-      </p>
-      <div className="flex flex-col gap-y-4">
-        <p>
-          Resetting the Knowledge Graph will restore all of the defaults back to
-          their original values. It will also perform unfathomable voodoo magic,
-          turning water to wine and flesh to gold.
-        </p>
-        <Button variant="destructive" className="w-min" onClick={reset}>
-          Reset Knowledge Graph
-        </Button>
-      </div>
-    </div>
+    <Formik
+      enableReinitialize
+      initialValues={kgEntityTypes}
+      validationSchema={validationSchema}
+      onSubmit={onSubmit}
+    >
+      {(props) => (
+        <Form className="flex flex-col gap-y-8">
+          <CardSection className="flex flex-col w-min px-10 gap-y-4">
+            <DataTable columns={columns} data={sortedKGEntityTypes} />
+            <div className="flex flex-row items-center gap-x-4">
+              <Button type="submit" variant="submit" disabled={!props.dirty}>
+                Save
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!props.dirty}
+                onClick={() => props.resetForm()}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardSection>
+          <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
+            <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
+              Danger
+            </p>
+            <div className="flex flex-col gap-y-4">
+              <p>
+                Resetting the Knowledge Graph will restore all of the defaults
+                back to their original values. It will also perform unfathomable
+                voodoo magic, turning water to wine and flesh to gold.
+              </p>
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-min"
+                onClick={reset}
+              >
+                Reset Knowledge Graph
+              </Button>
+            </div>
+          </div>
+        </Form>
+      )}
+    </Formik>
   );
 }
 
 function Main() {
-  const [configureModalShown, setConfigureModalShown] = useState(false);
-  const { data, isLoading, mutate } = useSWR<KGConfigRaw>(
-    "/api/admin/kg/config",
-    errorHandlingFetcher
-  );
-  const { popup, setPopup } = usePopup();
+  // Data:
+  const {
+    data: configData,
+    isLoading: configIsLoading,
+    mutate: configMutate,
+  } = useSWR<KGConfigRaw>("/api/admin/kg/config", errorHandlingFetcher);
+  const {
+    data: entityTypesData,
+    isLoading: entityTypesIsLoading,
+    mutate: entityTypesMutate,
+  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
 
-  if (isLoading || !data) {
+  // Local State:
+  const { popup, setPopup } = usePopup();
+  const [configureModalShown, setConfigureModalShown] = useState(false);
+
+  if (
+    configIsLoading ||
+    entityTypesIsLoading ||
+    !configData ||
+    !entityTypesData
+  ) {
     return <></>;
   }
 
-  const kgConfig = sanitizeKGConfig(data);
+  const kgConfig = sanitizeKGConfig(configData);
+  const [kgEntityTypes, sortedKGEntityTypes] =
+    sanitizeKGEntityTypes(entityTypesData);
 
   return (
     <div className="flex flex-col py-4 gap-y-8">
@@ -441,8 +445,12 @@ function Main() {
           <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
             Entity Types
           </p>
-          <KGEntityType setPopup={setPopup} />
-          <ResetActionButtons />
+          <KGEntityTypes
+            kgEntityTypes={kgEntityTypes}
+            sortedKGEntityTypes={sortedKGEntityTypes}
+            setPopup={setPopup}
+            refreshKGEntityTypes={entityTypesMutate}
+          />
         </>
       )}
       {configureModalShown && (
@@ -452,8 +460,8 @@ function Main() {
         >
           <KGConfiguration
             kgConfig={kgConfig}
-            onSubmitSuccess={mutate}
             setPopup={setPopup}
+            refreshKGConfig={configMutate}
           />
         </Modal>
       )}
