@@ -1032,8 +1032,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
-    import time
-
     connector = SalesforceConnector(requested_objects=["Account"])
 
     connector.load_credentials(
