@@ -692,7 +692,7 @@ def kg_extraction(
                         ] = defaultdict(int)
                     connector_aggregated_kg_extractions.relationships[relationship][
                         source_document_id
-                    ] += count
+                    ] += extraction_count
 
             for (
                 document_id,
