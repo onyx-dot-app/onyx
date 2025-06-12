@@ -4,8 +4,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import validate_kg_settings
 from onyx.kg.models import KGDefaultEntityDefinition
 from onyx.kg.models import KGGroundingType
 
@@ -330,10 +328,14 @@ def populate_default_entity_types(
     Returns the *entire* list of Entity Types.
     """
 
+    # Imported here to get rid of circular import.
+    from onyx.db.kg_config import get_kg_config_settings
+    from onyx.db.kg_config import validate_kg_settings
+
     kg_config_settings = get_kg_config_settings(db_session=db_session)
     validate_kg_settings(kg_config_settings)
-    vendor_name = kg_config_settings.KG_VENDOR
 
+    vendor_name = kg_config_settings.KG_VENDOR
     if not vendor_name:
         raise ValueError(
             f"Vendor name must be a non-empty string, instead got {vendor_name=}"
