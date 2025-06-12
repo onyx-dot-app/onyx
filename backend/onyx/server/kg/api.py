@@ -35,16 +35,7 @@ def get_kg_exposed(
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> None:
-    kg_config.reset_kg(db_session=db_session)
-
-
-@admin_router.put("/reindex")
-def reindex_kg(
-    _: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> None:
-    kg_config.reindex_kg(db_session=db_session)
+) -> None: ...
 
 
 # configurations
