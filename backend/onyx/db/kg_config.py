@@ -30,14 +30,11 @@ class KGProcessingType(Enum):
     CLUSTERING = "clustering"
 
 
-def _get_connector_sources(db_session: Session) -> list[str]:
-
-    connector_sources = [
+def _get_connector_sources(db_session: Session) -> set[str]:
+    return {
         source.value.lower()
         for source in get_configured_connector_sources(db_session=db_session)
-    ]
-
-    return connector_sources
+    }
 
 
 def _get_boolean_value(
@@ -321,13 +318,6 @@ def get_kg_entity_types(db_session: Session) -> list[EntityType]:
         for kg_entity_type in db_session.query(KGEntityType)
     ]
 
-    configured_connector_sources = _get_connector_sources(db_session=db_session)
-    available_entity_types = [
-        et
-        for et in existing_entity_types
-        if et.grounded_source_name in configured_connector_sources
-    ]
-
     if not existing_entity_types:
         existing_entity_types = [
             EntityType.from_model(kg_entity_type)
@@ -336,12 +326,13 @@ def get_kg_entity_types(db_session: Session) -> list[EntityType]:
             )
         ]
 
-        available_entity_types = [
-            et
-            for et in existing_entity_types
-            if et.grounded_source_name in configured_connector_sources
-        ]
+    configured_connector_sources = _get_connector_sources(db_session=db_session)
 
+    available_entity_types = [
+        et
+        for et in existing_entity_types
+        if et.grounded_source_name in configured_connector_sources
+    ]
     return available_entity_types
 
 
@@ -349,7 +340,6 @@ def update_kg_entity_types(
     db_session: Session,
     updates: list[EntityType],
 ) -> None:
-
     for upd in updates:
         if upd.name not in VALID_ENTITY_TYPE_NAMES:
             raise ValueError(
