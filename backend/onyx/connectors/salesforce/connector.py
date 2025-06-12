@@ -34,11 +34,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
-# from onyx.connectors.salesforce.salesforce_calls import (
-#     get_child_objects_by_id,
-#     get_object_by_id_query,
-# )
-# from onyx.connectors.salesforce.salesforce_calls import get_parent_reference_fields
 
 logger = setup_logger()
 
