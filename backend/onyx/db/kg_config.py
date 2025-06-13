@@ -20,10 +20,6 @@ from onyx.kg.setup.kg_default_entity_definitions import (
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
-from onyx.utils import logger
-
-
-log = logger.logging
 
 
 class KGProcessingType(Enum):
