@@ -246,17 +246,16 @@ def get_chunks_via_visit_api(
                         continue
 
                 if MULTI_TENANT:
-                    if filters.tenant_id:
-                        document_tenant_id = document["fields"].get(TENANT_ID)
-                        if document_tenant_id != filters.tenant_id:
-                            logger.error(
-                                f"Skipping document {document['document_id']} because "
-                                f"it does not belong to tenant {filters.tenant_id}. "
-                                "This should never happen."
-                            )
-                            continue
-                    else:
+                    if not filters.tenant_id:
                         raise ValueError("Tenant ID is required for multi-tenant")
+                    document_tenant_id = document["fields"].get(TENANT_ID)
+                    if document_tenant_id != filters.tenant_id:
+                        logger.error(
+                            f"Skipping document {document['document_id']} because "
+                            f"it does not belong to tenant {filters.tenant_id}. "
+                            "This should never happen."
+                        )
+                        continue
 
                 document_chunks.append(document)
 

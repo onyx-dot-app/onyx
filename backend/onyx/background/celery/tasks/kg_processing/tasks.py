@@ -10,10 +10,10 @@ from onyx.background.celery.tasks.kg_processing.utils import (
     block_kg_processing_current_tenant,
 )
 from onyx.background.celery.tasks.kg_processing.utils import (
-    check_kg_processing_requirements,
+    is_kg_clustering_only_requirements_met,
 )
 from onyx.background.celery.tasks.kg_processing.utils import (
-    check_kg_unclustered_extraction_requirements,
+    is_kg_processing_requirements_met,
 )
 from onyx.background.celery.tasks.kg_processing.utils import (
     unblock_kg_processing_current_tenant,
@@ -65,7 +65,7 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
         locked = True
 
         with get_session_with_current_tenant() as db_session:
-            kg_processing_requirements_met = check_kg_processing_requirements(
+            kg_processing_requirements_met = is_kg_processing_requirements_met(
                 db_session
             )
 
@@ -138,16 +138,16 @@ def check_for_kg_processing_clustering_only(
         locked = True
 
         with get_session_with_current_tenant() as db_session:
-            kg_processing_requirements_met = (
-                check_kg_unclustered_extraction_requirements(db_session)
+            kg_processing_requirements_met = is_kg_clustering_only_requirements_met(
+                db_session
             )
 
         if not kg_processing_requirements_met:
-
-            task_logger.info(
-                f"Found documents needing KG processing for tenant {tenant_id}"
-            )
             return None
+
+        task_logger.info(
+            f"Found documents needing KG processing for tenant {tenant_id}"
+        )
 
         self.app.send_task(
             OnyxCeleryTask.KG_CLUSTERING_ONLY,

@@ -24,52 +24,35 @@ def _update_kg_processing_status(db_session: Session, status_update: bool) -> No
     )
 
 
-def check_kg_processing_unblocked(db_session: Session) -> bool:
+def is_kg_processing_unblocked(db_session: Session) -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created.
     """
 
     kg_config = get_kg_config_settings(db_session)
-
-    if not kg_config.KG_ENABLED:
-        return False
-
-    kg_extraction_in_progress = kg_config.KG_EXTRACTION_IN_PROGRESS
-    kg_clustering_in_progress = kg_config.KG_CLUSTERING_IN_PROGRESS
-
-    if kg_extraction_in_progress or kg_clustering_in_progress:
-        return False
-
-    return True
+    return kg_config.KG_ENABLED and not (
+        kg_config.KG_EXTRACTION_IN_PROGRESS or kg_config.KG_CLUSTERING_IN_PROGRESS
+    )
 
 
-def check_kg_processing_requirements(db_session: Session) -> bool:
+def is_kg_processing_requirements_met(db_session: Session) -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created, and then looks for documents that should be indexed.
     """
-    if not check_kg_processing_unblocked(db_session):
+    if not is_kg_processing_unblocked(db_session):
         return False
 
     kg_config = get_kg_config_settings(db_session)
-
-    kg_coverage_start = kg_config.KG_COVERAGE_START
-    kg_max_coverage_days = kg_config.KG_MAX_COVERAGE_DAYS
-
-    documents_needing_kg_processing = check_for_documents_needing_kg_processing(
-        db_session, kg_coverage_start, kg_max_coverage_days
+    return check_for_documents_needing_kg_processing(
+        db_session, kg_config.KG_COVERAGE_START, kg_config.KG_MAX_COVERAGE_DAYS
     )
 
-    if not documents_needing_kg_processing:
-        return False
 
-    return True
-
-
-def check_kg_unclustered_extraction_requirements(db_session: Session) -> bool:
+def is_kg_clustering_only_requirements_met(db_session: Session) -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created, and then looks for documents that should be indexed.
     """
-    if not check_kg_processing_unblocked(db_session):
+    if not is_kg_processing_unblocked(db_session):
         return False
 
     # Check if there are any entries in the staging tables
@@ -80,21 +63,14 @@ def check_kg_unclustered_extraction_requirements(db_session: Session) -> bool:
         db_session.query(KGRelationshipExtractionStaging).first() is not None
     )
 
-    if not has_staging_entities and not has_staging_relationships:
-        return False
-
-    return True
+    return has_staging_entities or has_staging_relationships
 
 
 def block_kg_processing_current_tenant(db_session: Session) -> None:
     """Blocks KG processing for a tenant."""
     _update_kg_processing_status(db_session, True)
 
-    return None
-
 
 def unblock_kg_processing_current_tenant(db_session: Session) -> None:
     """Blocks KG processing for a tenant."""
     _update_kg_processing_status(db_session, False)
-
-    return None

@@ -583,7 +583,7 @@ def stream_chat_message_objects(
             raise Exception("Extractions done")
 
         elif new_msg_req.message.startswith("kg_rs_source"):
-            msg_split = [x.strip() for x in new_msg_req.message.split(":")]
+            msg_split = [x for x in new_msg_req.message.split(":")]
             if len(msg_split) > 2:
                 raise Exception("Invalid format for a source reset command")
             elif len(msg_split) == 2:

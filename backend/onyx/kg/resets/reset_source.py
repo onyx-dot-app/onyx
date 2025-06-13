@@ -13,18 +13,18 @@ from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
-from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 from onyx.kg.resets.reset_index import reset_full_kg_index
+from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 
 
-def reset_source_kg_index(source_name: str| None, tenant_id: str, index_name: str) -> None:
+def reset_source_kg_index(
+    source_name: str | None, tenant_id: str, index_name: str
+) -> None:
     """
     Resets the knowledge graph index and vespa for a source.
     """
     # reset vespa for the source
     reset_vespa_kg_index(tenant_id, index_name, source_name)
-
-    
 
     if source_name is None:
         reset_full_kg_index()
@@ -39,7 +39,9 @@ def reset_source_kg_index(source_name: str| None, tenant_id: str, index_name: st
                 .all()
             ]
             if not entity_types:
-                raise ValueError(f"There are no entity types for the source {source_name}")
+                raise ValueError(
+                    f"There are no entity types for the source {source_name}"
+                )
 
             # delete the entity type from the knowledge graph
             for entity_type in entity_types:
@@ -88,7 +90,9 @@ def reset_source_kg_index(source_name: str| None, tenant_id: str, index_name: st
             document_ids = [
                 cc_pair.id
                 for cc_pair in db_session.query(DocumentByConnectorCredentialPair)
-                .filter(DocumentByConnectorCredentialPair.connector_id.in_(kg_connectors))
+                .filter(
+                    DocumentByConnectorCredentialPair.connector_id.in_(kg_connectors)
+                )
                 .all()
             ]
 
