@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./select";
-import { Dispatch, useState } from "react";
+import { useState } from "react";
 
 export interface DatePickerProps {
   selectedDate: Date | null;

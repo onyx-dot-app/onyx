@@ -40,11 +40,7 @@ export function sanitizeKGEntityTypes(
   }
 
   const sortedData = Object.values(entityTypeMap);
-  sortedData.sort((a, b) => {
-    if (a.name < b.name) return -1;
-    else if (a.name > b.name) return 1;
-    return 0;
-  });
+  sortedData.sort((a, b) => a.name.localeCompare(b.name));
 
   return [entityTypeMap, sortedData];
 }
