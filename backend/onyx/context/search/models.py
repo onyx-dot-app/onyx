@@ -121,11 +121,6 @@ class BaseFilters(BaseModel):
 class UserFileFilters(BaseModel):
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
-    kg_entities: list[str] | None = None
-    kg_relationships: list[str] | None = None
-    kg_terms: list[str] | None = None
-    kg_sources: list[str] | None = None
-    kg_chunk_id_zero_only: bool | None = False
 
 
 class IndexFilters(BaseFilters, UserFileFilters):
