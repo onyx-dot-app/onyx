@@ -6,21 +6,28 @@ from celery.exceptions import SoftTimeLimitExceeded
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.tasks.kg_processing.utils import (
+    block_kg_processing_current_tenant,
+)
+from onyx.background.celery.tasks.kg_processing.utils import (
+    is_kg_clustering_only_requirements_met,
+)
+from onyx.background.celery.tasks.kg_processing.utils import (
+    is_kg_processing_requirements_met,
+)
+from onyx.background.celery.tasks.kg_processing.utils import (
+    unblock_kg_processing_current_tenant,
+)
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.document import check_for_documents_needing_kg_clustering
-from onyx.db.document import check_for_documents_needing_kg_processing
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import get_kg_processing_in_progress_status
-from onyx.db.kg_config import KGProcessingType
-from onyx.db.kg_config import set_kg_processing_in_progress_status
 from onyx.db.search_settings import get_current_search_settings
 from onyx.kg.clustering.clustering import kg_clustering
 from onyx.kg.extractions.extraction_processing import kg_extraction
+from onyx.kg.resets.reset_source import reset_source_kg_index
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
@@ -31,7 +38,7 @@ logger = setup_logger()
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_KG_PROCESSING,
-    soft_time_limit=300,
+    soft_time_limit=30000,
     bind=True,
 )
 def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
@@ -58,34 +65,11 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
         locked = True
 
         with get_session_with_current_tenant() as db_session:
-
-            kg_config = get_kg_config_settings(db_session)
-
-            if not kg_config.KG_ENABLED:
-
-                return None
-
-            kg_coverage_start = kg_config.KG_COVERAGE_START
-            kg_max_coverage_days = kg_config.KG_MAX_COVERAGE_DAYS
-
-            kg_extraction_in_progress = kg_config.KG_EXTRACTION_IN_PROGRESS
-            kg_clustering_in_progress = kg_config.KG_CLUSTERING_IN_PROGRESS
-
-        if kg_extraction_in_progress or kg_clustering_in_progress:
-            task_logger.info(
-                f"KG processing already in progress for tenant {tenant_id}, skipping"
-            )
-            return None
-
-        with get_session_with_current_tenant() as db_session:
-            documents_needing_kg_processing = check_for_documents_needing_kg_processing(
-                db_session, kg_coverage_start, kg_max_coverage_days
+            kg_processing_requirements_met = is_kg_processing_requirements_met(
+                db_session
             )
 
-        if not documents_needing_kg_processing:
-            task_logger.info(
-                f"No documents needing KG processing for tenant {tenant_id}, skipping"
-            )
+        if not kg_processing_requirements_met:
             return None
 
         task_logger.info(
@@ -154,22 +138,11 @@ def check_for_kg_processing_clustering_only(
         locked = True
 
         with get_session_with_current_tenant() as db_session:
-            kg_clustering_in_progress = get_kg_processing_in_progress_status(
-                db_session, processing_type=KGProcessingType.CLUSTERING
-            )
-            documents_needing_kg_clustering = check_for_documents_needing_kg_clustering(
+            kg_processing_requirements_met = is_kg_clustering_only_requirements_met(
                 db_session
             )
 
-        if kg_clustering_in_progress:
-            task_logger.info(
-                f"KG clustering already in progress for tenant {tenant_id}, skipping"
-            )
-            return None
-        elif not documents_needing_kg_clustering:
-            task_logger.info(
-                f"No documents needing KG clustering for tenant {tenant_id}, skipping"
-            )
+        if not kg_processing_requirements_met:
             return None
 
         task_logger.info(
@@ -226,12 +199,8 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
         search_settings = get_current_search_settings(db_session)
         index_str = search_settings.index_name
 
-        set_kg_processing_in_progress_status(
-            db_session, processing_type=KGProcessingType.EXTRACTION, in_progress=True
-        )
-        set_kg_processing_in_progress_status(
-            db_session, processing_type=KGProcessingType.CLUSTERING, in_progress=True
-        )
+        # prevent other tasks from running
+        block_kg_processing_current_tenant(db_session)
 
         db_session.commit()
         task_logger.info(f"KG processing set to in progress for tenant {tenant_id}")
@@ -240,37 +209,19 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
         kg_extraction(
             tenant_id=tenant_id, index_name=index_str, processing_chunk_batch_size=8
         )
-    except Exception as e:
-        task_logger.exception(f"Error during kg extraction: {e}")
-    finally:
-        with get_session_with_current_tenant() as db_session:
-            set_kg_processing_in_progress_status(
-                db_session,
-                processing_type=KGProcessingType.EXTRACTION,
-                in_progress=False,
-            )
-            db_session.commit()
 
-        task_logger.debug("Completed kg extraction task. Moving to clustering")
-
-    try:
         kg_clustering(
             tenant_id=tenant_id, index_name=index_str, processing_chunk_batch_size=8
         )
-    except Exception as e:
-        task_logger.exception(f"Error during kg clustering: {e}")
+    except Exception:
+        task_logger.exception("Error during kg processing")
+
     finally:
         with get_session_with_current_tenant() as db_session:
-            set_kg_processing_in_progress_status(
-                db_session,
-                processing_type=KGProcessingType.CLUSTERING,
-                in_progress=False,
-            )
+            unblock_kg_processing_current_tenant(db_session)
             db_session.commit()
 
-        task_logger.debug("Completed kg clustering task!")
-
-    task_logger.debug("Completed kg clustering task!")
+    task_logger.debug("Completed kg processing task!")
 
     return None
 
@@ -283,17 +234,13 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
 def kg_clustering_only(self: Task, *, tenant_id: str) -> int | None:
     """a task for doing kg clustering only."""
 
-    time.monotonic()
     with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
         index_str = search_settings.index_name
 
-        set_kg_processing_in_progress_status(
-            db_session, processing_type=KGProcessingType.CLUSTERING, in_progress=True
-        )
+        block_kg_processing_current_tenant(db_session)
 
         db_session.commit()
-        task_logger.info(f"KG processing set to in progress for tenant {tenant_id}")
 
     task_logger.debug("Starting kg clustering-only task!")
 
@@ -305,15 +252,42 @@ def kg_clustering_only(self: Task, *, tenant_id: str) -> int | None:
         task_logger.exception(f"Error during kg clustering: {e}")
     finally:
         with get_session_with_current_tenant() as db_session:
-            set_kg_processing_in_progress_status(
-                db_session,
-                processing_type=KGProcessingType.CLUSTERING,
-                in_progress=False,
-            )
+            unblock_kg_processing_current_tenant(db_session)
             db_session.commit()
 
-        task_logger.debug("Completed kg clustering task!")
-
     task_logger.debug("Completed kg clustering task!")
+
+    return None
+
+
+@shared_task(
+    name=OnyxCeleryTask.KG_RESET_SOURCE_INDEX,
+    soft_time_limit=1000,
+    bind=True,
+)
+def kg_reset_source_index(
+    self: Task, *, tenant_id: str, source_name: str, index_name: str
+) -> int | None:
+    """a task for KG reset of a source."""
+
+    with get_session_with_current_tenant() as db_session:
+        block_kg_processing_current_tenant(db_session)
+        db_session.commit()
+
+    task_logger.debug("Starting source reset task!")
+
+    try:
+        reset_source_kg_index(
+            source_name=source_name, tenant_id=tenant_id, index_name=index_name
+        )
+
+    except Exception as e:
+        task_logger.exception(f"Error during kg reset: {e}")
+    finally:
+        with get_session_with_current_tenant() as db_session:
+            unblock_kg_processing_current_tenant(db_session)
+            db_session.commit()
+
+        task_logger.debug("Completed kg reset task!")
 
     return None

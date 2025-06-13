@@ -113,3 +113,8 @@ def reset_vespa_kg_index(
     # Reset the kg fields
     for document_id in document_ids:
         _reset_vespa_for_doc(document_id, tenant_id, index_name)
+
+    logger.info(
+        f"Finished resetting kg vespa index {index_name} for tenant {tenant_id}, "
+        f"source: {source_name if source_name else 'all'}"
+    )

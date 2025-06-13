@@ -1,10 +1,8 @@
 from retry import retry
 
 from onyx.db.document import get_document_kg_entities_and_relationships
+from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
-from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
-from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.kg.utils.formatting_utils import generalize_entities
@@ -57,22 +55,17 @@ def get_kg_vespa_info_update_requests_for_document(
     )
 
     # get chunks in the document
-    chunks = get_chunks_via_visit_api(
-        chunk_request=VespaChunkRequest(document_id=document_id),
-        index_name=index_name,
-        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
-        field_names=["chunk_id"],
-        get_large_chunks=False,
-    )
+    with get_session_with_current_tenant() as db_session:
+        num_chunks = get_num_chunks_for_document(db_session, document_id)
 
     # get vespa update requests
     return [
         KGUChunkUpdateRequest(
             document_id=document_id,
-            chunk_id=chunk["fields"]["chunk_id"],
+            chunk_id=chunk_id,
             core_entity="unused",
             entities=kg_entities,
             relationships=kg_relationships or None,
         )
-        for chunk in chunks
+        for chunk_id in range(num_chunks)
     ]
