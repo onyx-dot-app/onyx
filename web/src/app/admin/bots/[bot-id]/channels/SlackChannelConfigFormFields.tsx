@@ -222,8 +222,8 @@ export function SlackChannelConfigFormFields({
               Default Configuration
             </Badge>
             <p className="mt-2 text-sm">
-              This default configuration will apply to all channels in the Slack
-              workspace and direct messages (DMs) unless disabled.
+              This default configuration will apply to all channels and direct
+              messages (DMs) in your Slack workspace.
             </p>
             <div className="mt-4 p-4 bg-background rounded-md border border-neutral-300">
               <CheckFormField
@@ -234,7 +234,7 @@ export function SlackChannelConfigFormFields({
               <p className="mt-2 text-sm italic">
                 Warning: Disabling the default configuration means OnyxBot
                 won&apos;t respond in Slack channels unless they are explicitly
-                configured.
+                configured. Additionally, OnyxBot will not respond to DMs.
               </p>
             </div>
           </>

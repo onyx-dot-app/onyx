@@ -170,9 +170,9 @@ def handle_message(
         respond_tag_only = channel_conf.get("respond_tag_only") or False
         respond_member_group_list = channel_conf.get("respond_member_group_list", None)
 
-    # If channel config is disabled, bot should not respond to this message (unless DM)
-    # TODO: Only default config can be disabled
-    if slack_channel_config.channel_config.get("disabled") and not is_bot_dm:
+    # Only default config can be disabled.
+    # If channel config is disabled, bot should not respond to this message (including DMs)
+    if slack_channel_config.channel_config.get("disabled"):
         logger.info("Skipping message: OnyxBot is disabled for this channel")
         return False
 
