@@ -317,6 +317,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     from onyx.server.onyx_api.google_docs import router as google_docs_router
     include_router_with_global_prefix_prepended(application, google_docs_router)
 
+    from onyx.server.pdf_translator.api import router as pdf_translator_router
+    include_router_with_global_prefix_prepended(application, pdf_translator_router)
+
     include_router_with_global_prefix_prepended(application, gpts_router)
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)

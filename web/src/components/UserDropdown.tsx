@@ -261,6 +261,18 @@ export function UserDropdown({
                   </>
                 )}
 
+                {/* PDF Translator Section */}
+                {page !== "pdf-translator" && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <DropdownOption
+                      href="/pdf-translator"
+                      icon={<UserIcon size={16} className="my-auto" />}
+                      label="PDF Translator"
+                    />
+                  </>
+                )}
+
                 {showAdminPanel ? (
                   <DropdownOption
                     href="/admin/indexing/status"
