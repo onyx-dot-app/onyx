@@ -7,7 +7,7 @@ from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.db.connector import get_configured_connector_sources
+from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.document import DocumentSource
 from onyx.db.models import Connector
 from onyx.db.models import KGConfig
@@ -30,7 +30,7 @@ class KGProcessingType(Enum):
 def _get_connector_sources(db_session: Session) -> set[str]:
     return {
         source.value.lower()
-        for source in get_configured_connector_sources(db_session=db_session)
+        for source in fetch_unique_document_sources(db_session=db_session)
     }
 
 
