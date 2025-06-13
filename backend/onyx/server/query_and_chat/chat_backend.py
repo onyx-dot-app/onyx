@@ -104,6 +104,8 @@ from onyx.server.query_and_chat.models import (
     ChatSessionUpdateRequest,
     CreateChatMessageRequest,
     CreateChatSessionID,
+    DocumentChangeConfirmationRequest,
+    DocumentChangeConfirmationResponse,
     DocumentChatRequest,
     LLMOverride,
     PromptOverride,
@@ -1063,3 +1065,70 @@ async def search_chats(
     return ChatSearchResponse(
         groups=groups, has_more=has_more, next_page=page + 1 if has_more else None
     )
+
+
+@router.post("/confirm-document-changes")
+def confirm_document_changes(
+    request: DocumentChangeConfirmationRequest,
+    user: User | None = Depends(current_chat_accessible_user),
+) -> DocumentChangeConfirmationResponse:
+    """
+    Confirms or rejects document changes by processing markup tags.
+    
+    For confirm: keeps addition-mark content, removes deletion-mark content
+    For reject: removes addition-mark content, keeps deletion-mark content
+    """
+    import re
+    
+    try:
+        document_content = request.document_content
+        action = request.action.lower()
+        
+        if action not in ["confirm", "reject"]:
+            raise ValueError(f"Invalid action: {action}. Must be 'confirm' or 'reject'")
+        
+        if action == "confirm":
+            # Keep additions, remove deletions
+            processed_content = re.sub(
+                r'<addition-mark>(.*?)</addition-mark>', 
+                r'\1', 
+                document_content, 
+                flags=re.DOTALL
+            )
+            processed_content = re.sub(
+                r'<deletion-mark>(.*?)</deletion-mark>', 
+                '', 
+                processed_content, 
+                flags=re.DOTALL
+            )
+            message = "Changes confirmed and applied"
+            
+        else:  # reject
+            # Remove additions, keep deletions
+            processed_content = re.sub(
+                r'<addition-mark>(.*?)</addition-mark>', 
+                '', 
+                document_content, 
+                flags=re.DOTALL
+            )
+            processed_content = re.sub(
+                r'<deletion-mark>(.*?)</deletion-mark>', 
+                r'\1', 
+                processed_content, 
+                flags=re.DOTALL
+            )
+            message = "Changes rejected and reverted"
+        
+        return DocumentChangeConfirmationResponse(
+            processed_content=processed_content,
+            success=True,
+            message=message
+        )
+        
+    except Exception as e:
+        logger.exception(f"Error processing document changes: {e}")
+        return DocumentChangeConfirmationResponse(
+            processed_content=request.document_content,
+            success=False,
+            message=f"Failed to process changes: {str(e)}"
+        )

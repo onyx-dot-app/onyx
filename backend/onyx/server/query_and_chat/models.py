@@ -330,3 +330,15 @@ class DocumentChatRequest(BaseModel):
     document_content: str | None = None
     document_type: str | None = None
     document_title: str | None = None
+
+
+class DocumentChangeConfirmationRequest(BaseModel):
+    action: str  # "confirm" or "reject"
+    document_content: str
+    session_id: str
+
+
+class DocumentChangeConfirmationResponse(BaseModel):
+    processed_content: str
+    success: bool
+    message: str

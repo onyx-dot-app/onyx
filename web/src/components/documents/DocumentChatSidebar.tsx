@@ -54,6 +54,11 @@ export function DocumentChatSidebar({
   const [expandedThinkingMessages, setExpandedThinkingMessages] = useState<Set<number>>(new Set());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   
+  // Check if document has pending changes
+  const hasPendingChanges = useMemo(() => {
+    return /<(addition|deletion)-mark>/.test(documentContent);
+  }, [documentContent]);
+  
   // Get access to assistants to determine current persona ID
   const { pinnedAssistants, finalAssistants } = useAssistants();
   
@@ -547,6 +552,46 @@ export function DocumentChatSidebar({
 
   const isThinkingExpanded = (messageId: number) => expandedThinkingMessages.has(messageId);
 
+  const handleDocumentChangeConfirmation = async (action: 'confirm' | 'reject') => {
+    if (!setContent) return;
+    
+    try {
+      const response = await fetch('/api/chat/confirm-document-changes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: action,
+          document_content: documentContent,
+          session_id: sessionId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process document changes');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setContent(result.processed_content);
+        
+        // Add a system message to the chat
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          text: result.message,
+          isUser: false,
+          isIntermediateOutput: true
+        }]);
+      } else {
+        console.error('Failed to process changes:', result.message);
+      }
+    } catch (error) {
+      console.error('Error processing document changes:', error);
+    }
+  };
+
   return (
     <div
       className={`relative bg-background max-w-full border-l border-t border-sidebar-border dark:border-neutral-700 h-screen`}
@@ -657,36 +702,71 @@ export function DocumentChatSidebar({
             )}
           </div>
 
+          {/* Document Change Confirmation UI */}
+          {hasPendingChanges && (
+            <div className="px-4 py-3 border-t border-border bg-amber-50 dark:bg-amber-900/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+                  Document changes pending
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDocumentChangeConfirmation('reject')}
+                  className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-900/20"
+                >
+                  Reject Changes
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleDocumentChangeConfirmation('confirm')}
+                  className="bg-green-600 hover:bg-green-700 text-white dark:bg-green-700 dark:hover:bg-green-800"
+                >
+                  Accept Changes
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Input */}
           <div className="p-4 border-t border-border">
-            <div className="flex gap-2">
-              <textarea
-                ref={textAreaRef}
-                value={message}
-                onChange={(e) => {
-                  setMessage(e.target.value);
-                  // Auto-resize the textarea
-                  if (textAreaRef.current) {
-                    textAreaRef.current.style.height = 'auto';
-                    textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
-                  }
-                }}
-                placeholder="Ask anything"
-                className="flex-grow resize-none border border-border rounded-md p-2 text-sm min-h-[38px] overflow-hidden"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-              />
-              <button
-                onClick={handleSendMessage}
-                className="px-3 py-2 bg-accent text-accent-foreground rounded-md hover:bg-accent/80 transition-colors"
-              >
-                <SendIcon size={16} />
-              </button>
-            </div>
+            {hasPendingChanges ? (
+              <div className="text-center text-sm text-muted-foreground py-2">
+                Please accept or reject document changes before continuing
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <textarea
+                  ref={textAreaRef}
+                  value={message}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    // Auto-resize the textarea
+                    if (textAreaRef.current) {
+                      textAreaRef.current.style.height = 'auto';
+                      textAreaRef.current.style.height = `${textAreaRef.current.scrollHeight}px`;
+                    }
+                  }}
+                  placeholder="Ask anything"
+                  className="flex-grow resize-none border border-border rounded-md p-2 text-sm min-h-[38px] overflow-hidden"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  className="px-3 py-2 bg-accent text-accent-foreground rounded-md hover:bg-accent/80 transition-colors"
+                >
+                  <SendIcon size={16} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
