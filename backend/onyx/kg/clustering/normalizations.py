@@ -239,17 +239,19 @@ def normalize_entities(
     normalized_entities_w_attributes: list[str] = []
     normalized_map: dict[str, str] = {}
 
-    attributes = [
+    entity_attributes = [
         get_attributes(attr_entity) for attr_entity in raw_entities_w_attributes
     ]
 
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [
             (_normalize_one_entity, (entity, attributes, allowed_docs_temp_view_name))
-            for entity, attributes in zip(raw_entities, attributes)
+            for entity, attributes in zip(raw_entities, entity_attributes)
         ]
     )
-    for entity, attributes, normalized_entity in zip(raw_entities, attributes, mapping):
+    for entity, attributes, normalized_entity in zip(
+        raw_entities, entity_attributes, mapping
+    ):
         if normalized_entity is not None:
             normalized_entities.append(normalized_entity)
             normalized_entities_w_attributes.append(
