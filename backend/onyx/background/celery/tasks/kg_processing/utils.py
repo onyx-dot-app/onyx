@@ -1,3 +1,5 @@
+from sqlalchemy.orm import Session
+
 from onyx.db.document import check_for_documents_needing_kg_processing
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import KGProcessingType
@@ -6,7 +8,7 @@ from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGRelationshipExtractionStaging
 
 
-def _update_kg_processing_status(db_session, status_update: bool) -> None:
+def _update_kg_processing_status(db_session: Session, status_update: bool) -> None:
     """Updates KG processing status for a tenant. (tenant implied by db_session)"""
 
     set_kg_processing_in_progress_status(
@@ -22,7 +24,7 @@ def _update_kg_processing_status(db_session, status_update: bool) -> None:
     )
 
 
-def check_kg_processing_unblocked(db_session) -> bool:
+def check_kg_processing_unblocked(db_session: Session) -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created.
     """
@@ -41,7 +43,7 @@ def check_kg_processing_unblocked(db_session) -> bool:
     return True
 
 
-def check_kg_processing_requirements(db_session) -> bool:
+def check_kg_processing_requirements(db_session: Session) -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created, and then looks for documents that should be indexed.
     """
@@ -63,7 +65,7 @@ def check_kg_processing_requirements(db_session) -> bool:
     return True
 
 
-def check_kg_unclustered_extraction_requirements(db_session) -> bool:
+def check_kg_unclustered_extraction_requirements(db_session: Session) -> bool:
     """Checks for any conditions that should block the KG processing task from being
     created, and then looks for documents that should be indexed.
     """
@@ -84,14 +86,14 @@ def check_kg_unclustered_extraction_requirements(db_session) -> bool:
     return True
 
 
-def block_kg_processing_current_tenant(db_session) -> None:
+def block_kg_processing_current_tenant(db_session: Session) -> None:
     """Blocks KG processing for a tenant."""
     _update_kg_processing_status(db_session, True)
 
     return None
 
 
-def unblock_kg_processing_current_tenant(db_session) -> None:
+def unblock_kg_processing_current_tenant(db_session: Session) -> None:
     """Blocks KG processing for a tenant."""
     _update_kg_processing_status(db_session, False)
 

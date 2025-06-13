@@ -38,7 +38,7 @@ logger = setup_logger()
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_KG_PROCESSING,
-    soft_time_limit=300,
+    soft_time_limit=30000,
     bind=True,
 )
 def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
@@ -64,7 +64,10 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
     try:
         locked = True
 
-        kg_processing_requirements_met = check_kg_processing_requirements(tenant_id)
+        with get_session_with_current_tenant() as db_session:
+            kg_processing_requirements_met = check_kg_processing_requirements(
+                db_session
+            )
 
         if not kg_processing_requirements_met:
             return None
@@ -134,9 +137,10 @@ def check_for_kg_processing_clustering_only(
     try:
         locked = True
 
-        kg_processing_requirements_met = check_kg_unclustered_extraction_requirements(
-            tenant_id
-        )
+        with get_session_with_current_tenant() as db_session:
+            kg_processing_requirements_met = (
+                check_kg_unclustered_extraction_requirements(db_session)
+            )
 
         if not kg_processing_requirements_met:
 
