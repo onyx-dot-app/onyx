@@ -3,6 +3,7 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
+from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationship
 from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipType
@@ -22,8 +23,8 @@ def reset_full_kg_index() -> None:
         db_session.query(KGRelationshipTypeExtractionStaging).delete()
         # Update all connectors to disable KG processing
         db_session.query(Connector).update({"kg_processing_enabled": False})
-        db_session.commit()
 
-    with get_session_with_current_tenant() as db_session:
+        db_session.query(KGEntityType).update({"active": False})
+
         reset_all_document_kg_stages(db_session)
         db_session.commit()

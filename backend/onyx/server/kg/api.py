@@ -8,7 +8,6 @@ from onyx.auth.users import current_admin_user
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db import kg_config
 from onyx.db.engine import get_session
-from onyx.db.kg_config import reset_entity_types
 from onyx.db.models import User
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
@@ -48,12 +47,10 @@ def reset_kg(
     db_session: Session = Depends(get_session),
 ) -> list[EntityType]:
     # reset all entity types to inactive
-    default_entities = reset_entity_types(db_session=db_session)
-
     # TODO: before merging, convert to celery task function in other PR
     reset_full_kg_index()
 
-    return default_entities
+    return get_kg_entity_types(db_session=db_session)
 
 
 # configurations
