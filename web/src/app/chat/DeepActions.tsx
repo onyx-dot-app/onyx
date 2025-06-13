@@ -37,6 +37,12 @@ export const DeepThinkingAction: DeepActionRenderer<
   return <div className="opacity-60">{action.thinking}...</div>;
 };
 
+export const DeepSendEmail: DeepActionRenderer<DeepActionType<"email">> = ({
+  action,
+}) => {
+  return <div className="opacity-60">Sending email to: {action.email}...</div>;
+};
+
 export const WebSearchAction: DeepActionRenderer<
   DeepActionType<"web_search">
 > = ({ action }) => {

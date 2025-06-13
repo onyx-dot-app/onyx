@@ -8,6 +8,7 @@ export type DeepAction =
   | DeepRemoveAction
   | DeepRunCommandAction
   | DeepSearchWebAction
+  | DeepSendEmailAction
   | DeepThinkingAction;
 
 type DeepRunCommandAction = {
@@ -38,6 +39,12 @@ type DeepThinkingAction = {
   type: "thinking";
   id: string;
   thinking: string;
+};
+
+type DeepSendEmailAction = {
+  type: "email";
+  id: string;
+  email: string;
 };
 
 export type DeepActionType<T extends DeepAction["type"]> = Extract<

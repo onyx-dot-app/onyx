@@ -1,5 +1,4 @@
 "use client";
-
 import { Message } from "./interfaces";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { AIMessage } from "./message/Messages";
@@ -13,6 +12,7 @@ import { HoverableIcon } from "@/components/Hoverable";
 import { DislikeFeedback, LikeFeedback } from "@/components/icons/icons";
 import { DeepAction, isCollapsible } from "./deepResearchAction";
 import {
+  DeepSendEmail,
   DeepThinkingAction,
   RunCommandAction,
   WebSearchAction,
@@ -41,17 +41,24 @@ const RenderAction = ({
         return <DeepThinkingAction action={action} />;
       case "web_search":
         return <WebSearchAction action={action} />;
+      case "email":
+        return <DeepSendEmail action={action} />;
       default:
         return action satisfies never; // ensure all deep action types are rendered
     }
   };
+  const verticalLine = (
+    <div className="h-full min-h-[40px] w-[2px] min-w-[2px] bg-neutral-500"></div>
+  );
   return (
-    <div className="mb-4 pl-4 border-l-neutral-500 border-l-2">
-      {isCollapsible(action) && (
-        <div className="flex items-center gap-2 mb-2">
-          <div className="opacity-70">{action.collapsed ? "▶" : "▼"}</div>
+    <div className="mb-4 overflow-x-auto flex gap-2 relative">
+      {isCollapsible(action) ? (
+        <div className="flex flex-col justify-items-center items-center">
           <div
-            className="cursor-pointer hover:text-neutral-300"
+            className="cursor-pointer select-none text-sm text-neutral-500 hover:text-neutral-300 transition-transform duration-200"
+            style={{
+              transform: `rotate(${action.collapsed ? "0deg" : "90deg"})`,
+            }}
             onClick={() => {
               if (setMessageActionCollapsed) {
                 setMessageActionCollapsed(
@@ -62,12 +69,14 @@ const RenderAction = ({
               }
             }}
           >
-            {action.collapsed ? "Show" : "Hide"}
+            ▶
           </div>
-          <div className="opacity-70">Action</div>
+          {!action.collapsed && <div className="flex-grow">{verticalLine}</div>}
         </div>
+      ) : (
+        <div className="pl-[7px]">{verticalLine}</div>
       )}
-      {<Inner action={action} />}
+      <div className="w-full">{<Inner action={action} />}</div>
     </div>
   );
 };
