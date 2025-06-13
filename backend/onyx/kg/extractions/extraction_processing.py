@@ -104,7 +104,7 @@ def _get_classification_extraction_instructions() -> (
 
         classification_instructions_dict[grounded_source_name][entity_type.id_name] = (
             KGEntityTypeInstructions(
-                attribute_instructions=attributes.metadata_attributes,
+                metadata_attribute_conversion=attributes.metadata_attributes,
                 classification_instructions=KGClassificationInstructions(
                     classification_enabled=classification_enabled,
                     classification_options=classification_options,
@@ -313,11 +313,12 @@ def _get_batch_metadata(
                 # add select metadata keys into kg attributes
                 kg_document_meta_data_dict[document_id].document_attributes = (
                     {
-                        entity_instructions.attribute_instructions[
+                        entity_instructions.metadata_attribute_conversion[
                             chunk_attr
                         ]: chunk_attr_val
                         for chunk_attr, chunk_attr_val in chunk_attributes.items()
-                        if chunk_attr in entity_instructions.attribute_instructions
+                        if chunk_attr
+                        in entity_instructions.metadata_attribute_conversion
                     }
                     if chunk_attributes
                     else None

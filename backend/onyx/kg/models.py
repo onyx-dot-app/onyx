@@ -203,7 +203,7 @@ class KGExtractionInstructions(BaseModel):
 
 
 class KGEntityTypeInstructions(BaseModel):
-    attribute_instructions: dict[str, str]
+    metadata_attribute_conversion: dict[str, str]
     classification_instructions: KGClassificationInstructions
     extraction_instructions: KGExtractionInstructions
     filter_instructions: dict[str, Any] | None = None
