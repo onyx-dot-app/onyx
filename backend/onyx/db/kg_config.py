@@ -62,6 +62,43 @@ def get_kg_exposed(db_session: Session) -> bool:
     )
 
 
+def get_kg_beta_persona_id(db_session: Session) -> int | None:
+    """Get the ID of the KG Beta persona."""
+    config = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_BETA_PERSONA_ID)
+        .first()
+    )
+
+    if not config or not config.kg_variable_values:
+        return None
+
+    try:
+        return int(config.kg_variable_values[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def set_kg_beta_persona_id(db_session: Session, persona_id: int | None) -> None:
+    """Set the ID of the KG Beta persona."""
+    value = [str(persona_id)] if persona_id is not None else []
+
+    stmt = (
+        pg_insert(KGConfig)
+        .values(
+            kg_variable_name=KGConfigVars.KG_BETA_PERSONA_ID,
+            kg_variable_values=value,
+        )
+        .on_conflict_do_update(
+            index_elements=["kg_variable_name"],
+            set_=dict(kg_variable_values=value),
+        )
+    )
+
+    db_session.execute(stmt)
+    db_session.commit()
+
+
 def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
     # TODO (raunakab):
     # Cleanup.
@@ -119,6 +156,14 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
             )
         elif result.kg_variable_name == KGConfigVars.KG_EXPOSED:
             kg_config_settings.KG_EXPOSED = result.kg_variable_values[0] == "true"
+        elif result.kg_variable_name == KGConfigVars.KG_BETA_PERSONA_ID:
+            if result.kg_variable_values and result.kg_variable_values[0]:
+                try:
+                    kg_config_settings.KG_BETA_PERSONA_ID = int(
+                        result.kg_variable_values[0]
+                    )
+                except ValueError:
+                    kg_config_settings.KG_BETA_PERSONA_ID = None
 
     return kg_config_settings
 

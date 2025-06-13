@@ -141,7 +141,7 @@ class Answer:
         if self.graph_config.behavior.use_agentic_search and (
             self.graph_config.inputs.persona
             and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith("KG Dev")
+            and self.graph_config.inputs.persona.name.startswith("KG Beta")
         ):
             run_langgraph = run_kb_graph
         elif self.graph_config.behavior.use_agentic_search:

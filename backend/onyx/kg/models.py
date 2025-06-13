@@ -19,6 +19,7 @@ class KGConfigSettings(BaseModel):
     KG_COVERAGE_START: datetime = datetime(1970, 1, 1)
     KG_MAX_COVERAGE_DAYS: int = 10000
     KG_MAX_PARENT_RECURSION_DEPTH: int = KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
+    KG_BETA_PERSONA_ID: int | None = None
 
 
 class KGConfigVars(str, Enum):
@@ -32,6 +33,7 @@ class KGConfigVars(str, Enum):
     KG_COVERAGE_START = "KG_COVERAGE_START"
     KG_MAX_COVERAGE_DAYS = "KG_MAX_COVERAGE_DAYS"
     KG_MAX_PARENT_RECURSION_DEPTH = "KG_MAX_PARENT_RECURSION_DEPTH"
+    KG_BETA_PERSONA_ID = "KG_BETA_PERSONA_ID"
 
 
 class KGChunkFormat(BaseModel):
