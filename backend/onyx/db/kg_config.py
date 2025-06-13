@@ -275,6 +275,12 @@ def enable_kg(
             kg_variable_name=KGConfigVars.KG_COVERAGE_START,
             kg_variable_values=[enable_req.coverage_start.strftime("%Y-%m-%d")],
         ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_MAX_COVERAGE_DAYS,
+            kg_variable_values=[
+                "180"
+            ],  # TODO: temporarily set max coverage to 6 months
+        ),
     ]
 
     for var in vars:
