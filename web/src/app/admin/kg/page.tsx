@@ -457,6 +457,7 @@ function Main() {
         <Modal
           title="Configure Knowledge Graph"
           onOutsideClick={() => setConfigureModalShown(false)}
+          className="overflow-y-scroll"
         >
           <KGConfiguration
             kgConfig={kgConfig}
