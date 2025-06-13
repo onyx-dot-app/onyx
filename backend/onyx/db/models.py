@@ -649,7 +649,7 @@ class KGEntityType(Base):
         NullFilteredString, nullable=False, index=False
     )
 
-    attributes: Mapped[dict] = mapped_column(
+    attributes: Mapped[dict | None] = mapped_column(
         postgresql.JSONB,
         nullable=True,
         default=dict,
@@ -659,6 +659,9 @@ class KGEntityType(Base):
 
     @property
     def parsed_attributes(self) -> KGEntityTypeAttributes:
+        if self.attributes is None:
+            return KGEntityTypeAttributes()
+
         try:
             return KGEntityTypeAttributes(**self.attributes)
         except ValidationError:
