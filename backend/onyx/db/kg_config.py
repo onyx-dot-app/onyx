@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import and_
+from sqlalchemy import delete
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -405,6 +406,6 @@ def bool_to_string(b: bool) -> str:
 
 
 def reset_entity_types(db_session: Session) -> list[EntityType]:
-    db_session.execute(update(KGEntityType).values(active=False))
+    db_session.execute(delete(KGEntityType))
     db_session.commit()
     return get_kg_entity_types(db_session=db_session)

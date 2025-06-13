@@ -38,6 +38,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 function createDomainField(
   name: string,
@@ -342,7 +343,21 @@ function KGEntityTypes({
       {(props) => (
         <Form className="flex flex-col gap-y-8">
           <CardSection className="flex flex-col w-min px-10 gap-y-4">
-            <DataTable columns={columns} data={sortedKGEntityTypes} />
+            <DataTable
+              columns={columns}
+              data={sortedKGEntityTypes}
+              emptyMessage={
+                <div className="flex flex-col gap-y-4">
+                  <p>No results available.</p>
+                  <p>
+                    To configure Knowledge Graph, first connect some {` `}
+                    <Link href={`/admin/add-connector`} className="underline">
+                      Connectors.
+                    </Link>
+                  </p>
+                </div>
+              }
+            />
             <div className="flex flex-row items-center gap-x-4">
               <Button type="submit" variant="submit" disabled={!props.dirty}>
                 Save
