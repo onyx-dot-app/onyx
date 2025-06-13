@@ -22,8 +22,8 @@ from onyx.connectors.salesforce.doc_conversion import _extract_section
 from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import _bulk_retrieve_from_salesforce
-from onyx.connectors.salesforce.salesforce_calls import _get_time_filter_for_sf_type
-from onyx.connectors.salesforce.salesforce_calls import _get_time_filtered_query
+from onyx.connectors.salesforce.salesforce_calls import _make_time_filter_for_sf_type
+from onyx.connectors.salesforce.salesforce_calls import _make_time_filtered_query
 from onyx.connectors.salesforce.salesforce_calls import get_object_by_id_query
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.utils.logger import setup_logger
@@ -821,12 +821,12 @@ def test_salesforce_bulk_retrieve() -> None:
     queryable_fields = sf_client.get_queryable_fields_by_type(sf_object_name)
 
     intermediate_time = datetime(2024, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
-    time_filter = _get_time_filter_for_sf_type(
+    time_filter = _make_time_filter_for_sf_type(
         queryable_fields, 0, intermediate_time.timestamp()
     )
     assert time_filter
 
-    query = _get_time_filtered_query(queryable_fields, sf_object_name, time_filter)
+    query = _make_time_filtered_query(queryable_fields, sf_object_name, time_filter)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         object_type, csv_paths = _bulk_retrieve_from_salesforce(

@@ -754,10 +754,12 @@ class OnyxSalesforceSQLite:
             """
         )
 
-    def get_basic_expert_info(
+    def make_basic_expert_info_from_record(
         self,
         sf_object: SalesforceObject,
     ) -> BasicExpertInfo | None:
+        """Parses record for LastModifiedById and returns BasicExpertInfo
+        of the user if possible."""
         object_dict: dict[str, Any] = sf_object.data
         if not (last_modified_by_id := object_dict.get("LastModifiedById")):
             logger.warning(f"No LastModifiedById found for {sf_object.id}")

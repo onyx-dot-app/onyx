@@ -11,8 +11,6 @@ from simple_salesforce.bulk2 import SFBulk2Type
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
 
-# from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
-
 logger = setup_logger()
 
 
@@ -42,7 +40,7 @@ def _build_created_date_time_filter_for_salesforce(
     )
 
 
-def _get_time_filter_for_sf_type(
+def _make_time_filter_for_sf_type(
     queryable_fields: list[str],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
@@ -57,7 +55,7 @@ def _get_time_filter_for_sf_type(
     return None
 
 
-def _get_time_filtered_query(
+def _make_time_filtered_query(
     queryable_fields: list[str], sf_type: str, time_filter: str
 ) -> str:
     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
@@ -189,7 +187,7 @@ def fetch_all_csvs_in_parallel(
                 break
 
             if start is not None and end is not None:
-                time_filter_temp = _get_time_filter_for_sf_type(
+                time_filter_temp = _make_time_filter_for_sf_type(
                     queryable_fields, start, end
                 )
                 if time_filter_temp is None:
@@ -209,7 +207,7 @@ def fetch_all_csvs_in_parallel(
             logger.warning(f"Object type skipped (no data available): type={sf_type}")
             continue
 
-        query = _get_time_filtered_query(queryable_fields, sf_type, time_filter)
+        query = _make_time_filtered_query(queryable_fields, sf_type, time_filter)
         type_to_query[sf_type] = query
 
     logger.info(

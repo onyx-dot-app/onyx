@@ -234,7 +234,7 @@ def convert_sf_object_to_doc(
     # is being triggered because a child object changed?
     primary_owner_list: list[BasicExpertInfo] | None = None
 
-    primary_owner = sf_db.get_basic_expert_info(sf_object)
+    primary_owner = sf_db.make_basic_expert_info_from_record(sf_object)
     if primary_owner:
         primary_owner_list = [primary_owner]
 
