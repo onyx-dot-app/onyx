@@ -81,12 +81,12 @@ def _object_type_has_api_data(
         query = f"SELECT Count() FROM {sf_type}{time_filter} LIMIT 1"
         result = sf_client.query(query)
         if result["totalSize"] == 0:
-            return True
+            return False
     except Exception as e:
         if "OPERATION_TOO_LARGE" not in str(e):
             logger.warning(f"Object type {sf_type} doesn't support query: {e}")
-            return True
-    return False
+            return False
+    return True
 
 
 def _bulk_retrieve_from_salesforce(
@@ -203,7 +203,7 @@ def fetch_all_csvs_in_parallel(
 
             break
 
-        if _object_type_has_api_data(sf_client, sf_type, time_filter):
+        if not _object_type_has_api_data(sf_client, sf_type, time_filter):
             logger.warning(f"Object type skipped (no data available): type={sf_type}")
             continue
 
