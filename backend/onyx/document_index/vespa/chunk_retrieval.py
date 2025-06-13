@@ -51,6 +51,7 @@ from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -153,7 +154,7 @@ def _vespa_hit_to_inference_chunk(
     )
 
 
-def _get_chunks_via_visit_api(
+def get_chunks_via_visit_api(
     chunk_request: VespaChunkRequest,
     index_name: str,
     filters: IndexFilters,
@@ -188,6 +189,13 @@ def _get_chunks_via_visit_api(
         selection += f" and {index_name}.chunk_id<={chunk_request.max_chunk_ind}"
     if not get_large_chunks:
         selection += f" and {index_name}.large_chunk_reference_ids == null"
+
+    # enforcing tenant_id through a == condition
+    if MULTI_TENANT:
+        if filters.tenant_id:
+            selection += f" and {index_name}.tenant_id=='{filters.tenant_id}'"
+        else:
+            raise ValueError("Tenant ID is required for multi-tenant")
 
     # Setting up the selection criteria in the query parameters
     params = {
@@ -248,7 +256,7 @@ def _get_chunks_via_visit_api(
 #     filters: IndexFilters | None = None,
 #     get_large_chunks: bool = False,
 # ) -> list[str]:
-#     document_chunks = _get_chunks_via_visit_api(
+#     document_chunks = get_chunks_via_visit_api(
 #         chunk_request=VespaChunkRequest(document_id=document_id),
 #         index_name=index_name,
 #         filters=filters or IndexFilters(access_control_list=None),
@@ -266,7 +274,7 @@ def parallel_visit_api_retrieval(
 ) -> list[InferenceChunkUncleaned]:
     functions_with_args: list[tuple[Callable, tuple]] = [
         (
-            _get_chunks_via_visit_api,
+            get_chunks_via_visit_api,
             (chunk_request, index_name, filters, get_large_chunks),
         )
         for chunk_request in chunk_requests

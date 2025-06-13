@@ -21,7 +21,13 @@ env:
 jobs:
   integration-tests:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on:
+      [
+        runs-on,
+        runner=32cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

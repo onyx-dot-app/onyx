@@ -2,7 +2,7 @@ from retry import retry
 
 from onyx.db.document import get_document_kg_entities_and_relationships
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
+from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
@@ -57,7 +57,7 @@ def get_kg_vespa_info_update_requests_for_document(
     )
 
     # get chunks in the document
-    chunks = _get_chunks_via_visit_api(
+    chunks = get_chunks_via_visit_api(
         chunk_request=VespaChunkRequest(document_id=document_id),
         index_name=index_name,
         filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),

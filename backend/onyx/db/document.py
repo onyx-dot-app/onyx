@@ -1280,3 +1280,8 @@ def get_document_kg_entities_and_relationships(
         .all()
     )
     return entities, relationships
+
+
+def get_num_chunks_for_document(db_session: Session, document_id: str) -> int:
+    stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
+    return db_session.execute(stmt).scalar_one_or_none() or 0
