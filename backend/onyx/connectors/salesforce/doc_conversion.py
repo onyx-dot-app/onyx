@@ -163,10 +163,8 @@ def convert_sf_query_result_to_doc(
     primary_owner_list: list[BasicExpertInfo] | None,
     sf_client: OnyxSalesforce,
 ) -> Document:
-    """Would be nice if this function was documented"""
-    # object_dict = sf_object.data
-    # salesforce_id = object_dict["Id"]
-    # onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
+    """Generates a yieldable Document from query results"""
+
     base_url = f"https://{sf_client.sf_instance}"
     extracted_doc_updated_at = time_str_to_utc(record["LastModifiedDate"])
     extracted_semantic_identifier = record.get("Name", "Unknown Object")
@@ -177,7 +175,6 @@ def convert_sf_query_result_to_doc(
             continue
 
         key_fields = child_record_key.split(":")
-        # child_record_name = key_fields[0]
         child_record_id = key_fields[1]
 
         child_text_section = _extract_section(
@@ -185,17 +182,6 @@ def convert_sf_query_result_to_doc(
             f"{base_url}/{child_record_id}",
         )
         sections.append(child_text_section)
-
-    # for id in sf_db.get_child_ids(sf_object.id):
-    #     if not (child_object := sf_db.get_record(id)):
-    #         continue
-    #     sections.append(
-    #         _extract_section(child_object.data, f"{base_url}/{child_object.id}")
-    #     )
-
-    # primary_owner = _extract_primary_owner(sf_db, sf_object)
-    # if primary_owner:
-    #     primary_owner_list = [primary_owner]
 
     doc = Document(
         id=f"{ID_PREFIX}{record_id}",

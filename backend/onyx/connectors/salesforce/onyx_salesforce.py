@@ -47,7 +47,7 @@ class OnyxSalesforce(Salesforce):
                 return True
 
         for suffix in SALESFORCE_BLACKLISTED_SUFFIXES:
-            if object_type_lower.startswith(prefix):
+            if object_type_lower.endswith(prefix):
                 return True
 
         return False
