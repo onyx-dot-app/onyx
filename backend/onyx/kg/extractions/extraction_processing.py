@@ -3,9 +3,9 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 from typing import cast
-from typing import Dict
 
 from langchain_core.messages import HumanMessage
+from pydantic import ValidationError
 
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
@@ -39,6 +39,7 @@ from onyx.kg.models import KGClassificationDecisions
 from onyx.kg.models import KGClassificationInstructions
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
+from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
 from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
@@ -49,6 +50,7 @@ from onyx.kg.utils.extraction_utils import (
 from onyx.kg.utils.extraction_utils import kg_process_person
 from onyx.kg.utils.extraction_utils import prepare_llm_content_extraction
 from onyx.kg.utils.extraction_utils import prepare_llm_document_content
+from onyx.kg.utils.extraction_utils import trackinfo_to_str
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
 from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import generalize_entities
@@ -73,13 +75,13 @@ logger = setup_logger()
 
 
 def _get_classification_extraction_instructions() -> (
-    Dict[str, Dict[str, KGEntityTypeInstructions]]
+    dict[str, dict[str, KGEntityTypeInstructions]]
 ):
     """
     Prepare the classification instructions for the given source.
     """
 
-    classification_instructions_dict: Dict[str, Dict[str, KGEntityTypeInstructions]] = (
+    classification_instructions_dict: dict[str, dict[str, KGEntityTypeInstructions]] = (
         {}
     )
 
@@ -87,7 +89,6 @@ def _get_classification_extraction_instructions() -> (
         entity_types = get_entity_types(db_session, active=True)
 
     for entity_type in entity_types:
-        assert isinstance(entity_type.attributes, dict)
         grounded_source_name = entity_type.grounded_source_name
 
         if grounded_source_name not in classification_instructions_dict:
@@ -95,23 +96,21 @@ def _get_classification_extraction_instructions() -> (
 
         if grounded_source_name is None:
             continue
-        classification_attributes = entity_type.attributes.get(
-            "classification_attributes", {}
-        )
 
+        try:
+            attributes = KGEntityTypeAttributes(**entity_type.attributes)
+        except ValidationError:
+            attributes = KGEntityTypeAttributes()
+
+        classification_attributes = attributes.classification_attributes
         classification_options = ", ".join(classification_attributes.keys())
-
         classification_enabled = (
             len(classification_options) > 0 and len(classification_attributes) > 0
         )
 
-        filter_instructions = cast(
-            dict[str, Any] | None,
-            entity_type.attributes.get("entity_filter_attributes", {}),
-        )
-
         classification_instructions_dict[grounded_source_name][entity_type.id_name] = (
             KGEntityTypeInstructions(
+                attribute_instructions=attributes.metadata_attributes,
                 classification_instructions=KGClassificationInstructions(
                     classification_enabled=classification_enabled,
                     classification_options=classification_options,
@@ -121,7 +120,7 @@ def _get_classification_extraction_instructions() -> (
                     deep_extraction=entity_type.deep_extraction,
                     active=entity_type.active,
                 ),
-                filter_instructions=filter_instructions,
+                filter_instructions=attributes.entity_filter_attributes,
             )
         )
 
@@ -150,28 +149,22 @@ def get_entity_types_str(active: bool | None = None) -> str:
             else:
                 allowed_values = ""
 
+            try:
+                attributes = KGEntityTypeAttributes(**entity_type.attributes)
+            except ValidationError:
+                attributes = KGEntityTypeAttributes()
+
             entity_type_attribute_list: list[str] = []
-            assert isinstance(entity_type.attributes, dict)
-            if entity_type.attributes.get("metadata_attributes"):
-
-                for attribute, values in entity_type.attributes.get(
-                    "metadata_attributes", {}
-                ).items():
-                    if values:
-                        entity_type_attribute_list.append(f"{attribute}: {values}")
-                    else:
-                        entity_type_attribute_list.append(
-                            f"{attribute}: any suitable value"
-                        )
-
-            if entity_type.attributes.get("classification_attributes"):
+            for attribute, values in attributes.attribute_values.items():
                 entity_type_attribute_list.append(
-                    "object_type: "
-                    + ", ".join(
-                        entity_type.attributes.get(
-                            "classification_attributes", {}
-                        ).keys()
-                    )
+                    f"{attribute}: {trackinfo_to_str(values)}"
+                )
+
+            if attributes.classification_attributes:
+                entity_type_attribute_list.append(
+                    # TODO: maybe 'subtype' instead? That way normalization can filter for these
+                    "object_type: one of: "
+                    + ", ".join(attributes.classification_attributes.keys())
                 )
             if entity_type_attribute_list:
                 entity_attributes = (
@@ -288,9 +281,6 @@ def _get_batch_metadata(
                 continue
 
             chunk_attributes = first_chunk.source_metadata
-            kg_document_meta_data_dict[document_id].document_attributes = (
-                chunk_attributes
-            )
 
             if batch_entity:
                 doc_entity = batch_entity
@@ -329,6 +319,18 @@ def _get_batch_metadata(
                     source_type_classification_extraction_instructions[doc_entity]
                 )
 
+                # add select metadata keys into kg attributes
+                kg_document_meta_data_dict[document_id].document_attributes = (
+                    {
+                        entity_instructions.attribute_instructions[
+                            chunk_attr
+                        ]: chunk_attr_val
+                        for chunk_attr, chunk_attr_val in chunk_attributes.items()
+                        if chunk_attr in entity_instructions.attribute_instructions
+                    }
+                    if chunk_attributes
+                    else None
+                )
                 kg_document_meta_data_dict[document_id].classification_enabled = (
                     entity_instructions.classification_instructions.classification_enabled
                 )
@@ -1354,14 +1356,9 @@ def _kg_document_classification(
                 classification_class
                 in document_classification_extraction_instructions.classification_class_definitions
             ):
-                extraction_decision = cast(
-                    bool,
-                    document_classification_extraction_instructions.classification_class_definitions[
-                        classification_class
-                    ][
-                        "extraction"
-                    ],
-                )
+                extraction_decision = document_classification_extraction_instructions.classification_class_definitions[
+                    classification_class
+                ].extraction
             else:
                 extraction_decision = False
 

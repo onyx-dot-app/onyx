@@ -6,235 +6,189 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import validate_kg_settings
-from onyx.kg.models import KGDefaultEntityDefinition
+from onyx.kg.models import KGEntityTypeAttributes
+from onyx.kg.models import KGEntityTypeClassificationInfo
+from onyx.kg.models import KGEntityTypeDefinition
 from onyx.kg.models import KGGroundingType
 
 
-def get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefinition]:
+def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefinition]:
     return {
-        "LINEAR": KGDefaultEntityDefinition(
+        "LINEAR": KGEntityTypeDefinition(
             description="A formal Linear ticket about a product issue or improvement request.",
-            attributes={
-                "metadata_attributes": {
-                    "team": "",
-                    "state": "",
-                    "priority": "",
-                    "created_at": "",
-                    "completed_at": "",
+            attributes=KGEntityTypeAttributes(
+                metadata_attributes={
+                    "team": "team",
+                    "state": "state",
+                    "priority": "priority",
+                    "created_at": "created_at",
+                    "completed_at": "completed_at",
                 },
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
+            ),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.LINEAR,
         ),
-        "JIRA-EPIC": KGDefaultEntityDefinition(
+        "JIRA": KGEntityTypeDefinition(
             description=(
-                "A formal Jira ticket describing large bodies of work that can be broken down into "
-                "a number of smaller Jira Tasks, Stories, or Bugs."
+                "A formal Jira ticket about a product issue or improvement request."
             ),
-            attributes={
-                "metadata_attributes": {
-                    "status": "",
-                    "priority": "",
-                    "reporter": "",
-                    "project_name": "",
-                    "created": "",
-                    "updated": "",
+            attributes=KGEntityTypeAttributes(
+                metadata_attributes={
+                    "issuetype": "subtype",
+                    "key": "key",
+                    "parent": "parent",
+                    "status": "status",
+                    "priority": "priority",
+                    "reporter": "creator",
+                    "project_name": "project",
+                    "created": "created_at",
+                    "updated": "updated",
                 },
-                "entity_filter_attributes": {"issuetype": "Epic"},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.JIRA,
-        ),
-        "JIRA-STORY": KGDefaultEntityDefinition(
-            description=(
-                "Also called 'user stories', these are Jira tickets describing short requirements or requests "
-                "written from the perspective of the end user."
             ),
-            attributes={
-                "metadata_attributes": {
-                    "status": "",
-                    "priority": "",
-                    "reporter": "",
-                    "project_name": "",
-                    "created": "",
-                    "updated": "",
-                },
-                "entity_filter_attributes": {"issuetype": "Story"},
-                "classification_attributes": {},
-            },
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.JIRA,
         ),
-        "JIRA-BUG": KGDefaultEntityDefinition(
-            description=("A Jira ticket describing a bug."),
-            attributes={
-                "metadata_attributes": {
-                    "status": "",
-                    "priority": "",
-                    "reporter": "",
-                    "project_name": "",
-                    "created": "",
-                    "updated": "",
+        "GITHUB_PR": KGEntityTypeDefinition(
+            description="A formal engineering request to merge proposed changes into the codebase.",
+            attributes=KGEntityTypeAttributes(
+                metadata_attributes={
+                    "repo": "repository",
+                    "state": "state",
+                    "num_commits": "num_commits",
+                    "num_files_changed": "num_files_changed",
+                    "labels": "labels",
+                    "merged": "merged",
+                    "merged_at": "merged_at",
+                    "closed_at": "closed_at",
+                    "created_at": "created_at",
+                    "updated_at": "updated_at",
                 },
-                "entity_filter_attributes": {"issuetype": "Bug"},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.JIRA,
-        ),
-        "JIRA-TASK": KGDefaultEntityDefinition(
-            description=("A Jira ticket describing a unit of work."),
-            attributes={
-                "metadata_attributes": {
-                    "status": "",
-                    "priority": "",
-                    "reporter": "",
-                    "project_name": "",
-                    "created": "",
-                    "updated": "",
-                },
-                "entity_filter_attributes": {"issuetype": "Task"},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.JIRA,
-        ),
-        "JIRA-SUBTASK": KGDefaultEntityDefinition(
-            description=("A Jira ticket describing a sub-unit of work."),
-            attributes={
-                "metadata_attributes": {
-                    "status": "",
-                    "priority": "",
-                    "reporter": "",
-                    "project_name": "",
-                    "created": "",
-                    "updated": "",
-                },
-                "entity_filter_attributes": {"issuetype": "Sub-task"},
-                "classification_attributes": {},
-            },
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.JIRA,
-        ),
-        "GITHUB-PR": KGDefaultEntityDefinition(
-            description=f"Our ({vendor_name}) Engineering PRs describing what was actually implemented.",
-            attributes={
-                "metadata_attributes": {
-                    "repo": "",
-                    "state": "",
-                    "num_commits": "",
-                    "num_files_changed": "",
-                    "labels": "",
-                    "merged": "",
-                    "merged_at": "",
-                    "closed_at": "",
-                    "created_at": "",
-                    "updated_at": "",
-                },
-                "entity_filter_attributes": {"object_type": "PullRequest"},
-                "classification_attributes": {},
-            },
+                entity_filter_attributes={"object_type": "PullRequest"},
+            ),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.GITHUB,
         ),
-        "GITHUB-ISSUE": KGDefaultEntityDefinition(
-            description=f"Our ({vendor_name}) Engineering issues describing what needs to be implemented.",
-            attributes={
-                "metadata_attributes": {
-                    "repo": "",
-                    "state": "",
-                    "labels": "",
-                    "closed_at": "",
-                    "created_at": "",
-                    "updated_at": "",
+        "GITHUB_ISSUE": KGEntityTypeDefinition(
+            description="A formal engineering ticket about an issue, idea, inquiry, or task.",
+            attributes=KGEntityTypeAttributes(
+                metadata_attributes={
+                    "repo": "repository",
+                    "state": "state",
+                    "labels": "labels",
+                    "closed_at": "closed_at",
+                    "created_at": "created_at",
+                    "updated_at": "updated_at",
                 },
-                "entity_filter_attributes": {"object_type": "Issue"},
-                "classification_attributes": {},
-            },
+                entity_filter_attributes={"object_type": "Issue"},
+            ),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.GITHUB,
         ),
-        "FIREFLIES": KGDefaultEntityDefinition(
+        "FIREFLIES": KGEntityTypeDefinition(
             description=(
                 f"A phone call transcript between us ({vendor_name}) "
                 "and another account or individuals, or an internal meeting."
             ),
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
+            attributes=KGEntityTypeAttributes(
+                classification_attributes={
+                    "customer": KGEntityTypeClassificationInfo(
+                        extraction=True,
+                        description="a call with representatives of one or more customers prospects",
+                    ),
+                    "internal": KGEntityTypeClassificationInfo(
+                        extraction=True,
+                        description="a call between employees of the vendor's company (a vendor-internal call)",
+                    ),
+                    "interview": KGEntityTypeClassificationInfo(
+                        extraction=True,
+                        description=(
+                            "a call with an individual who is interviewed or is discussing potential employment with the vendor"
+                        ),
+                    ),
+                    "other": KGEntityTypeClassificationInfo(
+                        extraction=True,
+                        description=(
+                            "a call with representatives of companies having a different reason for the call "
+                            "(investment, partnering, etc.)"
+                        ),
+                    ),
+                },
+            ),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.FIREFLIES,
         ),
-        "GONG": KGDefaultEntityDefinition(
+        "GONG": KGEntityTypeDefinition(
             description=(
                 f"A phone call transcript between us ({vendor_name}) "
                 "and another account or individuals, or an internal meeting."
             ),
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
+            attributes=KGEntityTypeAttributes(),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.GONG,
         ),
-        "GOOGLE_DRIVE": KGDefaultEntityDefinition(
+        "GOOGLE_DRIVE": KGEntityTypeDefinition(
             description="A Google Drive document.",
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {},
-                "classification_attributes": {},
-            },
+            attributes=KGEntityTypeAttributes(),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.GOOGLE_DRIVE,
         ),
-        "ACCOUNT": KGDefaultEntityDefinition(
+        "GMAIL": KGEntityTypeDefinition(
+            description="An email.",
+            attributes=KGEntityTypeAttributes(),
+            grounding=KGGroundingType.GROUNDED,
+            grounded_source_name=DocumentSource.GMAIL,
+        ),
+        "ACCOUNT": KGEntityTypeDefinition(
             description=(
                 "A company that was, is, or potentially could be a customer of the vendor "
                 f"('us, {vendor_name}'). Note that {vendor_name} can never be an ACCOUNT."
             ),
-            attributes={
-                "metadata_attributes": {},
-                "entity_filter_attributes": {"object_type": "Account"},
-                "classification_attributes": {},
-            },
+            attributes=KGEntityTypeAttributes(
+                entity_filter_attributes={"object_type": "Account"},
+            ),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.SALESFORCE,
         ),
-        "OPPORTUNITY": KGDefaultEntityDefinition(
+        "OPPORTUNITY": KGEntityTypeDefinition(
             description="A sales opportunity.",
-            attributes={
-                "metadata_attributes": {
-                    "name": "",
-                    "stage_name": "",
-                    "type": "",
-                    "amount": "",
-                    "fiscal_year": "",
-                    "fiscal_quarter": "",
-                    "is_closed": "",
-                    "close_date": "",
-                    "probability": "",
-                    "created_date": "",
-                    "last_modified_date": "",
+            attributes=KGEntityTypeAttributes(
+                metadata_attributes={
+                    "name": "name",
+                    "stage_name": "stage",
+                    "type": "type",
+                    "amount": "amount",
+                    "fiscal_year": "fiscal_year",
+                    "fiscal_quarter": "fiscal_quarter",
+                    "is_closed": "is_closed",
+                    "close_date": "close_date",
+                    "probability": "probability",
+                    "created_date": "created_at",
+                    "last_modified_date": "updated_at",
                 },
-                "entity_filter_attributes": {"object_type": "Opportunity"},
-                "classification_attributes": {},
-            },
+                entity_filter_attributes={"object_type": "Opportunity"},
+            ),
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.SALESFORCE,
         ),
-        "VENDOR": KGDefaultEntityDefinition(
+        "SLACK": KGEntityTypeDefinition(
+            description="A Slack conversation.",
+            attributes=KGEntityTypeAttributes(),
+            grounding=KGGroundingType.GROUNDED,
+            grounded_source_name=DocumentSource.SLACK,
+        ),
+        "WEB": KGEntityTypeDefinition(
+            description="A web page.",
+            attributes=KGEntityTypeAttributes(),
+            grounding=KGGroundingType.GROUNDED,
+            grounded_source_name=DocumentSource.WEB,
+        ),
+        "VENDOR": KGEntityTypeDefinition(
             description=f"The Vendor {vendor_name}, 'us'",
             grounding=KGGroundingType.GROUNDED,
             active=False,
             grounded_source_name=None,
         ),
-        "EMPLOYEE": KGDefaultEntityDefinition(
+        "EMPLOYEE": KGEntityTypeDefinition(
             description=(
                 f"A person who speaks on behalf of 'our' company (the VENDOR {vendor_name}), "
                 "NOT of another account. Therefore, employees of other companies "
