@@ -70,7 +70,7 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
                 if filtered_item:
                     filtered_list.append(filtered_item)
             elif item is not None:
-                filtered_list.append(filtered_item)
+                filtered_list.append(item)
         return filtered_list
 
     return data
