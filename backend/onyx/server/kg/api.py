@@ -37,11 +37,14 @@ def get_kg_exposed(
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> None:
+) -> list[EntityType]:
     # reset all entity types to inactive
-    reset_entity_types(db_session=db_session)
+    default_entities = reset_entity_types(db_session=db_session)
+
     # TODO: before merging, convert to celery task function in other PR
     reset_full_kg_index()
+
+    return default_entities
 
 
 # configurations

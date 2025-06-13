@@ -13,7 +13,13 @@ import { BrainIcon } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { SwitchField } from "@/components/ui/switch";
-import { Form, Formik, FormikState, useFormikContext } from "formik";
+import {
+  Form,
+  Formik,
+  FormikProps,
+  FormikState,
+  useFormikContext,
+} from "formik";
 import { useState } from "react";
 import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
@@ -74,17 +80,16 @@ const IgnoreDomains = createDomainField(
 
 function KGConfiguration({
   kgConfig,
-  refreshKGConfig,
+  onSubmitSuccess,
   setPopup,
 }: {
   kgConfig: KGConfig;
-  refreshKGConfig?: () => void;
+  onSubmitSuccess?: () => void;
   setPopup?: (spec: PopupSpec | null) => void;
 }) {
   const initialValues: KGConfig = {
     enabled: kgConfig.enabled,
     vendor: kgConfig.vendor ?? "",
-    // vendor_domains: kgConfig.vendor_domains ?? [""],
     vendor_domains:
       (kgConfig.vendor_domains?.length ?? 0) > 0
         ? kgConfig.vendor_domains
@@ -150,7 +155,7 @@ function KGConfiguration({
       type: "success",
     });
     resetForm({ values });
-    refreshKGConfig?.();
+    onSubmitSuccess?.();
   };
 
   return (
@@ -211,7 +216,7 @@ function KGConfiguration({
 
 function KGEntityTypes({
   kgEntityTypes,
-  sortedKGEntityTypes,
+  sortedKGEntityTypes: sorted,
   setPopup,
   refreshKGEntityTypes,
 }: {
@@ -220,6 +225,8 @@ function KGEntityTypes({
   setPopup?: (spec: PopupSpec | null) => void;
   refreshKGEntityTypes?: () => void;
 }) {
+  const [sortedKGEntityTypes, setSortedKGEntityTypes] = useState(sorted);
+
   const columns: ColumnDef<EntityType>[] = [
     {
       accessorKey: "name",
@@ -303,7 +310,7 @@ function KGEntityTypes({
     resetForm({ values });
   };
 
-  const reset = async () => {
+  const reset = async (props: FormikProps<EntityTypeValues>) => {
     const result = await fetch("/api/admin/kg/reset", { method: "PUT" });
 
     if (!result.ok) {
@@ -314,17 +321,20 @@ function KGEntityTypes({
       return;
     }
 
+    const rawData = (await result.json()) as EntityType[];
+    const [newEntityTypes, newSortedEntityTypes] =
+      sanitizeKGEntityTypes(rawData);
+    props.resetForm({ values: newEntityTypes });
+    setSortedKGEntityTypes(newSortedEntityTypes);
+
     setPopup?.({
       message: "Successfully reset Knowledge Graph.",
       type: "success",
     });
-
-    refreshKGEntityTypes?.();
   };
 
   return (
     <Formik
-      enableReinitialize
       initialValues={kgEntityTypes}
       validationSchema={validationSchema}
       onSubmit={onSubmit}
@@ -360,7 +370,7 @@ function KGEntityTypes({
                 type="button"
                 variant="destructive"
                 className="w-min"
-                onClick={reset}
+                onClick={() => reset(props)}
               >
                 Reset Knowledge Graph
               </Button>
@@ -379,11 +389,9 @@ function Main() {
     isLoading: configIsLoading,
     mutate: configMutate,
   } = useSWR<KGConfigRaw>("/api/admin/kg/config", errorHandlingFetcher);
-  const {
-    data: entityTypesData,
-    isLoading: entityTypesIsLoading,
-    mutate: entityTypesMutate,
-  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
+  const { data: entityTypesData, isLoading: entityTypesIsLoading } = useSWR<
+    EntityType[]
+  >("/api/admin/kg/entity-types", errorHandlingFetcher);
 
   // Local State:
   const { popup, setPopup } = usePopup();
@@ -449,7 +457,6 @@ function Main() {
             kgEntityTypes={kgEntityTypes}
             sortedKGEntityTypes={sortedKGEntityTypes}
             setPopup={setPopup}
-            refreshKGEntityTypes={entityTypesMutate}
           />
         </>
       )}
@@ -462,7 +469,10 @@ function Main() {
           <KGConfiguration
             kgConfig={kgConfig}
             setPopup={setPopup}
-            refreshKGConfig={configMutate}
+            onSubmitSuccess={() => {
+              configMutate();
+              setConfigureModalShown(false);
+            }}
           />
         </Modal>
       )}

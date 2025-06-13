@@ -404,6 +404,7 @@ def bool_to_string(b: bool) -> str:
     return "true" if b else "false"
 
 
-def reset_entity_types(db_session: Session) -> None:
+def reset_entity_types(db_session: Session) -> list[EntityType]:
     db_session.execute(update(KGEntityType).values(active=False))
     db_session.commit()
+    return get_kg_entity_types(db_session=db_session)
