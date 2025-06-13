@@ -160,10 +160,7 @@ class RedisConnectorIndex:
         self.redis.set(self.connector_active_key, 0, ex=self.CONNECTOR_ACTIVE_TTL)
 
     def connector_active(self) -> bool:
-        if self.redis.exists(self.connector_active_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.connector_active_key))
 
     def connector_active_ttl(self) -> int:
         """Refer to https://redis.io/docs/latest/commands/ttl/

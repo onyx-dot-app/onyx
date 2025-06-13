@@ -219,6 +219,7 @@ def _check_connector_and_attempt_status(
         )
 
 
+# TODO: delete from here if ends up unused
 def _check_failure_threshold(
     total_failures: int,
     document_count: int,
@@ -263,7 +264,12 @@ def _run_indexing(
     start_time = time.monotonic()  # jsut used for logging
 
     with get_session_with_current_tenant() as db_session_temp:
-        index_attempt_start = get_index_attempt(db_session_temp, index_attempt_id)
+        index_attempt_start = get_index_attempt(
+            db_session_temp,
+            index_attempt_id,
+            eager_load_cc_pair=True,
+            eager_load_search_settings=True,
+        )
         if not index_attempt_start:
             raise ValueError(
                 f"Index attempt {index_attempt_id} does not exist in DB. This should not be possible."
@@ -393,7 +399,9 @@ def _run_indexing(
     index_attempt: IndexAttempt | None = None
     try:
         with get_session_with_current_tenant() as db_session_temp:
-            index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
+            index_attempt = get_index_attempt(
+                db_session_temp, index_attempt_id, eager_load_cc_pair=True
+            )
             if not index_attempt:
                 raise RuntimeError(f"Index attempt {index_attempt_id} not found in DB.")
 
@@ -432,6 +440,7 @@ def _run_indexing(
                 checkpoint=checkpoint,
             )
 
+            # TODO: ensure this logic is moved correctly
             unresolved_errors = get_index_attempt_errors_for_cc_pair(
                 cc_pair_id=ctx.cc_pair_id,
                 unresolved_only=True,

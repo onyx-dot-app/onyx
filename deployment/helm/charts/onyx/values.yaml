@@ -535,6 +535,28 @@ celery_worker_user_files_indexing:
   tolerations: []
   affinity: {}
 
+celery_worker_document_processing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-document-processing
+  deploymentLabels:
+    app: celery-worker-document-processing
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 redis:
   enabled: true
   architecture: standalone

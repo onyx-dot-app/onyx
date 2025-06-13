@@ -95,9 +95,25 @@ def get_recent_attempts_for_cc_pair(
 
 
 def get_index_attempt(
-    db_session: Session, index_attempt_id: int
+    db_session: Session,
+    index_attempt_id: int,
+    eager_load_cc_pair: bool = False,
+    eager_load_search_settings: bool = False,
 ) -> IndexAttempt | None:
     stmt = select(IndexAttempt).where(IndexAttempt.id == index_attempt_id)
+    if eager_load_cc_pair:
+        stmt = stmt.options(
+            joinedload(IndexAttempt.connector_credential_pair).joinedload(
+                ConnectorCredentialPair.connector
+            )
+        )
+        stmt = stmt.options(
+            joinedload(IndexAttempt.connector_credential_pair).joinedload(
+                ConnectorCredentialPair.credential
+            )
+        )
+    if eager_load_search_settings:
+        stmt = stmt.options(joinedload(IndexAttempt.search_settings))
     return db_session.scalars(stmt).first()
 
 
