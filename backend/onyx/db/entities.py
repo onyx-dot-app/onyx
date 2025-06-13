@@ -46,22 +46,13 @@ def upsert_staging_entity(
     id_name = make_entity_id(entity_type, name)
     attributes = attributes or {}
 
-    entity_type_split = entity_type.split("-")
-    entity_class, entity_subtype = (
-        entity_type_split if len(entity_type_split) == 2 else (entity_type, None)
-    )
-
     entity_key = attributes.get("key")
     entity_parent = attributes.get("parent")
 
     keep_attributes = {
         attr_key: attr_val
         for attr_key, attr_val in attributes.items()
-        if not (
-            (attr_key in ("key", "parent") and entity_class)
-            or attr_key in ("object_type", "issuetype")
-            or "_email" in attr_key
-        )
+        if attr_key not in ("key", "parent")
     }
 
     # Create new entity
@@ -71,8 +62,6 @@ def upsert_staging_entity(
             id_name=id_name,
             name=name,
             entity_type_id_name=entity_type,
-            entity_class=entity_class,
-            entity_subtype=entity_subtype,
             entity_key=entity_key,
             parent_key=entity_parent,
             document_id=document_id,
@@ -127,8 +116,6 @@ def transfer_entity(
         .values(
             id_name=make_entity_id(entity.entity_type_id_name, uuid.uuid4().hex[:20]),
             name=entity.name.casefold(),
-            entity_class=entity.entity_class,
-            entity_subtype=entity.entity_subtype,
             entity_key=entity.entity_key,
             parent_key=entity.parent_key,
             alternative_names=entity.alternative_names or [],
