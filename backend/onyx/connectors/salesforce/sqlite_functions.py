@@ -380,7 +380,7 @@ class OnyxSalesforceSQLite:
         num_examined is an integer which signifies our progress through the changed_id's dict
 
         changed_ids is a list of all id's that changed, both parent and children.
-        prent
+        parent
 
         This is much simpler than get_changed_parent_ids_by_type.
 
