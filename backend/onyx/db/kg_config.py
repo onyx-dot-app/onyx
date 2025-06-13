@@ -239,36 +239,6 @@ def get_kg_processing_in_progress_status(
 # server API helpers
 
 
-# TODO: move to db
-VALID_ENTITY_TYPE_NAMES = set(
-    [
-        "ACCOUNT",
-        "CONCERN",
-        "CONNECTOR",
-        "EMPLOYEE",
-        "ENGAGEMENT",
-        "FIREFLIES",
-        "GITHUB",
-        "GMAIL",
-        "GOAL",
-        "GONG",
-        "GOOGLE_DRIVE",
-        "JIRA",
-        "LINEAR",
-        "OPPORTUNITY",
-        "SLACK",
-        "VENDOR",
-        "WEB",
-        "JIRA-EPIC",
-        "JIRA-ISSUE",
-        "JIRA-TASK",
-        "JIRA-SUBTASK",
-        "JIRA-STORY",
-        "JIRA-BUG",
-    ]
-)
-
-
 def get_kg_config(db_session: Session) -> KGConfigAPIModel:
     config = get_kg_config_settings(db_session=db_session)
     return KGConfigAPIModel.from_kg_config_settings(config)
@@ -387,11 +357,6 @@ def update_kg_entity_types(
     updates: list[EntityType],
 ) -> None:
     for upd in updates:
-        if upd.name not in VALID_ENTITY_TYPE_NAMES:
-            raise ValueError(
-                f"Invalid entity-type name; expected one of {VALID_ENTITY_TYPE_NAMES=}, instead got {upd.name=}"
-            )
-
         db_session.execute(
             update(KGEntityType)
             .where(KGEntityType.id_name == upd.name)
