@@ -53,7 +53,7 @@ class OnyxSalesforce(Salesforce):
         return False
 
     @staticmethod
-    def _get_child_objects_by_id_query(
+    def _make_child_objects_by_id_query(
         object_id: str,
         sf_type: str,
         child_relationships: list[str],
@@ -143,20 +143,17 @@ class OnyxSalesforce(Salesforce):
                 if len(child_relationships_batch) == 0:
                     break
 
-                query = OnyxSalesforce._get_child_objects_by_id_query(
+                query = OnyxSalesforce._make_child_objects_by_id_query(
                     object_id,
                     sf_type,
                     child_relationships_batch,
                     relationships_to_fields,
                 )
-                # print(f"{query=}")
 
                 try:
                     result = self.query(query)
                 except Exception:
                     logger.exception(f"Query failed: {query=}")
-                    # for child_relationship in child_relationships_batch:
-                    #     relationship_status[child_relationship] = False
                 else:
                     for child_record_key, child_result in result["records"][0].items():
                         if child_record_key == "attributes":
@@ -174,14 +171,6 @@ class OnyxSalesforce(Salesforce):
                             child_records[f"{child_record_key}:{child_record_id}"] = (
                                 child_record
                             )
-
-                        # if child_record:
-                        #     child_text_section = _extract_section(
-                        #         child_record,
-                        #         f"https://{sf_client.sf_instance}/{child_record_key}",
-                        #     )
-                        #     sections.append(child_text_section)
-                        # relationship_status[child_record_key] = False
                 finally:
                     child_relationships_batch.clear()
 
@@ -222,12 +211,7 @@ class OnyxSalesforce(Salesforce):
             field_name = field.get("name")
             field_type = field.get("type")
             if field_type in ["base64", "blob", "encryptedstring"]:
-                # print(f"skipping {sf_type=} {field_name=} {field_type=}")
                 continue
-
-            # field_custom = field.get("custom")
-            # if field_custom:
-            #     print(f"custom field: {sf_type=} {field_name=} {field_type=}")
 
             if field_name:
                 valid_fields.add(field_name)
@@ -246,11 +230,6 @@ class OnyxSalesforce(Salesforce):
         len_relationships = len(object_description["childRelationships"])
         for child_relationship in object_description["childRelationships"]:
             child_name = child_relationship["childSObject"]
-            # if child_name == "OutgoingEmail":
-            #     pass
-
-            # if child_name == "OutgoingEmailRelation":
-            #     pass
 
             index += 1
             valid, reason = self._is_valid_child_object(child_relationship)
@@ -318,7 +297,6 @@ class OnyxSalesforce(Salesforce):
 
         parent_reference_fields: dict[str, list[str]] = {}
 
-        # onyx_sf_type = OnyxSalesforceType(sf_type, sf_client)
         object_description = self.describe_type(sf_type)
         for field in object_description["fields"]:
             if field["type"] == "reference":

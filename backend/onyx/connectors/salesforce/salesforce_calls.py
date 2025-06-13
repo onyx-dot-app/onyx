@@ -42,41 +42,6 @@ def _build_created_date_time_filter_for_salesforce(
     )
 
 
-# def _sf_type_describe(sf_client: Salesforce, type_name: str) -> Any:
-#     sf_object = SFType(type_name, sf_client.session_id, sf_client.sf_instance)
-#     return sf_object.describe()
-
-
-# def _get_all_queryable_fields_of_sf_type(
-#     sf_client: Salesforce,
-#     sf_type: str,
-# ) -> list[str]:
-#     object_description = _sf_type_describe(sf_client, sf_type)
-#     fields: list[dict[str, Any]] = object_description["fields"]
-#     valid_fields: set[str] = set()
-#     field_names_to_remove: set[str] = set()
-#     for field in fields:
-#         if compound_field_name := field.get("compoundFieldName"):
-#             # We do want to get name fields even if they are compound
-#             if not field.get("nameField"):
-#                 field_names_to_remove.add(compound_field_name)
-
-#         field_name = field.get("name")
-#         field_type = field.get("type")
-#         if field_type in ["base64", "blob", "encryptedstring"]:
-#             # print(f"skipping {sf_type=} {field_name=} {field_type=}")
-#             continue
-
-#         # field_custom = field.get("custom")
-#         # if field_custom:
-#         #     print(f"custom field: {sf_type=} {field_name=} {field_type=}")
-
-#         if field_name:
-#             valid_fields.add(field_name)
-
-#     return list(valid_fields - field_names_to_remove)
-
-
 def _get_time_filter_for_sf_type(
     queryable_fields: list[str],
     start: SecondsSinceUnixEpoch,
@@ -106,39 +71,6 @@ def get_object_by_id_query(
         f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"
     )
     return query
-
-    # if len(child_relationships_batch) > 0:
-    #     query = _get_child_records_by_id_query(
-    #         parent_id,
-    #         parent_types[0],
-    #         child_relationships_batch,
-    #         child_relationship_to_queryable_fields,
-    #     )
-    #     print(f"{query=}")
-
-    #     try:
-    #         result = sf_client.query(query)
-    #         print(f"{result=}")
-    #     except Exception:
-    #         logger.exception(f"Query failed: {query=}")
-    #         for child_relationship in child_relationships_batch:
-    #             relationship_status[child_relationship] = False
-    #     else:
-    #         for child_record_key, child_record in result["records"][0].items():
-    #             if child_record_key == "attributes":
-    #                 continue
-
-    #             if child_record:
-    #                 child_text_section = _extract_section(
-    #                     child_record,
-    #                     f"https://{sf_client.sf_instance}/{child_record_key}",
-    #                 )
-    #                 sections.append(child_text_section)
-    #                 relationship_status[child_record_key] = False
-    #             else:
-    #                 relationship_status[child_record_key] = False
-    #     finally:
-    #         child_relationships_batch.clear()
 
 
 def _object_type_has_api_data(
