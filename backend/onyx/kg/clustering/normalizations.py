@@ -23,10 +23,11 @@ from onyx.db.models import KGEntity
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
-from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
 from onyx.kg.utils.formatting_utils import format_entity_id_for_models
+from onyx.kg.utils.formatting_utils import get_attributes
 from onyx.kg.utils.formatting_utils import get_entity_type
+from onyx.kg.utils.formatting_utils import make_entity_w_attributes
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_relationship_id
@@ -54,7 +55,9 @@ def _clean_name(entity_name: str) -> str:
 
 
 def _normalize_one_entity(
-    entity: str, allowed_docs_temp_view_name: str | None = None
+    entity: str,
+    attributes: dict[str, str],
+    allowed_docs_temp_view_name: str | None = None,
 ) -> str | None:
     """
     Matches a single entity to the best matching entity of the same type.
@@ -65,11 +68,17 @@ def _normalize_one_entity(
 
     cleaned_entity = _clean_name(entity_name)
 
+    # narrow filter to subtype if requested
+    type_filters = [KGEntity.entity_type_id_name == entity_type]
+    if "subtype" in attributes:
+        type_filters.append(
+            KGEntity.attributes.op("@>")({"subtype": attributes["subtype"]})
+        )
+
     # step 1: find entities containing the entity_name or something similar
     with get_session_with_current_tenant() as db_session:
 
         # get allowed documents
-
         metadata = MetaData()
         if allowed_docs_temp_view_name is None:
             raise ValueError("allowed_docs_temp_view_name is not available")
@@ -118,7 +127,7 @@ def _normalize_one_entity(
                 KGEntity.document_id == allowed_docs_temp_view.c.allowed_doc_id,
             )
             .filter(
-                KGEntity.entity_type_id_name == entity_type,
+                *type_filters,
                 KGEntity.name_trigrams.overlap(query_trigrams.c.trigrams),
                 # Add filter for allowed docs - either document_id is NULL or it's in allowed_docs
                 (
@@ -211,7 +220,8 @@ def _get_existing_normalized_relationships(
 
 
 def normalize_entities(
-    raw_entities_no_attributes: list[str],
+    raw_entities: list[str],
+    raw_entities_w_attributes: list[str],
     allowed_docs_temp_view_name: str | None = None,
 ) -> NormalizedEntities:
     """
@@ -219,58 +229,42 @@ def normalize_entities(
     Returns the best matching normalized entity for each input entity.
 
     Args:
-        raw_entities_no_attributes: list of entity strings to normalize, w/o attributes
+        raw_entities: list of entity strings to normalize, w/o attributes
+        raw_entities_w_attributes: list of entity strings to normalize, w/ attributes
 
     Returns:
         list of normalized entity strings
     """
-    normalized_results: list[str] = []
+    normalized_entities: list[str] = []
+    normalized_entities_w_attributes: list[str] = []
     normalized_map: dict[str, str] = {}
+
+    attributes = [
+        get_attributes(attr_entity) for attr_entity in raw_entities_w_attributes
+    ]
 
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [
-            (_normalize_one_entity, (entity, allowed_docs_temp_view_name))
-            for entity in raw_entities_no_attributes
+            (_normalize_one_entity, (entity, attributes, allowed_docs_temp_view_name))
+            for entity, attributes in zip(raw_entities, attributes)
         ]
     )
-    for entity, normalized_entity in zip(raw_entities_no_attributes, mapping):
+    for entity, attributes, normalized_entity in zip(raw_entities, attributes, mapping):
         if normalized_entity is not None:
-            normalized_results.append(normalized_entity)
+            normalized_entities.append(normalized_entity)
+            normalized_entities_w_attributes.append(
+                make_entity_w_attributes(normalized_entity, attributes)
+            )
             normalized_map[format_entity_id_for_models(entity)] = normalized_entity
         else:
+            logger.warning(f"No normalized entity found for {entity}")
             normalized_map[format_entity_id_for_models(entity)] = entity
 
     return NormalizedEntities(
-        entities=normalized_results, entity_normalization_map=normalized_map
+        entities=normalized_entities,
+        entities_w_attributes=normalized_entities_w_attributes,
+        entity_normalization_map=normalized_map,
     )
-
-
-def normalize_entities_w_attributes_from_map(
-    raw_entities_w_attributes: list[str],
-    entity_normalization_map: dict[str, str],
-) -> list[str]:
-    """
-    Normalize entities with attributes using the entity normalization map.
-    """
-
-    normalized_entities_w_attributes: list[str] = []
-
-    for raw_entities_w_attribute in raw_entities_w_attributes:
-        assert (
-            len(raw_entities_w_attribute.split("--")) == 2
-        ), f"Invalid entity with attributes: {raw_entities_w_attribute}"
-        raw_entity, attributes = raw_entities_w_attribute.split("--")
-        formatted_raw_entity = format_entity_id_for_models(raw_entity)
-        normalized_entity = entity_normalization_map.get(formatted_raw_entity)
-        if normalized_entity is None:
-            logger.warning(f"No normalized entity found for {raw_entity}")
-            continue
-        else:
-            normalized_entities_w_attributes.append(
-                f"{normalized_entity}--{raw_entities_w_attribute.split('--')[1].strip()}"
-            )
-
-    return normalized_entities_w_attributes
 
 
 def normalize_relationships(
@@ -345,63 +339,4 @@ def normalize_relationships(
 
     return NormalizedRelationships(
         relationships=normalized_rels, relationship_normalization_map=normalization_map
-    )
-
-
-def normalize_terms(raw_terms: list[str]) -> NormalizedTerms:
-    """
-    Normalize terms using semantic similarity matching.
-
-    Args:
-        terms: list of terms to normalize
-
-    Returns:
-        NormalizedTerms containing normalized terms and mapping
-    """
-    # # Placeholder for normalized terms - this would typically come from a predefined list
-    # normalized_term_list = [
-    #     "algorithm",
-    #     "database",
-    #     "software",
-    #     "programming",
-    #     # ... other normalized terms ...
-    # ]
-
-    # normalized_terms: list[str] = []
-    # normalization_map: dict[str, str | None] = {}
-
-    # if not raw_terms:
-    #     return NormalizedTerms(terms=[], term_normalization_map={})
-
-    # # Encode all terms at once for efficiency
-    # strings_to_encode = raw_terms + normalized_term_list
-    # vectors = encode_string_batch(strings_to_encode)
-
-    # # Split vectors into query terms and candidate terms
-    # query_vectors = vectors[:len(raw_terms)]
-    # candidate_vectors = vectors[len(raw_terms):]
-
-    # # Calculate similarity for each term
-    # for i, term in enumerate(raw_terms):
-    #     # Calculate dot products with all candidates
-    #     similarities = np.dot(candidate_vectors, query_vectors[i])
-    #     best_match_idx = np.argmax(similarities)
-    #     best_match_score = similarities[best_match_idx]
-
-    #     # Use a threshold to determine if the match is good enough
-    #     if best_match_score > 0.7:  # Adjust threshold as needed
-    #         normalized_term = normalized_term_list[best_match_idx]
-    #         normalized_terms.append(normalized_term)
-    #         normalization_map[term] = normalized_term
-    #     else:
-    #         # If no good match found, keep original
-    #         normalization_map[term] = None
-
-    # return NormalizedTerms(
-    #     terms=normalized_terms,
-    #     term_normalization_map=normalization_map
-    # )
-
-    return NormalizedTerms(
-        terms=raw_terms, term_normalization_map={term: term for term in raw_terms}
     )

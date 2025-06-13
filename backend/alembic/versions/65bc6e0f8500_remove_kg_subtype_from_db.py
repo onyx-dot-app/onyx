@@ -20,6 +20,8 @@ depends_on = None
 def upgrade() -> None:
     op.drop_column("kg_entity", "entity_class")
     op.drop_column("kg_entity", "entity_subtype")
+    op.drop_column("kg_entity_extraction_staging", "entity_class")
+    op.drop_column("kg_entity_extraction_staging", "entity_subtype")
 
 
 def downgrade() -> None:
@@ -28,4 +30,12 @@ def downgrade() -> None:
     )
     op.add_column(
         "kg_entity", sa.Column("entity_subtype", sa.String(), nullable=True, index=True)
+    )
+    op.add_column(
+        "kg_entity_extraction_staging",
+        sa.Column("entity_class", sa.String(), nullable=True, index=True),
+    )
+    op.add_column(
+        "kg_entity_extraction_staging",
+        sa.Column("entity_subtype", sa.String(), nullable=True, index=True),
     )

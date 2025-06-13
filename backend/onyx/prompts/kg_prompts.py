@@ -40,11 +40,9 @@ identify in the text, each formatted simply as '<term>'>]
 QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"entities": [<a list of entities of the prescribed entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization)>. Each entity \
-also should be followed by a list of attribute filters for the entity, if referred to in the \
-question for that entity. Example: 'ACCOUNT::* -- [account_type: customer]' should the question be \
+also should be followed by a list of comma-separated attribute filters for the entity, if referred to in the \
+question for that entity. Example: 'ACCOUNT::* -- [account_type: customer, status: active]' should the question be \
 'list all customer accounts', and ACCOUNT was an entity type with this attribute key/value allowed.] \
-"terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
-identify in the text, each formatted simply as '<term>'>],
 "time_filter": <if needed, a SQL-like filter for a field called 'event_date'. Do not select anything here \
 unless you are sure that the question asks for that filter. Only apply a time_filter if the question explicitly \
 mentions a specific date, time period, or event that can be directly translated into a date filter. Do not assume \
@@ -175,20 +173,19 @@ Explanation:
 
 
 ENTITY_EXAMPLE_1 = r"""
-{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::*--[]"], "terms": []}}
+{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::*--[]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_2 = r"""
-{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::performance--[]"], "terms": ["performance issue"]}}
+{{"entities": ["ACCOUNT::Nike--[]", "CONCERN::performance--[]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_3 = r"""
-{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[]", "CONCERN::user_experience--[]"],
- "terms": ["performance issue", "user experience"]}}
+{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[]", "CONCERN::user_experience--[]"]}}
 """.strip()
 
 ENTITY_EXAMPLE_4 = r"""
-{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[degree: severe]"], "terms": ["performance issue"]}}
+{{"entities": ["ACCOUNT::*--[]", "CONCERN::performance--[degree: severe]"]}}
 """.strip()
 
 MASTER_EXTRACTION_PROMPT = f"""
@@ -269,8 +266,8 @@ Here is the text you are asked to extract knowledge from, if needed with additio
 
 QUERY_ENTITY_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction and using knowledge graphs. You are given a question \
-and asked to extract entities (with attributes if applicable) and terms from it that you can reliably identify and that then \
-can later be matched with a known knowledge graph. You are also asked to extract time filters SHOULD \
+and asked to extract entities (with attributes if applicable) that you can reliably identify, which will then
+be matched with a known entity in theknowledge graph. You are also asked to extract time filters SHOULD \
 there be an explicit mention of a date or time frame in the QUESTION (note: last, first, etc.. DO NOT \
 imply the need for a time filter just because the question asks for something that is not the current date. \
 They will relate to ordering that we will handle separately).
@@ -330,7 +327,6 @@ Example 3:
    -  you should only extract entities belonging to the entity types above - but do extract all that you \
 can reliably identify in the text
    - if you refer to all/any/an unspecified entity of an entity type listed above, use '*' as the entity name
-   - keep the terms high-level
    - similarly, if a specific entity type is referred to in general, you should use '*' as the entity name
    - you MUST only use the initial list of entities provided! Ignore the entities in the examples unless \
 they are also part of the initial list of entities! This is essential!
@@ -347,7 +343,7 @@ explicitly as an attribute, then you should indeed extract the name/title as the
 
 {SEPARATOR_LINE}
 
-Here is the question you are asked to extract desired entities and terms from:
+Here is the question you are asked to extract desired entities and time filters from:
 {SEPARATOR_LINE}
 ---content---
 {SEPARATOR_LINE}

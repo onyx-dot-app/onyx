@@ -61,7 +61,7 @@ class KGEntityTypeAttributes(BaseModel):
     # there are several special attributes that you can map to:
     # - key: used to populate the entity_key field of the kg entity
     # - parent: used to populate the parent_key field of the kg entity
-    # - subtype: special attribute that will get filtered for in the query entity normalization step
+    # - subtype: special attribute that can be filtered for
     metadata_attributes: dict[str, str] = {}
     # a metadata key: value pair to match for to differentiate entities from the same source
     entity_filter_attributes: dict[str, Any] = {}
@@ -155,6 +155,7 @@ class KGPerson(BaseModel):
 
 class NormalizedEntities(BaseModel):
     entities: list[str]
+    entities_w_attributes: list[str]
     entity_normalization_map: dict[str, str]
 
 

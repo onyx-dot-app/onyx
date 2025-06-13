@@ -8,7 +8,6 @@ from onyx.agents.agent_search.kb_search.states import YesNoEnum
 
 class KGQuestionEntityExtractionResult(BaseModel):
     entities: list[str]
-    terms: list[str]
     time_filter: str | None
 
 
@@ -27,7 +26,6 @@ class KGQuestionRelationshipExtractionResult(BaseModel):
 class KGQuestionExtractionResult(BaseModel):
     entities: list[str]
     relationships: list[str]
-    terms: list[str]
     time_filter: str | None
 
 

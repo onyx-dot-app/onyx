@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 
 from onyx.db.kg_config import KGConfigSettings
@@ -38,6 +39,31 @@ def format_entity_id_for_models(entity_id_name: str) -> str:
     )
 
     return f"{formatted_entity_type}{separator}{formatted_entity_name}"
+
+
+def get_attributes(entity_w_attributes: str) -> dict[str, str]:
+    """
+    Extract attributes from an entity string.
+    E.g., "TYPE::Entity--[attr1: value1, attr2: value2]" -> {"attr1": "value1", "attr2": "value2"}
+    """
+    attr_split = entity_w_attributes.split("--")
+    if len(attr_split) != 2:
+        raise ValueError(f"Invalid entity with attributes: {entity_w_attributes}")
+
+    match = re.search(r"\[(.*)\]", attr_split[1])
+    if not match:
+        return {}
+
+    attr_list_str = match.group(1)
+    return {
+        attr_split[0].strip(): attr_split[1].strip()
+        for attr in attr_list_str.split(",")
+        if len(attr_split := attr.split(":", 1)) == 2
+    }
+
+
+def make_entity_w_attributes(entity: str, attributes: dict[str, str]) -> str:
+    return f"{entity}--[{', '.join(f'{k}: {v}' for k, v in attributes.items())}]"
 
 
 def format_relationship_id(relationship_id_name: str) -> str:

@@ -153,8 +153,9 @@ def get_entity_types_str(active: bool | None = None) -> str:
 
             if attributes.classification_attributes:
                 entity_type_attribute_list.append(
-                    # TODO: maybe 'subtype' instead? That way normalization can filter for these
-                    "object_type: one of: "
+                    # TODO: restructure classification attribute to be a dict of attribute name to classification info
+                    # e.g., {scope: {internal: prompt, external: prompt}, sentiment: {positive: prompt, negative: prompt}}
+                    "classification: one of: "
                     + ", ".join(attributes.classification_attributes.keys())
                 )
             if entity_type_attribute_list:

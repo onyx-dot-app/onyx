@@ -29,9 +29,7 @@ from onyx.configs.kg_configs import KG_STRATEGY_GENERATION_TIMEOUT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_document_id_for_entity
 from onyx.kg.clustering.normalizations import normalize_entities
-from onyx.kg.clustering.normalizations import normalize_entities_w_attributes_from_map
 from onyx.kg.clustering.normalizations import normalize_relationships
-from onyx.kg.clustering.normalizations import normalize_terms
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.prompts.kg_prompts import STRATEGY_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -147,7 +145,6 @@ def analyze(
         state.extracted_entities_no_attributes
     )  # attribute knowledge is not required for this step
     relationships = state.extracted_relationships
-    terms = state.extracted_terms
     time_filter = state.time_filter
 
     ## STEP 2 - stream out goals
@@ -157,18 +154,14 @@ def analyze(
     # Continue with node
 
     normalized_entities = normalize_entities(
-        entities, allowed_docs_temp_view_name=state.kg_doc_temp_view_name
-    )
-
-    query_graph_entities_w_attributes = normalize_entities_w_attributes_from_map(
+        entities,
         state.extracted_entities_w_attributes,
-        normalized_entities.entity_normalization_map,
+        allowed_docs_temp_view_name=state.kg_doc_temp_view_name,
     )
 
     normalized_relationships = normalize_relationships(
         relationships, normalized_entities.entity_normalization_map
     )
-    normalized_terms = normalize_terms(terms)
     normalized_time_filter = time_filter
 
     # If single-doc inquiry, send to single-doc processing directly
@@ -278,9 +271,9 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
         entity_normalization_map=normalized_entities.entity_normalization_map,
         relationship_normalization_map=normalized_relationships.relationship_normalization_map,
         query_graph_entities_no_attributes=query_graph_entities,
-        query_graph_entities_w_attributes=query_graph_entities_w_attributes,
+        query_graph_entities_w_attributes=normalized_entities.entities_w_attributes,
         query_graph_relationships=query_graph_relationships,
-        normalized_terms=normalized_terms.terms,
+        normalized_terms=[],  # TODO: remove fully later
         normalized_time_filter=normalized_time_filter,
         strategy=search_strategy,
         broken_down_question=broken_down_question,
