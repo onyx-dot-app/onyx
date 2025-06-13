@@ -12,6 +12,7 @@ import { HoverableIcon } from "@/components/Hoverable";
 import { DislikeFeedback, LikeFeedback } from "@/components/icons/icons";
 import { DeepAction, isCollapsible } from "./deepResearchAction";
 import {
+  DeepProcessAction,
   DeepSendEmail,
   DeepThinkingAction,
   RunCommandAction,
@@ -43,12 +44,14 @@ const RenderAction = ({
         return <WebSearchAction action={action} />;
       case "email":
         return <DeepSendEmail action={action} />;
+      case "process":
+        return <DeepProcessAction action={action} />;
       default:
         return action satisfies never; // ensure all deep action types are rendered
     }
   };
   const verticalLine = (
-    <div className="h-full min-h-[40px] w-[2px] min-w-[2px] bg-neutral-500"></div>
+    <div className="h-full w-[2px] min-w-[2px] bg-neutral-500"></div>
   );
   return (
     <div className="mb-4 overflow-x-auto flex gap-2 relative">
@@ -74,7 +77,7 @@ const RenderAction = ({
           {!action.collapsed && <div className="flex-grow">{verticalLine}</div>}
         </div>
       ) : (
-        <div className="pl-[7px]">{verticalLine}</div>
+        <div className="pl-[5px]">{verticalLine}</div>
       )}
       <div className="w-full">{<Inner action={action} />}</div>
     </div>

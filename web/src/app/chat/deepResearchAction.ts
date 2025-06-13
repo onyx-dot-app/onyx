@@ -7,6 +7,7 @@ export type DeepResearchActionPacket = {
 export type DeepAction =
   | DeepRemoveAction
   | DeepRunCommandAction
+  | DeepProcessAction
   | DeepSearchWebAction
   | DeepSendEmailAction
   | DeepThinkingAction;
@@ -45,6 +46,13 @@ type DeepSendEmailAction = {
   type: "email";
   id: string;
   email: string;
+};
+
+type DeepProcessAction = {
+  type: "process";
+  done: boolean;
+  id: string;
+  description: string;
 };
 
 export type DeepActionType<T extends DeepAction["type"]> = Extract<

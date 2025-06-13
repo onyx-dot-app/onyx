@@ -4,7 +4,7 @@ import {
   DeepAction,
   DeepActionType,
 } from "./deepResearchAction";
-import { Terminal } from "@phosphor-icons/react";
+import { Terminal, Spinner, Check } from "@phosphor-icons/react";
 type DeepActionRenderer<T extends DeepAction> = ({
   action,
 }: // onCollapse,
@@ -41,6 +41,21 @@ export const DeepSendEmail: DeepActionRenderer<DeepActionType<"email">> = ({
   action,
 }) => {
   return <div className="opacity-60">Sending email to: {action.email}...</div>;
+};
+
+export const DeepProcessAction: DeepActionRenderer<
+  DeepActionType<"process">
+> = ({ action }) => {
+  return (
+    <div className="flex items-center gap-2 opacity-70">
+      {action.done ? (
+        <Check size={18} weight="bold" className="text-green-500" />
+      ) : (
+        <Spinner size={18} className="animate-spin" />
+      )}
+      <div className="text-sm">{action.description}</div>
+    </div>
+  );
 };
 
 export const WebSearchAction: DeepActionRenderer<
