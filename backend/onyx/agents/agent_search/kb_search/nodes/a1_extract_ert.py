@@ -137,9 +137,7 @@ def extract_ert(
                 KGQuestionEntityExtractionResult.model_validate_json(cleaned_response)
             )
         except ValidationError:
-            logger.error(
-                "Failed to parse LLM response as JSON in Entity-Term Extraction"
-            )
+            logger.error("Failed to parse LLM response as JSON in Entity Extraction")
             entity_extraction_result = KGQuestionEntityExtractionResult(
                 entities=[], time_filter=""
             )
@@ -215,7 +213,7 @@ def extract_ert(
             )
         except ValidationError:
             logger.error(
-                "Failed to parse LLM response as JSON in Entity-Term Extraction"
+                "Failed to parse LLM response as JSON in Relationship Extraction"
             )
             relationship_extraction_result = KGQuestionRelationshipExtractionResult(
                 relationships=[],

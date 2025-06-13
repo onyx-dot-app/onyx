@@ -267,7 +267,7 @@ Here is the text you are asked to extract knowledge from, if needed with additio
 QUERY_ENTITY_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction and using knowledge graphs. You are given a question \
 and asked to extract entities (with attributes if applicable) that you can reliably identify, which will then
-be matched with a known entity in theknowledge graph. You are also asked to extract time filters SHOULD \
+be matched with a known entity in the knowledge graph. You are also asked to extract time filters SHOULD \
 there be an explicit mention of a date or time frame in the QUESTION (note: last, first, etc.. DO NOT \
 imply the need for a time filter just because the question asks for something that is not the current date. \
 They will relate to ordering that we will handle separately).
