@@ -158,9 +158,8 @@ def get_entity_types_str(active: bool | None = None) -> str:
                     + ", ".join(attributes.classification_attributes.keys())
                 )
             if entity_type_attribute_list:
-                entity_attributes = (
-                    "\n  - Attributes:\n         - "
-                    + "\n         - ".join(entity_type_attribute_list)
+                entity_attributes = "\n  - Attributes:\n    - " + "\n    - ".join(
+                    entity_type_attribute_list
                 )
             else:
                 entity_attributes = ""
