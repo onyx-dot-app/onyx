@@ -95,6 +95,12 @@ async function* mockSseStream(
     collapsed: false,
   });
   await delay(2000);
+  yield buildActionPacket("process", {
+    id: "think-curl-result",
+    done: false,
+    description: "Parsing web content",
+  });
+  await delay(200);
   yield buildActionPacket("run_command", {
     id: "parse-nike",
     cmd: `curl https://www.nike.com/`,
@@ -106,11 +112,6 @@ async function* mockSseStream(
     cmd: `curl https://www.reddit.com/r/RunningShoeGeeks`,
     result: longHtml,
     collapsed: true,
-  });
-  yield buildActionPacket("process", {
-    id: "think-curl-result",
-    done: false,
-    description: "Parsing web content",
   });
   await delay(4000);
   yield buildActionPacket("process", {
