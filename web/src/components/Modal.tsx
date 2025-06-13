@@ -91,7 +91,7 @@ export function Modal({
           flex-col
 
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
-          ${hideOverflow ? "overflow-hidden" : "overflow-visible"}
+          ${hideOverflow ? "overflow-hidden" : "overflow-y-auto"}
         `}
       >
         {onOutsideClick && !hideCloseButton && (
