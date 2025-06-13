@@ -5,7 +5,6 @@ from typing import Any
 from typing import cast
 
 from langchain_core.messages import HumanMessage
-from pydantic import ValidationError
 
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
@@ -39,7 +38,6 @@ from onyx.kg.models import KGClassificationDecisions
 from onyx.kg.models import KGClassificationInstructions
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
-from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
 from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
@@ -97,11 +95,7 @@ def _get_classification_extraction_instructions() -> (
         if grounded_source_name is None:
             continue
 
-        try:
-            attributes = KGEntityTypeAttributes(**entity_type.attributes)
-        except ValidationError:
-            attributes = KGEntityTypeAttributes()
-
+        attributes = entity_type.parsed_attributes
         classification_attributes = attributes.classification_attributes
         classification_options = ", ".join(classification_attributes.keys())
         classification_enabled = (
@@ -149,10 +143,7 @@ def get_entity_types_str(active: bool | None = None) -> str:
             else:
                 allowed_values = ""
 
-            try:
-                attributes = KGEntityTypeAttributes(**entity_type.attributes)
-            except ValidationError:
-                attributes = KGEntityTypeAttributes()
+            attributes = entity_type.parsed_attributes
 
             entity_type_attribute_list: list[str] = []
             for attribute, values in attributes.attribute_values.items():

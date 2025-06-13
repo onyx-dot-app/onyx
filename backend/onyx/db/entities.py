@@ -142,6 +142,9 @@ def transfer_entity(
             index_elements=["name", "entity_type_id_name", "document_id"],
             set_=dict(
                 occurrences=KGEntity.occurrences + entity.occurrences,
+                attributes=entity.attributes,  # attribute can get updated after re-indexing
+                event_time=entity.event_time,
+                time_updated=datetime.now(),
             ),
         )
         .returning(KGEntity)

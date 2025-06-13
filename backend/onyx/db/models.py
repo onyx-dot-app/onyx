@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import validates
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
+from pydantic import ValidationError
 
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 
@@ -64,6 +65,7 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
 from onyx.db.pydantic_type import PydanticType
+from onyx.kg.models import KGEntityTypeAttributes
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.file_store.models import FileDescriptor
@@ -654,6 +656,13 @@ class KGEntityType(Base):
         server_default="{}",
         comment="Filtering based on document attribute",
     )
+
+    @property
+    def parsed_attributes(self) -> KGEntityTypeAttributes:
+        try:
+            return KGEntityTypeAttributes(**self.attributes)
+        except ValidationError:
+            return KGEntityTypeAttributes()
 
     occurrences: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 

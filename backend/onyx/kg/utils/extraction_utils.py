@@ -1,8 +1,6 @@
 import re
 from collections import defaultdict
 
-from pydantic import ValidationError
-
 from onyx.configs.constants import OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
@@ -19,7 +17,6 @@ from onyx.kg.models import (
 )
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
-from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGEntityTypeClassificationInfo
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import kg_email_processing
@@ -490,14 +487,11 @@ class EntityTypeMetadataTracker:
             entity_types = db_session.query(KGEntityType).all()
 
         for entity_type in entity_types:
-            try:
-                attributes = KGEntityTypeAttributes(**entity_type.attributes)
-            except ValidationError:
-                attributes = KGEntityTypeAttributes()
-
-            self.entity_attr_info[entity_type.id_name] = attributes.attribute_values
+            self.entity_attr_info[entity_type.id_name] = (
+                entity_type.parsed_attributes.attribute_values
+            )
             self.entity_allowed_attrs[entity_type.id_name] = set(
-                attributes.metadata_attributes.values()
+                entity_type.parsed_attributes.metadata_attributes.values()
             )
 
     def export_typeinfo(self) -> None:
