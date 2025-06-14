@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import PGFileStore
+from onyx.db.models import FileStore
 from onyx.db.pg_file_store import create_populate_lobj
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
 from onyx.db.pg_file_store import upsert_pgfilestore
@@ -80,7 +80,7 @@ class AttachmentProcessingResult(BaseModel):
     """
     A container for results after processing a Confluence attachment.
     'text' is the textual content of the attachment.
-    'file_name' is the final file name used in PGFileStore to store the content.
+    'file_name' is the final file name used in FileStore to store the content.
     'error' holds an exception or string if something failed.
     """
 
@@ -546,7 +546,7 @@ def attachment_to_file_record(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
     db_session: Session,
-) -> tuple[PGFileStore, bytes]:
+) -> tuple[FileStore, bytes]:
     """Save an attachment to the file store and return the file record."""
     download_link = _attachment_to_download_link(confluence_client, attachment)
     image_data = confluence_client.get(

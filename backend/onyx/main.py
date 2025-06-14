@@ -51,6 +51,7 @@ from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import SqlEngine
 from onyx.db.engine import warm_up_connections
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
@@ -255,6 +256,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # If we are multi-tenant, we need to only set up initial public tables
         with get_session_context_manager() as db_session:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
+            # set up the file store (e.g. create bucket if needed). On multi-tenant,
+            # this is done via IaC
+            get_default_file_store(db_session).initialize()
     else:
         setup_multitenant_onyx()
 

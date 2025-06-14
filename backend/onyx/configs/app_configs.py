@@ -781,3 +781,19 @@ DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
 DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
     os.environ.get("DB_READONLY_PASSWORD") or "password"
 )
+
+# File Store Configuration
+S3_FILE_STORE_BUCKET_NAME = os.environ.get(
+    "S3_FILE_STORE_BUCKET_NAME", "onyx-file-store-bucket"
+)
+S3_FILE_STORE_PREFIX = os.environ.get("S3_FILE_STORE_PREFIX", "onyx-files")
+S3_ENDPOINT_URL = os.environ.get(
+    "S3_ENDPOINT_URL"
+)  # For MinIO and other S3-compatible storage
+S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
+
+# S3/MinIO Access Keys
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY")
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")

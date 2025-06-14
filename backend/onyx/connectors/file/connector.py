@@ -59,7 +59,7 @@ def _create_image_section(
 ) -> tuple[ImageSection, str | None]:
     """
     Creates an ImageSection for an image file or embedded image.
-    Stores the image in PGFileStore but does not generate a summary.
+    Stores the image in FileStore but does not generate a summary.
 
     Args:
         image_data: Raw image bytes
@@ -212,7 +212,7 @@ def _process_file(
     for idx, (img_data, img_name) in enumerate(
         extraction_result.embedded_images, start=1
     ):
-        # Store each embedded image as a separate file in PGFileStore
+        # Store each embedded image as a separate file in FileStore
         # and create a section with the image reference
         try:
             image_section, _ = _create_image_section(

@@ -28,7 +28,7 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.file_store.file_store import PostgresBackedFileStore
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -142,7 +142,7 @@ def put_logo(
 
 def fetch_logo_helper(db_session: Session) -> Response:
     try:
-        file_store = PostgresBackedFileStore(db_session)
+        file_store = get_default_file_store(db_session)
         onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")
@@ -157,7 +157,7 @@ def fetch_logo_helper(db_session: Session) -> Response:
 
 def fetch_logotype_helper(db_session: Session) -> Response:
     try:
-        file_store = PostgresBackedFileStore(db_session)
+        file_store = get_default_file_store(db_session)
         onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")

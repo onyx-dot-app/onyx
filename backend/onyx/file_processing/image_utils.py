@@ -20,7 +20,7 @@ def store_image_and_create_section(
     file_origin: FileOrigin = FileOrigin.OTHER,
 ) -> Tuple[ImageSection, str | None]:
     """
-    Stores an image in PGFileStore and creates an ImageSection object without summarization.
+    Stores an image in FileStore and creates an ImageSection object without summarization.
 
     Args:
         db_session: Database session
@@ -33,7 +33,7 @@ def store_image_and_create_section(
     Returns:
         Tuple containing:
         - ImageSection object with image reference
-        - The file_name in PGFileStore or None if storage failed
+        - The file_name in FileStore or None if storage failed
     """
     # Storage logic
     stored_file_name = None
