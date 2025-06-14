@@ -44,6 +44,7 @@ import {
   FileIcon2,
   GitbookIcon,
   HighspotIcon,
+  DrupalWikiIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -330,6 +331,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Highspot",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/highspot",
+  },
+  drupal_wiki: {
+    icon: DrupalWikiIcon,
+    displayName: "Drupal Wiki",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/drupal_wiki",
   },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used

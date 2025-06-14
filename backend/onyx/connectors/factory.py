@@ -18,6 +18,7 @@ from onyx.connectors.discord.connector import DiscordConnector
 from onyx.connectors.discourse.connector import DiscourseConnector
 from onyx.connectors.document360.connector import Document360Connector
 from onyx.connectors.dropbox.connector import DropboxConnector
+from onyx.connectors.drupal_wiki.connector import DrupalWikiConnector
 from onyx.connectors.egnyte.connector import EgnyteConnector
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.file.connector import LocalFileConnector
@@ -120,6 +121,7 @@ def identify_connector_class(
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
+        DocumentSource.DRUPAL_WIKI: DrupalWikiConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }
