@@ -31,9 +31,9 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
 
     reset_update_dict: dict[str, Any] = {
         "fields": {
-            "kg_entities": {"assign": {}},
-            "kg_relationships": {"assign": {}},
-            "kg_terms": {"assign": {}},
+            "kg_entities": {"assign": []},
+            "kg_relationships": {"assign": []},
+            "kg_terms": {"assign": []},
         }
     }
 

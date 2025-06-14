@@ -349,8 +349,8 @@ def generate_simple_sql(
                     ]
                 except Exception as e:
                     # No stopping here, the individualized SQL query is not mandatory
+                    # TODO: raise error on frontend
                     logger.error(f"Error executing Individualized SQL query: {e}")
-                    # individualized_query_results = None
 
         else:
             source_document_results = None

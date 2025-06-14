@@ -158,9 +158,9 @@ def get_document_chunks_for_kg_processing(
                 title=fields.get("title", ""),
                 content=fields.get("content", ""),
                 metadata=fields.get("metadata", {}),
-                entities=fields.get("kg_entities", {}),
-                relationships=fields.get("kg_relationships", {}),
-                terms=fields.get("kg_terms", {}),
+                entities=fields.get("kg_entities", []),
+                relationships=fields.get("kg_relationships", []),
+                terms=fields.get("kg_terms", []),
                 deep_extraction=deep_extraction,
             )
         )
