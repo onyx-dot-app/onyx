@@ -86,7 +86,11 @@ async function EditslackChannelConfigPage(props: {
       <BackButton />
       <AdminPageTitle
         icon={<SourceIcon sourceType={ValidSources.Slack} iconSize={32} />}
-        title="Edit Slack Channel Config"
+        title={
+          slackChannelConfig.is_default
+            ? "Edit Default Slack Config"
+            : "Edit Slack Channel Config"
+        }
       />
 
       <SlackChannelConfigCreationForm
