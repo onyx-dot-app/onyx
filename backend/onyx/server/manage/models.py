@@ -42,6 +42,7 @@ class AuthTypeResponse(BaseModel):
     # users to have verified emails
     requires_verification: bool
     anonymous_user_enabled: bool | None = None
+    kroki_enabled: bool = False
 
 
 class UserPreferences(BaseModel):
