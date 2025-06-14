@@ -161,19 +161,28 @@ if LOG_POSTGRES_CONN_COUNTS:
         active_connections = connection_proxy._pool.checkedout()
         idle_connections = connection_proxy._pool.checkedin()
         pool_size = connection_proxy._pool.size()
+
+        # Get additional pool information
+        pool_class_name = connection_proxy._pool.__class__.__name__
+        engine_app_name = SqlEngine.get_app_name() or "unknown"
+
         logger.debug(
-            "Connection Checkout\n"
+            "SYNC Engine Connection Checkout\n"
+            f"Pool Type: {pool_class_name};\n"
+            f"App Name: {engine_app_name};\n"
             f"Active Connections: {active_connections};\n"
-            f"Idle: {idle_connections};\n"
+            f"Idle Connections: {idle_connections};\n"
             f"Pool Size: {pool_size};\n"
-            f"Total connection checkouts: {checkout_count}"
+            f"Total Sync Checkouts: {checkout_count}"
         )
 
     @event.listens_for(Engine, "checkin")
     def log_checkin(dbapi_connection, connection_record):  # type: ignore
         global checkin_count
         checkin_count += 1
-        logger.debug(f"Total connection checkins: {checkin_count}")
+        logger.debug(
+            f"SYNC Engine Connection Checkin - Total Sync Checkins: {checkin_count}"
+        )
 
 
 def get_db_current_time(db_session: Session) -> datetime:
@@ -444,6 +453,41 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
                 token = get_iam_auth_token(host, port, user, AWS_REGION_NAME)
                 cparams["password"] = token
                 cparams["ssl"] = ssl_context
+
+        # Add connection logging for async engine if enabled
+        if LOG_POSTGRES_CONN_COUNTS:
+            async_checkout_count = 0
+            async_checkin_count = 0
+
+            @event.listens_for(_ASYNC_ENGINE.sync_engine, "checkout")
+            def log_async_checkout(dbapi_connection, connection_record, connection_proxy):  # type: ignore
+                nonlocal async_checkout_count
+                async_checkout_count += 1
+
+                active_connections = connection_proxy._pool.checkedout()
+                idle_connections = connection_proxy._pool.checkedin()
+                pool_size = connection_proxy._pool.size()
+
+                # Get additional pool information
+                pool_class_name = connection_proxy._pool.__class__.__name__
+
+                logger.debug(
+                    "ASYNC Engine Connection Checkout\n"
+                    f"Pool Type: {pool_class_name};\n"
+                    f"App Name: {app_name};\n"
+                    f"Active Connections: {active_connections};\n"
+                    f"Idle Connections: {idle_connections};\n"
+                    f"Pool Size: {pool_size};\n"
+                    f"Total Async Checkouts: {async_checkout_count}"
+                )
+
+            @event.listens_for(_ASYNC_ENGINE.sync_engine, "checkin")
+            def log_async_checkin(dbapi_connection, connection_record):  # type: ignore
+                nonlocal async_checkin_count
+                async_checkin_count += 1
+                logger.debug(
+                    f"ASYNC Engine Connection Checkin - Total Async Checkins: {async_checkin_count}"
+                )
 
     return _ASYNC_ENGINE
 
