@@ -157,32 +157,41 @@ class DocumentEditorTool(Tool):
         You are a document editor assistant. Your task is to edit the provided HTML text according to the instructions.
         Do not add any newlines in the HTML edited_text output. The edited_text should be a valid HTML string.
 
-        IMPORTANT: You must return a list of changes with the following format:
-        - Each change should specify the type (deletion or addition)
-        - For deletions, provide the exact text to be deleted and its context
-        - For additions, provide the exact text to be added and where it should be inserted
-        - For edits, break it up into a deletion and an addition
-        - Include the context around the change to help locate where it should be applied
-        - Do not include any unchanged parts of the document
-        - Maintain the original structure of the HTML document
-        - Return enough context before and after the change to ensure the change is not overlapping with any other part of the document
+        IMPORTANT: You must return a JSON object with the following structure:
+        {{
+            "changes": [
+                // Array of changes, where each change has:
+                {{
+                    "type": "deletion" or "addition",
+                    "context_before": "text before the change",
+                    "context_after": "text after the change",
+                    "text_to_delete": "text to remove (empty for additions)",
+                    "text_to_add": "text to add (empty for deletions)"
+                }}
+            ],
+            "summary": "A brief summary of all changes made"
+        }}
 
-        Example of a change representation:
-        Original: "<div> <p> REALLY LONG UNIMPORTANT TEXT </p> <p>This is a sample text.</p> </div>"
-        Changes: [
-            {{"type": "deletion",
-                "context_before": "<p>This is a ",
-                "context_after": " text.</p>",
-                "text_to_delete": "sample",
-                "text_to_add": ""
-            }},
-            {{"type": "addition",
-                "context_before": "<p>This is a ",
-                "context_after": " text.</p>",
-                "text_to_delete": "",
-                "text_to_add": "modified"
-            }}
-        ]
+        Example response format:
+        {{
+            "changes": [
+                {{
+                    "type": "deletion",
+                    "context_before": "<p>This is a ",
+                    "context_after": " text.</p>",
+                    "text_to_delete": "sample",
+                    "text_to_add": ""
+                }},
+                {{
+                    "type": "addition",
+                    "context_before": "<p>This is a ",
+                    "context_after": " text.</p>",
+                    "text_to_delete": "",
+                    "text_to_add": "modified"
+                }}
+            ],
+            "summary": "Changed 'sample' to 'modified' in the paragraph"
+        }}
 
         INSTRUCTIONS:
         {instructions}
