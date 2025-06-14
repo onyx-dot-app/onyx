@@ -58,8 +58,8 @@ def respond(
             stream,
             True,  # should_stream_answer
             writer,
-            final_search_results=final_search_results if final_search_results else None,
-            displayed_search_results=displayed_results if displayed_results else None,
+            final_search_results=final_search_results,
+            displayed_search_results=displayed_results,
             return_text_content=True,
         )
 

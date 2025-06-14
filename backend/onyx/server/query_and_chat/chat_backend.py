@@ -33,9 +33,7 @@ from onyx.agents.agent_search.models import (
 from onyx.agents.agent_search.run_graph import run_document_chat_graph
 from onyx.auth.users import current_chat_accessible_user, current_user
 from onyx.chat.chat_utils import create_chat_chain, extract_headers
-
 from onyx.chat.process_message import stream_chat_message
-
 from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
@@ -48,7 +46,6 @@ from onyx.configs.constants import (
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.connectors.models import InputType
-
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
     create_chat_session,
@@ -61,7 +58,6 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     get_chat_sessions_by_user,
     get_or_create_root_message,
-    reserve_message_id,
     set_as_latest_chat_message,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
@@ -890,9 +886,7 @@ def handle_document_chat_message(
                 user_chat_message = create_new_chat_message(
                     chat_session_id=chat_session_uuid,
                     parent_message=chat_messages[-1],
-                    prompt_id=persona.prompts[0].id
-                    if persona.prompts
-                    else None,
+                    prompt_id=persona.prompts[0].id if persona.prompts else None,
                     message=request.message,
                     token_count=token_count,
                     message_type=MessageType.USER,
@@ -950,6 +944,7 @@ def handle_document_chat_message(
                             system_message=SystemMessage(
                                 content=persona.prompts[0].system_prompt
                             ),
+                            include_citations_instructions=True,
                         ),
                     ),
                     tooling=GraphTooling(
@@ -1074,61 +1069,59 @@ def confirm_document_changes(
 ) -> DocumentChangeConfirmationResponse:
     """
     Confirms or rejects document changes by processing markup tags.
-    
+
     For confirm: keeps addition-mark content, removes deletion-mark content
     For reject: removes addition-mark content, keeps deletion-mark content
     """
     import re
-    
+
     try:
         document_content = request.document_content
         action = request.action.lower()
-        
+
         if action not in ["confirm", "reject"]:
             raise ValueError(f"Invalid action: {action}. Must be 'confirm' or 'reject'")
-        
+
         if action == "confirm":
             # Keep additions, remove deletions
             processed_content = re.sub(
-                r'<addition-mark>(.*?)</addition-mark>', 
-                r'\1', 
-                document_content, 
-                flags=re.DOTALL
+                r"<addition-mark>(.*?)</addition-mark>",
+                r"\1",
+                document_content,
+                flags=re.DOTALL,
             )
             processed_content = re.sub(
-                r'<deletion-mark>(.*?)</deletion-mark>', 
-                '', 
-                processed_content, 
-                flags=re.DOTALL
+                r"<deletion-mark>(.*?)</deletion-mark>",
+                "",
+                processed_content,
+                flags=re.DOTALL,
             )
             message = "Changes confirmed and applied"
-            
+
         else:  # reject
             # Remove additions, keep deletions
             processed_content = re.sub(
-                r'<addition-mark>(.*?)</addition-mark>', 
-                '', 
-                document_content, 
-                flags=re.DOTALL
+                r"<addition-mark>(.*?)</addition-mark>",
+                "",
+                document_content,
+                flags=re.DOTALL,
             )
             processed_content = re.sub(
-                r'<deletion-mark>(.*?)</deletion-mark>', 
-                r'\1', 
-                processed_content, 
-                flags=re.DOTALL
+                r"<deletion-mark>(.*?)</deletion-mark>",
+                r"\1",
+                processed_content,
+                flags=re.DOTALL,
             )
             message = "Changes rejected and reverted"
-        
+
         return DocumentChangeConfirmationResponse(
-            processed_content=processed_content,
-            success=True,
-            message=message
+            processed_content=processed_content, success=True, message=message
         )
-        
+
     except Exception as e:
         logger.exception(f"Error processing document changes: {e}")
         return DocumentChangeConfirmationResponse(
             processed_content=request.document_content,
             success=False,
-            message=f"Failed to process changes: {str(e)}"
+            message=f"Failed to process changes: {str(e)}",
         )

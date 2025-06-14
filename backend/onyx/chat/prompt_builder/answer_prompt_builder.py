@@ -19,7 +19,11 @@ from onyx.llm.utils import (
     model_supports_image_input,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT, CODE_BLOCK_MARKDOWN
+from onyx.prompts.chat_prompts import (
+    CHAT_USER_CONTEXT_FREE_PROMPT,
+    CODE_BLOCK_MARKDOWN,
+    REQUIRE_CITATION_STATEMENT,
+)
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import (
     drop_messages_history_overflow,
@@ -98,6 +102,7 @@ class AnswerPromptBuilder:
         raw_user_uploaded_files: list[InMemoryChatFile],
         single_message_history: str | None = None,
         system_message: SystemMessage | None = None,
+        include_citations_instructions: bool = False,
     ) -> None:
         self.max_tokens = compute_max_llm_input_tokens(llm_config)
 
@@ -129,6 +134,7 @@ class AnswerPromptBuilder:
         self.raw_user_query = raw_user_query
         self.raw_user_uploaded_files = raw_user_uploaded_files
         self.single_message_history = single_message_history
+        self.include_citations_instructions = include_citations_instructions
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:
@@ -201,16 +207,15 @@ class AnswerPromptBuilder:
         self, state_specific_instructions: str | None = None
     ) -> tuple[SystemMessage | None, int]:
         message, token_cnt = self.system_message_and_token_cnt or (None, 0)
-        if message is None:
-            if state_specific_instructions:
-                message = SystemMessage(content=state_specific_instructions)
-                token_cnt = check_message_tokens(
-                    message, self.llm_tokenizer_encode_func
-                )
-            return message, token_cnt
-        if not state_specific_instructions:
-            return message, token_cnt
-        message_content = f"<AGENT_INSTRUCTIONS>\n{message.content}\n</AGENT_INSTRUCTIONS>\n\n<STATE_INSTRUCTIONS>\n{state_specific_instructions}\n</STATE_INSTRUCTIONS>"
+        message_content = ""
+        if message is not None:
+            message_content = (
+                f"<AGENT_INSTRUCTIONS>\n{message.content}\n</AGENT_INSTRUCTIONS>\n\n"
+            )
+        if state_specific_instructions:
+            message_content += f"<STATE_INSTRUCTIONS>\n{state_specific_instructions}\n</STATE_INSTRUCTIONS>\n\n"
+        if self.include_citations_instructions:
+            message_content += "\n\n" + REQUIRE_CITATION_STATEMENT
         message = SystemMessage(content=message_content)
         token_cnt = check_message_tokens(message, self.llm_tokenizer_encode_func)
         return message, token_cnt
