@@ -1,27 +1,49 @@
 from abc import ABC
 from abc import abstractmethod
+from io import BytesIO
+from typing import Any
 from typing import cast
 from typing import IO
 
+import boto3
 import puremagic
+from botocore.config import Config
+from botocore.exceptions import ClientError
+from mypy_boto3_s3 import S3Client
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import AWS_ACCESS_KEY_ID
+from onyx.configs.app_configs import AWS_REGION_NAME
+from onyx.configs.app_configs import AWS_SECRET_ACCESS_KEY
+from onyx.configs.app_configs import MINIO_ACCESS_KEY
+from onyx.configs.app_configs import MINIO_SECRET_KEY
+from onyx.configs.app_configs import S3_ENDPOINT_URL
+from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
+from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
+from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
-from onyx.db.models import PGFileStore
-from onyx.db.pg_file_store import create_populate_lobj
-from onyx.db.pg_file_store import delete_lobj_by_id
-from onyx.db.pg_file_store import delete_pgfilestore_by_file_name
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name_optional
-from onyx.db.pg_file_store import read_lobj
-from onyx.db.pg_file_store import upsert_pgfilestore
+from onyx.db.models import FileStore as FileStoreModel
+from onyx.db.pg_file_store import delete_filestore_by_file_name
+from onyx.db.pg_file_store import get_filestore_by_file_name
+from onyx.db.pg_file_store import get_filestore_by_file_name_optional
+from onyx.db.pg_file_store import upsert_filestore_external
 from onyx.utils.file import FileWithMimeType
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class FileStore(ABC):
     """
     An abstraction for storing files and large binary objects.
     """
+
+    @abstractmethod
+    def initialize(self) -> None:
+        """
+        Should be called once before any other methods are called.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def has_file(
@@ -50,8 +72,7 @@ class FileStore(ABC):
         display_name: str | None,
         file_origin: FileOrigin,
         file_type: str,
-        file_metadata: dict | None = None,
-        commit: bool = True,
+        file_metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Save a file to the blob store
@@ -71,7 +92,7 @@ class FileStore(ABC):
     @abstractmethod
     def read_file(
         self, file_name: str, mode: str | None = None, use_tempfile: bool = False
-    ) -> IO:
+    ) -> IO[bytes]:
         """
         Read the content of a given file by the name
 
@@ -86,7 +107,7 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def read_file_record(self, file_name: str) -> PGFileStore:
+    def read_file_record(self, file_name: str) -> FileStoreModel:
         """
         Read the file record by the name
         """
@@ -100,10 +121,144 @@ class FileStore(ABC):
         - file_name: Name of file to delete
         """
 
+    @abstractmethod
+    def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
+        """
+        Get the file + parse out the mime type.
+        """
 
-class PostgresBackedFileStore(FileStore):
-    def __init__(self, db_session: Session):
+
+class S3BackedFileStore(FileStore):
+    """Isn't necessarily S3, but is any S3-compatible storage (e.g. MinIO)"""
+
+    def __init__(self, db_session: Session) -> None:
         self.db_session = db_session
+        self._s3_client: S3Client | None = None
+        self._bucket_name: str | None = None
+
+    def _get_s3_client(self) -> S3Client:
+        """Initialize S3 client if not already done"""
+        if self._s3_client is None:
+            # Try to get credentials from environment, prioritizing MinIO-specific ones
+            try:
+                # Check for MinIO-specific credentials first, then fall back to AWS
+                aws_access_key_id = MINIO_ACCESS_KEY or AWS_ACCESS_KEY_ID
+                aws_secret_access_key = MINIO_SECRET_KEY or AWS_SECRET_ACCESS_KEY
+                aws_region = AWS_REGION_NAME
+
+                # Support for custom S3-compatible endpoints (e.g., MinIO)
+                endpoint_url = S3_ENDPOINT_URL
+
+                # SSL verification can be disabled for local MinIO instances
+                verify_ssl = S3_VERIFY_SSL
+
+                client_kwargs: dict[str, Any] = {
+                    "service_name": "s3",
+                    "region_name": aws_region,
+                }
+
+                # Add endpoint URL if specified (for MinIO, etc.)
+                if endpoint_url:
+                    client_kwargs["endpoint_url"] = endpoint_url
+                    client_kwargs["config"] = Config(
+                        signature_version="s3v4",
+                        s3={"addressing_style": "path"},  # Required for MinIO
+                    )
+                    # Disable SSL verification if requested (for local development)
+                    if not verify_ssl:
+                        import urllib3
+
+                        urllib3.disable_warnings(
+                            urllib3.exceptions.InsecureRequestWarning
+                        )
+                        client_kwargs["verify"] = False
+
+                if aws_access_key_id and aws_secret_access_key:
+                    # Use explicit credentials
+                    client_kwargs.update(
+                        {
+                            "aws_access_key_id": aws_access_key_id,
+                            "aws_secret_access_key": aws_secret_access_key,
+                        }
+                    )
+                    self._s3_client = boto3.client(**client_kwargs)
+                else:
+                    # Use IAM role or default credentials (not typically used with MinIO)
+                    self._s3_client = boto3.client(**client_kwargs)
+
+            except Exception as e:
+                logger.error(f"Failed to initialize S3 client: {e}")
+                raise RuntimeError(f"Failed to initialize S3 client: {e}")
+
+        return self._s3_client
+
+    def _get_bucket_name(self) -> str:
+        """Get S3 bucket name from configuration"""
+        if self._bucket_name is None:
+            self._bucket_name = S3_FILE_STORE_BUCKET_NAME
+            if not self._bucket_name:
+                raise RuntimeError(
+                    "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
+                )
+        return self._bucket_name
+
+    def _get_s3_key(self, file_name: str) -> str:
+        """Generate S3 key from file name"""
+        prefix = S3_FILE_STORE_PREFIX
+        return f"{prefix}/{file_name}"
+
+    def initialize(self) -> None:
+        """Initialize the S3 file store by ensuring the bucket exists"""
+        try:
+            s3_client = self._get_s3_client()
+            bucket_name = self._get_bucket_name()
+
+            # Check if bucket exists
+            try:
+                s3_client.head_bucket(Bucket=bucket_name)
+                logger.info(f"S3 bucket '{bucket_name}' already exists")
+            except ClientError as e:
+                error_code = e.response["Error"]["Code"]
+                if error_code == "404":
+                    # Bucket doesn't exist, create it
+                    logger.info(f"Creating S3 bucket '{bucket_name}'")
+
+                    # For AWS S3, we need to handle region-specific bucket creation
+                    region = (
+                        s3_client._client_config.region_name
+                        if hasattr(s3_client, "_client_config")
+                        else None
+                    )
+
+                    if region and region != "us-east-1":
+                        # For regions other than us-east-1, we need to specify LocationConstraint
+                        s3_client.create_bucket(
+                            Bucket=bucket_name,
+                            CreateBucketConfiguration={"LocationConstraint": region},
+                        )
+                    else:
+                        # For us-east-1 or MinIO/other S3-compatible services
+                        s3_client.create_bucket(Bucket=bucket_name)
+
+                    logger.info(f"Successfully created S3 bucket '{bucket_name}'")
+                elif error_code == "403":
+                    # Bucket exists but we don't have permission to access it
+                    logger.warning(
+                        f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                    )
+                    raise RuntimeError(
+                        f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
+                    )
+                else:
+                    # Some other error occurred
+                    logger.error(f"Failed to check S3 bucket '{bucket_name}': {e}")
+                    raise RuntimeError(
+                        f"Failed to check S3 bucket '{bucket_name}': {e}"
+                    )
+
+        except Exception as e:
+            logger.error(f"Failed to initialize S3 file store: {e}")
+            raise RuntimeError(f"Failed to initialize S3 file store: {e}")
 
     def has_file(
         self,
@@ -112,13 +267,16 @@ class PostgresBackedFileStore(FileStore):
         file_type: str,
         display_name: str | None = None,
     ) -> bool:
-        file_record = get_pgfilestore_by_file_name_optional(
+        file_record = get_filestore_by_file_name_optional(
             file_name=display_name or file_name, db_session=self.db_session
         )
         return (
             file_record is not None
             and file_record.file_origin == file_origin
             and file_record.file_type == file_type
+            and file_record.bucket_name
+            is not None  # Ensure it's an external storage file
+            and file_record.object_key is not None
         )
 
     def save_file(
@@ -128,58 +286,111 @@ class PostgresBackedFileStore(FileStore):
         display_name: str | None,
         file_origin: FileOrigin,
         file_type: str,
-        file_metadata: dict | None = None,
-        commit: bool = True,
+        file_metadata: dict[str, Any] | None = None,
     ) -> None:
         try:
-            # The large objects in postgres are saved as special objects can be listed with
-            # SELECT * FROM pg_largeobject_metadata;
-            obj_id = create_populate_lobj(content=content, db_session=self.db_session)
-            upsert_pgfilestore(
+            s3_client = self._get_s3_client()
+            bucket_name = self._get_bucket_name()
+            s3_key = self._get_s3_key(file_name)
+
+            # Read content from IO object
+            if hasattr(content, "read"):
+                file_content = content.read()
+                if hasattr(content, "seek"):
+                    content.seek(0)  # Reset position for potential re-reads
+            else:
+                file_content = content
+
+            # Upload to S3
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=s3_key,
+                Body=file_content,
+                ContentType=file_type,
+            )
+
+            # Save metadata to database
+            upsert_filestore_external(
                 file_name=file_name,
                 display_name=display_name or file_name,
                 file_origin=file_origin,
                 file_type=file_type,
-                lobj_oid=obj_id,
+                bucket_name=bucket_name,
+                object_key=s3_key,
                 db_session=self.db_session,
                 file_metadata=file_metadata,
             )
-            if commit:
-                self.db_session.commit()
+            self.db_session.commit()
+
         except Exception:
             self.db_session.rollback()
             raise
 
     def read_file(
         self, file_name: str, mode: str | None = None, use_tempfile: bool = False
-    ) -> IO:
-        file_record = get_pgfilestore_by_file_name(
-            file_name=file_name, db_session=self.db_session
-        )
-        return read_lobj(
-            lobj_oid=file_record.lobj_oid,
-            db_session=self.db_session,
-            mode=mode,
-            use_tempfile=use_tempfile,
-        )
-
-    def read_file_record(self, file_name: str) -> PGFileStore:
-        file_record = get_pgfilestore_by_file_name(
+    ) -> IO[bytes]:
+        file_record = get_filestore_by_file_name(
             file_name=file_name, db_session=self.db_session
         )
 
+        if file_record.bucket_name is None or file_record.object_key is None:
+            raise RuntimeError(f"File {file_name} is not stored in external storage")
+
+        s3_client = self._get_s3_client()
+
+        try:
+            response = s3_client.get_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
+
+            file_content = response["Body"].read()
+
+            if use_tempfile:
+                import tempfile
+
+                temp_file = tempfile.NamedTemporaryFile(
+                    mode="w+b" if mode == "b" else "w+", delete=False
+                )
+                temp_file.write(file_content)
+                temp_file.seek(0)
+                return temp_file
+            else:
+                return BytesIO(file_content)
+
+        except ClientError as e:
+            logger.error(f"Failed to read file {file_name} from S3: {e}")
+            raise RuntimeError(f"Failed to read file {file_name} from S3: {e}")
+
+    def read_file_record(self, file_name: str) -> FileStoreModel:
+        file_record = get_filestore_by_file_name(
+            file_name=file_name, db_session=self.db_session
+        )
         return file_record
 
     def delete_file(self, file_name: str) -> None:
         try:
-            file_record = get_pgfilestore_by_file_name(
+            file_record = get_filestore_by_file_name(
                 file_name=file_name, db_session=self.db_session
             )
-            delete_lobj_by_id(file_record.lobj_oid, db_session=self.db_session)
-            delete_pgfilestore_by_file_name(
+
+            if (
+                file_record.bucket_name is not None
+                and file_record.object_key is not None
+            ):
+                s3_client = self._get_s3_client()
+
+                # Delete from external storage
+                s3_client.delete_object(
+                    Bucket=file_record.bucket_name, Key=file_record.object_key
+                )
+
+            # Delete metadata from database
+            delete_filestore_by_file_name(
                 file_name=file_name, db_session=self.db_session
             )
+
             self.db_session.commit()
+
         except Exception:
             self.db_session.rollback()
             raise
@@ -198,5 +409,28 @@ class PostgresBackedFileStore(FileStore):
 
 
 def get_default_file_store(db_session: Session) -> FileStore:
-    # The only supported file store now is the Postgres File Store
-    return PostgresBackedFileStore(db_session=db_session)
+    """
+    Returns the configured file store implementation.
+
+    Supports AWS S3, MinIO, and other S3-compatible storage.
+
+    Configuration is handled via environment variables defined in app_configs.py:
+
+    AWS S3:
+    - S3_FILE_STORE_BUCKET_NAME=<bucket-name>
+    - S3_FILE_STORE_PREFIX=<prefix> (optional, defaults to 'onyx-files')
+    - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (or use IAM roles)
+    - AWS_REGION_NAME=<region> (optional, defaults to 'us-east-2')
+
+    MinIO:
+    - S3_FILE_STORE_BUCKET_NAME=<bucket-name>
+    - S3_ENDPOINT_URL=<minio-endpoint> (e.g., http://localhost:9000)
+    - MINIO_ACCESS_KEY=<minio-access-key> (falls back to AWS_ACCESS_KEY_ID)
+    - MINIO_SECRET_KEY=<minio-secret-key> (falls back to AWS_SECRET_ACCESS_KEY)
+    - AWS_REGION_NAME=<any-region> (optional, defaults to 'us-east-2')
+    - S3_VERIFY_SSL=false (optional, for local development)
+
+    Other S3-compatible storage (Digital Ocean, Linode, etc.):
+    - Same as MinIO, but set appropriate S3_ENDPOINT_URL
+    """
+    return S3BackedFileStore(db_session=db_session)

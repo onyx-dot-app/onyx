@@ -61,7 +61,6 @@ def store_user_file_plaintext(
             display_name=f"Plaintext for user file {user_file_id}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
-            commit=False,
         )
         return True
     except Exception as e:
@@ -284,7 +283,6 @@ def save_file_from_url(url: str) -> str:
             display_name="GeneratedImage",
             file_origin=FileOrigin.CHAT_IMAGE_GEN,
             file_type="image/png;base64",
-            commit=True,
         )
         return unique_id
 
@@ -299,7 +297,6 @@ def save_file_from_base64(base64_string: str) -> str:
             display_name="GeneratedImage",
             file_origin=FileOrigin.CHAT_IMAGE_GEN,
             file_type=get_image_type(base64_string),
-            commit=True,
         )
         return unique_id
 

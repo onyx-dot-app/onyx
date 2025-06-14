@@ -504,7 +504,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
                         if not pgfilestore:
                             logger.warning(
-                                f"Image file {section.image_file_name} not found in PGFileStore"
+                                f"Image file {section.image_file_name} not found in FileStore"
                             )
 
                             processed_section.text = "[Image could not be processed]"

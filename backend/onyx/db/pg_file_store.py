@@ -10,7 +10,7 @@ from sqlalchemy.sql import select
 from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
-from onyx.db.models import PGFileStore
+from onyx.db.models import FileStore
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
@@ -25,15 +25,15 @@ def get_pg_conn_from_session(db_session: Session) -> connection:
 def get_pgfilestore_by_file_name_optional(
     file_name: str,
     db_session: Session,
-) -> PGFileStore | None:
-    return db_session.query(PGFileStore).filter_by(file_name=file_name).first()
+) -> FileStore | None:
+    return db_session.query(FileStore).filter_by(file_name=file_name).first()
 
 
 def get_pgfilestore_by_file_name(
     file_name: str,
     db_session: Session,
-) -> PGFileStore:
-    pgfilestore = db_session.query(PGFileStore).filter_by(file_name=file_name).first()
+) -> FileStore:
+    pgfilestore = db_session.query(FileStore).filter_by(file_name=file_name).first()
 
     if not pgfilestore:
         raise RuntimeError(f"File by name {file_name} does not exist or was deleted")
@@ -45,7 +45,7 @@ def delete_pgfilestore_by_file_name(
     file_name: str,
     db_session: Session,
 ) -> None:
-    db_session.query(PGFileStore).filter_by(file_name=file_name).delete()
+    db_session.query(FileStore).filter_by(file_name=file_name).delete()
 
 
 def create_populate_lobj(
@@ -53,7 +53,7 @@ def create_populate_lobj(
     db_session: Session,
 ) -> int:
     """Note, this does not commit the changes to the DB
-    This is because the commit should happen with the PGFileStore row creation
+    This is because the commit should happen with the FileStore row creation
     That step finalizes both the Large Object and the table tracking it
     """
     pg_conn = get_pg_conn_from_session(db_session)
@@ -133,8 +133,8 @@ def upsert_pgfilestore(
     db_session: Session,
     commit: bool = False,
     file_metadata: dict | None = None,
-) -> PGFileStore:
-    pgfilestore = db_session.query(PGFileStore).filter_by(file_name=file_name).first()
+) -> FileStore:
+    pgfilestore = db_session.query(FileStore).filter_by(file_name=file_name).first()
 
     if pgfilestore:
         try:
@@ -149,7 +149,7 @@ def upsert_pgfilestore(
 
         pgfilestore.lobj_oid = lobj_oid
     else:
-        pgfilestore = PGFileStore(
+        pgfilestore = FileStore(
             file_name=file_name,
             display_name=display_name,
             file_origin=file_origin,
@@ -172,9 +172,9 @@ def save_bytes_to_pgfilestore(
     identifier: str,
     display_name: str,
     file_origin: FileOrigin = FileOrigin.OTHER,
-) -> PGFileStore:
+) -> FileStore:
     """
-    Saves raw bytes to PGFileStore and returns the resulting record.
+    Saves raw bytes to FileStore and returns the resulting record.
     """
     file_name = f"{file_origin.name.lower()}_{identifier}"
     lobj_oid = create_populate_lobj(BytesIO(raw_bytes), db_session)
@@ -192,15 +192,125 @@ def save_bytes_to_pgfilestore(
 
 def get_query_history_export_files(
     db_session: Session,
-) -> list[PGFileStore]:
+) -> list[FileStore]:
     return list(
         db_session.scalars(
-            select(PGFileStore).where(
+            select(FileStore).where(
                 and_(
-                    PGFileStore.file_name.like(f"{QUERY_REPORT_NAME_PREFIX}-%"),
-                    PGFileStore.file_type == FileType.CSV,
-                    PGFileStore.file_origin == FileOrigin.QUERY_HISTORY_CSV,
+                    FileStore.file_name.like(f"{QUERY_REPORT_NAME_PREFIX}-%"),
+                    FileStore.file_type == FileType.CSV,
+                    FileStore.file_origin == FileOrigin.QUERY_HISTORY_CSV,
                 )
             )
         )
     )
+
+
+# New unified file store functions
+def get_filestore_by_file_name_optional(
+    file_name: str,
+    db_session: Session,
+) -> FileStore | None:
+    return db_session.query(FileStore).filter_by(file_name=file_name).first()
+
+
+def get_filestore_by_file_name(
+    file_name: str,
+    db_session: Session,
+) -> FileStore:
+    filestore = db_session.query(FileStore).filter_by(file_name=file_name).first()
+
+    if not filestore:
+        raise RuntimeError(f"File by name {file_name} does not exist or was deleted")
+
+    return filestore
+
+
+def delete_filestore_by_file_name(
+    file_name: str,
+    db_session: Session,
+) -> None:
+    db_session.query(FileStore).filter_by(file_name=file_name).delete()
+
+
+def upsert_filestore_postgres(
+    file_name: str,
+    display_name: str,
+    file_origin: FileOrigin,
+    file_type: str,
+    lobj_oid: int,
+    db_session: Session,
+    file_metadata: dict | None = None,
+) -> FileStore:
+    """Create or update a file store record for PostgreSQL large object storage"""
+    filestore = db_session.query(FileStore).filter_by(file_name=file_name).first()
+
+    if filestore:
+        # If switching from external to PostgreSQL storage, clean up old values
+        filestore.display_name = display_name
+        filestore.file_origin = file_origin
+        filestore.file_type = file_type
+        filestore.file_metadata = file_metadata
+        filestore.lobj_oid = lobj_oid
+        filestore.bucket_name = None
+        filestore.object_key = None
+    else:
+        filestore = FileStore(
+            file_name=file_name,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            lobj_oid=lobj_oid,
+            bucket_name=None,
+            object_key=None,
+        )
+        db_session.add(filestore)
+
+    return filestore
+
+
+def upsert_filestore_external(
+    file_name: str,
+    display_name: str,
+    file_origin: FileOrigin,
+    file_type: str,
+    bucket_name: str,
+    object_key: str,
+    db_session: Session,
+    file_metadata: dict | None = None,
+) -> FileStore:
+    """Create or update a file store record for external storage (S3, MinIO, etc.)"""
+    filestore = db_session.query(FileStore).filter_by(file_name=file_name).first()
+
+    if filestore:
+        # If switching from PostgreSQL to external storage, clean up old large object
+        if filestore.lobj_oid is not None:
+            try:
+                delete_lobj_by_id(lobj_oid=filestore.lobj_oid, db_session=db_session)
+            except Exception:
+                logger.error(
+                    f"Failed to delete large object with oid {filestore.lobj_oid}"
+                )
+
+        filestore.display_name = display_name
+        filestore.file_origin = file_origin
+        filestore.file_type = file_type
+        filestore.file_metadata = file_metadata
+        filestore.bucket_name = bucket_name
+        filestore.object_key = object_key
+        filestore.lobj_oid = None
+    else:
+        filestore = FileStore(
+            file_name=file_name,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            bucket_name=bucket_name,
+            object_key=object_key,
+            lobj_oid=None,
+        )
+        db_session.add(filestore)
+
+    return filestore
