@@ -19,11 +19,7 @@ from onyx.llm.utils import (
     model_supports_image_input,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.prompts.chat_prompts import (
-    CHAT_USER_CONTEXT_FREE_PROMPT,
-    CODE_BLOCK_MARKDOWN,
-    REQUIRE_CITATION_STATEMENT,
-)
+from onyx.prompts.chat_prompts import CHAT_USER_CONTEXT_FREE_PROMPT, CODE_BLOCK_MARKDOWN
 from onyx.prompts.direct_qa_prompts import HISTORY_BLOCK
 from onyx.prompts.prompt_utils import (
     drop_messages_history_overflow,
@@ -32,6 +28,15 @@ from onyx.prompts.prompt_utils import (
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult, ToolCallKickoff, ToolResponse
 from onyx.tools.tool import Tool
+
+CITATION_INSTRUCTIONS = """
+If you are citing results returned by the search tool, you MUST use the following format:
+
+Cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the document number. \
+DO NOT provide any links following the citations. In other words, avoid using the format [1](https://example.com). \
+Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
+Try to cite inline as opposed to leaving all citations until the very end of the response.
+""".rstrip()
 
 
 def default_build_system_message(
@@ -215,7 +220,7 @@ class AnswerPromptBuilder:
         if state_specific_instructions:
             message_content += f"<STATE_INSTRUCTIONS>\n{state_specific_instructions}\n</STATE_INSTRUCTIONS>\n\n"
         if self.include_citations_instructions:
-            message_content += "\n\n" + REQUIRE_CITATION_STATEMENT
+            message_content += "\n\n" + CITATION_INSTRUCTIONS
         message = SystemMessage(content=message_content)
         token_cnt = check_message_tokens(message, self.llm_tokenizer_encode_func)
         return message, token_cnt
