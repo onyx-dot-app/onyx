@@ -9,13 +9,14 @@ import {
   FiMinus,
   FiPauseCircle,
 } from "react-icons/fi";
-import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+// import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ConnectorCredentialPairStatus } from "@/lib/generated/onyx-api/model/connectorCredentialPairStatus";
 
 export function IndexAttemptStatus({
   status,
