@@ -13,15 +13,19 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.prompts import build_prompt_name_from_persona_name
-from onyx.db.prompts import upsert_prompt
 from onyx.kg.resets.reset_index import reset_full_kg_index
+from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_SYSTEM_PROMPT
+from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_TASK_PROMPT
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.kg.models import DisableKGConfigRequest
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig
 from onyx.tools.built_in_tools import get_search_tool
+
+
+_KG_BETA_ASSISTANT_DESCRIPTION = "The KG Beta assistant uses the Onyx Knowledge Graph (beta) structure \
+to answer questions"
 
 admin_router = APIRouter(prefix="/admin/kg")
 
@@ -47,8 +51,7 @@ def reset_kg(
     db_session: Session = Depends(get_session),
 ) -> list[EntityType]:
     # reset all entity types to inactive
-    # TODO: before merging, convert to celery task function in other PR
-    reset_full_kg_index()
+    reset_full_kg_index(db_session)
 
     return get_kg_entity_types(db_session=db_session)
 
@@ -82,23 +85,6 @@ def enable_or_disable_kg(
     if enable_req:
         kg_config.enable_kg(db_session=db_session, enable_req=enable_req)
         # Create or restore KG Beta persona
-        # Create prompt for KG Beta
-        prompt = upsert_prompt(
-            db_session=db_session,
-            user=None,
-            name=build_prompt_name_from_persona_name("KG Beta"),
-            system_prompt=(
-                "You are a knowledge graph assistant that helps users explore and "
-                "understand relationships between entities."
-            ),
-            task_prompt=(
-                "Help users explore and understand the knowledge graph by answering "
-                "questions about entities and their relationships."
-            ),
-            datetime_aware=False,
-            include_citations=True,
-            prompt_id=None,
-        )
 
         # Get the search tool
         search_tool = get_search_tool(db_session=db_session)
@@ -107,39 +93,34 @@ def enable_or_disable_kg(
 
         # Check if we have a previously created persona
         persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
-        try:
-            if persona_id:
-                # Try to restore the existing persona
-                try:
-                    persona = get_persona_by_id(
+
+        if persona_id:
+            # Try to restore the existing persona
+            try:
+                persona = get_persona_by_id(
+                    persona_id=persona_id,
+                    user=None,
+                    db_session=db_session,
+                    include_deleted=True,
+                )
+                if persona.deleted:
+                    mark_persona_as_not_deleted(
                         persona_id=persona_id,
                         user=None,
                         db_session=db_session,
-                        include_deleted=True,
                     )
-                    if persona.deleted:
-                        mark_persona_as_not_deleted(
-                            persona_id=persona_id,
-                            user=None,
-                            db_session=db_session,
-                        )
-                    return
-                except ValueError:
-                    # If persona doesn't exist or can't be restored, create a new one
-                    pass
-        except Exception:
-            # If any error occurs, create a new persona
-            pass
+                return
+
+            except ValueError:
+                # If persona doesn't exist or can't be restored, create a new one below
+                pass
 
         # Create KG Beta persona
         persona_request = PersonaUpsertRequest(
             name="KG Beta",
-            description=(
-                "The KG Beta assistant uses the Onyx Knowledge Graph (beta) structure "
-                "to answer questions"
-            ),
-            system_prompt="Use the Onyx Knowledge Graph (beta) to answer questions.",
-            task_prompt="",
+            description=_KG_BETA_ASSISTANT_DESCRIPTION,
+            system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
+            task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
             datetime_aware=False,
             include_citations=True,
             num_chunks=25,
@@ -147,7 +128,7 @@ def enable_or_disable_kg(
             is_public=False,
             llm_filter_extraction=False,
             recency_bias=RecencyBiasSetting.NO_DECAY,
-            prompt_ids=[prompt.id],
+            prompt_ids=[],
             document_set_ids=[],
             tool_ids=[search_tool.id],
             llm_model_provider_override=None,

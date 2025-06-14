@@ -34,7 +34,7 @@ def _get_connector_sources(db_session: Session) -> set[str]:
     }
 
 
-def _get_boolean_value(
+def _get_boolean_kg_config_var_value(
     db_session: Session,
     variable_name: str,
 ) -> bool:
@@ -53,7 +53,7 @@ def _get_boolean_value(
 
 
 def get_kg_exposed(db_session: Session) -> bool:
-    return _get_boolean_value(
+    return _get_boolean_kg_config_var_value(
         db_session=db_session, variable_name=KGConfigVars.KG_EXPOSED
     )
 
@@ -153,13 +153,10 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
         elif result.kg_variable_name == KGConfigVars.KG_EXPOSED:
             kg_config_settings.KG_EXPOSED = result.kg_variable_values[0] == "true"
         elif result.kg_variable_name == KGConfigVars.KG_BETA_PERSONA_ID:
-            if result.kg_variable_values and result.kg_variable_values[0]:
-                try:
-                    kg_config_settings.KG_BETA_PERSONA_ID = int(
-                        result.kg_variable_values[0]
-                    )
-                except ValueError:
-                    kg_config_settings.KG_BETA_PERSONA_ID = None
+            value = result.kg_variable_values[0] if result.kg_variable_values else None
+            kg_config_settings.KG_BETA_PERSONA_ID = (
+                int(value) if value and str(value).isdigit() else None
+            )
 
     return kg_config_settings
 

@@ -1,5 +1,6 @@
+from sqlalchemy.orm import Session
+
 from onyx.db.document import reset_all_document_kg_stages
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
@@ -10,21 +11,22 @@ from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 
 
-def reset_full_kg_index() -> None:
+def reset_full_kg_index(db_session: Session) -> None:
     """
     Resets the knowledge graph index.
     """
-    with get_session_with_current_tenant() as db_session:
-        db_session.query(KGRelationship).delete()
-        db_session.query(KGRelationshipType).delete()
-        db_session.query(KGEntity).delete()
-        db_session.query(KGRelationshipExtractionStaging).delete()
-        db_session.query(KGEntityExtractionStaging).delete()
-        db_session.query(KGRelationshipTypeExtractionStaging).delete()
-        # Update all connectors to disable KG processing
-        db_session.query(Connector).update({"kg_processing_enabled": False})
 
-        db_session.query(KGEntityType).update({"active": False})
+    db_session.query(KGRelationship).delete()
+    db_session.query(KGRelationshipType).delete()
+    db_session.query(KGEntity).delete()
+    db_session.query(KGRelationshipExtractionStaging).delete()
+    db_session.query(KGEntityExtractionStaging).delete()
+    db_session.query(KGRelationshipTypeExtractionStaging).delete()
+    # Update all connectors to disable KG processing
+    db_session.query(Connector).update({"kg_processing_enabled": False})
 
-        reset_all_document_kg_stages(db_session)
-        db_session.commit()
+    db_session.query(KGEntityType).update({"active": False})
+
+    reset_all_document_kg_stages(db_session)
+
+    db_session.commit()
