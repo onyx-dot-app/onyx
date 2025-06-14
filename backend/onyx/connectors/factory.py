@@ -55,6 +55,7 @@ from onyx.connectors.teams.connector import TeamsConnector
 from onyx.connectors.web.connector import WebConnector
 from onyx.connectors.wikipedia.connector import WikipediaConnector
 from onyx.connectors.xenforo.connector import XenforoConnector
+from onyx.connectors.youtube.connector import YouTubeConnector
 from onyx.connectors.zendesk.connector import ZendeskConnector
 from onyx.connectors.zulip.connector import ZulipConnector
 from onyx.db.connector import fetch_connector_by_id
@@ -120,6 +121,7 @@ def identify_connector_class(
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
+        DocumentSource.YOUTUBE: YouTubeConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }
@@ -236,3 +238,7 @@ def validate_ccpair_for_user(
 
     runnable_connector.validate_connector_settings()
     return True
+
+
+# Register YouTube connector in the factory
+register_connector(YouTubeConnector)
