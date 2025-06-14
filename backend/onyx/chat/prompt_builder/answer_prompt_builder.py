@@ -65,11 +65,9 @@ def default_build_system_message(
 def default_build_user_message(
     user_query: str,
     prompt_config: PromptConfig,
-    files: list[InMemoryChatFile] = None,
+    files: list[InMemoryChatFile] = [],
     single_message_history: str | None = None,
 ) -> HumanMessage:
-    if files is None:
-        files = []
     history_block = (
         HISTORY_BLOCK.format(history_str=single_message_history)
         if single_message_history
@@ -108,6 +106,8 @@ class AnswerPromptBuilder:
         single_message_history: str | None = None,
         system_message: SystemMessage | None = None,
         include_citations_instructions: bool = False,
+        include_document_context: bool = False,
+        documents: dict[str, dict[str, str]] | None = None,
     ) -> None:
         self.max_tokens = compute_max_llm_input_tokens(llm_config)
 
@@ -140,6 +140,10 @@ class AnswerPromptBuilder:
         self.raw_user_uploaded_files = raw_user_uploaded_files
         self.single_message_history = single_message_history
         self.include_citations_instructions = include_citations_instructions
+
+        # Document context for system prompt
+        self.include_document_context = include_document_context
+        self.documents = documents or {}
 
     def update_system_prompt(self, system_message: SystemMessage | None) -> None:
         if not system_message:
@@ -217,13 +221,40 @@ class AnswerPromptBuilder:
             message_content = (
                 f"<AGENT_INSTRUCTIONS>\n{message.content}\n</AGENT_INSTRUCTIONS>\n\n"
             )
+        if self.include_citations_instructions:
+            message_content += f"<CITATION_INSTRUCTIONS>\n{CITATION_INSTRUCTIONS}\n</CITATION_INSTRUCTIONS>\n\n"
         if state_specific_instructions:
             message_content += f"<STATE_INSTRUCTIONS>\n{state_specific_instructions}\n</STATE_INSTRUCTIONS>\n\n"
-        if self.include_citations_instructions:
-            message_content += "\n\n" + CITATION_INSTRUCTIONS
+        if self.include_document_context and self.documents:
+            document_context = self._build_document_context_section()
+            message_content += "\n\n" + document_context
         message = SystemMessage(content=message_content)
+
         token_cnt = check_message_tokens(message, self.llm_tokenizer_encode_func)
         return message, token_cnt
+
+    def _build_document_context_section(self) -> str:
+        """Build the document context section for the system prompt."""
+        if not self.documents:
+            return ""
+
+        context_parts = ["<CONTEXT>"]
+        context_parts.append(
+            "The following documents are available for reference and editing:"
+        )
+        context_parts.append("")
+
+        for doc_id, doc_info in self.documents.items():
+            title = doc_info.get("title", "Untitled Document")
+            content = doc_info.get("content", "")
+
+            context_parts.append(f"Document ID: {doc_id}")
+            context_parts.append(f"Title: {title}")
+            context_parts.append(f"Content: {content}")
+            context_parts.append("")  # Empty line between documents
+
+        context_parts.append("</CONTEXT>")
+        return "\n".join(context_parts)
 
 
 # Stores some parts of a prompt builder as needed for tool calls

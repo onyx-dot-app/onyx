@@ -323,13 +323,18 @@ class CreateChatResponse(BaseModel):
     chat_session_id: str
 
 
+class DocumentContent(BaseModel):
+    id: str
+    title: str
+    content: str
+    type: str = "document"
+
+
 class DocumentChatRequest(BaseModel):
     message: str
     document_ids: list[str] = []
     session_id: str
-    document_content: str | None = None
-    document_type: str | None = None
-    document_title: str | None = None
+    documents: list[DocumentContent] = []
 
 
 class DocumentChangeConfirmationRequest(BaseModel):

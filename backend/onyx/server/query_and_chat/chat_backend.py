@@ -3,6 +3,7 @@ import datetime
 import io
 import json
 import os
+import re
 import time
 import uuid
 from collections.abc import Callable, Generator
@@ -917,7 +918,19 @@ def handle_document_chat_message(
                     evaluation_type=LLMEvaluationType.BASIC,
                 )
                 tools.append(search_tool)
-                if request.document_content:
+
+                # Handle multi-document format
+                documents_dict = {}
+                documents_for_prompt = {}
+                if request.documents:
+                    documents_dict = {doc.id: doc.content for doc in request.documents}
+                    # Prepare documents for prompt builder with title and content
+                    documents_for_prompt = {
+                        doc.id: {"title": doc.title, "content": doc.content}
+                        for doc in request.documents
+                    }
+
+                if documents_dict:
                     document_editor_tool = DocumentEditorTool(
                         db_session=db_session,
                         user=user,
@@ -928,7 +941,7 @@ def handle_document_chat_message(
                         answer_style_config=AnswerStyleConfig(
                             citation_config=CitationConfig()
                         ),
-                        document_content=request.document_content,
+                        documents=documents_dict,
                     )
                     tools.append(document_editor_tool)
 
@@ -945,6 +958,8 @@ def handle_document_chat_message(
                                 content=persona.prompts[0].system_prompt
                             ),
                             include_citations_instructions=True,
+                            include_document_context=bool(documents_for_prompt),
+                            documents=documents_for_prompt,
                         ),
                     ),
                     tooling=GraphTooling(
@@ -1070,10 +1085,10 @@ def confirm_document_changes(
     """
     Confirms or rejects document changes by processing markup tags.
 
+
     For confirm: keeps addition-mark content, removes deletion-mark content
     For reject: removes addition-mark content, keeps deletion-mark content
     """
-    import re
 
     try:
         document_content = request.document_content

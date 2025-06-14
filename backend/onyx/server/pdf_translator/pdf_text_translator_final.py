@@ -284,7 +284,7 @@ class PDFTextTranslatorFinal:
 
         # Use first non-empty character for formatting
         first_char = non_empty_chars[0]
-        last_char = non_empty_chars[-1]
+        non_empty_chars[-1]
 
         # Calculate precise bounding box
         min_x0 = min(c["x0"] for c in phrase_chars)

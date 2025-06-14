@@ -23,7 +23,8 @@ INSTRUCTIONS_FIELD = "instructions"
 
 DOCUMENT_EDITOR_DESCRIPTION = """
 Edits a document based on user instructions. Use this tool when the user wants to modify text of a document or \
-when the user wants to modify the document in some way.
+when the user wants to modify the document in some way. When multiple documents are available, you must specify \
+which document to edit using the document_id parameter.
 """
 
 
@@ -59,8 +60,12 @@ class DocumentEditorTool(Tool):
             "type": "string",
             "description": "Detailed instructions on what changes to make to the text",
         },
+        "document_id": {
+            "type": "string",
+            "description": "ID of the specific document to edit (required when multiple documents are available)",
+        },
     }
-    _REQUIRED_PARAMETERS = [SEARCH_RESULTS_FIELD, INSTRUCTIONS_FIELD]
+    _REQUIRED_PARAMETERS = [SEARCH_RESULTS_FIELD, INSTRUCTIONS_FIELD, "document_id"]
 
     def __init__(
         self,
@@ -71,7 +76,7 @@ class DocumentEditorTool(Tool):
         llm: LLM | None = None,
         fast_llm: LLM | None = None,
         answer_style_config: AnswerStyleConfig | None = None,
-        document_content: str | None = None,
+        documents: dict[str, str] | None = None,
     ) -> None:
         self.user = user
         self.persona = persona
@@ -80,7 +85,7 @@ class DocumentEditorTool(Tool):
         self.fast_llm = fast_llm
         self.db_session = db_session
         self.answer_style_config = answer_style_config
-        self.document_content = document_content
+        self.documents = documents or {}
 
     @property
     def name(self) -> str:
@@ -97,6 +102,11 @@ class DocumentEditorTool(Tool):
     """For explicit tool calling"""
 
     def tool_definition(self) -> dict:
+        required_params = [SEARCH_RESULTS_FIELD, INSTRUCTIONS_FIELD, "document_id"]
+
+        # Add available document IDs to the description
+        document_id_description = f"ID of the specific document to edit (choose from: {list(self.documents.keys())})"
+
         return {
             "type": "function",
             "function": {
@@ -113,8 +123,12 @@ class DocumentEditorTool(Tool):
                             "type": "string",
                             "description": "Detailed instructions on what changes to make to the document content",
                         },
+                        "document_id": {
+                            "type": "string",
+                            "description": document_id_description,
+                        },
                     },
-                    "required": [SEARCH_RESULTS_FIELD, INSTRUCTIONS_FIELD],
+                    "required": required_params,
                 },
             },
         }
@@ -138,24 +152,39 @@ class DocumentEditorTool(Tool):
     """Actual tool execution"""
 
     def _run(
-        self, search_results: str | None, instructions: str, **kwargs: Any
+        self, search_results: str | None, instructions: str, document_id: str, **kwargs: Any
     ) -> Dict[str, Any]:
         """
         Edit text based on instructions.
 
         Args:
-            text: The original text content to edit
+            search_results: Search results for context
             instructions: Detailed instructions on what changes to make
+            document_id: ID of document to edit (required)
 
         Returns:
             Dict containing the result of the edit operation including the edited text
         """
-        logger.info(f"Editing text with instructions: {instructions}")
+        logger.info(f"Editing document with instructions: {instructions}")
 
-        # Create a prompt for the LLM to edit the text
+
+        # Validate document selection and get document content
+        if not document_id:
+            raise ValueError(f"document_id is required. Choose from: {list(self.documents.keys())}")
+        if document_id not in self.documents:
+            raise ValueError(f"Document ID '{document_id}' not found. Available documents: {list(self.documents.keys())}")
+        if not self.documents:
+            raise ValueError("No documents available for editing")
+
+        document_content = self.documents[document_id]
+        logger.info(f"Editing document with ID: {document_id}")
+
+        # Create a prompt for the LLM to edit the document
         document_editor_prompt = f"""
-        You are a document editor assistant. Your task is to edit the provided HTML text according to the instructions.
-        Do not add any newlines in the HTML edited_text output. The edited_text should be a valid HTML string.
+        You are a document editor assistant. Your task is to edit a document based on the instructions.
+
+        DOCUMENT CONTENT:
+        {document_content}
 
         IMPORTANT: You must return a list of changes with the following format:
         - Each change should specify the type (deletion or addition)
@@ -164,7 +193,7 @@ class DocumentEditorTool(Tool):
         - For edits, break it up into a deletion and an addition
         - Include the context around the change to help locate where it should be applied
         - Do not include any unchanged parts of the document
-        - Maintain the original structure of the HTML document
+        - Maintain the original structure of the document
         - Return enough context before and after the change to ensure the change is not overlapping with any other part of the document
 
         Example of a change representation:
@@ -190,12 +219,9 @@ class DocumentEditorTool(Tool):
         Here are the results of our Agentic Search tool to provide context (possibly null):
         SEARCH RESULTS:
         {search_results}
-
-        TEXT TO EDIT:
-        {self.document_content}
         """
 
-        # Use the LLM to edit the text
+        # Use the LLM to generate edit instructions
         if not self.llm:
             raise ValueError("LLM is required for document editing")
 
@@ -217,12 +243,12 @@ class DocumentEditorTool(Tool):
             llm_response = self.llm.invoke(
                 msg, structured_response_format=structured_response_format
             )
-
+            assert isinstance(llm_response.content, str)
             # Parse the response into our Pydantic model
             edit_result = DocumentEditResult.model_validate_json(llm_response.content)
 
             # Apply the changes to the original text
-            edited_text = self.document_content
+            edited_text = document_content
             changes = edit_result.changes
 
             # Sort changes in reverse order to avoid position shifting issues
@@ -257,20 +283,22 @@ class DocumentEditorTool(Tool):
             # Return the result with required fields
             return {
                 "success": True,
-                "original_text": self.document_content,
+                "original_text": document_content,
                 "edited_text": edited_text,
                 "message": edit_result.summary,
-                "edited": self.document_content != edited_text,
+                "edited": document_content != edited_text,
+                "document_id": document_id,
             }
 
         except Exception as e:
             logger.error(f"Error in document editing: {e}")
             return {
                 "success": False,
-                "original_text": self.document_content,
-                "edited_text": self.document_content,
-                "message": f"Failed to edit text: {str(e)}",
+                "original_text": document_content,
+                "edited_text": document_content,
+                "message": f"Failed to edit document: {str(e)}",
                 "edited": False,
+                "document_id": document_id,
             }
 
     def run(
@@ -278,12 +306,13 @@ class DocumentEditorTool(Tool):
     ) -> Generator[ToolResponse, None, None]:
         instructions = cast(str, llm_kwargs[INSTRUCTIONS_FIELD])
         search_results = cast(str, llm_kwargs.get(SEARCH_RESULTS_FIELD, ""))
+        document_id = cast(str, llm_kwargs["document_id"])
 
         logger.info(f"Running document editor with instructions: {instructions}")
 
         # Execute the document editing logic
         edit_result = self._run(
-            search_results=search_results, instructions=instructions
+            search_results=search_results, instructions=instructions, document_id=document_id
         )
 
         # Yield the response
@@ -335,7 +364,7 @@ if __name__ == "__main__":
     )
 
     # Create the document editor tool
-    editor = DocumentEditorTool(llm=llm, document_content=sample_document)
+    editor = DocumentEditorTool(llm=llm, documents={"sample": sample_document})
 
     # Example instructions
     instructions = """

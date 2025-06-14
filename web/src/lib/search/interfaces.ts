@@ -166,8 +166,12 @@ export interface SearchResponse {
 }
 
 export interface DocumentEditorResponse {
+  success: boolean;
+  original_text: string;
   edited_text: string;
-  summary: string;
+  message: string;
+  document_id: string;
+  edited: boolean;
 }
 
 export enum SourceCategory {

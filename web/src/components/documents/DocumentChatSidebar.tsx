@@ -18,6 +18,8 @@ import rehypePrism from 'rehype-prism-plus';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { v4 as uuidv4 } from 'uuid';
+import { DocumentSelector, DocumentContent } from './DocumentSelector';
+import { FileEntry } from '@/lib/documents/types';
 
 interface CitationInfo {
   citation_num: number;
@@ -33,6 +35,7 @@ interface DocumentChatSidebarProps {
   documentType?: 'document' | 'spreadsheet'; // Type of document being viewed
   documentTitle?: string; // Title of the document
   setContent?: (content: string) => void; // Function to update the document content
+  availableFiles?: FileEntry[]; // Available files from the left sidebar
 }
 
 export function DocumentChatSidebar({ 
@@ -41,7 +44,8 @@ export function DocumentChatSidebar({
   documentContent = '',
   documentType = 'document',
   documentTitle = '',
-  setContent
+  setContent,
+  availableFiles = []
 }: DocumentChatSidebarProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Array<{id: number, text: string, isUser: boolean, isIntermediateOutput?: boolean, isThinking?: boolean, debugLog?: Array<any>}>>([]);
@@ -53,6 +57,9 @@ export function DocumentChatSidebar({
   const citationMapRef = useRef<Map<number, string>>(new Map());
   const [expandedThinkingMessages, setExpandedThinkingMessages] = useState<Set<number>>(new Set());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Multi-document state
+  const [documentsInContext, setDocumentsInContext] = useState<DocumentContent[]>([]);
   
   // Check if document has pending changes
   const hasPendingChanges = useMemo(() => {
@@ -71,6 +78,7 @@ export function DocumentChatSidebar({
     setMessages([]);
     setDocuments([]);
     setCitationMap(new Map());
+    setDocumentsInContext([]);
     
     // Create a new chat session when resetting
     try {
@@ -100,6 +108,43 @@ export function DocumentChatSidebar({
       setSessionId(uuidv4());
     }
   }, [personaId]);
+  
+  // Auto-add current document to context when component mounts or document changes
+  useEffect(() => {
+    if (documentContent && documentTitle) {
+      // Use the actual document ID if available, otherwise fall back to 'current-document'
+      const docId = documentIds.length > 0 ? documentIds[0] : 'current-document';
+      
+      const currentDoc: DocumentContent = {
+        id: docId,
+        title: documentTitle,
+        content: documentContent,
+        type: documentType
+      };
+      
+      // Check if current document is already in context
+      const isAlreadyInContext = documentsInContext.some(doc => doc.id === currentDoc.id);
+      if (!isAlreadyInContext) {
+        setDocumentsInContext([currentDoc]);
+      }
+    }
+  }, [documentContent, documentTitle, documentType, documentIds]);
+  
+  // Handle adding documents to context
+  const handleAddDocument = useCallback((document: DocumentContent) => {
+    setDocumentsInContext(prev => {
+      const isAlreadyAdded = prev.some(doc => doc.id === document.id);
+      if (!isAlreadyAdded) {
+        return [...prev, document];
+      }
+      return prev;
+    });
+  }, []);
+  
+  // Handle removing documents from context
+  const handleRemoveDocument = useCallback((documentId: string) => {
+    setDocumentsInContext(prev => prev.filter(doc => doc.id !== documentId));
+  }, []);
 
   // Keep the ref in sync with the state
   useEffect(() => {
@@ -325,9 +370,7 @@ export function DocumentChatSidebar({
           message: message,
           document_ids: documentIds, // Use passed document IDs
           session_id: sessionId,
-          document_content: documentContent, // Add document content
-          document_type: documentType, // Add document type
-          document_title: documentTitle // Add document title
+          documents: documentsInContext, // Send multiple documents
         }),
       });
 
@@ -425,21 +468,26 @@ export function DocumentChatSidebar({
             const editedText = documentEditorResponse.edited_text;
             
             console.log('Document editor response received:', {
-              editedText: editedText.substring(0, 200) + '...',
+              success: documentEditorResponse.success,
+              editedText: editedText ? editedText.substring(0, 200) + '...' : 'N/A',
+              message: documentEditorResponse.message,
+              documentId: documentEditorResponse.document_id,
+              edited: documentEditorResponse.edited,
               availableDocuments: documents.length,
-              citationMapSize: citationMapRef.current.size,
-              documentsArray: documents,
-              citationMapEntries: Array.from(citationMapRef.current.entries())
+              citationMapSize: citationMapRef.current.size
             });
             
             // Log the raw content to see existing citations
-            console.log('Current document content before processing:', {
-              hasExistingCitations: /citation-mark/.test(editedText),
-              hasAdditionMarks: /<addition-mark>/.test(editedText),
-              contentPreview: editedText.substring(0, 500) + '...'
-            });
+            if (editedText) {
+              console.log('Current document content before processing:', {
+                hasExistingCitations: /citation-mark/.test(editedText),
+                hasAdditionMarks: /<addition-mark>/.test(editedText),
+                hasDeletionMarks: /<deletion-mark>/.test(editedText),
+                contentPreview: editedText.substring(0, 500) + '...'
+              });
+            }
             
-            if (setContent && editedText) {
+            if (documentEditorResponse.success && editedText && setContent) {
               // Wrap text with citations from current session
               const textWithCitations = wrapEntireTextWithCitations(
                 editedText,
@@ -450,6 +498,8 @@ export function DocumentChatSidebar({
                 hasCitationMarks: /citation-mark/.test(textWithCitations)
               });
               setContent(textWithCitations);
+            } else if (!documentEditorResponse.success) {
+              console.error('Document editing failed:', documentEditorResponse.message);
             }
           // Only display tool on receiving ToolCallKickoff packets, not ToolCallResult packets 
           // TODO: Add a symbol for tool completion
@@ -594,7 +644,7 @@ export function DocumentChatSidebar({
 
   return (
     <div
-      className={`relative bg-background max-w-full border-l border-t border-sidebar-border dark:border-neutral-700 h-screen`}
+      className={`relative bg-background max-w-full border-l border-sidebar-border dark:border-neutral-700 h-screen`}
       style={{ width: initialWidth }}
     >
       <div className="h-full">
@@ -616,6 +666,14 @@ export function DocumentChatSidebar({
             </div>
             <div className="border-b border-divider-history-sidebar-bar" />
           </div>
+          
+          {/* Document Selector */}
+          <DocumentSelector
+            documentsInContext={documentsInContext}
+            onAddDocument={handleAddDocument}
+            onRemoveDocument={handleRemoveDocument}
+            availableFiles={availableFiles}
+          />
 
           {/* Messages */}
           <div className="flex-grow overflow-y-auto p-4 space-y-3">

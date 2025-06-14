@@ -135,6 +135,7 @@ import {
     FolderResponse,
     useDocumentsContext,
 } from "./my-documents/DocumentsContext";
+import { getSidebarFiles } from "@/lib/documents/types";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -459,6 +460,7 @@ export function ChatPage({
       // if we're creating a brand new chat, then don't need to scroll
       if (chatSessionIdRef.current !== null) {
         clearSelectedDocuments();
+        setAvailableDocuments([]); // Clear available documents when switching chats
         setHasPerformedInitialScroll(false);
       }
     }
@@ -514,6 +516,14 @@ export function ChatPage({
         );
 
         updateCompleteMessageDetail(chatSession.chat_session_id, newMessageMap);
+        
+        // Extract available documents from the latest assistant message with documents
+        const latestMessagesWithDocs = newMessageHistory
+          .filter(msg => msg.documents && msg.documents.length > 0)
+          .reverse();
+        if (latestMessagesWithDocs.length > 0) {
+          setAvailableDocuments(latestMessagesWithDocs[0].documents || []);
+        }
       }
 
       setChatSessionSharedStatus(chatSession.shared_status);
@@ -1674,6 +1684,10 @@ export function ChatPage({
                 documentsResponse.level == 0
               ) {
                 documents = (packet as DocumentsResponse).top_documents;
+                // Update available documents for the chatbar
+                if (documents && documents.length > 0) {
+                  setAvailableDocuments(documents);
+                }
               } else if (
                 documentsResponse.level_question_num === 0 &&
                 documentsResponse.level == 1
@@ -1688,6 +1702,8 @@ export function ChatPage({
                 // point to the latest message (we don't know the messageId yet, which is why
                 // we have to use -1)
                 setSelectedMessageForDocDisplay(user_message_id);
+                // Update available documents for the chatbar
+                setAvailableDocuments(documents);
               }
             } else if (Object.hasOwn(packet, "tool_name")) {
               // Will only ever be one tool call per message
@@ -2116,6 +2132,9 @@ export function ChatPage({
     []
   );
   const [selectedDocumentTokens, setSelectedDocumentTokens] = useState(0);
+  const [availableDocuments, setAvailableDocuments] = useState<OnyxDocument[]>(
+    []
+  );
 
   const currentPersona = alternativeAssistant || liveAssistant;
 
@@ -3335,6 +3354,8 @@ export function ChatPage({
                                 setShowApiKeyModal(true)
                               }
                               selectedDocuments={selectedDocuments}
+                              availableDocuments={availableDocuments}
+                              sidebarDocuments={getSidebarFiles("PRECISION")}
                               message={message}
                               setMessage={setMessage}
                               stopGenerating={stopGenerating}

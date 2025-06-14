@@ -105,6 +105,7 @@ export function DocumentLayout({
             documentTitle={documentTitle}
             setContent={setContent}
             documentIds={documentIds}
+            availableFiles={getSidebarFiles(documentConfig)}
           />
         </div>
       </div>
