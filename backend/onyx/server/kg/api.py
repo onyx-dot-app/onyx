@@ -8,12 +8,17 @@ from onyx.auth.users import current_admin_user
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db import kg_config
 from onyx.db.engine import get_session
+from onyx.db.entity_type import get_configured_entity_types
+from onyx.db.entity_type import update_entity_types_and_related_connectors__commit
 from onyx.db.models import User
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.kg.resets.reset_index import reset_full_kg_index
+from onyx.kg.resets.reset_index import reset_full_kg_index__commit
+from onyx.kg.setup.kg_default_entity_definitions import (
+    populate_missing_default_entity_types__commit,
+)
 from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_SYSTEM_PROMPT
 from onyx.prompts.kg_prompts import KG_BETA_ASSISTANT_TASK_PROMPT
 from onyx.server.features.persona.models import PersonaUpsertRequest
@@ -21,6 +26,7 @@ from onyx.server.kg.models import DisableKGConfigRequest
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig
+from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 from onyx.tools.built_in_tools import get_search_tool
 
 
@@ -50,9 +56,7 @@ def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[EntityType]:
-    # reset all entity types to inactive
-    reset_full_kg_index(db_session)
-
+    reset_full_kg_index__commit(db_session)
     return get_kg_entity_types(db_session=db_session)
 
 
@@ -64,7 +68,8 @@ def get_kg_config(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> KGConfig:
-    return kg_config.get_kg_config(db_session=db_session)
+    config = kg_config.get_kg_config_settings(db_session=db_session)
+    return KGConfigAPIModel.from_kg_config_settings(config)
 
 
 @admin_router.put("/config")
@@ -83,7 +88,8 @@ def enable_or_disable_kg(
         raise ValueError("Invalid request body")
 
     if enable_req:
-        kg_config.enable_kg(db_session=db_session, enable_req=enable_req)
+        kg_config.enable_kg__commit(db_session=db_session, enable_req=enable_req)
+
         # Create or restore KG Beta persona
 
         # Get the search tool
@@ -162,7 +168,7 @@ def enable_or_disable_kg(
                 user=None,
                 db_session=db_session,
             )
-        kg_config.disable_kg(db_session=db_session)
+        kg_config.disable_kg__commit(db_session=db_session)
 
 
 # entity-types
@@ -173,9 +179,13 @@ def get_kg_entity_types(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[EntityType]:
-    return kg_config.get_kg_entity_types(
-        db_session=db_session,
-    )
+    # when using for the first time, populate with default entity types
+    kg_entity_types = get_configured_entity_types(db_session=db_session)
+    if not kg_entity_types:
+        populate_missing_default_entity_types__commit(db_session=db_session)
+        kg_entity_types = get_configured_entity_types(db_session=db_session)
+
+    return [EntityType.from_model(kg_entity_type) for kg_entity_type in kg_entity_types]
 
 
 @admin_router.put("/entity-types")
@@ -184,4 +194,6 @@ def update_kg_entity_types(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    kg_config.update_kg_entity_types(db_session=db_session, updates=updates)
+    update_entity_types_and_related_connectors__commit(
+        db_session=db_session, updates=updates
+    )

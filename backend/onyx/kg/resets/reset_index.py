@@ -11,7 +11,7 @@ from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 
 
-def reset_full_kg_index(db_session: Session) -> None:
+def reset_full_kg_index__commit(db_session: Session) -> None:
     """
     Resets the knowledge graph index.
     """

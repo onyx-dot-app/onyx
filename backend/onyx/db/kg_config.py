@@ -2,36 +2,18 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import and_
-from sqlalchemy import delete
-from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.db.connector import fetch_unique_document_sources
-from onyx.db.document import DocumentSource
-from onyx.db.models import Connector
 from onyx.db.models import KGConfig
-from onyx.db.models import KGEntityType
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
-from onyx.kg.setup.kg_default_entity_definitions import (
-    populate_default_entity_types,
-)
 from onyx.server.kg.models import EnableKGConfigRequest
-from onyx.server.kg.models import EntityType
-from onyx.server.kg.models import KGConfig as KGConfigAPIModel
 
 
 class KGProcessingType(Enum):
     EXTRACTION = "extraction"
     CLUSTERING = "clustering"
-
-
-def _get_connector_sources(db_session: Session) -> set[str]:
-    return {
-        source.value.lower()
-        for source in fetch_unique_document_sources(db_session=db_session)
-    }
 
 
 def _get_boolean_kg_config_var_value(
@@ -99,7 +81,7 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
     # TODO (raunakab):
     # Cleanup.
 
-    # TODO (joachim-danswer): restructure togethert with KGConfig redesign
+    # TODO (joachim-danswer): restructure together with KGConfig redesign
 
     results = db_session.query(KGConfig).all()
 
@@ -229,15 +211,7 @@ def get_kg_processing_in_progress_status(
     return config.kg_variable_values[0] == "true"
 
 
-# server API helpers
-
-
-def get_kg_config(db_session: Session) -> KGConfigAPIModel:
-    config = get_kg_config_settings(db_session=db_session)
-    return KGConfigAPIModel.from_kg_config_settings(config)
-
-
-def enable_kg(
+def enable_kg__commit(
     db_session: Session,
     enable_req: EnableKGConfigRequest,
 ) -> None:
@@ -254,7 +228,7 @@ def enable_kg(
     vars = [
         KGConfig(
             kg_variable_name=KGConfigVars.KG_ENABLED,
-            kg_variable_values=[bool_to_string(True)],
+            kg_variable_values=["true"],
         ),
         KGConfig(
             kg_variable_name=KGConfigVars.KG_VENDOR,
@@ -300,14 +274,14 @@ def enable_kg(
     db_session.commit()
 
 
-def disable_kg(db_session: Session) -> None:
+def disable_kg__commit(db_session: Session) -> None:
     var = (
         db_session.query(KGConfig)
         .filter(KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED)
         .first()
     )
 
-    values = [bool_to_string(False)]
+    values = ["false"]
 
     if var:
         db_session.query(KGConfig).where(
@@ -325,96 +299,3 @@ def disable_kg(db_session: Session) -> None:
         )
 
     db_session.commit()
-
-
-def get_kg_entity_types(db_session: Session) -> list[EntityType]:
-    existing_entity_types = [
-        EntityType.from_model(kg_entity_type)
-        for kg_entity_type in db_session.query(KGEntityType)
-    ]
-
-    if not existing_entity_types:
-        existing_entity_types = [
-            EntityType.from_model(kg_entity_type)
-            for kg_entity_type in populate_default_entity_types(
-                db_session=db_session,
-            )
-        ]
-
-    configured_connector_sources = _get_connector_sources(db_session=db_session)
-
-    available_entity_types = [
-        et
-        for et in existing_entity_types
-        if et.grounded_source_name in configured_connector_sources
-    ]
-    return available_entity_types
-
-
-def update_kg_entity_types(
-    db_session: Session,
-    updates: list[EntityType],
-) -> None:
-    for upd in updates:
-        db_session.execute(
-            update(KGEntityType)
-            .where(KGEntityType.id_name == upd.name)
-            .values(
-                description=upd.description,
-                active=upd.active,
-            )
-        )
-
-    db_session.commit()
-
-    # Update connector sources
-
-    configured_entity_types = get_kg_entity_types(db_session=db_session)
-
-    active_entity_type_sources = set(
-        [et.grounded_source_name for et in configured_entity_types if et.active]
-    )
-
-    # Update connectors that should be enabled
-    db_session.execute(
-        update(Connector)
-        .where(
-            Connector.source.in_(
-                [
-                    source
-                    for source in DocumentSource
-                    if source.value.lower() in active_entity_type_sources
-                ]
-            )
-        )
-        .where(~Connector.kg_processing_enabled)
-        .values(kg_processing_enabled=True)
-    )
-
-    # Update connectors that should be disabled
-    db_session.execute(
-        update(Connector)
-        .where(
-            Connector.source.in_(
-                [
-                    source
-                    for source in DocumentSource
-                    if source.value.lower() not in active_entity_type_sources
-                ]
-            )
-        )
-        .where(Connector.kg_processing_enabled)
-        .values(kg_processing_enabled=False)
-    )
-
-    db_session.commit()
-
-
-def bool_to_string(b: bool) -> str:
-    return "true" if b else "false"
-
-
-def reset_entity_types(db_session: Session) -> list[EntityType]:
-    db_session.execute(delete(KGEntityType))
-    db_session.commit()
-    return get_kg_entity_types(db_session=db_session)

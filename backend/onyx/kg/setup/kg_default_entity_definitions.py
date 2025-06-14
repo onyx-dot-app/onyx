@@ -1,14 +1,16 @@
-from collections.abc import Generator
+from typing import cast
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import validate_kg_settings
 from onyx.kg.models import KGDefaultEntityDefinition
 from onyx.kg.models import KGGroundingType
 
 
-def _get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefinition]:
+def get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefinition]:
     return {
         "LINEAR": KGDefaultEntityDefinition(
             description="A formal Linear ticket about a product issue or improvement request.",
@@ -245,66 +247,34 @@ def _get_default_entity_types(vendor_name: str) -> dict[str, KGDefaultEntityDefi
     }
 
 
-def _generate_non_existing_entity_types(
-    existing_entity_types: dict[str, KGEntityType],
-    vendor_name: str,
-) -> Generator[KGEntityType]:
-    default_entity_types = _get_default_entity_types(vendor_name=vendor_name)
-
-    for default_entity_name, default_entity_type in default_entity_types.items():
-        if default_entity_name not in existing_entity_types:
-            grounded_source_name = (
-                default_entity_type.grounded_source_name.value
-                if default_entity_type.grounded_source_name
-                else None
-            )
-            yield KGEntityType(
-                id_name=default_entity_name,
-                description=default_entity_type.description,
-                attributes=default_entity_type.attributes,
-                grounding=default_entity_type.grounding,
-                grounded_source_name=grounded_source_name,
-                active=False,
-            )
-
-
-def populate_default_entity_types(
-    db_session: Session,
-) -> list[KGEntityType]:
+def populate_missing_default_entity_types__commit(db_session: Session) -> None:
     """
-    Populates the database with the *missing* Entity Types (if any are missing) into the database.
-    Returns the *entire* list of Entity Types.
+    Populates the database with the missing default entity types.
     """
-
-    # Imported here to get rid of circular import.
-    from onyx.db.kg_config import get_kg_config_settings
-    from onyx.db.kg_config import validate_kg_settings
-
     kg_config_settings = get_kg_config_settings(db_session=db_session)
     validate_kg_settings(kg_config_settings)
 
-    vendor_name = kg_config_settings.KG_VENDOR
-    if not vendor_name:
-        raise ValueError(
-            f"Vendor name must be a non-empty string, instead got {vendor_name=}"
+    vendor_name = cast(str, kg_config_settings.KG_VENDOR)
+
+    existing_entity_types = {et.id_name for et in db_session.query(KGEntityType).all()}
+
+    default_entity_types = get_default_entity_types(vendor_name=vendor_name)
+    for entity_type_id_name, entity_type_definition in default_entity_types.items():
+        if entity_type_id_name in existing_entity_types:
+            continue
+
+        grounded_source_name = (
+            entity_type_definition.grounded_source_name.value
+            if entity_type_definition.grounded_source_name
+            else None
         )
-
-    existing_entity_types = {
-        et.id_name: et for et in db_session.query(KGEntityType).all()
-    }
-    non_existing_entity_types = _generate_non_existing_entity_types(
-        existing_entity_types=existing_entity_types,
-        vendor_name=vendor_name,
-    )
-
-    entity_types = []
-
-    for non_existing_entity_type in non_existing_entity_types:
-        db_session.add(non_existing_entity_type)
-        entity_types.append(non_existing_entity_type)
-
+        kg_entity_type = KGEntityType(
+            id_name=entity_type_id_name,
+            description=entity_type_definition.description,
+            attributes=entity_type_definition.attributes,
+            grounding=entity_type_definition.grounding,
+            grounded_source_name=grounded_source_name,
+            active=False,
+        )
+        db_session.add(kg_entity_type)
     db_session.commit()
-
-    entity_types.extend(existing_entity_types.values())
-
-    return entity_types
