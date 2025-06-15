@@ -1,0 +1,60 @@
+name: File Store Tests
+
+on:
+  merge_group:
+  pull_request:
+    branches: [main]
+
+env:
+  # AWS
+  S3_AWS_ACCESS_KEY_ID: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
+  S3_AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
+
+  # MinIO
+  S3_ENDPOINT_URL: "http://localhost:9004"
+
+jobs:
+  connectors-check:
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+
+    env:
+      PYTHONPATH: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
+          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Set up MinIO
+        run: |
+          cd deployment/docker_compose
+          docker-compose -f docker-compose.dev.yml up -d minio
+
+      - name: Run Tests
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/daily/file_store

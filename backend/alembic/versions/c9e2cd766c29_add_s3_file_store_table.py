@@ -11,6 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from onyx.file_store.file_store import get_s3_file_store
+
 # revision identifiers, used by Alembic.
 revision = "c9e2cd766c29"
 down_revision = "cec7ec36c505"
@@ -48,18 +50,14 @@ def upgrade() -> None:
         ),
     )
 
-    # Add constraint to ensure either lobj_oid OR (bucket_name AND object_key) is set
-    op.create_check_constraint(
-        "file_store_storage_check",
-        "file_store",
-        "(lobj_oid IS NOT NULL) OR (bucket_name IS NOT NULL AND object_key IS NOT NULL)",
-    )
-
     print(
         "External storage configured - migrating files from PostgreSQL to external storage..."
     )
     _migrate_files_to_external_storage()
     print("File migration completed successfully!")
+
+    # Remove lobj_oid column
+    op.drop_column("file_store", "lobj_oid")
 
 
 def downgrade() -> None:
@@ -70,9 +68,6 @@ def downgrade() -> None:
     )
     print("Files in external storage will not be moved back to PostgreSQL.")
 
-    # Remove the check constraint
-    op.drop_constraint("file_store_storage_check", "file_store")
-
     # Remove external storage columns
     op.drop_column("file_store", "updated_at")
     op.drop_column("file_store", "created_at")
@@ -80,7 +75,7 @@ def downgrade() -> None:
     op.drop_column("file_store", "bucket_name")
 
     # Make lobj_oid non-nullable again
-    op.alter_column("file_store", "lobj_oid", nullable=False)
+    op.add_column("file_store", sa.Column("lobj_oid", sa.String(), nullable=True))
 
 
 def _migrate_files_to_external_storage() -> None:
@@ -94,11 +89,10 @@ def _migrate_files_to_external_storage() -> None:
         from onyx.file_store._deprecated.postgres_file_store import (
             PostgresBackedFileStore,
         )
-        from onyx.file_store.file_store import S3BackedFileStore
 
         # Create file store instances
         postgres_store = PostgresBackedFileStore(db_session=session)
-        external_store = S3BackedFileStore(db_session=session)
+        external_store = get_s3_file_store(db_session=session)
 
         # Find all files currently stored in PostgreSQL (lobj_oid is not null)
         result = session.execute(
@@ -117,58 +111,42 @@ def _migrate_files_to_external_storage() -> None:
         )
 
         migrated_count = 0
-        failed_count = 0
 
         for i, file_name in enumerate(files_to_migrate, 1):
-            try:
-                print(f"Migrating file {i}/{total_files}: {file_name}")
+            print(f"Migrating file {i}/{total_files}: {file_name}")
 
-                # Read file record to get metadata
-                file_record = postgres_store.read_file_record(file_name)
+            # Read file record to get metadata
+            file_record = postgres_store.read_file_record(file_name)
 
-                # Read file content from PostgreSQL
-                file_content = postgres_store.read_file(file_name, mode="b")
+            # Read file content from PostgreSQL
+            file_content = postgres_store.read_file(file_name, mode="b")
 
-                # Handle file_metadata type conversion
-                file_metadata = None
-                if file_record.file_metadata is not None:
-                    if isinstance(file_record.file_metadata, dict):
-                        file_metadata = file_record.file_metadata
-                    else:
-                        # Convert other types to dict if possible, otherwise None
-                        try:
-                            file_metadata = dict(file_record.file_metadata)  # type: ignore
-                        except (TypeError, ValueError):
-                            file_metadata = None
+            # Handle file_metadata type conversion
+            file_metadata = None
+            if file_record.file_metadata is not None:
+                if isinstance(file_record.file_metadata, dict):
+                    file_metadata = file_record.file_metadata
+                else:
+                    # Convert other types to dict if possible, otherwise None
+                    try:
+                        file_metadata = dict(file_record.file_metadata)  # type: ignore
+                    except (TypeError, ValueError):
+                        file_metadata = None
 
-                # Save to external storage (this will handle the database record update and cleanup)
-                external_store.save_file(
-                    file_name=file_record.file_name,
-                    content=file_content,
-                    display_name=file_record.display_name,
-                    file_origin=file_record.file_origin,
-                    file_type=file_record.file_type,
-                    file_metadata=file_metadata,
-                )
-
-                migrated_count += 1
-                print(f"✓ Successfully migrated file {i}/{total_files}: {file_name}")
-
-            except Exception as e:
-                failed_count += 1
-                print(f"✗ Failed to migrate file {file_name}: {str(e)}")
-                # Continue with other files rather than failing the entire migration
-                session.rollback()
-
-        print(
-            f"Migration completed: {migrated_count} files migrated successfully, {failed_count} files failed."
-        )
-
-        if failed_count > 0:
-            print("Some files failed to migrate. Check the logs above for details.")
-            print(
-                "Failed files remain in PostgreSQL storage and can be migrated manually later."
+            # Save to external storage (this will handle the database record update and cleanup)
+            external_store.save_file(
+                file_name=file_record.file_name,
+                content=file_content,
+                display_name=file_record.display_name,
+                file_origin=file_record.file_origin,
+                file_type=file_record.file_type,
+                file_metadata=file_metadata,
             )
+
+            migrated_count += 1
+            print(f"✓ Successfully migrated file {i}/{total_files}: {file_name}")
+
+        print(f"Migration completed: {migrated_count} files migrated successfully.")
 
     except Exception as e:
         print(f"Critical error during file migration: {str(e)}")

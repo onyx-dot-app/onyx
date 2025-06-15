@@ -405,6 +405,34 @@ class S3BackedFileStore(FileStore):
             return None
 
 
+def get_s3_file_store(db_session: Session) -> S3BackedFileStore:
+    """
+    Returns the S3 file store implementation.
+    """
+
+    # Get bucket name - this is required
+    bucket_name = S3_FILE_STORE_BUCKET_NAME
+    if not bucket_name:
+        raise RuntimeError(
+            "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
+        )
+
+    # Try to get credentials from environment, prioritizing MinIO-specific ones
+    aws_access_key_id = MINIO_ACCESS_KEY or S3_AWS_ACCESS_KEY_ID
+    aws_secret_access_key = MINIO_SECRET_KEY or S3_AWS_SECRET_ACCESS_KEY
+
+    return S3BackedFileStore(
+        db_session=db_session,
+        bucket_name=bucket_name,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_region_name=AWS_REGION_NAME,
+        s3_endpoint_url=S3_ENDPOINT_URL,
+        s3_prefix=S3_FILE_STORE_PREFIX,
+        s3_verify_ssl=S3_VERIFY_SSL,
+    )
+
+
 def get_default_file_store(db_session: Session) -> FileStore:
     """
     Returns the configured file store implementation.
@@ -430,24 +458,4 @@ def get_default_file_store(db_session: Session) -> FileStore:
     Other S3-compatible storage (Digital Ocean, Linode, etc.):
     - Same as MinIO, but set appropriate S3_ENDPOINT_URL
     """
-    # Get bucket name - this is required
-    bucket_name = S3_FILE_STORE_BUCKET_NAME
-    if not bucket_name:
-        raise RuntimeError(
-            "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
-        )
-
-    # Try to get credentials from environment, prioritizing MinIO-specific ones
-    aws_access_key_id = MINIO_ACCESS_KEY or S3_AWS_ACCESS_KEY_ID
-    aws_secret_access_key = MINIO_SECRET_KEY or S3_AWS_SECRET_ACCESS_KEY
-
-    return S3BackedFileStore(
-        db_session=db_session,
-        bucket_name=bucket_name,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region_name=AWS_REGION_NAME,
-        s3_endpoint_url=S3_ENDPOINT_URL,
-        s3_prefix=S3_FILE_STORE_PREFIX,
-        s3_verify_ssl=S3_VERIFY_SSL,
-    )
+    return get_s3_file_store(db_session)

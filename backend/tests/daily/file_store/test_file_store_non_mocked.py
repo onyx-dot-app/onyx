@@ -28,7 +28,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-TEST_BUCKET_NAME: str = "onyx-file-store-tests"
+TEST_BUCKET_NAME: str = "onyx-file-store-bucket"
 TEST_FILE_PREFIX: str = "test-files"
 
 
