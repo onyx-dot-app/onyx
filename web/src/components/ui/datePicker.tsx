@@ -90,7 +90,7 @@ export function DatePicker({
             setShownDate(date);
           }}
           toMonth={new Date()}
-          fromMonth={new Date(1970, 0)}
+          fromMonth={new Date(startYear, 0)}
         />
         <Button
           variant="outline"

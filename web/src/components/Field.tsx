@@ -893,6 +893,7 @@ export function DatePickerField({
       <DatePicker
         selectedDate={field.value}
         setSelectedDate={helper.setValue}
+        startYear={2025} // TODO: remove this once the public beta is over
         disabled={disabled}
       />
     </div>
