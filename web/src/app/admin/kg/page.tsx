@@ -229,6 +229,7 @@ function KGEntityTypes({
   refreshKGEntityTypes?: () => void;
 }) {
   const [sortedKGEntityTypes, setSortedKGEntityTypes] = useState(sorted);
+  console.log({ sortedKGEntityTypes });
 
   const columns: ColumnDef<EntityType>[] = [
     {
@@ -406,9 +407,11 @@ function Main() {
     isLoading: configIsLoading,
     mutate: configMutate,
   } = useSWR<KGConfigRaw>("/api/admin/kg/config", errorHandlingFetcher);
-  const { data: entityTypesData, isLoading: entityTypesIsLoading } = useSWR<
-    EntityType[]
-  >("/api/admin/kg/entity-types", errorHandlingFetcher);
+  const {
+    data: entityTypesData,
+    isLoading: entityTypesIsLoading,
+    mutate: entityTypesMutate,
+  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
 
   // Local State:
   const { popup, setPopup } = usePopup();
@@ -478,6 +481,7 @@ function Main() {
             kgEntityTypes={kgEntityTypes}
             sortedKGEntityTypes={sortedKGEntityTypes}
             setPopup={setPopup}
+            refreshKGEntityTypes={entityTypesMutate}
           />
         </>
       )}
