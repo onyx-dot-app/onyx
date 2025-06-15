@@ -2,6 +2,7 @@ import json
 from collections.abc import Generator
 from typing import Any, Dict, Literal, Optional, cast
 
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict
 
 from onyx.chat.models import AnswerStyleConfig, PromptConfig
@@ -152,7 +153,11 @@ class DocumentEditorTool(Tool):
     """Actual tool execution"""
 
     def _run(
-        self, search_results: str | None, instructions: str, document_id: str, **kwargs: Any
+        self,
+        search_results: str | None,
+        instructions: str,
+        document_id: str,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """
         Edit text based on instructions.
@@ -167,12 +172,15 @@ class DocumentEditorTool(Tool):
         """
         logger.info(f"Editing document with instructions: {instructions}")
 
-
         # Validate document selection and get document content
         if not document_id:
-            raise ValueError(f"document_id is required. Choose from: {list(self.documents.keys())}")
+            raise ValueError(
+                f"document_id is required. Choose from: {list(self.documents.keys())}"
+            )
         if document_id not in self.documents:
-            raise ValueError(f"Document ID '{document_id}' not found. Available documents: {list(self.documents.keys())}")
+            raise ValueError(
+                f"Document ID '{document_id}' not found. Available documents: {list(self.documents.keys())}"
+            )
         if not self.documents:
             raise ValueError("No documents available for editing")
 
@@ -180,61 +188,11 @@ class DocumentEditorTool(Tool):
         logger.info(f"Editing document with ID: {document_id}")
 
         # Create a prompt for the LLM to edit the document
-        document_editor_prompt = f"""
-        You are a document editor assistant. Your task is to edit a document based on the instructions.
-
-        DOCUMENT CONTENT:
-        {document_content}
-
-        IMPORTANT: You must return a JSON object with the following structure:
-        {{
-            "changes": [
-                // Array of changes, where each change has:
-                {{
-                    "type": "deletion" or "addition",
-                    "context_before": "text before the change",
-                    "context_after": "text after the change",
-                    "text_to_delete": "text to remove (empty for additions)",
-                    "text_to_add": "text to add (empty for deletions)"
-                }}
-            ],
-            "summary": "A brief summary of all changes made"
-        }}
-
-        Example response format:
-        {{
-            "changes": [
-                {{
-                    "type": "deletion",
-                    "context_before": "<p>This is a ",
-                    "context_after": " text.</p>",
-                    "text_to_delete": "sample",
-                    "text_to_add": ""
-                }},
-                {{
-                    "type": "addition",
-                    "context_before": "<p>This is a ",
-                    "context_after": " text.</p>",
-                    "text_to_delete": "",
-                    "text_to_add": "modified"
-                }}
-            ],
-            "summary": "Changed 'sample' to 'modified' in the paragraph"
-        }}
-
-        INSTRUCTIONS:
-        {instructions}
-
-        Here are the results of our Agentic Search tool to provide context (possibly null):
-        SEARCH RESULTS:
-        {search_results}
-        """
+        document_editor_prompt = self._get_prompt(instructions, document_content)
 
         # Use the LLM to generate edit instructions
         if not self.llm:
             raise ValueError("LLM is required for document editing")
-
-        from langchain_core.messages import HumanMessage
 
         msg = [HumanMessage(content=document_editor_prompt)]
 
@@ -321,7 +279,9 @@ class DocumentEditorTool(Tool):
 
         # Execute the document editing logic
         edit_result = self._run(
-            search_results=search_results, instructions=instructions, document_id=document_id
+            search_results=search_results,
+            instructions=instructions,
+            document_id=document_id,
         )
 
         # Yield the response
@@ -344,6 +304,74 @@ class DocumentEditorTool(Tool):
             prompt_builder.append_message(tool_call_summary.tool_call_request)
             prompt_builder.append_message(tool_call_summary.tool_call_result)
         return prompt_builder
+
+    def _get_prompt(self, instructions: str, document: str) -> str:
+        """Get the prompt for the document editor."""
+        system_message = """You are a precise document editor with expertise in making targeted modifications to text content. Your task is to analyze the provided document and make specific changes according to the given instructions.
+
+Key capabilities:
+1. Precise text modifications with context preservation
+2. Structured data handling (tables, lists, etc.)
+3. Atomic unit operations for table cells
+4. Clear change tracking with deletion and addition markers
+
+Output format requirements:
+{
+    "changes": [
+        {
+            "type": "deletion" | "addition",
+            "context_before": "text before the change",
+            "context_after": "text after the change",
+            "text_to_delete": "text to delete (for deletions)",
+            "text_to_add": "text to add (for additions)"
+        }
+    ],
+    "summary": "A brief summary of the changes made"
+}
+
+Table cell modification rules:
+1. Treat each cell as an atomic unit
+2. For cell value updates:
+   a. Mark entire old value for deletion: <deletion-mark>old_value</deletion-mark>
+   b. Add new value immediately after: <addition-mark>new_value</addition-mark>
+   c. Keep deletion and addition marks adjacent
+3. Never insert new values before/after old values - replace entire values
+
+Example of correct table cell replacement:
+Original: <td>Update to PRD 3.11 to include prevention</td>
+Correct changes array:
+[
+    {
+        "type": "deletion",
+        "context_before": "Update to PRD ",
+        "context_after": " to include prevention",
+        "text_to_delete": "3.11",
+        "text_to_add": ""
+    },
+    {
+        "type": "addition",
+        "context_before": "Update to PRD ",
+        "context_after": " to include prevention",
+        "text_to_delete": "",
+        "text_to_add": "4.0"
+    }
+]"""
+
+        human_message = f"""Please edit the following document according to these instructions:
+
+{instructions}
+
+Document to edit:
+{document}
+
+Follow these steps:
+1. Search the entire document for values to update
+2. If found, create appropriate changes in the changes array
+3. If not found, set "edited" to false in your response
+4. Preserve all surrounding text and HTML tags
+5. Ensure changes are precise and maintain document structure"""
+
+        return f"{system_message}\n\n{human_message}"
 
 
 if __name__ == "__main__":
