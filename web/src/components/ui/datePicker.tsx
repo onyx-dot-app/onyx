@@ -31,8 +31,9 @@ export function DatePicker({
   disabled = false,
   onClear,
 }: DatePickerProps) {
+  const validStartYear = Math.max(startYear, 1970);
   const currYear = extractYear(new Date());
-  const years = Array(currYear - startYear + 1)
+  const years = Array(currYear - validStartYear + 1)
     .fill(currYear)
     .map((currYear, index) => currYear - index);
   const [shownDate, setShownDate] = useState(selectedDate ?? new Date());
@@ -90,7 +91,7 @@ export function DatePicker({
             setShownDate(date);
           }}
           toMonth={new Date()}
-          fromMonth={new Date(startYear, 0)}
+          fromMonth={new Date(validStartYear, 0)}
         />
         <Button
           variant="outline"
