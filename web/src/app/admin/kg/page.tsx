@@ -335,6 +335,8 @@ function KGEntityTypes({
       message: "Successfully reset Knowledge Graph.",
       type: "success",
     });
+
+    refreshKGEntityTypes?.();
   };
 
   return (
