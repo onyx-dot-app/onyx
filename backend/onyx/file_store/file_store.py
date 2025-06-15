@@ -1,3 +1,4 @@
+import tempfile
 from abc import ABC
 from abc import abstractmethod
 from io import BytesIO
@@ -131,41 +132,45 @@ class FileStore(ABC):
 class S3BackedFileStore(FileStore):
     """Isn't necessarily S3, but is any S3-compatible storage (e.g. MinIO)"""
 
-    def __init__(self, db_session: Session) -> None:
+    def __init__(
+        self,
+        db_session: Session,
+        bucket_name: str,
+        aws_access_key_id: str | None = None,
+        aws_secret_access_key: str | None = None,
+        aws_region_name: str | None = None,
+        s3_endpoint_url: str | None = None,
+        s3_prefix: str | None = None,
+        s3_verify_ssl: bool = True,
+    ) -> None:
         self.db_session = db_session
         self._s3_client: S3Client | None = None
-        self._bucket_name: str | None = None
+        self._bucket_name = bucket_name
+        self._aws_access_key_id = aws_access_key_id
+        self._aws_secret_access_key = aws_secret_access_key
+        self._aws_region_name = aws_region_name or "us-east-2"
+        self._s3_endpoint_url = s3_endpoint_url
+        self._s3_prefix = s3_prefix or "onyx-files"
+        self._s3_verify_ssl = s3_verify_ssl
 
     def _get_s3_client(self) -> S3Client:
         """Initialize S3 client if not already done"""
         if self._s3_client is None:
-            # Try to get credentials from environment, prioritizing MinIO-specific ones
             try:
-                # Check for MinIO-specific credentials first, then fall back to AWS
-                aws_access_key_id = MINIO_ACCESS_KEY or AWS_ACCESS_KEY_ID
-                aws_secret_access_key = MINIO_SECRET_KEY or AWS_SECRET_ACCESS_KEY
-                aws_region = AWS_REGION_NAME
-
-                # Support for custom S3-compatible endpoints (e.g., MinIO)
-                endpoint_url = S3_ENDPOINT_URL
-
-                # SSL verification can be disabled for local MinIO instances
-                verify_ssl = S3_VERIFY_SSL
-
                 client_kwargs: dict[str, Any] = {
                     "service_name": "s3",
-                    "region_name": aws_region,
+                    "region_name": self._aws_region_name,
                 }
 
                 # Add endpoint URL if specified (for MinIO, etc.)
-                if endpoint_url:
-                    client_kwargs["endpoint_url"] = endpoint_url
+                if self._s3_endpoint_url:
+                    client_kwargs["endpoint_url"] = self._s3_endpoint_url
                     client_kwargs["config"] = Config(
                         signature_version="s3v4",
                         s3={"addressing_style": "path"},  # Required for MinIO
                     )
                     # Disable SSL verification if requested (for local development)
-                    if not verify_ssl:
+                    if not self._s3_verify_ssl:
                         import urllib3
 
                         urllib3.disable_warnings(
@@ -173,12 +178,12 @@ class S3BackedFileStore(FileStore):
                         )
                         client_kwargs["verify"] = False
 
-                if aws_access_key_id and aws_secret_access_key:
+                if self._aws_access_key_id and self._aws_secret_access_key:
                     # Use explicit credentials
                     client_kwargs.update(
                         {
-                            "aws_access_key_id": aws_access_key_id,
-                            "aws_secret_access_key": aws_secret_access_key,
+                            "aws_access_key_id": self._aws_access_key_id,
+                            "aws_secret_access_key": self._aws_secret_access_key,
                         }
                     )
                     self._s3_client = boto3.client(**client_kwargs)
@@ -194,18 +199,13 @@ class S3BackedFileStore(FileStore):
 
     def _get_bucket_name(self) -> str:
         """Get S3 bucket name from configuration"""
-        if self._bucket_name is None:
-            self._bucket_name = S3_FILE_STORE_BUCKET_NAME
-            if not self._bucket_name:
-                raise RuntimeError(
-                    "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
-                )
+        if not self._bucket_name:
+            raise RuntimeError("S3 bucket name is required for S3 file store")
         return self._bucket_name
 
     def _get_s3_key(self, file_name: str) -> str:
         """Generate S3 key from file name"""
-        prefix = S3_FILE_STORE_PREFIX
-        return f"{prefix}/{file_name}"
+        return f"{self._s3_prefix}/{file_name}"
 
     def initialize(self) -> None:
         """Initialize the S3 file store by ensuring the bucket exists"""
@@ -268,7 +268,7 @@ class S3BackedFileStore(FileStore):
         display_name: str | None = None,
     ) -> bool:
         file_record = get_filestore_by_file_name_optional(
-            file_name=display_name or file_name, db_session=self.db_session
+            file_name=file_name, db_session=self.db_session
         )
         return (
             file_record is not None
@@ -346,11 +346,8 @@ class S3BackedFileStore(FileStore):
             file_content = response["Body"].read()
 
             if use_tempfile:
-                import tempfile
-
-                temp_file = tempfile.NamedTemporaryFile(
-                    mode="w+b" if mode == "b" else "w+", delete=False
-                )
+                # Always open in binary mode for temp files since we're writing bytes
+                temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
                 temp_file.write(file_content)
                 temp_file.seek(0)
                 return temp_file
@@ -433,4 +430,24 @@ def get_default_file_store(db_session: Session) -> FileStore:
     Other S3-compatible storage (Digital Ocean, Linode, etc.):
     - Same as MinIO, but set appropriate S3_ENDPOINT_URL
     """
-    return S3BackedFileStore(db_session=db_session)
+    # Get bucket name - this is required
+    bucket_name = S3_FILE_STORE_BUCKET_NAME
+    if not bucket_name:
+        raise RuntimeError(
+            "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
+        )
+
+    # Try to get credentials from environment, prioritizing MinIO-specific ones
+    aws_access_key_id = MINIO_ACCESS_KEY or AWS_ACCESS_KEY_ID
+    aws_secret_access_key = MINIO_SECRET_KEY or AWS_SECRET_ACCESS_KEY
+
+    return S3BackedFileStore(
+        db_session=db_session,
+        bucket_name=bucket_name,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_region_name=AWS_REGION_NAME,
+        s3_endpoint_url=S3_ENDPOINT_URL,
+        s3_prefix=S3_FILE_STORE_PREFIX,
+        s3_verify_ssl=S3_VERIFY_SSL,
+    )
