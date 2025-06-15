@@ -15,6 +15,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
     InternetSearchTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.calculator.calculator_tool import CalculatorTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,6 +59,12 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         ]
         if os.environ.get("BING_API_KEY")
         else []
+    ),
+    InCodeToolInfo(
+        cls=CalculatorTool,
+        description="The Calculator Tool allows the Assistant to perform mathematical calculations.",
+        in_code_tool_id=CalculatorTool.__name__,
+        display_name=CalculatorTool._DISPLAY_NAME,
     ),
 ]
 

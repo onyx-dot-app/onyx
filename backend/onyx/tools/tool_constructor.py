@@ -41,6 +41,9 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.calculator.calculator_tool import (
+    CalculatorTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens, explicit_tool_calling_supported
 from onyx.utils.headers import header_dict_to_header_list
@@ -126,6 +129,10 @@ class InternetSearchToolConfig(BaseModel):
     )
 
 
+class CalculatorToolConfig(BaseModel):
+    pass
+
+
 class ImageGenerationToolConfig(BaseModel):
     additional_headers: dict[str, str] | None = None
 
@@ -147,6 +154,7 @@ def construct_tools(
     search_tool_config: SearchToolConfig | None = None,
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
+    calculator_tool_config: CalculatorToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     user_knowledge_present: bool = False,
 ) -> dict[int, list[Tool]]:
@@ -227,6 +235,14 @@ def construct_tools(
                         answer_style_config=internet_search_tool_config.answer_style_config,
                         prompt_config=prompt_config,
                     )
+                ]
+
+            elif tool_cls.__name__ == CalculatorTool.__name__:
+                if not calculator_tool_config:
+                    calculator_tool_config = CalculatorToolConfig()
+
+                tool_dict[db_tool_model.id] = [
+                    CalculatorTool()
                 ]
 
         # Handle custom tools
