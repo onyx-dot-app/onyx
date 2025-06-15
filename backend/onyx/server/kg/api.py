@@ -55,6 +55,7 @@ def reset_kg(
     db_session: Session = Depends(get_session),
 ) -> list[EntityType]:
     reset_full_kg_index__commit(db_session)
+    populate_missing_default_entity_types__commit(db_session=db_session)
     return get_kg_entity_types(db_session=db_session)
 
 
@@ -90,6 +91,7 @@ def enable_or_disable_kg(
 
     # Enable KG
     kg_config.enable_kg__commit(db_session=db_session, enable_req=req)
+    populate_missing_default_entity_types__commit(db_session=db_session)
 
     # Create or restore KG Beta persona
 
@@ -172,9 +174,6 @@ def get_kg_entity_types(
 ) -> list[EntityType]:
     # when using for the first time, populate with default entity types
     kg_entity_types = get_configured_entity_types(db_session=db_session)
-    if not kg_entity_types:
-        populate_missing_default_entity_types__commit(db_session=db_session)
-        kg_entity_types = get_configured_entity_types(db_session=db_session)
 
     return [EntityType.from_model(kg_entity_type) for kg_entity_type in kg_entity_types]
 
