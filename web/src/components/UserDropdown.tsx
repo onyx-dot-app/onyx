@@ -1,22 +1,34 @@
 "use client";
 
-import { useState, useRef, useContext, useEffect, useMemo } from "react";
-import { FiLogOut } from "react-icons/fi";
-import Link from "next/link";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { NavigationItem, Notification } from "@/app/admin/settings/interfaces";
+import { pageType } from "@/app/chat/sessionSidebar/types";
+import { LOGOUT_DISABLED } from "@/lib/constants";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserRole } from "@/lib/types";
 import { checkUserIsNoAuthUser, logout } from "@/lib/user";
-import { Popover } from "./popover/Popover";
-import { LOGOUT_DISABLED } from "@/lib/constants";
-import { SettingsContext } from "./settings/SettingsProvider";
-import { BellIcon, LightSettingsIcon, UserIcon } from "./icons/icons";
-import { pageType } from "@/app/chat/sessionSidebar/types";
-import { NavigationItem, Notification } from "@/app/admin/settings/interfaces";
-import DynamicFaIcon, { preloadIcons } from "./icons/DynamicFaIcon";
-import { useUser } from "./user/UserProvider";
-import { Notifications } from "./chat/Notifications";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FiLogOut } from "react-icons/fi";
 import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { Notifications } from "./chat/Notifications";
+import DynamicFaIcon, { preloadIcons } from "./icons/DynamicFaIcon";
+import { BellIcon, LightSettingsIcon, UserIcon } from "./icons/icons";
+import { Popover } from "./popover/Popover";
+import { SettingsContext } from "./settings/SettingsProvider";
+import { useUser } from "./user/UserProvider";
+
+const getDomainSpecificNavItems = (email?: string) => {
+  if (!email) return { showDocuments: false, showPdfTranslator: false };
+  
+  const domain = email.split('@')[1];
+  if (domain === 'getvalkai.com' || domain === 'test.com') {
+    return { showDocuments: true, showPdfTranslator: true };
+  } else if (domain === 'oxos.com') {
+    return { showDocuments: true, showPdfTranslator: false };
+  }
+  return { showDocuments: false, showPdfTranslator: false };
+};
 
 interface DropdownOptionProps {
   href?: string;
@@ -82,6 +94,8 @@ export function UserDropdown({
     error,
     mutate: refreshNotifications,
   } = useSWR<Notification[]>("/api/notifications", errorHandlingFetcher);
+
+  const domainNavItems = getDomainSpecificNavItems(user?.email);
 
   useEffect(() => {
     const iconNames = customNavItems
@@ -250,9 +264,8 @@ export function UserDropdown({
                 )}
                 
                 {/* Document Editor Section */}
-                {page !== "documents" && (
+                {page !== "documents" && domainNavItems.showDocuments && (
                   <>
-                    <div className="border-t border-border my-1" />
                     <DropdownOption
                       href="/documents"
                       icon={<UserIcon size={16} className="my-auto" />}
@@ -262,15 +275,19 @@ export function UserDropdown({
                 )}
 
                 {/* PDF Translator Section */}
-                {page !== "pdf-translator" && (
+                {page !== "pdf-translator" && domainNavItems.showPdfTranslator && (
                   <>
-                    <div className="border-t border-border my-1" />
                     <DropdownOption
                       href="/pdf-translator"
                       icon={<UserIcon size={16} className="my-auto" />}
                       label="PDF Translator"
                     />
                   </>
+                )}
+
+                {/* Divider between Pages and Settings */}
+                {(domainNavItems.showDocuments || domainNavItems.showPdfTranslator) && (
+                  <div className="border-t border-border my-1" />
                 )}
 
                 {showAdminPanel ? (
