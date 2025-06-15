@@ -18,7 +18,6 @@ from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import MINIO_ACCESS_KEY
-from onyx.configs.app_configs import MINIO_PORT
 from onyx.configs.app_configs import MINIO_SECRET_KEY
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_context_manager
@@ -28,15 +27,21 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Test constants
-TEST_BUCKET_NAME: str = "onyx-file-store-bucket"
-TEST_MINIO_ENDPOINT: str = f"http://localhost:{MINIO_PORT}"
-TEST_MINIO_ACCESS_KEY: str = MINIO_ACCESS_KEY or "minioadmin"
-TEST_MINIO_SECRET_KEY: str = MINIO_SECRET_KEY or "minioadmin"
+
+TEST_BUCKET_NAME: str = "onyx-file-store-tests"
 TEST_FILE_PREFIX: str = "test-files"
 
 
 # Type definitions for test data
+class BackendConfig(TypedDict):
+    endpoint_url: str | None
+    access_key: str
+    secret_key: str
+    region: str
+    verify_ssl: bool
+    backend_name: str
+
+
 class FileTestData(TypedDict):
     name: str
     display_name: str
@@ -51,6 +56,54 @@ class WorkerResult(TypedDict):
     content: str
 
 
+def _get_all_backend_configs() -> List[BackendConfig]:
+    """Get configurations for all available backends"""
+    from onyx.configs.app_configs import (
+        S3_ENDPOINT_URL,
+        S3_AWS_ACCESS_KEY_ID,
+        S3_AWS_SECRET_ACCESS_KEY,
+        AWS_REGION_NAME,
+    )
+
+    configs: List[BackendConfig] = []
+
+    # MinIO configuration (if endpoint is configured)
+    if S3_ENDPOINT_URL:
+        minio_access_key = MINIO_ACCESS_KEY or "minioadmin"
+        minio_secret_key = MINIO_SECRET_KEY or "minioadmin"
+        if minio_access_key and minio_secret_key:
+            configs.append(
+                {
+                    "endpoint_url": S3_ENDPOINT_URL,
+                    "access_key": minio_access_key,
+                    "secret_key": minio_secret_key,
+                    "region": "us-east-1",
+                    "verify_ssl": False,
+                    "backend_name": "MinIO",
+                }
+            )
+
+    # AWS S3 configuration (if credentials are available)
+    if S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
+        configs.append(
+            {
+                "endpoint_url": None,
+                "access_key": S3_AWS_ACCESS_KEY_ID,
+                "secret_key": S3_AWS_SECRET_ACCESS_KEY,
+                "region": AWS_REGION_NAME or "us-east-2",
+                "verify_ssl": True,
+                "backend_name": "AWS S3",
+            }
+        )
+
+    if not configs:
+        pytest.skip(
+            "No backend configurations available - set MinIO or AWS S3 credentials"
+        )
+
+    return configs
+
+
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
     """Create a database session for testing using the actual PostgreSQL database"""
@@ -63,58 +116,70 @@ def db_session() -> Generator[Session, None, None]:
         yield session
 
 
-@pytest.fixture(scope="function")
-def file_store(db_session: Session) -> Generator[S3BackedFileStore, None, None]:
-    """Create an S3BackedFileStore instance for testing"""
-    # Create S3BackedFileStore with explicit test configuration
+@pytest.fixture(
+    scope="function",
+    params=_get_all_backend_configs(),
+    ids=lambda config: config["backend_name"],
+)
+def file_store(
+    request, db_session: Session
+) -> Generator[S3BackedFileStore, None, None]:
+    """Create an S3BackedFileStore instance for testing with parametrized backend"""
+    backend_config: BackendConfig = request.param
+
+    # Create S3BackedFileStore with backend-specific configuration
     store = S3BackedFileStore(
         db_session=db_session,
         bucket_name=TEST_BUCKET_NAME,
-        aws_access_key_id=TEST_MINIO_ACCESS_KEY,
-        aws_secret_access_key=TEST_MINIO_SECRET_KEY,
-        aws_region_name="us-east-1",  # Use a simple region for testing
-        s3_endpoint_url=TEST_MINIO_ENDPOINT,
-        s3_prefix=TEST_FILE_PREFIX,
-        s3_verify_ssl=False,  # Disable SSL verification for local MinIO
+        aws_access_key_id=backend_config["access_key"],
+        aws_secret_access_key=backend_config["secret_key"],
+        aws_region_name=backend_config["region"],
+        s3_endpoint_url=backend_config["endpoint_url"],
+        s3_prefix=f"{TEST_FILE_PREFIX}-{uuid.uuid4()}",
+        s3_verify_ssl=backend_config["verify_ssl"],
     )
 
     # Initialize the store and ensure bucket exists
     store.initialize()
-    logger.info(f"Successfully initialized file store with bucket {TEST_BUCKET_NAME}")
+    logger.info(
+        f"Successfully initialized {backend_config['backend_name']} file store with bucket {TEST_BUCKET_NAME}"
+    )
 
     yield store
 
     # Cleanup: Remove all test files from the bucket
     try:
         s3_client = store._get_s3_client()
-        bucket_name = store._get_bucket_name()
+        actual_bucket_name = store._get_bucket_name()
 
         # List and delete all objects in the test prefix
         response = s3_client.list_objects_v2(
-            Bucket=bucket_name, Prefix=f"{TEST_FILE_PREFIX}/"
+            Bucket=actual_bucket_name, Prefix=f"{TEST_FILE_PREFIX}/"
         )
 
         if "Contents" in response:
             objects_to_delete = [{"Key": obj["Key"]} for obj in response["Contents"]]
             s3_client.delete_objects(
-                Bucket=bucket_name, Delete={"Objects": objects_to_delete}  # type: ignore[typeddict-item]
+                Bucket=actual_bucket_name, Delete={"Objects": objects_to_delete}  # type: ignore[typeddict-item]
             )
-            logger.info(f"Cleaned up {len(objects_to_delete)} test objects from MinIO")
+            logger.info(
+                f"Cleaned up {len(objects_to_delete)} test objects from {backend_config['backend_name']}"
+            )
     except Exception as e:
         logger.warning(f"Failed to cleanup test objects: {e}")
 
 
 class TestS3BackedFileStore:
-    """Test suite for S3BackedFileStore using real MinIO"""
+    """Test suite for S3BackedFileStore using real S3-compatible storage (MinIO or AWS S3)"""
 
     def test_store_initialization(self, file_store: S3BackedFileStore) -> None:
         """Test that the file store initializes properly"""
         # The fixture already calls initialize(), so we just verify it worked
-        assert file_store._get_bucket_name() == TEST_BUCKET_NAME
+        bucket_name = file_store._get_bucket_name()
+        assert bucket_name.startswith(TEST_BUCKET_NAME)  # Should be backend-specific
 
         # Verify bucket exists by trying to list objects
         s3_client = file_store._get_s3_client()
-        bucket_name = file_store._get_bucket_name()
 
         # This should not raise an exception
         s3_client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
@@ -149,8 +214,10 @@ class TestS3BackedFileStore:
         assert file_record.display_name == display_name
         assert file_record.file_origin == file_origin
         assert file_record.file_type == file_type
-        assert file_record.bucket_name == TEST_BUCKET_NAME
-        assert file_record.object_key == f"{TEST_FILE_PREFIX}/{file_name}"
+        assert (
+            file_record.bucket_name == file_store._get_bucket_name()
+        )  # Use actual bucket name
+        assert file_record.object_key == f"{file_store._s3_prefix}/{file_name}"
 
     def test_save_and_read_binary_file(self, file_store: S3BackedFileStore) -> None:
         """Test saving and reading a binary file"""
@@ -541,8 +608,8 @@ class TestS3BackedFileStore:
             assert read_content == content
 
     @pytest.mark.skipif(
-        not os.environ.get("TEST_MINIO_NETWORK_ERRORS"),
-        reason="Network error tests require TEST_MINIO_NETWORK_ERRORS environment variable",
+        not os.environ.get("TEST_S3_NETWORK_ERRORS"),
+        reason="Network error tests require TEST_S3_NETWORK_ERRORS environment variable",
     )
     def test_network_error_handling(self, file_store: S3BackedFileStore) -> None:
         """Test handling of network errors (requires special setup)"""
@@ -662,10 +729,10 @@ class TestS3BackedFileStore:
         assert nested_data["null_value"] is None
         assert len(cast(str, stored_metadata_dict["large_text"])) == 1000
 
-    def test_database_consistency_after_minio_failure(
+    def test_database_consistency_after_s3_failure(
         self, file_store: S3BackedFileStore
     ) -> None:
-        """Test that database stays consistent when MinIO operations fail"""
+        """Test that database stays consistent when S3 operations fail"""
         file_name = f"{uuid.uuid4()}.txt"
         display_name = "Test Consistency"
         content = "Initial content"
@@ -686,7 +753,7 @@ class TestS3BackedFileStore:
         assert file_store.has_file(file_name, file_origin, file_type, display_name)
         initial_record = file_store.read_file_record(file_name)
 
-        # Now try to update but fail on MinIO side
+        # Now try to update but fail on S3 side
         with patch.object(file_store, "_get_s3_client") as mock_client:
             mock_s3 = mock_client.return_value
             # Let the first call (for reading/checking) succeed, but fail on put_object
@@ -731,6 +798,14 @@ class TestS3BackedFileStore:
         file_type: str = "text/plain"
         file_origin: FileOrigin = FileOrigin.OTHER
 
+        # Get current file store configuration to replicate in workers
+        current_bucket_name = file_store._get_bucket_name()
+        current_access_key = file_store._aws_access_key_id
+        current_secret_key = file_store._aws_secret_access_key
+        current_region = file_store._aws_region_name
+        current_endpoint_url = file_store._s3_endpoint_url
+        current_verify_ssl = file_store._s3_verify_ssl
+
         results: List[Tuple[int, str, str]] = []
         errors: List[Tuple[int, str]] = []
 
@@ -741,13 +816,13 @@ class TestS3BackedFileStore:
                 with get_session_context_manager() as worker_session:
                     worker_file_store = S3BackedFileStore(
                         db_session=worker_session,
-                        bucket_name=TEST_BUCKET_NAME,
-                        aws_access_key_id=TEST_MINIO_ACCESS_KEY,
-                        aws_secret_access_key=TEST_MINIO_SECRET_KEY,
-                        aws_region_name="us-east-1",  # Use a simple region for testing
-                        s3_endpoint_url=TEST_MINIO_ENDPOINT,
+                        bucket_name=current_bucket_name,
+                        aws_access_key_id=current_access_key,
+                        aws_secret_access_key=current_secret_key,
+                        aws_region_name=current_region,
+                        s3_endpoint_url=current_endpoint_url,
                         s3_prefix=TEST_FILE_PREFIX,
-                        s3_verify_ssl=False,  # Disable SSL verification for local MinIO
+                        s3_verify_ssl=current_verify_ssl,
                     )
 
                     file_name: str = f"{base_file_name}_{worker_id}.txt"
