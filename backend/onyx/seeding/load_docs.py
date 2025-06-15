@@ -58,7 +58,7 @@ def _create_indexable_chunks(
                 TextSection(
                     text=preprocessed_doc["content"],
                     link=preprocessed_doc["url"],
-                    image_file_name=None,
+                    image_file_id=None,
                 )
             ],
             source=DocumentSource.WEB,
@@ -102,7 +102,7 @@ def _create_indexable_chunks(
             user_folder=None,
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
-            image_file_name=None,
+            image_file_id=None,
             aggregated_chunk_boost_factor=1.0,
         )
 

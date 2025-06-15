@@ -56,7 +56,7 @@ def update_image_sections_with_query(
     chunks_with_images = []
     for section in sections:
         for chunk in section.chunks:
-            if chunk.image_file_name:
+            if chunk.image_file_id:
                 chunks_with_images.append(chunk)
 
     if not chunks_with_images:
@@ -68,19 +68,19 @@ def update_image_sections_with_query(
     def process_image_chunk(chunk: InferenceChunk) -> tuple[str, str]:
         try:
             logger.debug(
-                f"Processing image chunk with ID: {chunk.unique_id}, image: {chunk.image_file_name}"
+                f"Processing image chunk with ID: {chunk.unique_id}, image: {chunk.image_file_id}"
             )
             with get_session_with_current_tenant() as db_session:
                 file_record = get_default_file_store(db_session).read_file(
-                    cast(str, chunk.image_file_name), mode="b"
+                    cast(str, chunk.image_file_id), mode="b"
                 )
                 if not file_record:
-                    logger.error(f"Image file not found: {chunk.image_file_name}")
+                    logger.error(f"Image file not found: {chunk.image_file_id}")
                     raise Exception("File not found")
                 file_content = file_record.read()
                 image_base64 = base64.b64encode(file_content).decode()
                 logger.debug(
-                    f"Successfully loaded image data for {chunk.image_file_name}"
+                    f"Successfully loaded image data for {chunk.image_file_id}"
                 )
 
             messages: list[BaseMessage] = [
@@ -114,7 +114,7 @@ def update_image_sections_with_query(
 
         except Exception:
             logger.exception(
-                f"Error updating image section with query source image url: {chunk.image_file_name}"
+                f"Error updating image section with query source image url: {chunk.image_file_id}"
             )
             return chunk.unique_id, "Error analyzing image."
 

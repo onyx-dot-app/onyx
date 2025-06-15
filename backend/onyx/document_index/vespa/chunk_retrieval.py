@@ -136,7 +136,7 @@ def _vespa_hit_to_inference_chunk(
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
         source_type=fields[SOURCE_TYPE],
-        image_file_name=fields.get(IMAGE_FILE_NAME),
+        image_file_id=fields.get(IMAGE_FILE_NAME),
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),

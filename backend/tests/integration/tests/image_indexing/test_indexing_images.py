@@ -108,7 +108,7 @@ def test_image_indexing(
         # Ensure we indexed an image from the sample.pdf file
         has_sample_pdf_image = False
         for doc in documents:
-            if doc.image_file_name and FILE_NAME in doc.image_file_name:
+            if doc.image_file_id and FILE_NAME in doc.image_file_id:
                 has_sample_pdf_image = True
 
         # Assert that at least one document has an image file name containing "sample.pdf"

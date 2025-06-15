@@ -115,11 +115,13 @@ def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:
 
 def get_usage_report_data(
     db_session: Session,
-    report_name: str,
+    report_display_name: str,
 ) -> IO:
     file_store = get_default_file_store(db_session)
     # usage report may be very large, so don't load it all into memory
-    return file_store.read_file(file_name=report_name, mode="b", use_tempfile=True)
+    return file_store.read_file(
+        file_id=report_display_name, mode="b", use_tempfile=True
+    )
 
 
 def write_usage_report(

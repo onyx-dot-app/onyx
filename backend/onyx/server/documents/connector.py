@@ -1,7 +1,6 @@
 import json
 import mimetypes
 import os
-import uuid
 import zipfile
 from io import BytesIO
 from typing import Any
@@ -449,40 +448,36 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
                             continue
 
                         sub_file_bytes = zf.read(file_info)
-                        sub_file_name = os.path.join(str(uuid.uuid4()), file_info)
-                        deduped_file_paths.append(sub_file_name)
 
                         mime_type, __ = mimetypes.guess_type(file_info)
                         if mime_type is None:
                             mime_type = "application/octet-stream"
 
-                        file_store.save_file(
-                            file_name=sub_file_name,
+                        file_id = file_store.save_file(
                             content=BytesIO(sub_file_bytes),
                             display_name=os.path.basename(file_info),
                             file_origin=FileOrigin.CONNECTOR,
                             file_type=mime_type,
                         )
+                        deduped_file_paths.append(file_id)
                 continue
 
             # Special handling for docx files - only store the plaintext version
             if file.content_type and file.content_type.startswith(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             ):
-                file_path = convert_docx_to_txt(file, file_store)
-                deduped_file_paths.append(file_path)
+                docx_file_id = convert_docx_to_txt(file, file_store)
+                deduped_file_paths.append(docx_file_id)
                 continue
 
             # Default handling for all other file types
-            file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))
-            deduped_file_paths.append(file_path)
-            file_store.save_file(
-                file_name=file_path,
+            file_id = file_store.save_file(
                 content=file.file,
                 display_name=file.filename,
                 file_origin=FileOrigin.CONNECTOR,
                 file_type=file.content_type or "text/plain",
             )
+            deduped_file_paths.append(file_id)
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -10,7 +10,9 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from typing import cast, Any
 
+from onyx.db._deprecated.pg_file_store import delete_lobj_by_id, read_lobj
 from onyx.file_store.file_store import get_s3_file_store
 
 # revision identifiers, used by Alembic.
@@ -22,17 +24,18 @@ depends_on = None
 
 def upgrade() -> None:
     # Modify existing file_store table to support external storage
+    op.rename_table("file_store", "file_record")
 
     # Make lobj_oid nullable (for external storage files)
-    op.alter_column("file_store", "lobj_oid", nullable=True)
+    op.alter_column("file_record", "lobj_oid", nullable=True)
 
     # Add external storage columns with generic names
-    op.add_column("file_store", sa.Column("bucket_name", sa.String(), nullable=True))
-    op.add_column("file_store", sa.Column("object_key", sa.String(), nullable=True))
+    op.add_column("file_record", sa.Column("bucket_name", sa.String(), nullable=True))
+    op.add_column("file_record", sa.Column("object_key", sa.String(), nullable=True))
 
     # Add timestamps for tracking
     op.add_column(
-        "file_store",
+        "file_record",
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -41,7 +44,7 @@ def upgrade() -> None:
         ),
     )
     op.add_column(
-        "file_store",
+        "file_record",
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
@@ -50,6 +53,8 @@ def upgrade() -> None:
         ),
     )
 
+    op.alter_column("file_record", "file_name", new_column_name="file_id")
+
     print(
         "External storage configured - migrating files from PostgreSQL to external storage..."
     )
@@ -57,7 +62,7 @@ def upgrade() -> None:
     print("File migration completed successfully!")
 
     # Remove lobj_oid column
-    op.drop_column("file_store", "lobj_oid")
+    op.drop_column("file_record", "lobj_oid")
 
 
 def downgrade() -> None:
@@ -67,6 +72,8 @@ def downgrade() -> None:
         "WARNING: This migration is not fully reversible if files were migrated to external storage."
     )
     print("Files in external storage will not be moved back to PostgreSQL.")
+
+    op.rename_table("file_record", "file_store")
 
     # Remove external storage columns
     op.drop_column("file_store", "updated_at")
@@ -85,18 +92,11 @@ def _migrate_files_to_external_storage() -> None:
     session = Session(bind=bind)
 
     try:
-        # Import file store classes for the migration
-        from onyx.file_store._deprecated.postgres_file_store import (
-            PostgresBackedFileStore,
-        )
-
-        # Create file store instances
-        postgres_store = PostgresBackedFileStore(db_session=session)
         external_store = get_s3_file_store(db_session=session)
 
         # Find all files currently stored in PostgreSQL (lobj_oid is not null)
         result = session.execute(
-            text("SELECT file_name FROM file_store WHERE lobj_oid IS NOT NULL")
+            text("SELECT file_id FROM file_record WHERE lobj_oid IS NOT NULL")
         )
 
         files_to_migrate = [row[0] for row in result.fetchall()]
@@ -112,20 +112,32 @@ def _migrate_files_to_external_storage() -> None:
 
         migrated_count = 0
 
-        for i, file_name in enumerate(files_to_migrate, 1):
-            print(f"Migrating file {i}/{total_files}: {file_name}")
+        for i, file_id in enumerate(files_to_migrate, 1):
+            print(f"Migrating file {i}/{total_files}: {file_id}")
 
             # Read file record to get metadata
-            file_record = postgres_store.read_file_record(file_name)
+            file_record = session.execute(
+                text("SELECT * FROM file_record WHERE file_id = :file_id"),
+                {"file_id": file_id},
+            ).fetchone()
+
+            if file_record is None:
+                print(f"File {file_id} not found in PostgreSQL storage.")
+                continue
+
+            lobj_id = cast(int, file_record.lobj_oid)  # type: ignore
+            file_metadata = cast(Any, file_record.file_metadata)  # type: ignore
 
             # Read file content from PostgreSQL
-            file_content = postgres_store.read_file(file_name, mode="b")
+            file_content = read_lobj(
+                lobj_id, db_session=session, mode="b", use_tempfile=True
+            )
 
             # Handle file_metadata type conversion
             file_metadata = None
-            if file_record.file_metadata is not None:
-                if isinstance(file_record.file_metadata, dict):
-                    file_metadata = file_record.file_metadata
+            if file_metadata is not None:
+                if isinstance(file_metadata, dict):
+                    file_metadata = file_metadata
                 else:
                     # Convert other types to dict if possible, otherwise None
                     try:
@@ -135,16 +147,17 @@ def _migrate_files_to_external_storage() -> None:
 
             # Save to external storage (this will handle the database record update and cleanup)
             external_store.save_file(
-                file_name=file_record.file_name,
+                file_id=file_id,
                 content=file_content,
                 display_name=file_record.display_name,
                 file_origin=file_record.file_origin,
                 file_type=file_record.file_type,
                 file_metadata=file_metadata,
             )
+            delete_lobj_by_id(lobj_id, db_session=session)
 
             migrated_count += 1
-            print(f"✓ Successfully migrated file {i}/{total_files}: {file_name}")
+            print(f"✓ Successfully migrated file {i}/{total_files}: {file_id}")
 
         print(f"Migration completed: {migrated_count} files migrated successfully.")
 

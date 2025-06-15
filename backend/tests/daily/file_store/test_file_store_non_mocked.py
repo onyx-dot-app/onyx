@@ -28,7 +28,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-TEST_BUCKET_NAME: str = "onyx-file-store-bucket"
+TEST_BUCKET_NAME: str = "onyx-file-store-tests"
 TEST_FILE_PREFIX: str = "test-files"
 
 
@@ -122,7 +122,7 @@ def db_session() -> Generator[Session, None, None]:
     ids=lambda config: config["backend_name"],
 )
 def file_store(
-    request, db_session: Session
+    request: pytest.FixtureRequest, db_session: Session
 ) -> Generator[S3BackedFileStore, None, None]:
     """Create an S3BackedFileStore instance for testing with parametrized backend"""
     backend_config: BackendConfig = request.param
@@ -186,7 +186,7 @@ class TestS3BackedFileStore:
 
     def test_save_and_read_text_file(self, file_store: S3BackedFileStore) -> None:
         """Test saving and reading a text file"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Text File"
         content = "This is a test text file content.\nWith multiple lines."
         file_type = "text/plain"
@@ -194,34 +194,36 @@ class TestS3BackedFileStore:
 
         # Save the file
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Read the file back
-        read_content_io = file_store.read_file(file_name)
+        read_content_io = file_store.read_file(file_id)
         read_content = read_content_io.read().decode("utf-8")
 
         assert read_content == content
 
         # Verify file record in database
-        file_record = file_store.read_file_record(file_name)
-        assert file_record.file_name == file_name
+        file_record = file_store.read_file_record(file_id)
+        assert file_record.file_id == file_id
         assert file_record.display_name == display_name
         assert file_record.file_origin == file_origin
         assert file_record.file_type == file_type
         assert (
             file_record.bucket_name == file_store._get_bucket_name()
         )  # Use actual bucket name
-        assert file_record.object_key == f"{file_store._s3_prefix}/{file_name}"
+        assert file_record.object_key == f"{file_store._s3_prefix}/{file_id}"
 
     def test_save_and_read_binary_file(self, file_store: S3BackedFileStore) -> None:
         """Test saving and reading a binary file"""
-        file_name = f"{uuid.uuid4()}.bin"
+        file_id = f"{uuid.uuid4()}.bin"
         display_name = "Test Binary File"
         # Create some binary content
         content = bytes(range(256))  # 0-255 bytes
@@ -230,23 +232,25 @@ class TestS3BackedFileStore:
 
         # Save the file
         content_io = BytesIO(content)
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Read the file back
-        read_content_io = file_store.read_file(file_name)
+        read_content_io = file_store.read_file(file_id)
         read_content = read_content_io.read()
 
         assert read_content == content
 
     def test_save_with_metadata(self, file_store: S3BackedFileStore) -> None:
         """Test saving a file with metadata"""
-        file_name = f"{uuid.uuid4()}.json"
+        file_id = f"{uuid.uuid4()}.json"
         display_name = "Test Metadata File"
         content = '{"key": "value", "number": 42}'
         file_type = "application/json"
@@ -260,22 +264,24 @@ class TestS3BackedFileStore:
 
         # Save the file with metadata
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
             file_metadata=metadata,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Verify metadata is stored in database
-        file_record = file_store.read_file_record(file_name)
+        file_record = file_store.read_file_record(file_id)
         assert file_record.file_metadata == metadata
 
     def test_has_file(self, file_store: S3BackedFileStore) -> None:
         """Test the has_file method"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Has File"
         content = "Content for has_file test"
         file_type = "text/plain"
@@ -283,48 +289,46 @@ class TestS3BackedFileStore:
 
         # Initially, file should not exist
         assert not file_store.has_file(
-            file_name=file_name,
+            file_id=file_id,
             file_origin=file_origin,
             file_type=file_type,
-            display_name=display_name,
         )
 
         # Save the file
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
+
+        assert returned_file_id == file_id
 
         # Now file should exist
         assert file_store.has_file(
-            file_name=file_name,
+            file_id=file_id,
             file_origin=file_origin,
             file_type=file_type,
-            display_name=display_name,
         )
 
         # Test with wrong parameters
         assert not file_store.has_file(
-            file_name=file_name,
+            file_id=file_id,
             file_origin=FileOrigin.CONNECTOR,  # Wrong origin
             file_type=file_type,
-            display_name=display_name,
         )
 
         assert not file_store.has_file(
-            file_name=file_name,
+            file_id=file_id,
             file_origin=file_origin,
             file_type="application/pdf",  # Wrong type
-            display_name=display_name,
         )
 
     def test_read_file_with_tempfile(self, file_store: S3BackedFileStore) -> None:
         """Test reading a file using temporary file"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Temp File"
         content = "Content for temporary file test"
         file_type = "text/plain"
@@ -332,16 +336,18 @@ class TestS3BackedFileStore:
 
         # Save the file
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Read using temporary file
-        temp_file = file_store.read_file(file_name, use_tempfile=True)
+        temp_file = file_store.read_file(file_id, use_tempfile=True)
 
         # Read content from temp file
         temp_file.seek(0)
@@ -363,7 +369,7 @@ class TestS3BackedFileStore:
 
     def test_delete_file(self, file_store: S3BackedFileStore) -> None:
         """Test deleting a file"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Delete File"
         content = "Content for delete test"
         file_type = "text/plain"
@@ -371,40 +377,40 @@ class TestS3BackedFileStore:
 
         # Save the file
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
+
+        assert returned_file_id == file_id
 
         # Verify file exists
         assert file_store.has_file(
-            file_name=file_name,
+            file_id=file_id,
             file_origin=file_origin,
             file_type=file_type,
-            display_name=display_name,
         )
 
         # Delete the file
-        file_store.delete_file(file_name)
+        file_store.delete_file(file_id)
 
         # Verify file no longer exists
         assert not file_store.has_file(
-            file_name=file_name,
+            file_id=file_id,
             file_origin=file_origin,
             file_type=file_type,
-            display_name=display_name,
         )
 
         # Verify trying to read deleted file raises exception
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
-            file_store.read_file(file_name)
+            file_store.read_file(file_id)
 
     def test_get_file_with_mime_type(self, file_store: S3BackedFileStore) -> None:
         """Test getting file with mime type detection"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test MIME Type"
         content = "This is a plain text file"
         file_type = "text/plain"
@@ -412,16 +418,18 @@ class TestS3BackedFileStore:
 
         # Save the file
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Get file with mime type
-        file_with_mime = file_store.get_file_with_mime_type(file_name)
+        file_with_mime = file_store.get_file_with_mime_type(file_id)
 
         assert file_with_mime is not None
         assert file_with_mime.data.decode("utf-8") == content
@@ -430,7 +438,7 @@ class TestS3BackedFileStore:
 
     def test_file_overwrite(self, file_store: S3BackedFileStore) -> None:
         """Test overwriting an existing file"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Overwrite"
         original_content = "Original content"
         new_content = "New content after overwrite"
@@ -439,35 +447,39 @@ class TestS3BackedFileStore:
 
         # Save original file
         content_io = BytesIO(original_content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Verify original content
-        read_content_io = file_store.read_file(file_name)
+        read_content_io = file_store.read_file(file_id)
         assert read_content_io.read().decode("utf-8") == original_content
 
         # Overwrite with new content
         new_content_io = BytesIO(new_content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id_2 = file_store.save_file(
             content=new_content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id_2 == file_id
+
         # Verify new content
-        read_content_io = file_store.read_file(file_name)
+        read_content_io = file_store.read_file(file_id)
         assert read_content_io.read().decode("utf-8") == new_content
 
     def test_large_file_handling(self, file_store: S3BackedFileStore) -> None:
         """Test handling of larger files"""
-        file_name = f"{uuid.uuid4()}.bin"
+        file_id = f"{uuid.uuid4()}.bin"
         display_name = "Test Large File"
         # Create a 1MB file
         content_size = 1024 * 1024  # 1MB
@@ -477,16 +489,18 @@ class TestS3BackedFileStore:
 
         # Save the large file
         content_io = BytesIO(content)
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Read the file back
-        read_content_io = file_store.read_file(file_name)
+        read_content_io = file_store.read_file(file_id)
         read_content = read_content_io.read()
 
         assert len(read_content) == content_size
@@ -496,27 +510,27 @@ class TestS3BackedFileStore:
         self, file_store: S3BackedFileStore
     ) -> None:
         """Test error handling when trying to read a non-existent file"""
-        nonexistent_file = f"{uuid.uuid4()}.txt"
+        nonexistent_file_id = f"{uuid.uuid4()}.txt"
 
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
-            file_store.read_file(nonexistent_file)
+            file_store.read_file(nonexistent_file_id)
 
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
-            file_store.read_file_record(nonexistent_file)
+            file_store.read_file_record(nonexistent_file_id)
 
         # get_file_with_mime_type should return None for non-existent files
-        result = file_store.get_file_with_mime_type(nonexistent_file)
+        result = file_store.get_file_with_mime_type(nonexistent_file_id)
         assert result is None
 
     def test_error_handling_delete_nonexistent_file(
         self, file_store: S3BackedFileStore
     ) -> None:
         """Test error handling when trying to delete a non-existent file"""
-        nonexistent_file = f"{uuid.uuid4()}.txt"
+        nonexistent_file_id = f"{uuid.uuid4()}.txt"
 
         # Should raise an exception when trying to delete non-existent file
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
-            file_store.delete_file(nonexistent_file)
+            file_store.delete_file(nonexistent_file_id)
 
     def test_multiple_files_different_origins(
         self, file_store: S3BackedFileStore
@@ -549,21 +563,21 @@ class TestS3BackedFileStore:
         # Save all files
         for file_data in files_data:
             content_io = BytesIO(file_data["content"].encode("utf-8"))
-            file_store.save_file(
-                file_name=file_data["name"],
+            returned_file_id = file_store.save_file(
                 content=content_io,
                 display_name=file_data["display_name"],
                 file_origin=file_data["origin"],
                 file_type=file_data["type"],
+                file_id=file_data["name"],
             )
+            assert returned_file_id == file_data["name"]
 
         # Verify all files exist and have correct properties
         for file_data in files_data:
             assert file_store.has_file(
-                file_name=file_data["name"],
+                file_id=file_data["name"],
                 file_origin=file_data["origin"],
                 file_type=file_data["type"],
-                display_name=file_data["display_name"],
             )
 
             # Read and verify content
@@ -589,21 +603,23 @@ class TestS3BackedFileStore:
             f"{uuid.uuid4()}(with)parentheses.txt",
         ]
 
-        for file_name in special_files:
-            content = f"Content for {file_name}"
+        for file_id in special_files:
+            content = f"Content for {file_id}"
             content_io = BytesIO(content.encode("utf-8"))
 
             # Save the file
-            file_store.save_file(
-                file_name=file_name,
+            returned_file_id = file_store.save_file(
                 content=content_io,
-                display_name=f"Display: {file_name}",
+                display_name=f"Display: {file_id}",
                 file_origin=FileOrigin.OTHER,
                 file_type="text/plain",
+                file_id=file_id,
             )
 
+            assert returned_file_id == file_id
+
             # Read and verify
-            read_content_io = file_store.read_file(file_name)
+            read_content_io = file_store.read_file(file_id)
             read_content = read_content_io.read().decode("utf-8")
             assert read_content == content
 
@@ -633,16 +649,16 @@ class TestS3BackedFileStore:
 
             with pytest.raises(ClientError):
                 file_store.save_file(
-                    file_name=f"{uuid.uuid4()}.txt",
                     content=content_io,
                     display_name="Network Error Test",
                     file_origin=FileOrigin.OTHER,
                     file_type="text/plain",
+                    file_id=f"{uuid.uuid4()}.txt",
                 )
 
     def test_database_transaction_rollback(self, file_store: S3BackedFileStore) -> None:
         """Test database transaction rollback behavior with PostgreSQL"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Rollback"
         content = "Content for rollback test"
         file_type = "text/plain"
@@ -663,20 +679,20 @@ class TestS3BackedFileStore:
             # This should fail and rollback the database transaction
             with pytest.raises(ClientError):
                 file_store.save_file(
-                    file_name=file_name,
                     content=content_io,
                     display_name=display_name,
                     file_origin=file_origin,
                     file_type=file_type,
+                    file_id=file_id,
                 )
 
         # Verify that the database record was not created due to rollback
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
-            file_store.read_file_record(file_name)
+            file_store.read_file_record(file_id)
 
     def test_complex_jsonb_metadata(self, file_store: S3BackedFileStore) -> None:
         """Test PostgreSQL JSONB metadata handling with complex data structures"""
-        file_name = f"{uuid.uuid4()}.json"
+        file_id = f"{uuid.uuid4()}.json"
         display_name = "Test Complex Metadata"
         content = '{"data": "test"}'
         file_type = "application/json"
@@ -701,17 +717,19 @@ class TestS3BackedFileStore:
 
         # Save file with complex metadata
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
             file_metadata=complex_metadata,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Retrieve and verify the metadata was stored correctly
-        file_record = file_store.read_file_record(file_name)
+        file_record = file_store.read_file_record(file_id)
         stored_metadata = file_record.file_metadata
 
         # Verify all metadata fields were preserved
@@ -733,7 +751,7 @@ class TestS3BackedFileStore:
         self, file_store: S3BackedFileStore
     ) -> None:
         """Test that database stays consistent when S3 operations fail"""
-        file_name = f"{uuid.uuid4()}.txt"
+        file_id = f"{uuid.uuid4()}.txt"
         display_name = "Test Consistency"
         content = "Initial content"
         file_type = "text/plain"
@@ -741,17 +759,19 @@ class TestS3BackedFileStore:
 
         # First, save a file successfully
         content_io = BytesIO(content.encode("utf-8"))
-        file_store.save_file(
-            file_name=file_name,
+        returned_file_id = file_store.save_file(
             content=content_io,
             display_name=display_name,
             file_origin=file_origin,
             file_type=file_type,
+            file_id=file_id,
         )
 
+        assert returned_file_id == file_id
+
         # Verify initial state
-        assert file_store.has_file(file_name, file_origin, file_type, display_name)
-        initial_record = file_store.read_file_record(file_name)
+        assert file_store.has_file(file_id, file_origin, file_type)
+        initial_record = file_store.read_file_record(file_id)
 
         # Now try to update but fail on S3 side
         with patch.object(file_store, "_get_s3_client") as mock_client:
@@ -773,22 +793,22 @@ class TestS3BackedFileStore:
             # This should fail and rollback
             with pytest.raises(ClientError):
                 file_store.save_file(
-                    file_name=file_name,
                     content=new_content_io,
                     display_name=display_name,
                     file_origin=file_origin,
                     file_type=file_type,
+                    file_id=file_id,
                 )
 
         # Verify the database record is unchanged (not updated)
-        current_record = file_store.read_file_record(file_name)
-        assert current_record.file_name == initial_record.file_name
+        current_record = file_store.read_file_record(file_id)
+        assert current_record.file_id == initial_record.file_id
         assert current_record.display_name == initial_record.display_name
         assert current_record.bucket_name == initial_record.bucket_name
         assert current_record.object_key == initial_record.object_key
 
         # Verify we can still read the original file content
-        read_content_io = file_store.read_file(file_name)
+        read_content_io = file_store.read_file(file_id)
         read_content = read_content_io.read().decode("utf-8")
         assert read_content == content  # Original content, not the failed update
 
@@ -806,7 +826,7 @@ class TestS3BackedFileStore:
         current_endpoint_url = file_store._s3_endpoint_url
         current_verify_ssl = file_store._s3_verify_ssl
 
-        results: List[Tuple[int, str, str]] = []
+        results: List[Tuple[str, str]] = []
         errors: List[Tuple[int, str]] = []
 
         def save_file_worker(worker_id: int) -> bool:
@@ -830,13 +850,13 @@ class TestS3BackedFileStore:
                     content_io: BytesIO = BytesIO(content.encode("utf-8"))
 
                     worker_file_store.save_file(
-                        file_name=file_name,
+                        file_id=file_name,
                         content=content_io,
                         display_name=f"Worker {worker_id} File",
                         file_origin=file_origin,
                         file_type=file_type,
                     )
-                    results.append((worker_id, file_name, content))
+                    results.append((file_name, content))
                     return True
             except Exception as e:
                 errors.append((worker_id, str(e)))
@@ -856,16 +876,15 @@ class TestS3BackedFileStore:
         ), f"Expected 10 successful operations, got {len(results)}"
 
         # Verify all files were saved correctly
-        for worker_id, file_name, expected_content in results:
+        for file_id, expected_content in results:
             # Check file exists
             assert file_store.has_file(
-                file_name=file_name,
+                file_id=file_id,
                 file_origin=file_origin,
                 file_type=file_type,
-                display_name=f"Worker {worker_id} File",
             )
 
             # Check content is correct
-            read_content_io = file_store.read_file(file_name)
+            read_content_io = file_store.read_file(file_id)
             actual_content: str = read_content_io.read().decode("utf-8")
             assert actual_content == expected_content

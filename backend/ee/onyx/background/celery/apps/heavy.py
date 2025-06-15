@@ -86,7 +86,6 @@ def export_query_history_task(
         try:
             stream.seek(0)
             get_default_file_store(db_session).save_file(
-                file_name=report_name,
                 content=stream,
                 display_name=report_name,
                 file_origin=FileOrigin.QUERY_HISTORY_CSV,
@@ -96,6 +95,7 @@ def export_query_history_task(
                     "end": end.isoformat(),
                     "start_time": start_time.isoformat(),
                 },
+                file_id=report_name,
             )
 
             delete_task_with_id(

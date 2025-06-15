@@ -4,7 +4,6 @@ import io
 import json
 import os
 import time
-import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
@@ -739,9 +738,7 @@ def upload_files_for_chat(
         new_content_type = file.content_type
 
         # Store the file normally
-        file_id = str(uuid.uuid4())
-        file_store.save_file(
-            file_name=file_id,
+        file_id = file_store.save_file(
             content=file_content_io,
             display_name=file.filename,
             file_origin=FileOrigin.CHAT_UPLOAD,
@@ -756,10 +753,8 @@ def upload_files_for_chat(
                 file=extracted_text_io,  # use the bytes we already read
                 file_name=file.filename or "",
             )
-            text_file_id = str(uuid.uuid4())
 
-            file_store.save_file(
-                file_name=text_file_id,
+            text_file_id = file_store.save_file(
                 content=io.BytesIO(extracted_text.encode()),
                 display_name=file.filename,
                 file_origin=FileOrigin.CHAT_UPLOAD,

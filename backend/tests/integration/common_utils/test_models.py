@@ -76,7 +76,7 @@ class DATestConnector(BaseModel):
 class SimpleTestDocument(BaseModel):
     id: str
     content: str
-    image_file_name: str | None = None
+    image_file_id: str | None = None
 
 
 class DATestCCPair(BaseModel):

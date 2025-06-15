@@ -3,7 +3,6 @@ from collections.abc import Callable
 from io import BytesIO
 from typing import cast
 from uuid import UUID
-from uuid import uuid4
 
 import requests
 from sqlalchemy.orm import Session
@@ -56,11 +55,11 @@ def store_user_file_plaintext(
     file_content = BytesIO(plaintext_content.encode("utf-8"))
     try:
         file_store.save_file(
-            file_name=plaintext_file_name,
             content=file_content,
             display_name=f"Plaintext for user file {user_file_id}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
+            file_id=plaintext_file_name,
         )
         return True
     except Exception as e:
@@ -273,32 +272,27 @@ def save_file_from_url(url: str) -> str:
         response = requests.get(url)
         response.raise_for_status()
 
-        unique_id = str(uuid4())
-
         file_io = BytesIO(response.content)
         file_store = get_default_file_store(db_session)
-        file_store.save_file(
-            file_name=unique_id,
+        file_id = file_store.save_file(
             content=file_io,
             display_name="GeneratedImage",
             file_origin=FileOrigin.CHAT_IMAGE_GEN,
             file_type="image/png;base64",
         )
-        return unique_id
+        return file_id
 
 
 def save_file_from_base64(base64_string: str) -> str:
     with get_session_with_current_tenant() as db_session:
-        unique_id = str(uuid4())
         file_store = get_default_file_store(db_session)
-        file_store.save_file(
-            file_name=unique_id,
+        file_id = file_store.save_file(
             content=BytesIO(base64.b64decode(base64_string)),
             display_name="GeneratedImage",
             file_origin=FileOrigin.CHAT_IMAGE_GEN,
             file_type=get_image_type(base64_string),
         )
-        return unique_id
+        return file_id
 
 
 def save_file(

@@ -68,7 +68,7 @@ def test_default_indexing_embedder_embed_chunks(
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
             large_chunk_id=None,
-            image_file_name=None,
+            image_file_id=None,
             chunk_context=chunk_context,
             doc_summary=doc_summary,
             contextual_rag_reserved_tokens=200,
