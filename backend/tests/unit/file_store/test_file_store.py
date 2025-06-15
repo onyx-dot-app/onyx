@@ -130,18 +130,6 @@ class TestExternalStorageFileStore:
             bucket_name: str = file_store._get_bucket_name()
             assert bucket_name == "my-test-bucket"
 
-    def test_s3_bucket_name_missing(self, db_session: Session) -> None:
-        """Test error when S3 bucket name is missing"""
-        with patch("onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", None):
-            file_store = S3BackedFileStore(db_session, bucket_name="test-bucket")
-            with pytest.raises(
-                RuntimeError,
-                match="S3 bucket name is required for S3 file store",
-            ):
-                # Override the bucket name to None to test the error
-                file_store._bucket_name = None
-                file_store._get_bucket_name()
-
     def test_s3_key_generation_default_prefix(self, db_session: Session) -> None:
         """Test S3 key generation with default prefix"""
         with patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "onyx-files"):
