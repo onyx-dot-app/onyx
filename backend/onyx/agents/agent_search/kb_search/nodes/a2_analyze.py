@@ -18,6 +18,7 @@ from onyx.agents.agent_search.kb_search.models import KGAnswerApproach
 from onyx.agents.agent_search.kb_search.states import AnalysisUpdate
 from onyx.agents.agent_search.kb_search.states import KGAnswerFormat
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
+from onyx.agents.agent_search.kb_search.states import KGRelationshipDetection
 from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import YesNoEnum
@@ -230,6 +231,7 @@ def analyze(
             )
             search_type = approach_extraction_result.search_type
             search_strategy = approach_extraction_result.search_strategy
+            relationship_detection = approach_extraction_result.relationship_detection
             output_format = approach_extraction_result.format
             broken_down_question = approach_extraction_result.broken_down_question
             divide_and_conquer = approach_extraction_result.divide_and_conquer
@@ -239,6 +241,7 @@ def analyze(
             )
             search_type = KGSearchType.SEARCH
             search_strategy = KGAnswerStrategy.DEEP
+            relationship_detection = KGRelationshipDetection.RELATIONSHIPS
             output_format = KGAnswerFormat.TEXT
             broken_down_question = None
             divide_and_conquer = YesNoEnum.NO
@@ -258,6 +261,14 @@ def analyze(
 
     step_answer = f"Strategy and format have been extracted from query. Strategy: {search_strategy.value}, \
 Format: {output_format.value}, Broken down question: {broken_down_question}"
+
+    if (
+        query_graph_relationships
+        or relationship_detection == KGRelationshipDetection.RELATIONSHIPS
+    ):
+        query_type = "graph_relationships"
+    else:
+        query_type = "graph_entities"
 
     stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
 
@@ -281,6 +292,7 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
         divide_and_conquer=divide_and_conquer,
         single_doc_id=single_doc_id,
         search_type=search_type,
+        query_type=query_type,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

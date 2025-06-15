@@ -53,6 +53,11 @@ class KGAnswerStrategy(Enum):
     SIMPLE = "SIMPLE"
 
 
+class KGRelationshipDetection(Enum):
+    RELATIONSHIPS = "RELATIONSHIPS"
+    NO_RELATIONSHIPS = "NO_RELATIONSHIPS"
+
+
 class KGAnswerFormat(Enum):
     LIST = "LIST"
     TEXT = "TEXT"
@@ -79,6 +84,7 @@ class AnalysisUpdate(LoggerUpdate):
     divide_and_conquer: YesNoEnum | None = None
     single_doc_id: str | None = None
     search_type: KGSearchType | None = None
+    query_type: str | None = None
 
 
 class SQLSimpleGenerationUpdate(LoggerUpdate):
@@ -118,6 +124,7 @@ class ERTExtractionUpdate(LoggerUpdate):
     time_filter: str | None = None
     kg_doc_temp_view_name: str | None = None
     kg_rel_temp_view_name: str | None = None
+    kg_entity_temp_view_name: str | None = None
 
 
 class ResultsDataUpdate(LoggerUpdate):

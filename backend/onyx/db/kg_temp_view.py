@@ -8,11 +8,12 @@ from onyx.configs.app_configs import DB_READONLY_USER
 Base = declarative_base()
 
 
-def get_user_view_names(user_email: str) -> tuple[str, str]:
+def get_user_view_names(user_email: str) -> tuple[str, str, str]:
     user_email_cleaned = user_email.replace("@", "_").replace(".", "_")
     return (
         f"allowed_docs_{user_email_cleaned}",
         f"kg_relationships_with_access_{user_email_cleaned}",
+        f"kg_entities_with_access_{user_email_cleaned}",
     )
 
 
@@ -22,6 +23,7 @@ def create_views(
     user_email: str,
     allowed_docs_view_name: str = "allowed_docs",
     kg_relationships_view_name: str = "kg_relationships_with_access",
+    kg_entity_view_name: str = "kg_entities_with_access",
 ) -> None:
     # Create ALLOWED_DOCS view
     allowed_docs_view = text(
@@ -99,7 +101,7 @@ def create_views(
     """
     ).bindparams(user_email=user_email)
 
-    # Create the main view that uses ALLOWED_DOCS
+    # Create the main view that uses ALLOWED_DOCS for Relationships
     kg_relationships_view = text(
         f"""
     CREATE OR REPLACE VIEW {kg_relationships_view_name} AS
@@ -122,14 +124,33 @@ def create_views(
     """
     )
 
+    # Create the main view that uses ALLOWED_DOCS for Entities
+    kg_entity_view = text(
+        f"""
+    CREATE OR REPLACE VIEW {kg_entity_view_name} AS
+    SELECT kge.id_name as entity,
+           kge.entity_type_id_name as entity_type,
+           kge.attributes as entity_attributes,
+           kge.document_id as source_document,
+           d.doc_updated_at as source_date
+    FROM kg_entity kge
+    INNER JOIN {allowed_docs_view_name} AD on AD.allowed_doc_id = kge.document_id
+    JOIN document d on d.id = kge.document_id
+    """
+    )
+
     # Execute the views using the session
     db_session.execute(allowed_docs_view)
     db_session.execute(kg_relationships_view)
+    db_session.execute(kg_entity_view)
 
     # Grant permissions on view to readonly user
 
     db_session.execute(
         text(f"GRANT SELECT ON {kg_relationships_view_name} TO {DB_READONLY_USER}")
+    )
+    db_session.execute(
+        text(f"GRANT SELECT ON {kg_entity_view_name} TO {DB_READONLY_USER}")
     )
 
     db_session.commit()
@@ -139,8 +160,9 @@ def create_views(
 
 def drop_views(
     db_session: Session,
-    allowed_docs_view_name: str = "allowed_docs",
-    kg_relationships_view_name: str = "kg_relationships_with_access",
+    allowed_docs_view_name: str | None = None,
+    kg_relationships_view_name: str | None = None,
+    kg_entity_view_name: str | None = None,
 ) -> None:
     """
     Drops the temporary views created by create_views.
@@ -150,18 +172,28 @@ def drop_views(
         allowed_docs_view_name: Name of the allowed_docs view
         kg_relationships_view_name: Name of the kg_relationships view
     """
-    # First revoke access from the readonly user
-    revoke_kg_relationships = text(
-        f"REVOKE SELECT ON {kg_relationships_view_name} FROM {DB_READONLY_USER}"
-    )
 
-    db_session.execute(revoke_kg_relationships)
+    if kg_relationships_view_name:
+        revoke_kg_relationships = text(
+            f"REVOKE SELECT ON {kg_relationships_view_name} FROM {DB_READONLY_USER}"
+        )
+        db_session.execute(revoke_kg_relationships)
+        drop_kg_relationships = text(
+            f"DROP VIEW IF EXISTS {kg_relationships_view_name}"
+        )
+        db_session.execute(drop_kg_relationships)
 
-    # Drop the views in reverse order of creation to handle dependencies
-    drop_kg_relationships = text(f"DROP VIEW IF EXISTS {kg_relationships_view_name}")
-    drop_allowed_docs = text(f"DROP VIEW IF EXISTS {allowed_docs_view_name}")
+    if kg_entity_view_name:
+        revoke_kg_entities = text(
+            f"REVOKE SELECT ON {kg_entity_view_name} FROM {DB_READONLY_USER}"
+        )
+        db_session.execute(revoke_kg_entities)
+        drop_kg_entities = text(f"DROP VIEW IF EXISTS {kg_entity_view_name}")
+        db_session.execute(drop_kg_entities)
 
-    db_session.execute(drop_kg_relationships)
-    db_session.execute(drop_allowed_docs)
+    if allowed_docs_view_name:
+        drop_allowed_docs = text(f"DROP VIEW IF EXISTS {allowed_docs_view_name}")
+        db_session.execute(drop_allowed_docs)
+
     db_session.commit()
     return None
