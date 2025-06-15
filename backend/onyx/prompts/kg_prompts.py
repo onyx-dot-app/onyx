@@ -1334,7 +1334,7 @@ KG_SEARCH_PROMPT = f"""
 You are an expert in extracting relevant structured information from a list of documents that \
 should relate to one object. You are presented with a list of documents that have been determined to be \
 relevant to the task of interest. Your goal is to extract the information asked around these topics:
-You should look at the documents - in no particular order! - and extract the information that relates \
+You should look at the documents and extract the information that relates \
 to a question:
 {SEPARATOR_LINE}
 {{question}}
@@ -1344,8 +1344,10 @@ Here are the documents you are supposed to search through:
 --
 {{document_text}}
 {SEPARATOR_LINE}
-Note: in this case, please DO cite your sources. This is very important! Use the format [<document_number>](). \
-Note the important (), please do not forget.
+Note: in this case, please DO cite your sources. This is very important! \
+Use the format [<document number>]. Ie, use [1], [2], and NOT [1,2] if \
+there are two documents to cite, etc. \
+
 
 Please now generate the answer to the question given the documents:
 """.strip()
