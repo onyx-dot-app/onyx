@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import and_
+from sqlalchemy import exists
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -16,28 +16,13 @@ class KGProcessingType(Enum):
     CLUSTERING = "clustering"
 
 
-def _get_boolean_kg_config_var_value(
-    db_session: Session,
-    variable_name: str,
-) -> bool:
-    value = (
-        db_session.query(KGConfig.kg_variable_values)
-        .filter(
-            and_(
-                KGConfig.kg_variable_name == variable_name,
-                KGConfig.kg_variable_values == ["true"],
-            )
-        )
-        .first()
-    )
-
-    return value is not None
-
-
 def get_kg_exposed(db_session: Session) -> bool:
-    return _get_boolean_kg_config_var_value(
-        db_session=db_session, variable_name=KGConfigVars.KG_EXPOSED
-    )
+    return db_session.query(
+        exists().where(
+            KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED,
+            KGConfig.kg_variable_values == ["true"],
+        )
+    ).scalar()
 
 
 def get_kg_beta_persona_id(db_session: Session) -> int | None:

@@ -87,79 +87,7 @@ def enable_or_disable_kg(
     else:
         raise ValueError("Invalid request body")
 
-    if enable_req:
-        kg_config.enable_kg__commit(db_session=db_session, enable_req=enable_req)
-
-        # Create or restore KG Beta persona
-
-        # Get the search tool
-        search_tool = get_search_tool(db_session=db_session)
-        if not search_tool:
-            raise RuntimeError("SearchTool not found in the database.")
-
-        # Check if we have a previously created persona
-        persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
-
-        if persona_id:
-            # Try to restore the existing persona
-            try:
-                persona = get_persona_by_id(
-                    persona_id=persona_id,
-                    user=None,
-                    db_session=db_session,
-                    include_deleted=True,
-                )
-                if persona.deleted:
-                    mark_persona_as_not_deleted(
-                        persona_id=persona_id,
-                        user=None,
-                        db_session=db_session,
-                    )
-                return
-
-            except ValueError:
-                # If persona doesn't exist or can't be restored, create a new one below
-                pass
-
-        # Create KG Beta persona
-        persona_request = PersonaUpsertRequest(
-            name="KG Beta",
-            description=_KG_BETA_ASSISTANT_DESCRIPTION,
-            system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
-            task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
-            datetime_aware=False,
-            include_citations=True,
-            num_chunks=25,
-            llm_relevance_filter=False,
-            is_public=False,
-            llm_filter_extraction=False,
-            recency_bias=RecencyBiasSetting.NO_DECAY,
-            prompt_ids=[],
-            document_set_ids=[],
-            tool_ids=[search_tool.id],
-            llm_model_provider_override=None,
-            llm_model_version_override=None,
-            starter_messages=None,
-            users=[],
-            groups=[],
-            label_ids=[],
-            is_default_persona=False,
-            display_priority=0,
-            user_file_ids=[],
-            user_folder_ids=[],
-        )
-
-        persona_snapshot = create_update_persona(
-            persona_id=None,
-            create_persona_request=persona_request,
-            user=None,
-            db_session=db_session,
-        )
-        # Store the persona ID in the KG config
-        kg_config.set_kg_beta_persona_id(
-            db_session=db_session, persona_id=persona_snapshot.id
-        )
-    else:
+    if not enable_req:
         # Get the KG Beta persona ID and delete it
         persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
         if persona_id:
@@ -169,6 +97,79 @@ def enable_or_disable_kg(
                 db_session=db_session,
             )
         kg_config.disable_kg__commit(db_session=db_session)
+        return
+
+    kg_config.enable_kg__commit(db_session=db_session, enable_req=enable_req)
+
+    # Create or restore KG Beta persona
+
+    # Get the search tool
+    search_tool = get_search_tool(db_session=db_session)
+    if not search_tool:
+        raise RuntimeError("SearchTool not found in the database.")
+
+    # Check if we have a previously created persona
+    persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
+
+    if persona_id:
+        # Try to restore the existing persona
+        try:
+            persona = get_persona_by_id(
+                persona_id=persona_id,
+                user=None,
+                db_session=db_session,
+                include_deleted=True,
+            )
+            if persona.deleted:
+                mark_persona_as_not_deleted(
+                    persona_id=persona_id,
+                    user=None,
+                    db_session=db_session,
+                )
+            return
+
+        except ValueError:
+            # If persona doesn't exist or can't be restored, create a new one below
+            pass
+
+    # Create KG Beta persona
+    persona_request = PersonaUpsertRequest(
+        name="KG Beta",
+        description=_KG_BETA_ASSISTANT_DESCRIPTION,
+        system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
+        task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
+        datetime_aware=False,
+        include_citations=True,
+        num_chunks=25,
+        llm_relevance_filter=False,
+        is_public=False,
+        llm_filter_extraction=False,
+        recency_bias=RecencyBiasSetting.NO_DECAY,
+        prompt_ids=[],
+        document_set_ids=[],
+        tool_ids=[search_tool.id],
+        llm_model_provider_override=None,
+        llm_model_version_override=None,
+        starter_messages=None,
+        users=[],
+        groups=[],
+        label_ids=[],
+        is_default_persona=False,
+        display_priority=0,
+        user_file_ids=[],
+        user_folder_ids=[],
+    )
+
+    persona_snapshot = create_update_persona(
+        persona_id=None,
+        create_persona_request=persona_request,
+        user=None,
+        db_session=db_session,
+    )
+    # Store the persona ID in the KG config
+    kg_config.set_kg_beta_persona_id(
+        db_session=db_session, persona_id=persona_snapshot.id
+    )
 
 
 # entity-types
