@@ -17,7 +17,6 @@ from tests.integration.common_utils.managers.user import UserManager
     [
         (
             EnableKGConfigRequest(
-                enabled=True,
                 vendor="Test",
                 vendor_domains=["test.app", "tester.ai"],
                 ignore_domains=[],
@@ -34,7 +33,6 @@ from tests.integration.common_utils.managers.user import UserManager
         ),
         (
             EnableKGConfigRequest(
-                enabled=True,
                 vendor="Test",
                 vendor_domains=[],
                 ignore_domains=[],

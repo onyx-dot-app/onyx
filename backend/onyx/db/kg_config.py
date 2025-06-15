@@ -202,7 +202,7 @@ def enable_kg__commit(
 ) -> None:
     validate_kg_settings(
         KGConfigSettings(
-            KG_ENABLED=enable_req.enabled,
+            KG_ENABLED=True,
             KG_VENDOR=enable_req.vendor,
             KG_VENDOR_DOMAINS=enable_req.vendor_domains,
             KG_IGNORE_EMAIL_DOMAINS=enable_req.ignore_domains,

@@ -131,7 +131,8 @@ function KGConfiguration({
       resetForm: (nextState?: Partial<FormikState<KGConfig>>) => void;
     }
   ) => {
-    const body = values.enabled ? values : { enabled: false };
+    const { enabled, ...enableRequest } = values;
+    const body = enabled ? enableRequest : {};
 
     const response = await fetch("/api/admin/kg/config", {
       method: "PUT",

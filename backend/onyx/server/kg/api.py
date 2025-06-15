@@ -1,5 +1,3 @@
-from typing import Union
-
 from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -74,20 +72,11 @@ def get_kg_config(
 
 @admin_router.put("/config")
 def enable_or_disable_kg(
-    req: Union[EnableKGConfigRequest, DisableKGConfigRequest],
+    req: EnableKGConfigRequest | DisableKGConfigRequest,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if isinstance(req, EnableKGConfigRequest):
-        enable_req = req if req.enabled else None
-    elif isinstance(req, DisableKGConfigRequest):
-        if req.enabled:
-            raise ValueError("Cannot update KG Config with only `enabled: true`")
-        enable_req = None
-    else:
-        raise ValueError("Invalid request body")
-
-    if not enable_req:
+    if isinstance(req, DisableKGConfigRequest):
         # Get the KG Beta persona ID and delete it
         persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
         if persona_id:
@@ -99,7 +88,8 @@ def enable_or_disable_kg(
         kg_config.disable_kg__commit(db_session=db_session)
         return
 
-    kg_config.enable_kg__commit(db_session=db_session, enable_req=enable_req)
+    # Enable KG
+    kg_config.enable_kg__commit(db_session=db_session, enable_req=req)
 
     # Create or restore KG Beta persona
 

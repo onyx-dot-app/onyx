@@ -29,7 +29,6 @@ class KGConfig(BaseModel):
 
 
 class EnableKGConfigRequest(BaseModel):
-    enabled: bool
     vendor: str
     vendor_domains: list[str]
     ignore_domains: list[str] = []
@@ -41,8 +40,6 @@ class EnableKGConfigRequest(BaseModel):
 
 
 class DisableKGConfigRequest(BaseModel):
-    enabled: bool
-
     model_config = ConfigDict(
         extra="forbid",
     )
