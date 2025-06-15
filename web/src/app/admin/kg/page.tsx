@@ -202,6 +202,7 @@ function KGConfiguration({
                 name="coverage_start"
                 label="Coverage Start"
                 subtext="The start date of coverage for Knowledge Graph."
+                startYear={2025} // TODO: remove this after public beta
                 disabled={!props.values.enabled}
               />
             </div>

@@ -876,6 +876,7 @@ export interface DatePickerFieldProps {
   label: string;
   name: string;
   subtext?: string;
+  startYear?: number;
   disabled?: boolean;
 }
 
@@ -883,6 +884,7 @@ export function DatePickerField({
   label,
   name,
   subtext,
+  startYear = 1970,
   disabled = false,
 }: DatePickerFieldProps) {
   const [field, _, helper] = useField<Date | null>(name);
@@ -893,7 +895,7 @@ export function DatePickerField({
       <DatePicker
         selectedDate={field.value}
         setSelectedDate={helper.setValue}
-        startYear={2025} // TODO: remove this once the public beta is over
+        startYear={startYear}
         disabled={disabled}
       />
     </div>
