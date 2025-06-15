@@ -82,6 +82,7 @@ import cohereIcon from "../../../public/Cohere.svg";
 import googleIcon from "../../../public/Google.png";
 import xenforoIcon from "../../../public/Xenforo.svg";
 import highspotIcon from "../../../public/Highspot.png";
+import oneNoteIcon from "../../../public/one_note.png";
 import { FaGithub, FaRobot } from "react-icons/fa";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -1330,6 +1331,13 @@ export const NotionIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <LogoIcon size={size} className={className} src="/Notion.png" />
+);
+
+export const OneNoteIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src="/one_note.png" />
 );
 
 export const GuruIcon = ({

@@ -1,7 +1,7 @@
-import * as Yup from "yup";
-import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type
+import * as Yup from "yup";
+import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
@@ -807,6 +807,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
           "If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to.",
       },
     ],
+    advanced_values: [],
+  },
+  one_note: {
+    description: "Configure OneNote connector",
+    values: [],
     advanced_values: [],
   },
   hubspot: {

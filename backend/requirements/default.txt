@@ -45,6 +45,7 @@ lxml_html_clean==0.2.2
 llama-index==0.12.28
 Mako==1.2.4
 msal==1.28.0
+msgraph-sdk==1.33.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2

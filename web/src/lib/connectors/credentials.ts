@@ -98,6 +98,11 @@ export interface NotionCredentialJson {
   notion_integration_token: string;
 }
 
+export interface OneNoteCredentialJson {
+  client_id: string;
+  client_secret: string;
+}
+
 export interface ZulipCredentialJson {
   zuliprc_content: string;
 }
@@ -234,6 +239,7 @@ export interface HighspotCredentialJson {
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
+  one_note: { client_id: "", client_secret: "" } as OneNoteCredentialJson,
   oxos_master_file: null,
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {

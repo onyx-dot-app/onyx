@@ -46,6 +46,7 @@ from onyx.connectors.mediawiki.wiki import MediaWikiConnector
 from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
+from onyx.connectors.one_note.connector import OneNoteConnector
 from onyx.connectors.onyx_jira.connector import JiraConnector
 from onyx.connectors.oxos_google_drive.connector import OxosGoogleDriveConnector
 from onyx.connectors.oxos_master_file.connector import OxosMasterFileConnector
@@ -92,6 +93,7 @@ def identify_connector_class(
         DocumentSource.PRODUCTBOARD: ProductboardConnector,
         DocumentSource.SLAB: SlabConnector,
         DocumentSource.NOTION: NotionConnector,
+        DocumentSource.ONE_NOTE: OneNoteConnector,
         DocumentSource.ZULIP: ZulipConnector,
         DocumentSource.GURU: GuruConnector,
         DocumentSource.LINEAR: LinearConnector,

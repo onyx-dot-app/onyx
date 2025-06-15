@@ -164,13 +164,11 @@ def oauth_callback(
         credential_json=token_info,
         admin_public=True,  # Or based on some logic/parameter
         source=source,
-        name=f"{source.title()} OAuth Credential",
+        name=f"{source.title()} OAuth Credential ({user.email})",
     )
 
     credential = create_credential(
-        credential_data=credential_data,
-        user=user,
-        db_session=db_session,
+        credential_data=credential_data, user=user, db_session=db_session
     )
 
     # TODO: use a library for url handling
@@ -193,16 +191,12 @@ class OAuthDetails(BaseModel):
 
 @router.get("/details/{source}")
 def oauth_details(
-    source: DocumentSource,
-    _: User = Depends(current_user),
+    source: DocumentSource, _: User = Depends(current_user)
 ) -> OAuthDetails:
     oauth_connectors = _discover_oauth_connectors()
 
     if source not in oauth_connectors:
-        return OAuthDetails(
-            oauth_enabled=False,
-            additional_kwargs=[],
-        )
+        return OAuthDetails(oauth_enabled=False, additional_kwargs=[])
 
     connector_cls = oauth_connectors[source]
 
@@ -219,6 +213,5 @@ def oauth_details(
         )
 
     return OAuthDetails(
-        oauth_enabled=True,
-        additional_kwargs=additional_kwarg_descriptions,
+        oauth_enabled=True, additional_kwargs=additional_kwarg_descriptions
     )

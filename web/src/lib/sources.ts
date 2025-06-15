@@ -19,6 +19,7 @@ import {
   LinearIcon,
   LoopioIcon,
   NotionIcon,
+  OneNoteIcon,
   ProductboardIcon,
   R2Icon,
   SalesforceIcon,
@@ -139,6 +140,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Notion",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/notion",
+  },
+  one_note: {
+    icon: OneNoteIcon,
+    displayName: "OneNote",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/one_note",
   },
   zendesk: {
     icon: ZendeskIcon,
