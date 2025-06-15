@@ -39,6 +39,7 @@ from onyx.connectors.onyx_jira.utils import extract_text_from_adf
 from onyx.connectors.onyx_jira.utils import get_comment_strs
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
 logger = setup_logger()
@@ -430,9 +431,14 @@ if __name__ == "__main__":
             "jira_api_token": os.environ["JIRA_API_TOKEN"],
         }
     )
-    document_batches = connector.load_from_checkpoint(
-        0,
-        float("inf"),
-        JiraConnectorCheckpoint(has_more=True),
+
+    start = 0
+    end = datetime.now().timestamp()
+
+    print(
+        load_all_docs_from_checkpoint_connector(
+            connector=connector,
+            start=start,
+            end=end,
+        )
     )
-    print(next(document_batches))
