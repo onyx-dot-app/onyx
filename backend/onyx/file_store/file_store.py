@@ -1,4 +1,5 @@
 import tempfile
+import uuid
 from abc import ABC
 from abc import abstractmethod
 from io import BytesIO
@@ -23,11 +24,11 @@ from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
-from onyx.db.models import FileStore as FileStoreModel
-from onyx.db.pg_file_store import delete_filestore_by_file_name
-from onyx.db.pg_file_store import get_filestore_by_file_name
-from onyx.db.pg_file_store import get_filestore_by_file_name_optional
-from onyx.db.pg_file_store import upsert_filestore_external
+from onyx.db.file_record import delete_filerecord_by_file_id
+from onyx.db.file_record import get_filerecord_by_file_id
+from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.file_record import upsert_filerecord
+from onyx.db.models import FileRecord as FileStoreModel
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 
@@ -42,24 +43,22 @@ class FileStore(ABC):
     @abstractmethod
     def initialize(self) -> None:
         """
-        Should be called once before any other methods are called.
+        Should generally be called once before any other methods are called.
         """
         raise NotImplementedError
 
     @abstractmethod
     def has_file(
         self,
-        file_name: str,
+        file_id: str,
         file_origin: FileOrigin,
         file_type: str,
-        display_name: str | None = None,
     ) -> bool:
         """
         Check if a file exists in the blob store
 
         Parameters:
-        - file_name: Name of the file to save
-        - display_name: Display name of the file
+        - file_id: Unique ID of the file to check for
         - file_origin: Origin of the file
         - file_type: Type of the file
         """
@@ -68,37 +67,39 @@ class FileStore(ABC):
     @abstractmethod
     def save_file(
         self,
-        file_name: str,
         content: IO,
         display_name: str | None,
         file_origin: FileOrigin,
         file_type: str,
         file_metadata: dict[str, Any] | None = None,
-    ) -> None:
+        file_id: str | None = None,
+    ) -> str:
         """
         Save a file to the blob store
 
         Parameters:
-        - connector_name: Name of the CC-Pair (as specified by the user in the UI)
-        - file_name: Name of the file to save
         - content: Contents of the file
-        - display_name: Display name of the file
+        - display_name: Display name of the file to save
         - file_origin: Origin of the file
         - file_type: Type of the file
         - file_metadata: Additional metadata for the file
-        - commit: Whether to commit the transaction after saving the file
+        - file_id: Unique ID of the file to save. If not provided, a random UUID will be generated.
+                   It is generally NOT recommended to provide this.
+
+        Returns:
+            The unique ID of the file that was saved.
         """
         raise NotImplementedError
 
     @abstractmethod
     def read_file(
-        self, file_name: str, mode: str | None = None, use_tempfile: bool = False
+        self, file_id: str, mode: str | None = None, use_tempfile: bool = False
     ) -> IO[bytes]:
         """
-        Read the content of a given file by the name
+        Read the content of a given file by the ID
 
         Parameters:
-        - file_name: Name of file to read
+        - file_id: Unique ID of file to read
         - mode: Mode to open the file (e.g. 'b' for binary)
         - use_tempfile: Whether to use a temporary file to store the contents
                         in order to avoid loading the entire file into memory
@@ -108,15 +109,15 @@ class FileStore(ABC):
         """
 
     @abstractmethod
-    def read_file_record(self, file_name: str) -> FileStoreModel:
+    def read_file_record(self, file_id: str) -> FileStoreModel:
         """
-        Read the file record by the name
+        Read the file record by the ID
         """
 
     @abstractmethod
-    def delete_file(self, file_name: str) -> None:
+    def delete_file(self, file_id: str) -> None:
         """
-        Delete a file by its name.
+        Delete a file by its ID.
 
         Parameters:
         - file_name: Name of file to delete
@@ -262,36 +263,35 @@ class S3BackedFileStore(FileStore):
 
     def has_file(
         self,
-        file_name: str,
+        file_id: str,
         file_origin: FileOrigin,
         file_type: str,
-        display_name: str | None = None,
     ) -> bool:
-        file_record = get_filestore_by_file_name_optional(
-            file_name=file_name, db_session=self.db_session
+        file_record = get_filerecord_by_file_id_optional(
+            file_id=file_id, db_session=self.db_session
         )
         return (
             file_record is not None
             and file_record.file_origin == file_origin
             and file_record.file_type == file_type
-            and file_record.bucket_name
-            is not None  # Ensure it's an external storage file
-            and file_record.object_key is not None
         )
 
     def save_file(
         self,
-        file_name: str,
         content: IO,
         display_name: str | None,
         file_origin: FileOrigin,
         file_type: str,
         file_metadata: dict[str, Any] | None = None,
-    ) -> None:
+        file_id: str | None = None,
+    ) -> str:
+        if file_id is None:
+            file_id = str(uuid.uuid4())
+
         try:
             s3_client = self._get_s3_client()
             bucket_name = self._get_bucket_name()
-            s3_key = self._get_s3_key(file_name)
+            s3_key = self._get_s3_key(file_id)
 
             # Read content from IO object
             if hasattr(content, "read"):
@@ -310,9 +310,9 @@ class S3BackedFileStore(FileStore):
             )
 
             # Save metadata to database
-            upsert_filestore_external(
-                file_name=file_name,
-                display_name=display_name or file_name,
+            upsert_filerecord(
+                file_id=file_id,
+                display_name=display_name or file_id,
                 file_origin=file_origin,
                 file_type=file_type,
                 bucket_name=bucket_name,
@@ -322,19 +322,21 @@ class S3BackedFileStore(FileStore):
             )
             self.db_session.commit()
 
+            return file_id
+
         except Exception:
             self.db_session.rollback()
             raise
 
     def read_file(
-        self, file_name: str, mode: str | None = None, use_tempfile: bool = False
+        self, file_id: str, mode: str | None = None, use_tempfile: bool = False
     ) -> IO[bytes]:
-        file_record = get_filestore_by_file_name(
-            file_name=file_name, db_session=self.db_session
+        file_record = get_filerecord_by_file_id(
+            file_id=file_id, db_session=self.db_session
         )
 
         if file_record.bucket_name is None or file_record.object_key is None:
-            raise RuntimeError(f"File {file_name} is not stored in external storage")
+            raise RuntimeError(f"File {file_id} is not stored in external storage")
 
         s3_client = self._get_s3_client()
 
@@ -355,19 +357,19 @@ class S3BackedFileStore(FileStore):
                 return BytesIO(file_content)
 
         except ClientError as e:
-            logger.error(f"Failed to read file {file_name} from S3: {e}")
-            raise RuntimeError(f"Failed to read file {file_name} from S3: {e}")
+            logger.error(f"Failed to read file {file_id} from S3: {e}")
+            raise RuntimeError(f"Failed to read file {file_id} from S3: {e}")
 
-    def read_file_record(self, file_name: str) -> FileStoreModel:
-        file_record = get_filestore_by_file_name(
-            file_name=file_name, db_session=self.db_session
+    def read_file_record(self, file_id: str) -> FileStoreModel:
+        file_record = get_filerecord_by_file_id(
+            file_id=file_id, db_session=self.db_session
         )
         return file_record
 
-    def delete_file(self, file_name: str) -> None:
+    def delete_file(self, file_id: str) -> None:
         try:
-            file_record = get_filestore_by_file_name(
-                file_name=file_name, db_session=self.db_session
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=self.db_session
             )
 
             if (
@@ -382,9 +384,7 @@ class S3BackedFileStore(FileStore):
                 )
 
             # Delete metadata from database
-            delete_filestore_by_file_name(
-                file_name=file_name, db_session=self.db_session
-            )
+            delete_filerecord_by_file_id(file_id=file_id, db_session=self.db_session)
 
             self.db_session.commit()
 

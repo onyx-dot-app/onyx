@@ -19,7 +19,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
@@ -39,8 +38,6 @@ def _read_file_from_filestore(
     Gets the content of a file from Postgres.
     """
     extension = get_file_ext(file_name)
-
-    # Read file from Postgres store
     file_content = get_default_file_store(db_session).read_file(file_name, mode="b")
 
     if is_accepted_file_ext(extension, OnyxExtensionType.All):
@@ -91,6 +88,7 @@ def _create_image_section(
 
 
 def _process_file(
+    file_id: str,
     file_name: str,
     file: IO[Any],
     metadata: dict[str, Any] | None,
@@ -107,12 +105,6 @@ def _process_file(
 
     # Get file extension and determine file type
     extension = get_file_ext(file_name)
-
-    # Fetch the DB record so we know the ID for internal URL
-    pg_record = get_pgfilestore_by_file_name(file_name=file_name, db_session=db_session)
-    if not pg_record:
-        logger.warning(f"No file record found for '{file_name}' in PG; skipping.")
-        return []
 
     if not is_accepted_file_ext(extension, OnyxExtensionType.All):
         logger.warning(
@@ -149,7 +141,7 @@ def _process_file(
             section, _ = _create_image_section(
                 image_data=image_data,
                 db_session=db_session,
-                parent_file_name=pg_record.file_name,
+                parent_file_name=file_id,
                 display_name=title,
             )
 
@@ -218,7 +210,7 @@ def _process_file(
             image_section, _ = _create_image_section(
                 image_data=img_data,
                 db_session=db_session,
-                parent_file_name=pg_record.file_name,
+                parent_file_name=file_id,
                 display_name=f"{title} - image {idx}",
                 idx=idx,
             )
@@ -278,18 +270,21 @@ class LocalFileConnector(LoadConnector):
         documents: list[Document] = []
 
         with get_session_with_current_tenant() as db_session:
-            for file_path in self.file_locations:
-                file_io = _read_file_from_filestore(
-                    file_name=file_path,
-                    db_session=db_session,
-                )
-                if not file_io:
+            for file_id in self.file_locations:
+                file_store = get_default_file_store(db_session)
+                file_record = file_store.read_file_record(file_id=file_id)
+                if not file_record:
                     # typically an unsupported extension
+                    logger.warning(
+                        f"No file record found for '{file_id}' in PG; skipping."
+                    )
                     continue
 
-                metadata = self._get_file_metadata(file_path)
+                metadata = self._get_file_metadata(file_id)
+                file_io = file_store.read_file(file_id=file_id, mode="b")
                 new_docs = _process_file(
-                    file_name=file_path,
+                    file_id=file_id,
+                    file_name=file_record.display_name,
                     file=file_io,
                     metadata=metadata,
                     pdf_pass=self.pdf_pass,

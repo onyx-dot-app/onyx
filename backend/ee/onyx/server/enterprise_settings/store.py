@@ -131,11 +131,11 @@ def upload_logo(
 
     file_store = get_default_file_store(db_session)
     file_store.save_file(
-        file_name=_LOGOTYPE_FILENAME if is_logotype else _LOGO_FILENAME,
         content=content,
         display_name=display_name,
         file_origin=FileOrigin.OTHER,
         file_type=file_type,
+        file_id=_LOGOTYPE_FILENAME if is_logotype else _LOGO_FILENAME,
     )
     return True
 

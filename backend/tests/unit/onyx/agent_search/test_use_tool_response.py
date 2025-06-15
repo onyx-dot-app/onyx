@@ -65,7 +65,7 @@ def create_test_inference_chunk(
         section_continuation=False,
         document_id=document_id,
         source_type=DocumentSource.FILE,
-        image_file_name=None,
+        image_file_id=None,
         title=title,
         semantic_identifier=semantic_identifier,
         boost=1,

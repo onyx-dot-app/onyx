@@ -1,4 +1,3 @@
-import uuid
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -182,9 +181,7 @@ def upload_file(
 ) -> dict[str, str]:
     file_store = get_default_file_store(db_session)
     file_type = ChatFileType.IMAGE
-    file_id = str(uuid.uuid4())
-    file_store.save_file(
-        file_name=file_id,
+    file_id = file_store.save_file(
         content=file.file,
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,

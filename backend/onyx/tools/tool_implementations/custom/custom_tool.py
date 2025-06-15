@@ -217,7 +217,7 @@ class CustomTool(BaseTool):
                 content = BytesIO(file_content)
 
             file_store.save_file(
-                file_name=file_id,
+                file_id=file_id,
                 content=content,
                 display_name=file_id,
                 file_origin=FileOrigin.CHAT_UPLOAD,

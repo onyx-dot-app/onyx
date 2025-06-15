@@ -172,7 +172,7 @@ def create_test_chunk(
         large_chunk_reference_ids=[],
         embeddings=ChunkEmbedding(full_embedding=[], mini_chunk_embeddings=[]),
         title_embedding=None,
-        image_file_name=None,
+        image_file_id=None,
         chunk_context="",
         doc_summary="",
         contextual_rag_reserved_tokens=200,

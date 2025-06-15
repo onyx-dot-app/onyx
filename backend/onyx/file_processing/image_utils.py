@@ -1,10 +1,11 @@
+from io import BytesIO
 from typing import Tuple
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import ImageSection
-from onyx.db.pg_file_store import save_bytes_to_pgfilestore
+from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,23 +37,20 @@ def store_image_and_create_section(
         - The file_name in FileStore or None if storage failed
     """
     # Storage logic
-    stored_file_name = None
     try:
-        pgfilestore = save_bytes_to_pgfilestore(
-            db_session=db_session,
-            raw_bytes=image_data,
-            media_type=media_type,
-            identifier=file_name,
+        file_store = get_default_file_store(db_session)
+        file_id = file_store.save_file(
+            content=BytesIO(image_data),
             display_name=display_name,
             file_origin=file_origin,
+            file_type=media_type,
         )
-        stored_file_name = pgfilestore.file_name
     except Exception as e:
         logger.error(f"Failed to store image: {e}")
         raise e
 
     # Create an ImageSection with empty text (will be filled by LLM later in the pipeline)
     return (
-        ImageSection(image_file_name=stored_file_name, link=link),
-        stored_file_name,
+        ImageSection(image_file_id=file_id, link=link),
+        file_id,
     )

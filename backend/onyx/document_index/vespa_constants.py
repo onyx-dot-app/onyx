@@ -68,6 +68,7 @@ PRIMARY_OWNERS = "primary_owners"
 SECONDARY_OWNERS = "secondary_owners"
 RECENCY_BIAS = "recency_bias"
 HIDDEN = "hidden"
+# for legacy reasons, called `name` in Vespa despite it really being an ID
 IMAGE_FILE_NAME = "image_file_name"
 
 # Specific to Vespa, needed for highlighting matching keywords / section

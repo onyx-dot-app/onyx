@@ -2,7 +2,6 @@ import io
 import json
 import os
 import re
-import uuid
 import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -613,15 +612,13 @@ def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
     all_paras = [p.text for p in doc.paragraphs]
     text_content = "\n".join(all_paras)
 
-    text_file_name = docx_to_txt_filename(file.filename or f"docx_{uuid.uuid4()}")
-    file_store.save_file(
-        file_name=text_file_name,
+    file_id = file_store.save_file(
         content=BytesIO(text_content.encode("utf-8")),
         display_name=file.filename,
         file_origin=FileOrigin.CONNECTOR,
         file_type="text/plain",
     )
-    return text_file_name
+    return file_id
 
 
 def docx_to_txt_filename(file_path: str) -> str:

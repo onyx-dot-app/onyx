@@ -325,7 +325,7 @@ class ConfluenceConnector(
                         # Create an ImageSection for image attachments
                         image_section = ImageSection(
                             link=f"{page_url}#attachment-{attachment['id']}",
-                            image_file_name=result.file_name,
+                            image_file_id=result.file_name,
                         )
                         sections.append(image_section)
                     else:
@@ -440,7 +440,7 @@ class ConfluenceConnector(
                     doc.sections.append(
                         ImageSection(
                             link=object_url,
-                            image_file_name=file_storage_name,
+                            image_file_id=file_storage_name,
                         )
                     )
             except Exception as e:

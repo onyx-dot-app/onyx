@@ -44,8 +44,6 @@ from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
-from onyx.db.pg_file_store import get_pgfilestore_by_file_name
-from onyx.db.pg_file_store import read_lobj
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
@@ -59,6 +57,7 @@ from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
+from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
@@ -463,13 +462,13 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         # Even without LLM, we still convert to IndexingDocument with base Sections
         return [
             IndexingDocument(
-                **document.dict(),
+                **document.model_dump(),
                 processed_sections=[
                     Section(
                         text=section.text if isinstance(section, TextSection) else "",
                         link=section.link,
-                        image_file_name=(
-                            section.image_file_name
+                        image_file_id=(
+                            section.image_file_id
                             if isinstance(section, ImageSection)
                             else None
                         ),
@@ -486,38 +485,39 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         processed_sections: list[Section] = []
 
         for section in document.sections:
-            # For ImageSection, process and create base Section with both text and image_file_name
+            # For ImageSection, process and create base Section with both text and image_file_id
             if isinstance(section, ImageSection):
                 # Default section with image path preserved - ensure text is always a string
                 processed_section = Section(
                     link=section.link,
-                    image_file_name=section.image_file_name,
+                    image_file_id=section.image_file_id,
                     text="",  # Initialize with empty string
                 )
 
                 # Try to get image summary
                 try:
                     with get_session_with_current_tenant() as db_session:
-                        pgfilestore = get_pgfilestore_by_file_name(
-                            file_name=section.image_file_name, db_session=db_session
-                        )
+                        file_store = get_default_file_store(db_session)
 
-                        if not pgfilestore:
+                        file_record = file_store.read_file_record(
+                            file_id=section.image_file_id
+                        )
+                        if not file_record:
                             logger.warning(
-                                f"Image file {section.image_file_name} not found in FileStore"
+                                f"Image file {section.image_file_id} not found in FileStore"
                             )
 
                             processed_section.text = "[Image could not be processed]"
                         else:
                             # Get the image data
-                            image_data_io = read_lobj(
-                                pgfilestore.lobj_oid, db_session, mode="rb"
+                            image_data_io = file_store.read_file(
+                                file_id=section.image_file_id
                             )
-                            pgfilestore_data = image_data_io.read()
+                            image_data = image_data_io.read()
                             summary = summarize_image_with_error_handling(
                                 llm=llm,
-                                image_data=pgfilestore_data,
-                                context_name=pgfilestore.display_name or "Image",
+                                image_data=image_data,
+                                context_name=file_record.display_name or "Image",
                             )
 
                             if summary:
@@ -537,23 +537,13 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 processed_section = Section(
                     text=section.text or "",  # Ensure text is always a string, not None
                     link=section.link,
-                    image_file_name=None,
-                )
-                processed_sections.append(processed_section)
-
-            # If it's already a base Section (unlikely), just append it with text validation
-            else:
-                # Ensure text is always a string
-                processed_section = Section(
-                    text=section.text if section.text is not None else "",
-                    link=section.link,
-                    image_file_name=section.image_file_name,
+                    image_file_id=None,
                 )
                 processed_sections.append(processed_section)
 
         # Create IndexingDocument with original sections and processed_sections
         indexed_document = IndexingDocument(
-            **document.dict(), processed_sections=processed_sections
+            **document.model_dump(), processed_sections=processed_sections
         )
         indexed_documents.append(indexed_document)
 
@@ -1020,7 +1010,6 @@ def index_doc_batch(
         )
         # Store the plaintext in the file store for faster retrieval
         for user_file_id, raw_text in user_file_id_to_raw_text.items():
-            # Use the dedicated function to store plaintext
             store_user_file_plaintext(
                 user_file_id=user_file_id,
                 plaintext_content=raw_text,

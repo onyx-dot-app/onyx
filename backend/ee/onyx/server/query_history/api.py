@@ -39,9 +39,9 @@ from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine import get_session
 from onyx.db.enums import TaskStatus
+from onyx.db.file_record import get_query_history_export_files
 from onyx.db.models import ChatSession
 from onyx.db.models import User
-from onyx.db.pg_file_store import get_query_history_export_files
 from onyx.db.tasks import get_task_with_id
 from onyx.db.tasks import register_task
 from onyx.file_store.file_store import get_default_file_store
@@ -360,7 +360,7 @@ def get_query_history_export_status(
 
     report_name = construct_query_history_report_name(request_id)
     has_file = file_store.has_file(
-        file_name=report_name,
+        file_id=report_name,
         file_origin=FileOrigin.QUERY_HISTORY_CSV,
         file_type=FileType.CSV,
     )
@@ -385,7 +385,7 @@ def download_query_history_csv(
     report_name = construct_query_history_report_name(request_id)
     file_store = get_default_file_store(db_session)
     has_file = file_store.has_file(
-        file_name=report_name,
+        file_id=report_name,
         file_origin=FileOrigin.QUERY_HISTORY_CSV,
         file_type=FileType.CSV,
     )
