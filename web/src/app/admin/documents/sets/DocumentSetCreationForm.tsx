@@ -9,7 +9,7 @@ import {
   DocumentSetCreationRequest,
 } from "./lib";
 import { ConnectorStatus, DocumentSet, UserGroup, UserRole } from "@/lib/types";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";

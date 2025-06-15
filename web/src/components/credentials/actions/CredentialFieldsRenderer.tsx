@@ -1,10 +1,7 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFormikContext } from "formik";
-import {
-  BooleanFormField,
-  TextFormField,
-} from "@/components/admin/connectors/Field";
+import { BooleanFormField, TextFormField } from "@/components/Field";
 import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
@@ -64,7 +61,9 @@ export function CredentialFieldsRenderer({
           <TabsList
             className="grid w-full"
             style={{
-              gridTemplateColumns: `repeat(${templateWithAuth.authMethods!.length}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${
+                templateWithAuth.authMethods!.length
+              }, minmax(0, 1fr))`,
             }}
           >
             {templateWithAuth.authMethods.map((method) => (

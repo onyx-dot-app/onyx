@@ -10,7 +10,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { useUser } from "@/components/user/UserProvider";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { SubLabel } from "@/components/admin/connectors/Field";
+import { SubLabel } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import {
