@@ -517,6 +517,7 @@ export function DocumentChatSidebar({
             let friendlyToolName = "";
             if (toolName === 'run_search') friendlyToolName = "🔍 Searching";
             else if (toolName === 'document_editor') friendlyToolName = "📝 Editing";
+            else if (toolName === 'document_review') friendlyToolName = "📋 Reviewing";
             
             if (friendlyToolName) {
               if (isCompletion) {

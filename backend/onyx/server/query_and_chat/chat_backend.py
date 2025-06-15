@@ -117,6 +117,9 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.document.document_editor_tool import (
     DocumentEditorTool,
 )
+from onyx.tools.tool_implementations.document.document_review_tool import (
+    DocumentReviewTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
@@ -944,6 +947,20 @@ def handle_document_chat_message(
                         documents=documents_dict,
                     )
                     tools.append(document_editor_tool)
+
+                    document_review_tool = DocumentReviewTool(
+                        db_session=db_session,
+                        user=user,
+                        persona=persona,
+                        llm=llm,
+                        fast_llm=fast_llm,
+                        prompt_config=PromptConfig.from_model(persona.prompts[0]),
+                        answer_style_config=AnswerStyleConfig(
+                            citation_config=CitationConfig()
+                        ),
+                        documents=documents_dict,
+                    )
+                    tools.append(document_review_tool)
 
                 config = GraphConfig(
                     inputs=GraphInputs(

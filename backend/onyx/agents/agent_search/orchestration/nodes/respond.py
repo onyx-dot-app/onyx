@@ -6,15 +6,15 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.db.chat import create_new_chat_message, get_chat_messages_by_session
 from onyx.configs.constants import MessageType
+from onyx.db.chat import create_new_chat_message, get_chat_messages_by_session
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def respond(
+def respond_node(
     state: Any, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> dict[str, Any]:
     """

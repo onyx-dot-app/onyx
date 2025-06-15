@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Literal, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
@@ -69,52 +69,13 @@ def route_thinking(
     return decision.should_think
 
 
-_ROUTE_TOOL_USE_INSTRUCTIONS = """Analyze the following conversation to determine whether the agent needs to use a tool to respond to the user."""
-
-
-class ActionDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    should_act: bool = Field(
-        description="Whether the agent should act (use a tool) or respond to the user"
-    )
-
-
-def route_action(
-    state: DocumentChatState,
-    config: RunnableConfig,
-    writer: StreamWriter = lambda _: None,
-) -> bool:
-    """Router node that decides whether the agent should use a tool to respond to the user."""
-    agent_config = cast(GraphConfig, config.get("metadata", {}).get("config"))
-    llm = agent_config.tooling.fast_llm
-    prompt_builder = agent_config.inputs.prompt_builder
-    built_prompt = prompt_builder.build(state_instructions=_ROUTE_TOOL_USE_INSTRUCTIONS)
-    stream = llm.stream(
-        prompt=built_prompt,
-        structured_response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "action_decision",
-                "schema": ActionDecision.model_json_schema(),
-                "strict": True,
-            },
-        },
-    )
-    response_chunk = process_llm_stream(
-        stream, should_stream_answer=False, writer=writer, return_text_content=True
-    )
-    assert isinstance(response_chunk.content, str)
-    decision = ActionDecision.model_validate_json(response_chunk.content)
-    return decision.should_act
-
-
-_ROUTE_ACTION_THREE_WAY_INSTRUCTIONS = """Analyze the following conversation to determine what action the agent should take next.
+_ROUTE_ACTION_INSTRUCTIONS = """Analyze the following conversation to determine what action the agent should take next.
 
 The agent can:
 - SEARCH: Use the search tool to find relevant information from the knowledge base
 - EDIT: Use the document editor tool to modify or create documents
 - RESPOND: Provide a final response to the user without using any tools
+- REVIEW: Use the document review tool to review the document
 
 Choose SEARCH if:
 - The user is asking for information that requires searching the knowledge base
@@ -129,18 +90,23 @@ Choose EDIT if:
 Choose RESPOND if:
 - You have sufficient information to answer the user's question
 - The user is asking for clarification or explanation of already available information
-- No additional tools are needed to provide a complete response"""
+- No additional tools are needed to provide a complete response
+
+Choose REVIEW if:
+- You are instructed to review the document
+- The user is asking for feedback of the document or analysis
+"""
 
 
-class ActionThreeWayDecision(BaseModel):
+class ActionDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: str = Field(
-        description="The action the agent should take: 'search', 'edit', or 'respond'"
+    action: Literal["search", "edit", "review", "respond"] = Field(
+        description="The action the agent should take: 'search', 'edit', 'review', or 'respond'"
     )
 
 
-def route_action_three_way(
+def route_action(
     state: DocumentChatState,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
@@ -149,14 +115,14 @@ def route_action_three_way(
     agent_config = cast(GraphConfig, config.get("metadata", {}).get("config"))
     llm = agent_config.tooling.fast_llm
     prompt_builder = agent_config.inputs.prompt_builder
-    built_prompt = prompt_builder.build(state_instructions=_ROUTE_ACTION_THREE_WAY_INSTRUCTIONS)
+    built_prompt = prompt_builder.build(state_instructions=_ROUTE_ACTION_INSTRUCTIONS)
     stream = llm.stream(
         prompt=built_prompt,
         structured_response_format={
             "type": "json_schema",
             "json_schema": {
                 "name": "action_three_way_decision",
-                "schema": ActionThreeWayDecision.model_json_schema(),
+                "schema": ActionDecision.model_json_schema(),
                 "strict": True,
             },
         },
@@ -165,5 +131,5 @@ def route_action_three_way(
         stream, should_stream_answer=False, writer=writer, return_text_content=True
     )
     assert isinstance(response_chunk.content, str)
-    decision = ActionThreeWayDecision.model_validate_json(response_chunk.content)
+    decision = ActionDecision.model_validate_json(response_chunk.content)
     return decision.action
