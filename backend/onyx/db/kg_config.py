@@ -1,34 +1,73 @@
 from datetime import datetime
 from enum import Enum
 
+from sqlalchemy import exists
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGConfig
 from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGConfigVars
+from onyx.server.kg.models import EnableKGConfigRequest
 
 
 class KGProcessingType(Enum):
-
     EXTRACTION = "extraction"
     CLUSTERING = "clustering"
 
 
-def get_kg_enablement(db_session: Session) -> bool:
-    check = (
-        db_session.query(KGConfig.kg_variable_values)
-        .filter(
-            KGConfig.kg_variable_name == "KG_ENABLED"
-            and KGConfig.kg_variable_values == ["true"]
+def get_kg_exposed(db_session: Session) -> bool:
+    return db_session.query(
+        exists().where(
+            KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED,
+            KGConfig.kg_variable_values == ["true"],
         )
+    ).scalar()
+
+
+def get_kg_beta_persona_id(db_session: Session) -> int | None:
+    """Get the ID of the KG Beta persona."""
+    config = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_BETA_PERSONA_ID)
         .first()
     )
-    return check is not None
+
+    if not config or not config.kg_variable_values:
+        return None
+
+    try:
+        return int(config.kg_variable_values[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def set_kg_beta_persona_id(db_session: Session, persona_id: int | None) -> None:
+    """Set the ID of the KG Beta persona."""
+    value = [str(persona_id)] if persona_id is not None else []
+
+    stmt = (
+        pg_insert(KGConfig)
+        .values(
+            kg_variable_name=KGConfigVars.KG_BETA_PERSONA_ID,
+            kg_variable_values=value,
+        )
+        .on_conflict_do_update(
+            index_elements=["kg_variable_name"],
+            set_=dict(kg_variable_values=value),
+        )
+    )
+
+    db_session.execute(stmt)
+    db_session.commit()
 
 
 def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
-    # TODO: restructure togethert with KGConfig redesign
+    # TODO (raunakab):
+    # Cleanup.
+
+    # TODO (joachim-danswer): restructure together with KGConfig redesign
+
     results = db_session.query(KGConfig).all()
 
     kg_config_settings = KGConfigSettings()
@@ -80,6 +119,11 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
             )
         elif result.kg_variable_name == KGConfigVars.KG_EXPOSED:
             kg_config_settings.KG_EXPOSED = result.kg_variable_values[0] == "true"
+        elif result.kg_variable_name == KGConfigVars.KG_BETA_PERSONA_ID:
+            value = result.kg_variable_values[0] if result.kg_variable_values else None
+            kg_config_settings.KG_BETA_PERSONA_ID = (
+                int(value) if value and str(value).isdigit() else None
+            )
 
     return kg_config_settings
 
@@ -150,3 +194,91 @@ def get_kg_processing_in_progress_status(
         return False
 
     return config.kg_variable_values[0] == "true"
+
+
+def enable_kg__commit(
+    db_session: Session,
+    enable_req: EnableKGConfigRequest,
+) -> None:
+    validate_kg_settings(
+        KGConfigSettings(
+            KG_ENABLED=True,
+            KG_VENDOR=enable_req.vendor,
+            KG_VENDOR_DOMAINS=enable_req.vendor_domains,
+            KG_IGNORE_EMAIL_DOMAINS=enable_req.ignore_domains,
+            KG_COVERAGE_START=enable_req.coverage_start,
+        )
+    )
+
+    vars = [
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_ENABLED,
+            kg_variable_values=["true"],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR,
+            kg_variable_values=[enable_req.vendor],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_VENDOR_DOMAINS,
+            kg_variable_values=enable_req.vendor_domains,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_IGNORE_EMAIL_DOMAINS,
+            kg_variable_values=enable_req.ignore_domains,
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_COVERAGE_START,
+            kg_variable_values=[enable_req.coverage_start.strftime("%Y-%m-%d")],
+        ),
+        KGConfig(
+            kg_variable_name=KGConfigVars.KG_MAX_COVERAGE_DAYS,
+            kg_variable_values=["10000"],  # TODO: revisit coverage days
+        ),
+    ]
+
+    for var in vars:
+        existing_var = (
+            db_session.query(KGConfig)
+            .filter(KGConfig.kg_variable_name == var.kg_variable_name)
+            .first()
+        )
+        if not existing_var:
+            db_session.add(var)
+            continue
+
+        db_session.query(KGConfig).filter(
+            KGConfig.kg_variable_name == var.kg_variable_name
+        ).update(
+            {"kg_variable_values": var.kg_variable_values},
+            synchronize_session=False,
+        )
+
+    db_session.commit()
+
+
+def disable_kg__commit(db_session: Session) -> None:
+    var = (
+        db_session.query(KGConfig)
+        .filter(KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED)
+        .first()
+    )
+
+    values = ["false"]
+
+    if var:
+        db_session.query(KGConfig).where(
+            KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED
+        ).update(
+            {"kg_variable_values": values},
+            synchronize_session=False,
+        )
+    else:
+        db_session.add(
+            KGConfig(
+                kg_variable_name=KGConfigVars.KG_ENABLED,
+                kg_variable_values=values,
+            )
+        )
+
+    db_session.commit()

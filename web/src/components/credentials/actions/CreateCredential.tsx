@@ -3,10 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ValidSources } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
-import {
-  BooleanFormField,
-  TextFormField,
-} from "@/components/admin/connectors/Field";
+import { BooleanFormField, TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { getSourceDocLink } from "@/lib/sources";

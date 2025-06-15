@@ -4,7 +4,7 @@ import { Callout } from "@/components/ui/callout";
 import { Button } from "@/components/ui/button";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
-import { Label, TextFormField } from "@/components/admin/connectors/Field";
+import { Label, TextFormField } from "@/components/Field";
 import { LoadingAnimation } from "@/components/Loading";
 import {
   CloudEmbeddingProvider,
