@@ -40,6 +40,14 @@ class ExternalAccess:
     def num_entries(self) -> int:
         return len(self.external_user_emails) + len(self.external_user_group_ids)
 
+    @classmethod
+    def empty(cls) -> "ExternalAccess":
+        return cls(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+
 
 @dataclass(frozen=True)
 class DocExternalAccess:

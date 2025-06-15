@@ -6,8 +6,8 @@ https://confluence.atlassian.com/conf85/check-who-can-view-a-page-1283360557.htm
 from collections.abc import Generator
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
+from ee.onyx.external_permissions.utils import make_missing_docs_inaccessible
 from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.models import SlimDocument
@@ -57,26 +57,10 @@ def confluence_doc_sync(
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id}")
     existing_doc_ids = fetch_all_existing_docs_fn()
 
-    # Find missing doc IDs
-    fetched_doc_ids = {doc.id for doc in slim_docs}
-    missing_doc_ids = set(existing_doc_ids) - fetched_doc_ids
-
-    # Yield access removal for missing docs. Better to be safe.
-    if missing_doc_ids:
-        logger.warning(
-            f"Found {len(missing_doc_ids)} documents that are in the DB but "
-            "not present in Confluence fetch. Making them inaccessible."
-        )
-        for missing_id in missing_doc_ids:
-            logger.warning(f"Removing access for document ID: {missing_id}")
-            yield DocExternalAccess(
-                doc_id=missing_id,
-                external_access=ExternalAccess(
-                    external_user_emails=set(),
-                    external_user_group_ids=set(),
-                    is_public=False,
-                ),
-            )
+    yield from make_missing_docs_inaccessible(
+        fetched_slim_docs=slim_docs,
+        existing_doc_ids=existing_doc_ids,
+    )
 
     for doc in slim_docs:
         if not doc.external_access:

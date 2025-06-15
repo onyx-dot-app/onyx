@@ -1,6 +1,7 @@
 import os
 from collections.abc import Iterable
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
@@ -24,6 +25,14 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.jira.access import get_project_permissions
+from onyx.connectors.jira.utils import best_effort_basic_expert_info
+from onyx.connectors.jira.utils import best_effort_get_field_from_issue
+from onyx.connectors.jira.utils import build_jira_client
+from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.jira.utils import extract_text_from_adf
+from onyx.connectors.jira.utils import get_comment_strs
+from onyx.connectors.jira.utils import get_jira_project_key_from_issue
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -31,12 +40,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.connectors.onyx_jira.utils import best_effort_basic_expert_info
-from onyx.connectors.onyx_jira.utils import best_effort_get_field_from_issue
-from onyx.connectors.onyx_jira.utils import build_jira_client
-from onyx.connectors.onyx_jira.utils import build_jira_url
-from onyx.connectors.onyx_jira.utils import extract_text_from_adf
-from onyx.connectors.onyx_jira.utils import get_comment_strs
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -329,22 +332,34 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        jql = self._get_jql_query(start or 0, end or float("inf"))
+        one_day = timedelta(hours=24).total_seconds()
+
+        start = start or 0
+        end = (
+            end or datetime.now().timestamp() + one_day
+        )  # we add one day to account for any potential timezone issues
+
+        jql = self._get_jql_query(start, end)
 
         slim_doc_batch = []
         for issue in _perform_jql_search(
             jira_client=self.jira_client,
             jql=jql,
-            start=0,
+            start=int(start),
             max_results=_JIRA_SLIM_PAGE_SIZE,
-            fields="key",
         ):
+            project_key = get_jira_project_key_from_issue(issue=issue)
+            if not project_key:
+                continue
+
             issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
             id = build_jira_url(self.jira_client, issue_key)
             slim_doc_batch.append(
                 SlimDocument(
                     id=id,
-                    external_access=None,
+                    external_access=get_project_permissions(
+                        jira_client=self.jira_client, jira_project=project_key
+                    ),
                 )
             )
             if len(slim_doc_batch) >= _JIRA_SLIM_PAGE_SIZE:
@@ -417,6 +432,11 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
 
 if __name__ == "__main__":
     import os
+    from onyx.utils.variable_functionality import global_version
+    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+
+    # For connector permission testing, set EE to true.
+    global_version.set_ee()
 
     connector = JiraConnector(
         jira_base_url=os.environ["JIRA_BASE_URL"],
@@ -430,9 +450,19 @@ if __name__ == "__main__":
             "jira_api_token": os.environ["JIRA_API_TOKEN"],
         }
     )
-    document_batches = connector.load_from_checkpoint(
-        0,
-        float("inf"),
-        JiraConnectorCheckpoint(has_more=True),
-    )
-    print(next(document_batches))
+
+    start = 0
+    end = datetime.now().timestamp()
+
+    for slim_doc in connector.retrieve_all_slim_documents(
+        start=start,
+        end=end,
+    ):
+        print(slim_doc)
+
+    for doc in load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=start,
+        end=end,
+    ):
+        print(doc)

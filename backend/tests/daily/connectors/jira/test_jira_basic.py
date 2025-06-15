@@ -1,13 +1,12 @@
 import os
 import time
-from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.models import Document
-from onyx.connectors.onyx_jira.connector import JiraConnector
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
@@ -31,9 +30,7 @@ def jira_connector() -> JiraConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_jira_connector_basic(
-    mock_get_api_key: MagicMock, jira_connector: JiraConnector
-) -> None:
+def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> None:
     docs = load_all_docs_from_checkpoint_connector(
         connector=jira_connector,
         start=0,
