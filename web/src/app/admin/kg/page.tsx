@@ -242,7 +242,7 @@ function KGEntityTypes({
         <div className="h-20 w-[800px]">
           <TextAreaField
             name={`${row.original.name.toLowerCase()}.description`}
-            className="resize-none"
+            className="resize-none border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"
           />
         </div>
       ),
