@@ -56,6 +56,8 @@ export function DocumentChatSidebar({
   const [citationMap, setCitationMap] = useState<Map<number, string>>(new Map());
   const citationMapRef = useRef<Map<number, string>>(new Map());
   const [expandedThinkingMessages, setExpandedThinkingMessages] = useState<Set<number>>(new Set());
+  const [completedTools, setCompletedTools] = useState<Set<number>>(new Set());
+  const [completedThinking, setCompletedThinking] = useState<Set<number>>(new Set());
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   
   // Multi-document state
@@ -79,6 +81,8 @@ export function DocumentChatSidebar({
     setDocuments([]);
     setCitationMap(new Map());
     setDocumentsInContext([]);
+    setCompletedTools(new Set());
+    setCompletedThinking(new Set());
     
     // Create a new chat session when resetting
     try {
@@ -501,35 +505,41 @@ export function DocumentChatSidebar({
             } else if (!documentEditorResponse.success) {
               console.error('Document editing failed:', documentEditorResponse.message);
             }
-          // Only display tool on receiving ToolCallKickoff packets, not ToolCallResult packets 
-          // TODO: Add a symbol for tool completion
-          } else if ('tool_name' in packet && !('tool_result' in packet)) {
+          // Handle both tool kickoff and completion packets
+          } else if ('tool_name' in packet) {
             // Handle tool call packets for debugging display
             const toolName = (packet as any).tool_name;
+            const toolArgs = (packet as any).tool_args;
+            const isCompletion = 'tool_result' in packet;
+            const isEarlyKickoff = !isCompletion && toolArgs && Object.keys(toolArgs).length === 0;
             
             // Convert tool names to more friendly messages
             let friendlyToolName = "";
-            if (toolName === 'run_search') friendlyToolName = "🔍 Searching for information";
-            // TODO: The id for intermediate tool results is "id" not "tool_name"
-            // else if (toolName === 'section_relevance') friendlyToolName = "📊 Analyzing relevance";
-            // else if (toolName === 'context') friendlyToolName = "📚 Gathering context";
-            else if (toolName === 'document_editor') friendlyToolName = "📝 Editing document";
+            if (toolName === 'run_search') friendlyToolName = "🔍 Searching";
+            else if (toolName === 'document_editor') friendlyToolName = "📝 Editing";
             
             if (friendlyToolName) {
-              setMessages(prev => {
-                const updatedMessages = [...prev];
-                const lastMessage = updatedMessages[updatedMessages.length - 1];
-                
-                // If the last message is an intermediate output (tool use), append to it
-                if (lastMessage && !lastMessage.isUser && lastMessage.isIntermediateOutput) {
-                  const currentText = lastMessage.text || '';
-                  updatedMessages[updatedMessages.length - 1] = {
-                    ...lastMessage,
-                    text: currentText ? `${currentText}\n${friendlyToolName}` : friendlyToolName,
-                    debugLog: [...(lastMessage.debugLog || []), { type: 'tool', name: toolName }]
-                  };
-                } else {
-                  // Create a new intermediate output message
+              if (isCompletion) {
+                // Handle tool completion - update existing tool bubble
+                setMessages(prev => {
+                  const updatedMessages = [...prev];
+                  // Find the most recent tool message with this tool name
+                  for (let i = updatedMessages.length - 1; i >= 0; i--) {
+                    const msg = updatedMessages[i];
+                    if (msg.isIntermediateOutput && msg.debugLog?.some(log => log.name === toolName)) {
+                      // Mark this tool as completed
+                      setCompletedTools(prev => new Set([...prev, msg.id]));
+                      break;
+                    }
+                  }
+                  return updatedMessages;
+                });
+              } else if (isEarlyKickoff) {
+                // Handle early tool kickoff (empty args) - always create new tool bubble
+                setMessages(prev => {
+                  const updatedMessages = [...prev];
+                  
+                  // Always create a new intermediate output message for each tool
                   updatedMessages.push({
                     id: Date.now() + Math.random(),
                     text: friendlyToolName,
@@ -537,10 +547,11 @@ export function DocumentChatSidebar({
                     isIntermediateOutput: true,
                     debugLog: [{ type: 'tool', name: toolName }]
                   });
-                }
-                
-                return updatedMessages;
-              });
+                  
+                  return updatedMessages;
+                });
+              }
+              // Ignore actual kickoff (with args) to avoid duplicates
             }
           } else if ('top_documents' in packet) {
             const documentPacket = packet as DocumentInfoPacket;
@@ -562,6 +573,22 @@ export function DocumentChatSidebar({
           } else if ('chat_complete' in packet) {
             console.log('Chat complete received');
             setIsLoading(false);
+          }
+          
+          // Mark thinking as complete when any non-thinking packet arrives
+          if (!('thinking_piece' in packet)) {
+            setMessages(prev => {
+              const updatedMessages = [...prev];
+              // Find and mark the most recent thinking bubble as completed
+              for (let i = updatedMessages.length - 1; i >= 0; i--) {
+                const msg = updatedMessages[i];
+                if (msg.isThinking && !completedThinking.has(msg.id)) {
+                  setCompletedThinking(prev => new Set([...prev, msg.id]));
+                  break;
+                }
+              }
+              return updatedMessages;
+            });
           }
         }
       } catch (error) {
@@ -691,24 +718,32 @@ export function DocumentChatSidebar({
                         className={`max-w-[80%] p-3 rounded-lg ${msg.isUser 
                           ? 'bg-accent text-accent-foreground border border-accent/50' 
                           : msg.isIntermediateOutput
-                            ? 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-xs font-mono'
+                            ? `${
+                                completedTools.has(msg.id)
+                                  ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50'
+                                  : 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700'
+                              } text-xs font-mono`
                             : msg.isThinking
-                              ? (isThinkingExpanded(msg.id) 
-                                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 text-blue-800 dark:text-blue-200' 
-                                : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 text-blue-800 dark:text-blue-200 text-xs')
+                              ? `${
+                                  completedThinking.has(msg.id)
+                                    ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50'
+                                    : 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700'
+                                } text-gray-800 dark:text-gray-200 ${
+                                  isThinkingExpanded(msg.id) ? '' : 'text-xs'
+                                }`
                               : 'bg-background-chat-hover'}`}
                         style={msg.isIntermediateOutput ? { maxHeight: '300px', overflowY: 'auto' } : {}}
                       >
                         {msg.isThinking ? (
                           <div>
-                            {/* Clickable header */}
+                            {/* Clickable header - same style as tool bubbles */}
                             <div 
-                              className={`flex items-center gap-2 text-xs opacity-70 cursor-pointer hover:opacity-90 transition-opacity ${
+                              className={`flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity ${
                                 isThinkingExpanded(msg.id) ? 'mb-2' : 'mb-0'
                               }`}
                               onClick={() => toggleThinkingMessage(msg.id)}
                             >
-                              <span>🧠 Thinking...</span>
+                              <span className="font-mono text-xs">🧠 Thinking{completedThinking.has(msg.id) ? '' : '...'}</span>
                               {isThinkingExpanded(msg.id) ? (
                                 <FiChevronDown size={12} />
                               ) : (
@@ -729,7 +764,13 @@ export function DocumentChatSidebar({
                             ) : null}
                           </div>
                         ) : msg.isIntermediateOutput ? (
-                          <pre className="whitespace-pre-wrap">{msg.text}</pre>
+                          <div className={`whitespace-pre-wrap font-mono text-xs ${
+                            completedTools.has(msg.id) 
+                              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/50' 
+                              : ''
+                          }`}>
+                            {msg.text}{completedTools.has(msg.id) ? '' : '...'}
+                          </div>
                         ) : (
                           <ReactMarkdown
                             className="prose dark:prose-invert max-w-full text-sm"

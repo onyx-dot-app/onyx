@@ -4,6 +4,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.orchestration.nodes.base_tool_node import execute_tool_node
+from onyx.agents.agent_search.orchestration.nodes.tool_node_utils import emit_early_tool_kickoff
 
 _EDIT_NODE_INSTRUCTIONS = """Use the document editor tool to make the requested changes to documents.
 
@@ -21,6 +22,9 @@ def edit_node(
     2. Saves edit results to database and prompt builder
     3. Goes to respond node for final response generation
     """
+    # Emit early tool kickoff for immediate user feedback
+    emit_early_tool_kickoff("document_editor", writer)
+
     return execute_tool_node(
         state=state,
         config=config,

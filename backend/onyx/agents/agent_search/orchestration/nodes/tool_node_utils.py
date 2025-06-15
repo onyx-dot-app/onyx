@@ -12,6 +12,7 @@ from onyx.configs.constants import MessageType
 from onyx.db.chat import create_new_chat_message, get_chat_messages_by_session
 from onyx.db.models import ChatMessage
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_runner import ToolRunner
 from onyx.utils.logger import setup_logger
 
@@ -21,6 +22,12 @@ logger = setup_logger()
 def emit_packet(packet: AnswerPacket, writer: StreamWriter) -> None:
     """Emit an answer packet to the stream writer."""
     write_custom_event("basic_response", packet, writer)
+
+
+def emit_early_tool_kickoff(tool_name: str, writer: StreamWriter) -> None:
+    """Emit an early tool kickoff message with just the tool name."""
+    kickoff = ToolCallKickoff(tool_name=tool_name, tool_args={})
+    emit_packet(kickoff, writer)
 
 
 def save_tool_call_message(
@@ -77,7 +84,7 @@ def execute_tool(
         selected_tool, tool_call_request["args"], override_kwargs=None
     )
 
-    # Emit tool kickoff
+    # Emit tool kickoff with actual args (early kickoff was sent at node entry)
     tool_kickoff = tool_runner.kickoff()
     emit_packet(tool_kickoff, writer)
 

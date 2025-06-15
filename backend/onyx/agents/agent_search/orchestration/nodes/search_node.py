@@ -4,6 +4,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.orchestration.nodes.base_tool_node import execute_tool_node
+from onyx.agents.agent_search.orchestration.nodes.tool_node_utils import emit_early_tool_kickoff
 from onyx.context.search.utils import dedupe_documents
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
@@ -33,6 +34,9 @@ def search_node(
     2. Saves search results to database and prompt builder
     3. Loops back to action router for potential additional searches
     """
+    # Emit early tool kickoff for immediate user feedback
+    emit_early_tool_kickoff("run_search", writer)
+
     return execute_tool_node(
         state=state,
         config=config,
