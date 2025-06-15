@@ -248,9 +248,7 @@ def enable_kg__commit(
         ),
         KGConfig(
             kg_variable_name=KGConfigVars.KG_MAX_COVERAGE_DAYS,
-            kg_variable_values=[
-                "180"
-            ],  # TODO: temporarily set max coverage to 6 months
+            kg_variable_values=["10000"],  # TODO: revisit coverage days
         ),
     ]
 
