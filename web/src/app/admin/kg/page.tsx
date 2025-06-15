@@ -67,7 +67,7 @@ function createDomainField(
 const VendorDomains = createDomainField(
   "vendor_domains",
   "Vendor Domains",
-  "Domain names of your vendor.",
+  "Domain names of your company. Users with these email domains will be recognized as employees.",
   "Domain",
   1
 );
@@ -75,7 +75,7 @@ const VendorDomains = createDomainField(
 const IgnoreDomains = createDomainField(
   "ignore_domains",
   "Ignore Domains",
-  "Domain names to ignore.",
+  "Domain names to ignore. Users with these email domains will be excluded from the Knowledge Graph.",
   "Domain"
 );
 
@@ -83,10 +83,12 @@ function KGConfiguration({
   kgConfig,
   onSubmitSuccess,
   setPopup,
+  entityTypesMutate,
 }: {
   kgConfig: KGConfig;
   onSubmitSuccess?: () => void;
   setPopup?: (spec: PopupSpec | null) => void;
+  entityTypesMutate?: () => void;
 }) {
   const initialValues: KGConfig = {
     enabled: kgConfig.enabled,
@@ -158,6 +160,11 @@ function KGConfiguration({
     });
     resetForm({ values });
     onSubmitSuccess?.();
+
+    // Refresh entity types if KG was enabled
+    if (enabled && entityTypesMutate) {
+      entityTypesMutate();
+    }
   };
 
   return (
@@ -192,7 +199,7 @@ function KGConfiguration({
               <TextFormField
                 name="vendor"
                 label="Vendor"
-                subtext="The company which is providing this feature."
+                subtext="Your company name."
                 className="flex flex-row flex-1 w-full"
                 placeholder="My Company Inc."
                 disabled={!props.values.enabled}
@@ -496,10 +503,11 @@ function Main() {
           <KGConfiguration
             kgConfig={kgConfig}
             setPopup={setPopup}
-            onSubmitSuccess={() => {
-              configMutate();
+            onSubmitSuccess={async () => {
+              await configMutate();
               setConfigureModalShown(false);
             }}
+            entityTypesMutate={entityTypesMutate}
           />
         </Modal>
       )}
