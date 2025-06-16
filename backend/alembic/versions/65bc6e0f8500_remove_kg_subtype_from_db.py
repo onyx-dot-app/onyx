@@ -26,16 +26,16 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.add_column(
-        "kg_entity", sa.Column("entity_class", sa.String(), nullable=True, index=True)
-    )
-    op.add_column(
-        "kg_entity", sa.Column("entity_subtype", sa.String(), nullable=True, index=True)
+        "kg_entity_extraction_staging",
+        sa.Column("entity_subtype", sa.String(), nullable=True, index=True),
     )
     op.add_column(
         "kg_entity_extraction_staging",
         sa.Column("entity_class", sa.String(), nullable=True, index=True),
     )
     op.add_column(
-        "kg_entity_extraction_staging",
-        sa.Column("entity_subtype", sa.String(), nullable=True, index=True),
+        "kg_entity", sa.Column("entity_subtype", sa.String(), nullable=True, index=True)
+    )
+    op.add_column(
+        "kg_entity", sa.Column("entity_class", sa.String(), nullable=True, index=True)
     )
