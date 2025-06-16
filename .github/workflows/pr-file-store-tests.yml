@@ -14,7 +14,7 @@ env:
   S3_ENDPOINT_URL: "http://localhost:9004"
 
 jobs:
-  connectors-check:
+  file-store-tests:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
 
@@ -42,10 +42,10 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Set up MinIO
+      - name: Set up MinIO and Postgres
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db
 
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
