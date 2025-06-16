@@ -224,9 +224,17 @@ class SharepointConnector(LoadConnector, PollConnector):
                     logger.warning(f"Failed to process drive: {str(e)}")
 
         except Exception as e:
+            err_str = str(e)
+            if (
+                "403 Client Error" in err_str
+                or "404 Client Error" in err_str
+                or "invalid_client" in err_str
+            ):
+                raise e
+
             # Sites include things that do not contain drives so this fails
             # but this is fine, as there are no actual documents in those
-            logger.warning(f"Failed to process site: {str(e)}")
+            logger.warning(f"Failed to process site: {err_str}")
 
         return final_driveitems
 
