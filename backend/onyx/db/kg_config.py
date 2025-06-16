@@ -12,7 +12,7 @@ logger = setup_logger()
 
 def set_kg_config_settings(kg_config_settings: KGConfigSettings) -> None:
     kv_store = get_kv_store()
-    kv_store.store(KV_KG_CONFIG_KEY, kg_config_settings.model_dump_json())
+    kv_store.store(KV_KG_CONFIG_KEY, kg_config_settings.model_dump())
 
 
 def get_kg_config_settings() -> KGConfigSettings:
