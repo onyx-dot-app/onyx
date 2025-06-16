@@ -45,7 +45,7 @@ jobs:
       - name: Set up MinIO
         run: |
           cd deployment/docker_compose
-          docker-compose -f docker-compose.dev.yml up -d minio
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio
 
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
