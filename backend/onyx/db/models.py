@@ -619,22 +619,6 @@ class Document(Base):
     )
 
 
-# TODO: restructure config management
-class KGConfig(Base):
-    __tablename__ = "kg_config"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-
-    kg_variable_name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
-    kg_variable_values: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), nullable=False, default=list
-    )
-
-    __table_args__ = (
-        UniqueConstraint("kg_variable_name", name="uq_kg_config_variable_name"),
-    )
-
-
 class KGEntityType(Base):
     __tablename__ = "kg_entity_type"
 

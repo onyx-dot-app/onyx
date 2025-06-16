@@ -347,9 +347,7 @@ def kg_extraction(
 
     logger.info(f"Starting kg extraction for tenant {tenant_id}")
 
-    with get_session_with_current_tenant() as db_session:
-        kg_config_settings = get_kg_config_settings(db_session)
-
+    kg_config_settings = get_kg_config_settings()
     validate_kg_settings(kg_config_settings)
 
     # get connector ids that are enabled for KG extraction
@@ -405,7 +403,7 @@ def kg_extraction(
                     get_unprocessed_kg_document_batch_for_connector(
                         db_session,
                         connector_id,
-                        kg_coverage_start=kg_config_settings.KG_COVERAGE_START,
+                        kg_coverage_start=kg_config_settings.KG_COVERAGE_START_DATE,
                         kg_max_coverage_days=connector_coverage_days
                         or kg_config_settings.KG_MAX_COVERAGE_DAYS,
                         batch_size=8,

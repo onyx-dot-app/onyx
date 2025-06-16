@@ -8,32 +8,25 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
 
 
+# Note: make sure to write a migration if adding a non-nullable field or removing a field
 class KGConfigSettings(BaseModel):
     KG_EXPOSED: bool = False
     KG_ENABLED: bool = False
     KG_VENDOR: str | None = None
-    KG_VENDOR_DOMAINS: list[str] | None = None
-    KG_IGNORE_EMAIL_DOMAINS: list[str] | None = None
-    KG_EXTRACTION_IN_PROGRESS: bool = False
-    KG_CLUSTERING_IN_PROGRESS: bool = False
-    KG_COVERAGE_START: datetime = datetime(1970, 1, 1)
+    KG_VENDOR_DOMAINS: list[str] = []
+    KG_IGNORE_EMAIL_DOMAINS: list[str] = []
+    KG_COVERAGE_START: str = datetime(1970, 1, 1).strftime("%Y-%m-%d")
     KG_MAX_COVERAGE_DAYS: int = 10000
     KG_MAX_PARENT_RECURSION_DEPTH: int = KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
     KG_BETA_PERSONA_ID: int | None = None
 
+    @property
+    def KG_COVERAGE_START_DATE(self) -> datetime:
+        return datetime.strptime(self.KG_COVERAGE_START, "%Y-%m-%d")
 
-class KGConfigVars(str, Enum):
-    KG_EXPOSED = "KG_EXPOSED"
-    KG_ENABLED = "KG_ENABLED"
-    KG_VENDOR = "KG_VENDOR"
-    KG_VENDOR_DOMAINS = "KG_VENDOR_DOMAINS"
-    KG_IGNORE_EMAIL_DOMAINS = "KG_IGNORE_EMAIL_DOMAINS"
-    KG_EXTRACTION_IN_PROGRESS = "KG_EXTRACTION_IN_PROGRESS"
-    KG_CLUSTERING_IN_PROGRESS = "KG_CLUSTERING_IN_PROGRESS"
-    KG_COVERAGE_START = "KG_COVERAGE_START"
-    KG_MAX_COVERAGE_DAYS = "KG_MAX_COVERAGE_DAYS"
-    KG_MAX_PARENT_RECURSION_DEPTH = "KG_MAX_PARENT_RECURSION_DEPTH"
-    KG_BETA_PERSONA_ID = "KG_BETA_PERSONA_ID"
+
+class KGProcessingStatus(BaseModel):
+    in_progress: bool = False
 
 
 class KGGroundingType(str, Enum):

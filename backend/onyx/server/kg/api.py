@@ -4,10 +4,13 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db import kg_config
 from onyx.db.engine import get_session
 from onyx.db.entity_type import get_configured_entity_types
 from onyx.db.entity_type import update_entity_types_and_related_connectors__commit
+from onyx.db.kg_config import disable_kg
+from onyx.db.kg_config import enable_kg
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import set_kg_config_settings
 from onyx.db.models import User
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
@@ -39,11 +42,9 @@ admin_router = APIRouter(prefix="/admin/kg")
 
 
 @admin_router.get("/exposed")
-def get_kg_exposed(
-    _: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> bool:
-    return kg_config.get_kg_exposed(db_session=db_session)
+def get_kg_exposed(_: User | None = Depends(current_admin_user)) -> bool:
+    kg_config_settings = get_kg_config_settings()
+    return kg_config_settings.KG_EXPOSED
 
 
 # global resets
@@ -63,11 +64,8 @@ def reset_kg(
 
 
 @admin_router.get("/config")
-def get_kg_config(
-    _: User | None = Depends(current_admin_user),
-    db_session: Session = Depends(get_session),
-) -> KGConfig:
-    config = kg_config.get_kg_config_settings(db_session=db_session)
+def get_kg_config(_: User | None = Depends(current_admin_user)) -> KGConfig:
+    config = get_kg_config_settings()
     return KGConfigAPIModel.from_kg_config_settings(config)
 
 
@@ -79,18 +77,19 @@ def enable_or_disable_kg(
 ) -> None:
     if isinstance(req, DisableKGConfigRequest):
         # Get the KG Beta persona ID and delete it
-        persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
-        if persona_id:
+        kg_config_settings = get_kg_config_settings()
+        persona_id = kg_config_settings.KG_BETA_PERSONA_ID
+        if persona_id is not None:
             mark_persona_as_deleted(
                 persona_id=persona_id,
                 user=user,
                 db_session=db_session,
             )
-        kg_config.disable_kg__commit(db_session=db_session)
+        disable_kg()
         return
 
     # Enable KG
-    kg_config.enable_kg__commit(db_session=db_session, enable_req=req)
+    enable_kg(enable_req=req)
     populate_missing_default_entity_types__commit(db_session=db_session)
 
     # Create or restore KG Beta persona
@@ -101,7 +100,8 @@ def enable_or_disable_kg(
         raise RuntimeError("SearchTool not found in the database.")
 
     # Check if we have a previously created persona
-    persona_id = kg_config.get_kg_beta_persona_id(db_session=db_session)
+    kg_config_settings = get_kg_config_settings()
+    persona_id = kg_config_settings.KG_BETA_PERSONA_ID
 
     if persona_id is not None:
         # Try to restore the existing persona
@@ -162,9 +162,8 @@ def enable_or_disable_kg(
         db_session=db_session,
     )
     # Store the persona ID in the KG config
-    kg_config.set_kg_beta_persona_id(
-        db_session=db_session, persona_id=persona_snapshot.id
-    )
+    kg_config_settings.KG_BETA_PERSONA_ID = persona_snapshot.id
+    set_kg_config_settings(kg_config_settings)
 
 
 # entity-types

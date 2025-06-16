@@ -306,8 +306,7 @@ def kg_clustering(
     """
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 
-    with get_session_with_current_tenant() as db_session:
-        kg_config_settings = get_kg_config_settings(db_session)
+    kg_config_settings = get_kg_config_settings()
     validate_kg_settings(kg_config_settings)
 
     # Cluster and transfer grounded entities sequentially

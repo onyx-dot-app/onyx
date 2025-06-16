@@ -570,7 +570,7 @@ def stream_chat_message_objects(
 
     llm: LLM
 
-    kg_config_settings = get_kg_config_settings(db_session)
+    kg_config_settings = get_kg_config_settings()
 
     if kg_config_settings.KG_ENABLED:
 

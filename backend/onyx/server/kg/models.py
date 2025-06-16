@@ -24,7 +24,7 @@ class KGConfig(BaseModel):
             vendor=kg_config_settings.KG_VENDOR,
             vendor_domains=kg_config_settings.KG_VENDOR_DOMAINS,
             ignore_domains=kg_config_settings.KG_IGNORE_EMAIL_DOMAINS,
-            coverage_start=kg_config_settings.KG_COVERAGE_START,
+            coverage_start=kg_config_settings.KG_COVERAGE_START_DATE,
         )
 
 

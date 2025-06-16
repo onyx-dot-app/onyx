@@ -9,9 +9,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
 from onyx.db.engine import get_session_context_manager
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import set_kg_config_settings
 from onyx.db.models import Connector
-from onyx.db.models import KGConfig
-from onyx.kg.models import KGConfigVars
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.kg.models import DisableKGConfigRequest
 from onyx.server.kg.models import EnableKGConfigRequest
@@ -27,26 +27,9 @@ def reset_for_test() -> None:
     """Reset all data before each test."""
     reset_all()
 
-    with get_session_context_manager() as db_session:
-        db_session.query(KGConfig).filter(
-            KGConfig.kg_variable_name == KGConfigVars.KG_EXPOSED
-        ).update({"kg_variable_values": ["true"]})
-        db_session.commit()
-
-
-@pytest.fixture()
-def enable_kg() -> None:
-    with get_session_context_manager() as db_session:
-        db_session.query(KGConfig).filter(
-            KGConfig.kg_variable_name == KGConfigVars.KG_ENABLED
-        ).update({"kg_variable_values": ["true"]})
-        db_session.query(KGConfig).filter(
-            KGConfig.kg_variable_name == KGConfigVars.KG_VENDOR
-        ).update({"kg_variable_values": ["Test"]})
-        db_session.query(KGConfig).filter(
-            KGConfig.kg_variable_name == KGConfigVars.KG_VENDOR_DOMAINS
-        ).update({"kg_variable_values": ["test.app, tester.ai"]})
-        db_session.commit()
+    kg_config_settings = get_kg_config_settings()
+    kg_config_settings.KG_EXPOSED = True
+    set_kg_config_settings(kg_config_settings)
 
 
 @pytest.fixture()
@@ -157,13 +140,22 @@ def test_kg_enable_with_missing_fields_should_fail() -> None:
     assert res.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_update_kg_entity_types(enable_kg: None, connectors: None) -> None:
+def test_update_kg_entity_types(connectors: None) -> None:
     admin_user = UserManager.create(name="admin_user")
 
-    # Run reset to populate default entity types
+    # Enable kg and populate default entity types
+    req1 = json.loads(
+        EnableKGConfigRequest(
+            vendor="Test",
+            vendor_domains=["test.app", "tester.ai"],
+            ignore_domains=[],
+            coverage_start=datetime(1970, 1, 1, 0, 0),
+        ).model_dump_json()
+    )
     res1 = requests.put(
-        f"{API_SERVER_URL}/admin/kg/reset",
+        f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
+        json=req1,
     )
     assert (
         res1.status_code == HTTPStatus.OK
@@ -227,15 +219,22 @@ def test_update_kg_entity_types(enable_kg: None, connectors: None) -> None:
     assert new_entity_types == expected_entity_types
 
 
-def test_update_invalid_kg_entity_type_should_do_nothing(
-    enable_kg: None, connectors: None
-) -> None:
+def test_update_invalid_kg_entity_type_should_do_nothing(connectors: None) -> None:
     admin_user = UserManager.create(name="admin_user")
 
-    # Run reset to populate default entity types
+    # Enable kg and populate default entity types
+    req1 = json.loads(
+        EnableKGConfigRequest(
+            vendor="Test",
+            vendor_domains=["test.app", "tester.ai"],
+            ignore_domains=[],
+            coverage_start=datetime(1970, 1, 1, 0, 0),
+        ).model_dump_json()
+    )
     res1 = requests.put(
-        f"{API_SERVER_URL}/admin/kg/reset",
+        f"{API_SERVER_URL}/admin/kg/config",
         headers=admin_user.headers,
+        json=req1,
     )
     assert (
         res1.status_code == HTTPStatus.OK

@@ -199,11 +199,9 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
         search_settings = get_current_search_settings(db_session)
         index_str = search_settings.index_name
 
-        # prevent other tasks from running
-        block_kg_processing_current_tenant(db_session)
-
-        db_session.commit()
-        task_logger.info(f"KG processing set to in progress for tenant {tenant_id}")
+    # prevent other tasks from running
+    block_kg_processing_current_tenant()
+    task_logger.info(f"KG processing set to in progress for tenant {tenant_id}")
 
     try:
         kg_extraction(
@@ -217,9 +215,7 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
         task_logger.exception("Error during kg processing")
 
     finally:
-        with get_session_with_current_tenant() as db_session:
-            unblock_kg_processing_current_tenant(db_session)
-            db_session.commit()
+        unblock_kg_processing_current_tenant()
 
     task_logger.debug("Completed kg processing task!")
 
@@ -238,10 +234,7 @@ def kg_clustering_only(self: Task, *, tenant_id: str) -> int | None:
         search_settings = get_current_search_settings(db_session)
         index_str = search_settings.index_name
 
-        block_kg_processing_current_tenant(db_session)
-
-        db_session.commit()
-
+    block_kg_processing_current_tenant()
     task_logger.debug("Starting kg clustering-only task!")
 
     try:
@@ -251,9 +244,7 @@ def kg_clustering_only(self: Task, *, tenant_id: str) -> int | None:
     except Exception as e:
         task_logger.exception(f"Error during kg clustering: {e}")
     finally:
-        with get_session_with_current_tenant() as db_session:
-            unblock_kg_processing_current_tenant(db_session)
-            db_session.commit()
+        unblock_kg_processing_current_tenant()
 
     task_logger.debug("Completed kg clustering task!")
 
@@ -270,10 +261,7 @@ def kg_reset_source_index(
 ) -> int | None:
     """a task for KG reset of a source."""
 
-    with get_session_with_current_tenant() as db_session:
-        block_kg_processing_current_tenant(db_session)
-        db_session.commit()
-
+    block_kg_processing_current_tenant()
     task_logger.debug("Starting source reset task!")
 
     try:
@@ -284,9 +272,7 @@ def kg_reset_source_index(
     except Exception as e:
         task_logger.exception(f"Error during kg reset: {e}")
     finally:
-        with get_session_with_current_tenant() as db_session:
-            unblock_kg_processing_current_tenant(db_session)
-            db_session.commit()
+        unblock_kg_processing_current_tenant()
 
         task_logger.debug("Completed kg reset task!")
 

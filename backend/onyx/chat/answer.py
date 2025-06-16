@@ -123,7 +123,7 @@ class Answer:
             allow_refinement=AGENT_ALLOW_REFINEMENT,
             allow_agent_reranking=allow_agent_reranking,
             perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
-            kg_config_settings=get_kg_config_settings(db_session),
+            kg_config_settings=get_kg_config_settings(),
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,
