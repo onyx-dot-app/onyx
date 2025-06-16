@@ -12,6 +12,13 @@ def make_missing_docs_inaccessible(
     fetched_slim_docs: list[SlimDocument],
     existing_doc_ids: list[str],
 ) -> Generator[DocExternalAccess]:
+    """
+    Given the fetched `SlimDocument`s and the existing doc-ids, the existing doc-ids whose ids were *not* fetched will be marked
+    inaccessible.
+
+    Each one of the fetched `SlimDocument`'s `DocExternalAccess` will be yielded.
+    """
+
     fetched_ids = {doc.id for doc in fetched_slim_docs}
     existing_ids = set(existing_doc_ids)
 

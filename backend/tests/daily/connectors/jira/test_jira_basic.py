@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.models import Document
-from onyx.connectors.onyx_jira.connector import JiraConnector
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 

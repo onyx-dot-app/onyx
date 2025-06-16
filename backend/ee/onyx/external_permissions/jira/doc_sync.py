@@ -3,8 +3,8 @@ from collections.abc import Generator
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.utils import make_missing_docs_inaccessible
 from onyx.access.models import DocExternalAccess
+from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.onyx_jira.connector import JiraConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger

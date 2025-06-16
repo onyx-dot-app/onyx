@@ -62,11 +62,6 @@ JIRA_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("JIRA_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
 )
 
-# In seconds, default is 30 minutes
-JIRA_PERMISSION_GROUP_SYNC_FREQUENCY = int(
-    os.environ.get("JIRA_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
-)
-
 
 #####
 # Google Drive
