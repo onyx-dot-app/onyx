@@ -323,30 +323,25 @@ class S3BackedFileStore(FileStore):
             file_id=file_id, db_session=self.db_session
         )
 
-        if file_record.bucket_name is None or file_record.object_key is None:
-            raise RuntimeError(f"File {file_id} is not stored in external storage")
-
         s3_client = self._get_s3_client()
-
         try:
             response = s3_client.get_object(
                 Bucket=file_record.bucket_name, Key=file_record.object_key
             )
+        except ClientError:
+            logger.error(f"Failed to read file {file_id} from S3")
+            raise
 
-            file_content = response["Body"].read()
+        file_content = response["Body"].read()
 
-            if use_tempfile:
-                # Always open in binary mode for temp files since we're writing bytes
-                temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
-                temp_file.write(file_content)
-                temp_file.seek(0)
-                return temp_file
-            else:
-                return BytesIO(file_content)
-
-        except ClientError as e:
-            logger.error(f"Failed to read file {file_id} from S3: {e}")
-            raise RuntimeError(f"Failed to read file {file_id} from S3: {e}")
+        if use_tempfile:
+            # Always open in binary mode for temp files since we're writing bytes
+            temp_file = tempfile.NamedTemporaryFile(mode="w+b", delete=False)
+            temp_file.write(file_content)
+            temp_file.seek(0)
+            return temp_file
+        else:
+            return BytesIO(file_content)
 
     def read_file_record(self, file_id: str) -> FileStoreModel:
         file_record = get_filerecord_by_file_id(
@@ -360,16 +355,11 @@ class S3BackedFileStore(FileStore):
                 file_id=file_id, db_session=self.db_session
             )
 
-            if (
-                file_record.bucket_name is not None
-                and file_record.object_key is not None
-            ):
-                s3_client = self._get_s3_client()
-
-                # Delete from external storage
-                s3_client.delete_object(
-                    Bucket=file_record.bucket_name, Key=file_record.object_key
-                )
+            # Delete from external storage
+            s3_client = self._get_s3_client()
+            s3_client.delete_object(
+                Bucket=file_record.bucket_name, Key=file_record.object_key
+            )
 
             # Delete metadata from database
             delete_filerecord_by_file_id(file_id=file_id, db_session=self.db_session)

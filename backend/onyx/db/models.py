@@ -2701,8 +2701,8 @@ class FileRecord(Base):
     file_metadata: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
 
     # External storage support (S3, MinIO, Azure Blob, etc.)
-    bucket_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    object_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    bucket_name: Mapped[str] = mapped_column(String)
+    object_key: Mapped[str] = mapped_column(String)
 
     # Timestamps for external storage
     created_at: Mapped[datetime.datetime] = mapped_column(
