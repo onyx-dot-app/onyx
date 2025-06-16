@@ -47,6 +47,11 @@ jobs:
           cd deployment/docker_compose
           docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db
 
+      - name: Run migrations
+        run: |
+          cd backend
+          alembic upgrade head
+
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
