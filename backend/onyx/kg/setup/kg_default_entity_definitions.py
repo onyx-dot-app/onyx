@@ -225,7 +225,7 @@ def populate_missing_default_entity_types__commit(db_session: Session) -> None:
         kg_entity_type = KGEntityType(
             id_name=entity_type_id_name,
             description=entity_type_definition.description,
-            attributes=entity_type_definition.attributes,
+            attributes=entity_type_definition.attributes.model_dump(),
             grounding=entity_type_definition.grounding,
             grounded_source_name=grounded_source_name,
             active=False,
