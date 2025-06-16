@@ -161,8 +161,17 @@ def test_update_kg_entity_types(connectors: None) -> None:
         res1.status_code == HTTPStatus.OK
     ), f"Error response: {res1.status_code} - {res1.text}"
 
+    # Get old entity types
+    res2 = requests.get(
+        f"{API_SERVER_URL}/admin/kg/entity-types",
+        headers=admin_user.headers,
+    )
+    assert (
+        res2.status_code == HTTPStatus.OK
+    ), f"Error response: {res2.status_code} - {res2.text}"
+
     # Update entity types
-    req2 = [
+    req3 = [
         EntityType(
             name="ACCOUNT",
             description="Test.",
@@ -175,14 +184,14 @@ def test_update_kg_entity_types(connectors: None) -> None:
             active=False,
         ).model_dump(),
     ]
-    res2 = requests.put(
+    res3 = requests.put(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
-        json=req2,
+        json=req3,
     )
     assert (
-        res2.status_code == HTTPStatus.OK
-    ), f"Error response: {res2.status_code} - {res2.text}"
+        res3.status_code == HTTPStatus.OK
+    ), f"Error response: {res3.status_code} - {res3.text}"
 
     # Check connector kg_processing is enabled
     with get_session_context_manager() as db_session:
@@ -194,22 +203,22 @@ def test_update_kg_entity_types(connectors: None) -> None:
         assert connector.kg_processing_enabled
 
     # Check entity types looks correct
-    res3 = requests.get(
+    res4 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
     )
     assert (
-        res3.status_code == HTTPStatus.OK
-    ), f"Error response: {res3.status_code} - {res3.text}"
+        res4.status_code == HTTPStatus.OK
+    ), f"Error response: {res4.status_code} - {res4.text}"
 
     new_entity_types = {
         entity_type["name"]: EntityType.model_validate(entity_type)
-        for entity_type in res3.json()
+        for entity_type in res4.json()
     }
 
     expected_entity_types = {
         entity_type["name"]: EntityType.model_validate(entity_type)
-        for entity_type in res1.json()
+        for entity_type in res2.json()
     }
     expected_entity_types["ACCOUNT"].active = True
     expected_entity_types["ACCOUNT"].description = "Test."
@@ -240,27 +249,36 @@ def test_update_invalid_kg_entity_type_should_do_nothing(connectors: None) -> No
         res1.status_code == HTTPStatus.OK
     ), f"Error response: {res1.status_code} - {res1.text}"
 
-    # Update entity types with non-existent entity type
-    req2 = [
-        EntityType(name="NON-EXISTENT", description="Test.", active=False).model_dump(),
-    ]
-    res2 = requests.put(
+    # Get old entity types
+    res2 = requests.get(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
-        json=req2,
     )
     assert (
         res2.status_code == HTTPStatus.OK
     ), f"Error response: {res2.status_code} - {res2.text}"
 
-    # Get entity types after the update attempt
-    res3 = requests.get(
+    # Update entity types with non-existent entity type
+    req3 = [
+        EntityType(name="NON-EXISTENT", description="Test.", active=False).model_dump(),
+    ]
+    res3 = requests.put(
         f"{API_SERVER_URL}/admin/kg/entity-types",
         headers=admin_user.headers,
+        json=req3,
     )
     assert (
         res3.status_code == HTTPStatus.OK
     ), f"Error response: {res3.status_code} - {res3.text}"
 
+    # Get entity types after the update attempt
+    res4 = requests.get(
+        f"{API_SERVER_URL}/admin/kg/entity-types",
+        headers=admin_user.headers,
+    )
+    assert (
+        res4.status_code == HTTPStatus.OK
+    ), f"Error response: {res4.status_code} - {res4.text}"
+
     # Should be the same as before since non-existent entity type should be ignored
-    assert res1.json() == res3.json()
+    assert res2.json() == res4.json()
