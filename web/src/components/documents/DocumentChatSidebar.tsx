@@ -7,6 +7,7 @@ import { extractCodeText, preprocessLaTeX } from '@/app/chat/message/codeUtils';
 import { useAssistants } from '@/components/context/AssistantsContext';
 import { SendIcon } from '@/components/icons/icons';
 import { Button } from '@/components/ui/button';
+import { FileEntry } from '@/lib/documents/types';
 import { AgentAnswerPiece, DocumentEditorResponse, DocumentInfoPacket, OnyxDocument, ThinkingPiece } from '@/lib/search/interfaces';
 import { handleSSEStream } from '@/lib/search/streamingUtils';
 import { transformLinkUri } from '@/lib/utils';
@@ -18,8 +19,7 @@ import rehypePrism from 'rehype-prism-plus';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { v4 as uuidv4 } from 'uuid';
-import { DocumentSelector, DocumentContent } from './DocumentSelector';
-import { FileEntry } from '@/lib/documents/types';
+import { DocumentContent, DocumentSelector } from './DocumentSelector';
 
 interface CitationInfo {
   citation_num: number;
@@ -529,7 +529,7 @@ export function DocumentChatSidebar({
                     const msg = updatedMessages[i];
                     if (msg.isIntermediateOutput && msg.debugLog?.some(log => log.name === toolName)) {
                       // Mark this tool as completed
-                      setCompletedTools(prev => new Set([...prev, msg.id]));
+                      setCompletedTools(prev => new Set(Array.from(prev).concat(msg.id)));
                       break;
                     }
                   }
@@ -584,7 +584,7 @@ export function DocumentChatSidebar({
               for (let i = updatedMessages.length - 1; i >= 0; i--) {
                 const msg = updatedMessages[i];
                 if (msg.isThinking && !completedThinking.has(msg.id)) {
-                  setCompletedThinking(prev => new Set([...prev, msg.id]));
+                  setCompletedThinking(prev => new Set(Array.from(prev).concat(msg.id)));
                   break;
                 }
               }
@@ -618,7 +618,7 @@ export function DocumentChatSidebar({
 
   const toggleThinkingMessage = (messageId: number) => {
     setExpandedThinkingMessages(prev => {
-      const newSet = new Set(prev);
+      const newSet = new Set(Array.from(prev));
       if (newSet.has(messageId)) {
         newSet.delete(messageId);
       } else {

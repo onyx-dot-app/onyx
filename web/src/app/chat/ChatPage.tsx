@@ -135,7 +135,6 @@ import {
     FolderResponse,
     useDocumentsContext,
 } from "./my-documents/DocumentsContext";
-import { getSidebarFiles } from "@/lib/documents/types";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -3354,8 +3353,6 @@ export function ChatPage({
                                 setShowApiKeyModal(true)
                               }
                               selectedDocuments={selectedDocuments}
-                              availableDocuments={availableDocuments}
-                              sidebarDocuments={getSidebarFiles("PRECISION")}
                               message={message}
                               setMessage={setMessage}
                               stopGenerating={stopGenerating}
