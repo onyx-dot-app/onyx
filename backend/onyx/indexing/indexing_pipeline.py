@@ -978,6 +978,15 @@ def index_doc_batch(
                 continue
             ids_to_new_updated_at[doc.id] = doc.doc_updated_at
 
+        # Store the plaintext in the file store for faster retrieval
+        # NOTE: this creates its own session to avoid committing the overall
+        # transaction.
+        for user_file_id, raw_text in user_file_id_to_raw_text.items():
+            store_user_file_plaintext(
+                user_file_id=user_file_id,
+                plaintext_content=raw_text,
+            )
+
         update_docs_updated_at__no_commit(
             ids_to_new_updated_at=ids_to_new_updated_at, db_session=db_session
         )
@@ -1008,13 +1017,6 @@ def index_doc_batch(
             document_ids=[doc.id for doc in filtered_documents],
             db_session=db_session,
         )
-        # Store the plaintext in the file store for faster retrieval
-        for user_file_id, raw_text in user_file_id_to_raw_text.items():
-            store_user_file_plaintext(
-                user_file_id=user_file_id,
-                plaintext_content=raw_text,
-                db_session=db_session,
-            )
 
         # save the chunk boost components to postgres
         update_chunk_boost_components__no_commit(
@@ -1022,6 +1024,7 @@ def index_doc_batch(
         )
 
         # Pause user file ccpairs
+        # TODO: investigate why nothing is done here?
 
         db_session.commit()
 
