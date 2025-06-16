@@ -1,0 +1,29 @@
+from collections.abc import Generator
+
+from onyx.access.models import DocExternalAccess
+from onyx.access.models import ExternalAccess
+from onyx.connectors.models import SlimDocument
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def make_missing_docs_inaccessible(
+    fetched_slim_docs: list[SlimDocument],
+    existing_doc_ids: list[str],
+) -> Generator[DocExternalAccess]:
+    fetched_ids = {doc.id for doc in fetched_slim_docs}
+    existing_ids = set(existing_doc_ids)
+
+    missing_ids = existing_ids - fetched_ids
+    if missing_ids:
+        logger.warning(
+            f"Found {len(missing_ids)=} documents that are in the DB but not present in fetch. Making them inaccessible."
+        )
+
+        for missing_id in missing_ids:
+            logger.warning(f"Removing access for {missing_id=}")
+            yield DocExternalAccess(
+                doc_id=missing_id,
+                external_access=ExternalAccess.empty(),
+            )
