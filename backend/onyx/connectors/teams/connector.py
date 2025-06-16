@@ -161,7 +161,7 @@ class TeamsConnector(
     def load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        _end: SecondsSinceUnixEpoch,
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
         if self.graph_client is None:
@@ -191,7 +191,6 @@ class TeamsConnector(
             team_id=todo_team_id,
         )
         channels = _collect_all_channels_from_team(
-            graph_client=self.graph_client,
             team=team,
         )
 
@@ -202,7 +201,6 @@ class TeamsConnector(
                 team=team,
                 channel=channel,
                 start=start,
-                end=end,
             )
             for channel in channels
         ]
@@ -418,7 +416,6 @@ def _get_team_by_id(
 
 
 def _collect_all_channels_from_team(
-    graph_client: GraphClient,
     team: Team,
 ) -> list[Channel]:
     if not team.id:
@@ -452,7 +449,6 @@ def _collect_documents_for_channel(
     team: Team,
     channel: Channel,
     start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
 ) -> Iterator[Document | None | ConnectorFailure]:
     """
     This function yields an iterator of `Document`s, where each `Document` corresponds to a "thread".
