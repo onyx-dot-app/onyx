@@ -132,27 +132,22 @@ class KGUDocumentUpdateRequest(BaseModel):
 def generate_kg_update_request(
     kg_update_request: KGUChunkUpdateRequest,
 ) -> dict[str, dict]:
-    kg_update_dict: dict[str, dict] = {"fields": {}}
+    kg_update_dict: dict[str, dict] = {}
 
     if kg_update_request.entities is not None:
-        kg_update_dict["fields"]["kg_entities"] = {
-            "assign": list(kg_update_request.entities)
-        }
+        kg_update_dict["kg_entities"] = {"assign": list(kg_update_request.entities)}
 
     if kg_update_request.relationships is not None:
-        kg_update_dict["fields"]["kg_relationships"] = {"assign": []}
+        kg_update_dict["kg_relationships"] = {"assign": []}
         for relationship in kg_update_request.relationships:
             source, rel_type, target = split_relationship_id(relationship)
-            kg_update_dict["fields"]["kg_relationships"]["assign"].append(
+            kg_update_dict["kg_relationships"]["assign"].append(
                 {
                     "source": source,
                     "rel_type": rel_type,
                     "target": target,
                 }
             )
-
-    if kg_update_request.terms is not None:
-        kg_update_dict["fields"]["kg_terms"] = {"assign": list(kg_update_request.terms)}
 
     return kg_update_dict
 
@@ -703,7 +698,9 @@ class VespaIndex(DocumentIndex):
         # Build the _VespaUpdateRequest objects
 
         for kg_update_request in kg_update_requests:
-            kg_update_dict = generate_kg_update_request(kg_update_request)
+            kg_update_dict: dict[str, dict] = {
+                "fields": generate_kg_update_request(kg_update_request)
+            }
             if not kg_update_dict["fields"]:
                 logger.error("Update request received but nothing to update")
                 continue
