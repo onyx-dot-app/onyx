@@ -517,7 +517,13 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
         finally:
             # always reset the search path on exit
             if MULTI_TENANT:
+                if not dbapi_connection.is_valid:
+                    logger.warning(
+                        "dbapi_connection is None, likely the original connection expired."
+                    )
+                    return
                 cursor = dbapi_connection.cursor()
+
                 try:
                     cursor.execute('SET search_path TO "$user", public')
                 except Exception as e:
