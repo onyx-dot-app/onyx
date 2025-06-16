@@ -22,9 +22,10 @@ interface TiptapEditorProps {
   documentData?: DocumentBase | FormattedDocumentBase | null;
   onChange?: (content: string) => void;
   editable?: boolean;
+  isUserTyping?: boolean;
 }
 
-export function TiptapEditor({ content = '', documentData, onChange, editable = true }: TiptapEditorProps) {
+export function TiptapEditor({ content = '', documentData, onChange, editable = true, isUserTyping = false }: TiptapEditorProps) {
   // Track document ID to know when to update content
   const docIdRef = React.useRef<string | null>(documentData?.id || null);
 
@@ -66,12 +67,15 @@ export function TiptapEditor({ content = '', documentData, onChange, editable = 
   React.useEffect(() => {
     const currentDocId = documentData?.id || null;
 
-    // Only update content when document ID changes (switching documents)
-    if (editor) {
+    // Only update content when:
+    // 1. Document ID changes (switching documents)
+    // 2. Content is different from current editor content
+    // 3. User is not currently typing (to prevent scroll interruption)
+    if (editor && content !== editor.getHTML() && !isUserTyping) {
       editor.commands.setContent(content);
       docIdRef.current = currentDocId;
     }
-  }, [editor, content, documentData])
+  }, [editor, content, documentData, isUserTyping])
 
   if (!editor) {
     return null;

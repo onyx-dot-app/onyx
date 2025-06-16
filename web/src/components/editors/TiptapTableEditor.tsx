@@ -18,9 +18,10 @@ interface TiptapTableEditorProps {
   content?: string;
   onChange?: (content: string) => void;
   editable?: boolean;
+  isUserTyping?: boolean;
 }
 
-export function TiptapTableEditor({ content, onChange, editable = true }: TiptapTableEditorProps) {
+export function TiptapTableEditor({ content, onChange, editable = true, isUserTyping = false }: TiptapTableEditorProps) {
   // Initialize the editor with the content as-is
   // The first row is already set as a header row in the DocumentsPage.convertSheetDataToTableHtml function
   
@@ -81,10 +82,10 @@ export function TiptapTableEditor({ content, onChange, editable = true }: Tiptap
 
   // Update editor content when it changes externally
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor && content !== editor.getHTML() && !isUserTyping) {
       editor.commands.setContent(content || '');
     }
-  }, [content, editor]);
+  }, [content, editor, isUserTyping]);
 
   // Call enableClickableLinks when the editor is ready
   useEffect(() => {

@@ -180,6 +180,7 @@ export default function DocumentsPage() {
               <TiptapTableEditor 
                 key={`sheet-${docId}-${selectedSheet}`}
                 content={content}
+                isUserTyping={isUserTyping}
                 onChange={(newContent) => {
                   setContent(newContent);
                   setIsUserTyping(true);
@@ -197,6 +198,7 @@ export default function DocumentsPage() {
                 key={`doc-${docId}`}
                 content={content}
                 documentData={formattedDocumentData || documentData}
+                isUserTyping={isUserTyping}
                 onChange={(newContent) => {
                   setContent(newContent);
                   setIsUserTyping(true);
