@@ -64,6 +64,8 @@ def create_populate_lobj(
         )
         # ``scalar_one`` is 2.0-style; ``scalar`` works on both 1.4/2.0.
         lobj_oid = result.scalar()
+        if lobj_oid is None:
+            raise RuntimeError("Failed to create large object")
         return int(lobj_oid)
 
 
@@ -111,6 +113,8 @@ def read_lobj(
             {"oid": lobj_oid},
         )
         byte_data = result.scalar()
+        if byte_data is None:
+            raise RuntimeError("Failed to read large object")
 
         if use_tempfile:
             temp_file = tempfile.SpooledTemporaryFile(max_size=MAX_IN_MEMORY_SIZE)
