@@ -30,22 +30,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _read_file_from_filestore(
-    file_name: str,
-    db_session: Session,
-) -> IO | None:
-    """
-    Gets the content of a file from Postgres.
-    """
-    extension = get_file_ext(file_name)
-    file_content = get_default_file_store(db_session).read_file(file_name, mode="b")
-
-    if is_accepted_file_ext(extension, OnyxExtensionType.All):
-        return file_content
-    logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
-    return None
-
-
 def _create_image_section(
     image_data: bytes,
     db_session: Session,
@@ -125,7 +109,8 @@ def _process_file(
     source_type = (
         DocumentSource(source_type_str) if source_type_str else DocumentSource.FILE
     )
-    doc_id = metadata.get("document_id") or f"FILE_CONNECTOR__{file_name}"
+
+    doc_id = f"FILE_CONNECTOR__{file_id}"
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly

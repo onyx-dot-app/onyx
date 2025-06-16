@@ -210,56 +210,49 @@ class S3BackedFileStore(FileStore):
 
     def initialize(self) -> None:
         """Initialize the S3 file store by ensuring the bucket exists"""
+        s3_client = self._get_s3_client()
+        bucket_name = self._get_bucket_name()
+
+        # Check if bucket exists
         try:
-            s3_client = self._get_s3_client()
-            bucket_name = self._get_bucket_name()
+            s3_client.head_bucket(Bucket=bucket_name)
+            logger.info(f"S3 bucket '{bucket_name}' already exists")
+        except ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "404":
+                # Bucket doesn't exist, create it
+                logger.info(f"Creating S3 bucket '{bucket_name}'")
 
-            # Check if bucket exists
-            try:
-                s3_client.head_bucket(Bucket=bucket_name)
-                logger.info(f"S3 bucket '{bucket_name}' already exists")
-            except ClientError as e:
-                error_code = e.response["Error"]["Code"]
-                if error_code == "404":
-                    # Bucket doesn't exist, create it
-                    logger.info(f"Creating S3 bucket '{bucket_name}'")
+                # For AWS S3, we need to handle region-specific bucket creation
+                region = (
+                    s3_client._client_config.region_name
+                    if hasattr(s3_client, "_client_config")
+                    else None
+                )
 
-                    # For AWS S3, we need to handle region-specific bucket creation
-                    region = (
-                        s3_client._client_config.region_name
-                        if hasattr(s3_client, "_client_config")
-                        else None
-                    )
-
-                    if region and region != "us-east-1":
-                        # For regions other than us-east-1, we need to specify LocationConstraint
-                        s3_client.create_bucket(
-                            Bucket=bucket_name,
-                            CreateBucketConfiguration={"LocationConstraint": region},
-                        )
-                    else:
-                        # For us-east-1 or MinIO/other S3-compatible services
-                        s3_client.create_bucket(Bucket=bucket_name)
-
-                    logger.info(f"Successfully created S3 bucket '{bucket_name}'")
-                elif error_code == "403":
-                    # Bucket exists but we don't have permission to access it
-                    logger.warning(
-                        f"S3 bucket '{bucket_name}' exists but access is forbidden"
-                    )
-                    raise RuntimeError(
-                        f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
+                if region and region != "us-east-1":
+                    # For regions other than us-east-1, we need to specify LocationConstraint
+                    s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={"LocationConstraint": region},
                     )
                 else:
-                    # Some other error occurred
-                    logger.error(f"Failed to check S3 bucket '{bucket_name}': {e}")
-                    raise RuntimeError(
-                        f"Failed to check S3 bucket '{bucket_name}': {e}"
-                    )
+                    # For us-east-1 or MinIO/other S3-compatible services
+                    s3_client.create_bucket(Bucket=bucket_name)
 
-        except Exception as e:
-            logger.error(f"Failed to initialize S3 file store: {e}")
-            raise RuntimeError(f"Failed to initialize S3 file store: {e}")
+                logger.info(f"Successfully created S3 bucket '{bucket_name}'")
+            elif error_code == "403":
+                # Bucket exists but we don't have permission to access it
+                logger.warning(
+                    f"S3 bucket '{bucket_name}' exists but access is forbidden"
+                )
+                raise RuntimeError(
+                    f"Access denied to S3 bucket '{bucket_name}'. Check credentials and permissions."
+                )
+            else:
+                # Some other error occurred
+                logger.error(f"Failed to check S3 bucket '{bucket_name}': {e}")
+                raise RuntimeError(f"Failed to check S3 bucket '{bucket_name}': {e}")
 
     def has_file(
         self,
@@ -288,45 +281,40 @@ class S3BackedFileStore(FileStore):
         if file_id is None:
             file_id = str(uuid.uuid4())
 
-        try:
-            s3_client = self._get_s3_client()
-            bucket_name = self._get_bucket_name()
-            s3_key = self._get_s3_key(file_id)
+        s3_client = self._get_s3_client()
+        bucket_name = self._get_bucket_name()
+        s3_key = self._get_s3_key(file_id)
 
-            # Read content from IO object
-            if hasattr(content, "read"):
-                file_content = content.read()
-                if hasattr(content, "seek"):
-                    content.seek(0)  # Reset position for potential re-reads
-            else:
-                file_content = content
+        # Read content from IO object
+        if hasattr(content, "read"):
+            file_content = content.read()
+            if hasattr(content, "seek"):
+                content.seek(0)  # Reset position for potential re-reads
+        else:
+            file_content = content
 
-            # Upload to S3
-            s3_client.put_object(
-                Bucket=bucket_name,
-                Key=s3_key,
-                Body=file_content,
-                ContentType=file_type,
-            )
+        # Upload to S3
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=s3_key,
+            Body=file_content,
+            ContentType=file_type,
+        )
 
-            # Save metadata to database
-            upsert_filerecord(
-                file_id=file_id,
-                display_name=display_name or file_id,
-                file_origin=file_origin,
-                file_type=file_type,
-                bucket_name=bucket_name,
-                object_key=s3_key,
-                db_session=self.db_session,
-                file_metadata=file_metadata,
-            )
-            self.db_session.commit()
+        # Save metadata to database
+        upsert_filerecord(
+            file_id=file_id,
+            display_name=display_name or file_id,
+            file_origin=file_origin,
+            file_type=file_type,
+            bucket_name=bucket_name,
+            object_key=s3_key,
+            db_session=self.db_session,
+            file_metadata=file_metadata,
+        )
+        self.db_session.commit()
 
-            return file_id
-
-        except Exception:
-            self.db_session.rollback()
-            raise
+        return file_id
 
     def read_file(
         self, file_id: str, mode: str | None = None, use_tempfile: bool = False

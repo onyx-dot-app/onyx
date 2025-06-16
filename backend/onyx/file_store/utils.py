@@ -29,16 +29,14 @@ def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
     return f"plaintext_{user_file_id}"
 
 
-def store_user_file_plaintext(
-    user_file_id: int, plaintext_content: str, db_session: Session
-) -> bool:
+def store_user_file_plaintext(user_file_id: int, plaintext_content: str) -> bool:
     """
     Store plaintext content for a user file in the file store.
 
     Args:
         user_file_id: The ID of the user file
         plaintext_content: The plaintext content to store
-        db_session: The database session
+        db_session: The database session (not used directly, we create our own)
 
     Returns:
         bool: True if storage was successful, False otherwise
@@ -50,18 +48,19 @@ def store_user_file_plaintext(
     # Get plaintext file name
     plaintext_file_name = user_file_id_to_plaintext_file_name(user_file_id)
 
-    # Store the plaintext in the file store
-    file_store = get_default_file_store(db_session)
-    file_content = BytesIO(plaintext_content.encode("utf-8"))
+    # Use a separate session to avoid committing the caller's transaction
     try:
-        file_store.save_file(
-            content=file_content,
-            display_name=f"Plaintext for user file {user_file_id}",
-            file_origin=FileOrigin.PLAINTEXT_CACHE,
-            file_type="text/plain",
-            file_id=plaintext_file_name,
-        )
-        return True
+        with get_session_with_current_tenant() as file_store_session:
+            file_store = get_default_file_store(file_store_session)
+            file_content = BytesIO(plaintext_content.encode("utf-8"))
+            file_store.save_file(
+                content=file_content,
+                display_name=f"Plaintext for user file {user_file_id}",
+                file_origin=FileOrigin.PLAINTEXT_CACHE,
+                file_type="text/plain",
+                file_id=plaintext_file_name,
+            )
+            return True
     except Exception as e:
         logger.warning(f"Failed to store plaintext for user file {user_file_id}: {e}")
         return False
