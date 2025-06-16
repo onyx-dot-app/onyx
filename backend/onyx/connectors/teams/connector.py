@@ -17,7 +17,6 @@ from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from office365.teams.team import Team  # type: ignore
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -32,6 +31,9 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TextSection
+from onyx.connectors.teams.models import Message
+from onyx.connectors.teams.utils import fetch_messages
+from onyx.connectors.teams.utils import fetch_replies
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -223,34 +225,23 @@ class TeamsConnector(
         )
 
 
-def _get_created_datetime(chat_message: ChatMessage) -> datetime:
-    # Extract the 'createdDateTime' value from the 'properties' dictionary and convert it to a datetime object
-    return time_str_to_utc(chat_message.properties["createdDateTime"])
-
-
-def _extract_channel_members(channel: Channel) -> list[BasicExpertInfo]:
-    channel_members_list: list[BasicExpertInfo] = []
+def _extract_channel_members(channel: Channel) -> dict[str, BasicExpertInfo]:
     members = channel.members.get_all(
         # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
     ).execute_query_retry()
-    for member in members:
-        channel_members_list.append(BasicExpertInfo(display_name=member.display_name))
-    return channel_members_list
+
+    return {
+        member.display_name: BasicExpertInfo(display_name=member.display_name)
+        for member in members
+    }
 
 
-def _construct_semantic_identifier(channel: Channel, top_message: ChatMessage) -> str:
-    # NOTE: needs to be done this weird way because sometime we get back `None` for
-    # the fields which causes things to explode
-    top_message_from = top_message.properties.get("from") or {}
-    top_message_user = top_message_from.get("user") or {}
-    first_poster = top_message_user.get("displayName", "Unknown User")
-
+def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
     channel_name = channel.properties.get("displayName", "Unknown")
-    thread_subject = top_message.properties.get("subject", "Unknown")
 
     try:
-        snippet = parse_html_page_basic(top_message.body.content.rstrip())
+        snippet = parse_html_page_basic((top_message.body.content or "").rstrip())
         snippet = snippet[:50] + "..." if len(snippet) > 50 else snippet
     except Exception:
         logger.exception(
@@ -259,7 +250,11 @@ def _construct_semantic_identifier(channel: Channel, top_message: ChatMessage) -
         )
         snippet = ""
 
-    semantic_identifier = f"{first_poster} in {channel_name} about {thread_subject}"
+    semantic_identifier = (
+        f"{top_message.from_.user.display_name if top_message.from_ else 'Unknown User'}"
+        " in "
+        f"{channel_name} about {top_message.subject or 'Unknown'}"
+    )
     if snippet:
         semantic_identifier += f": {snippet}"
 
@@ -268,23 +263,20 @@ def _construct_semantic_identifier(channel: Channel, top_message: ChatMessage) -
 
 def _convert_thread_to_document(
     channel: Channel,
-    thread: list[ChatMessage],
+    thread: list[Message],
 ) -> Document | None:
     if len(thread) == 0:
         return None
 
     most_recent_message_datetime: datetime | None = None
     top_message = thread[0]
-    post_members_list: list[BasicExpertInfo] = []
+    posters: dict[str, BasicExpertInfo] = {}
     thread_text = ""
 
-    sorted_thread = sorted(thread, key=_get_created_datetime, reverse=True)
+    sorted_thread = sorted(thread, key=lambda m: m.created_date_time, reverse=True)
 
     if sorted_thread:
-        most_recent_message = sorted_thread[0]
-        most_recent_message_datetime = time_str_to_utc(
-            most_recent_message.properties["createdDateTime"]
-        )
+        most_recent_message_datetime = sorted_thread[0].created_date_time
 
     for message in thread:
         # add text and a newline
@@ -293,42 +285,34 @@ def _convert_thread_to_document(
             thread_text += message_text
 
         # if it has a subject, that means its the top level post message, so grab its id, url, and subject
-        if message.properties["subject"]:
+        if message.subject:
             top_message = message
 
-        # check to make sure there is a valid display name
-        if message.properties["from"]:
-            if message.properties["from"]["user"]:
-                if message.properties["from"]["user"]["displayName"]:
-                    message_sender = message.properties["from"]["user"]["displayName"]
-                    # if its not a duplicate, add it to the list
-                    if message_sender not in [
-                        member.display_name for member in post_members_list
-                    ]:
-                        post_members_list.append(
-                            BasicExpertInfo(display_name=message_sender)
-                        )
+        if not message.from_:
+            continue
+
+        if message.from_.user.display_name not in posters:
+            posters[message.from_.user.display_name] = BasicExpertInfo(
+                display_name=message.from_.user.display_name
+            )
 
     if not thread_text:
         return None
 
     # if there are no found post members, grab the members from the parent channel
-    if not post_members_list:
-        post_members_list = _extract_channel_members(channel)
+    if not posters:
+        _extract_channel_members(channel)
 
     semantic_string = _construct_semantic_identifier(channel, top_message)
 
-    post_id = top_message.properties["id"]
-    web_url = top_message.web_url
-
     doc = Document(
-        id=post_id,
-        sections=[TextSection(link=web_url, text=thread_text)],
+        id=top_message.id,
+        sections=[TextSection(link=top_message.web_url, text=thread_text)],
         source=DocumentSource.TEAMS,
         semantic_identifier=semantic_string,
         title="",  # teams threads don't really have a "title"
         doc_updated_at=most_recent_message_datetime,
-        primary_owners=post_members_list,
+        primary_owners=list(posters.values()),
         metadata={},
     )
     return doc
@@ -476,24 +460,12 @@ def _collect_documents_for_channel(
     A "thread" is the conjunction of the "root" message and all of its replies.
     """
 
-    # Server-side filter conditions are not supported on the chat-messages API.
-    # Therefore, we have to do this client-side, which is quite a bit more inefficient.
-    #
-    # Not allowed:
-    # message_collection = channel.messages.get().filter(f"createdDateTime gt {start}").execute_query()
-
-    message_collection = channel.messages.get_all(
-        # explicitly needed because of incorrect type definitions provided by the `office365` library
-        page_loaded=lambda _: None
-    ).execute_query()
-
-    for message in message_collection:
-        if not message.id:
-            continue
-
-        if not _should_process_message(message=message, start=start, end=end):
-            continue
-
+    for message in fetch_messages(
+        graph_client=graph_client,
+        team_id=team.id,
+        channel_id=channel.id,
+        start=start,
+    ):
         try:
             MAX_RETRIES = 10
             retries = 0
@@ -502,7 +474,15 @@ def _collect_documents_for_channel(
 
             while retries < MAX_RETRIES:
                 try:
-                    replies = list(message.replies.get_all().execute_query())
+                    replies = list(
+                        fetch_replies(
+                            graph_client=graph_client,
+                            team_id=team.id,
+                            channel_id=channel.id,
+                            root_message_id=message.id,
+                        )
+                    )
+
                     cre = None
                     break
 
@@ -551,40 +531,6 @@ def _collect_documents_for_channel(
             )
 
 
-def _should_process_message(
-    message: ChatMessage,
-    start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
-) -> bool:
-    """
-    Returns `True` if the given message was created / modified within the start-to-end datetime range.
-    Returns `False` otherwise.
-    """
-
-    props = message.properties
-
-    if props.get("deletedDateTime"):
-        return False
-
-    def compare(dt_str: str) -> bool:
-        dt_ts = datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc).timestamp()
-        return start <= dt_ts and dt_ts < end
-
-    if modified_at := props.get("lastModifiedDateTime"):
-        if isinstance(modified_at, str):
-            return compare(modified_at)
-
-    if created_at := props.get("createdDateTime"):
-        if isinstance(created_at, str):
-            return compare(created_at)
-
-    logger.warn(
-        "No `lastModifiedDateTime` or `createdDateTime` fields found in `message.properties`"
-    )
-
-    return False
-
-
 if __name__ == "__main__":
     from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -606,10 +552,9 @@ if __name__ == "__main__":
 
     connector.validate_connector_settings()
 
-    print(
-        load_everything_from_checkpoint_connector(
-            connector=connector,
-            start=0.0,
-            end=datetime.now(tz=timezone.utc).timestamp(),
-        )
-    )
+    for doc in load_everything_from_checkpoint_connector(
+        connector=connector,
+        start=0.0,
+        end=datetime.now(tz=timezone.utc).timestamp(),
+    ):
+        print(doc)
