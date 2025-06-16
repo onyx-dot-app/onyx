@@ -51,7 +51,7 @@ def document_chat_graph_builder() -> StateGraph:
         },
     )
     graph.add_edge(start_key="search_node", end_key="action_router")
-    graph.add_edge(start_key="edit_node", end_key="action_router")
+    graph.add_edge(start_key="edit_node", end_key="respond_node")
     graph.add_edge(start_key="review_node", end_key="action_router")
     graph.add_edge(start_key="respond_node", end_key=END)
 
