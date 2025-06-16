@@ -111,13 +111,15 @@ def reorder_sections(
 ) -> list[InferenceSection]:
     if section_relevance_list is None:
         return sections
-
+    logger.info(sections)
+    logger.info(section_relevance_list)
     reordered_sections: list[InferenceSection] = []
     if section_relevance_list is not None:
         for selection_target in [True, False]:
             for section, is_relevant in zip(sections, section_relevance_list):
                 if is_relevant == selection_target:
                     reordered_sections.append(section)
+    logger.info(reordered_sections)
     return reordered_sections
 
 
@@ -268,7 +270,7 @@ def _apply_pruning(
                     tokenizer=llm_tokenizer,
                 )
                 sections = [sections[0]]
-
+    logger.info(sections)
     return sections
 
 
