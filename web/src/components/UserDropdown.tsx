@@ -9,7 +9,7 @@ import { checkUserIsNoAuthUser, logout } from "@/lib/user";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { FiLogOut } from "react-icons/fi";
+import { FiFolder, FiLogOut } from "react-icons/fi";
 import useSWR from "swr";
 import { Notifications } from "./chat/Notifications";
 import DynamicFaIcon, { preloadIcons } from "./icons/DynamicFaIcon";
@@ -19,15 +19,15 @@ import { SettingsContext } from "./settings/SettingsProvider";
 import { useUser } from "./user/UserProvider";
 
 const getDomainSpecificNavItems = (email?: string) => {
-  if (!email) return { showDocuments: false, showPdfTranslator: false };
+  if (!email) return { showProjects: false, showPdfTranslator: false };
   
   const domain = email.split('@')[1];
   if (domain === 'getvalkai.com' || domain === 'test.com') {
-    return { showDocuments: true, showPdfTranslator: true };
+    return { showProjects: true, showPdfTranslator: true };
   } else if (domain === 'oxos.com') {
-    return { showDocuments: true, showPdfTranslator: false };
+    return { showProjects: true, showPdfTranslator: false };
   }
-  return { showDocuments: false, showPdfTranslator: false };
+  return { showProjects: false, showPdfTranslator: false };
 };
 
 interface DropdownOptionProps {
@@ -263,13 +263,13 @@ export function UserDropdown({
                   </>
                 )}
                 
-                {/* Document Editor Section */}
-                {page !== "documents" && domainNavItems.showDocuments && (
+                {/* Projects Section */}
+                {page !== "projects" && domainNavItems.showProjects && (
                   <>
                     <DropdownOption
-                      href="/documents"
-                      icon={<UserIcon size={16} className="my-auto" />}
-                      label="Documents"
+                      href="/projects"
+                      icon={<FiFolder size={16} className="my-auto" />}
+                      label="Projects"
                     />
                   </>
                 )}
@@ -286,7 +286,7 @@ export function UserDropdown({
                 )}
 
                 {/* Divider between Pages and Settings */}
-                {(domainNavItems.showDocuments || domainNavItems.showPdfTranslator) && (
+                {(domainNavItems.showProjects || domainNavItems.showPdfTranslator) && (
                   <div className="border-t border-border my-1" />
                 )}
 
