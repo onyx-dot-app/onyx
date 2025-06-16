@@ -26,6 +26,11 @@ services:
       - MODEL_SERVER_PORT=${MODEL_SERVER_PORT:-}
       - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
+      # MinIO configuration
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
       # To enable the LLM for testing, update the value below
       # NOTE: this is disabled by default since this is a high volume eval that can be costly
       - DISABLE_GENERATIVE_AI=${DISABLE_GENERATIVE_AI:-true}
@@ -60,6 +65,11 @@ services:
       - INDEXING_MODEL_SERVER_HOST=${INDEXING_MODEL_SERVER_HOST:-indexing_model_server}
       - ENV_SEED_CONFIGURATION=${ENV_SEED_CONFIGURATION:-}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
+      # MinIO configuration
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -206,6 +216,24 @@ services:
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
 
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9004:9000"
+      - "9005:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
   cache:
     image: redis:7.4-alpine
     restart: always
@@ -229,3 +257,4 @@ volumes:
       o: bind
       device: ${DANSWER_VESPA_DATA_DIR:-./vespa_data}
   log_store:  # for logs that we don't want to lose on container restarts
+  minio_data:
