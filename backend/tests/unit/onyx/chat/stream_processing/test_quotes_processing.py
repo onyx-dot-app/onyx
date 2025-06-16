@@ -150,7 +150,7 @@ def test_fuzzy_match_quotes_to_docs() -> None:
         metadata={},
         match_highlights=[],
         updated_at=None,
-        image_file_name=None,
+        image_file_id=None,
         doc_summary="",
         chunk_context="",
     )
@@ -171,7 +171,7 @@ def test_fuzzy_match_quotes_to_docs() -> None:
         metadata={},
         match_highlights=[],
         updated_at=None,
-        image_file_name=None,
+        image_file_id=None,
         doc_summary="",
         chunk_context="",
     )

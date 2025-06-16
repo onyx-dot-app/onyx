@@ -12,7 +12,7 @@ from onyx.configs.constants import SessionType
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
-from onyx.db.models import PGFileStore
+from onyx.db.models import FileRecord
 from onyx.db.models import TaskQueueState
 
 
@@ -254,7 +254,7 @@ class QueryHistoryExport(BaseModel):
     @classmethod
     def from_file(
         cls,
-        file: PGFileStore,
+        file: FileRecord,
     ) -> "QueryHistoryExport":
         if not file.file_metadata or not isinstance(file.file_metadata, dict):
             raise RuntimeError(
@@ -262,7 +262,7 @@ class QueryHistoryExport(BaseModel):
             )
 
         metadata = QueryHistoryFileMetadata.model_validate(dict(file.file_metadata))
-        task_id = extract_task_id_from_query_history_report_name(file.file_name)
+        task_id = extract_task_id_from_query_history_report_name(file.file_id)
 
         return cls(
             task_id=task_id,

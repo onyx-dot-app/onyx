@@ -29,7 +29,7 @@ class BaseChunk(BaseModel):
     content: str
     # Holds the link and the offsets into the raw Chunk text
     source_links: dict[int, str] | None
-    image_file_name: str | None
+    image_file_id: str | None
     # True if this Chunk's start is not at the start of a Section
     section_continuation: bool
 

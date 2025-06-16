@@ -33,7 +33,7 @@ class Section(BaseModel):
 
     link: str | None = None
     text: str | None = None
-    image_file_name: str | None = None
+    image_file_id: str | None = None
 
 
 class TextSection(Section):
@@ -48,10 +48,10 @@ class TextSection(Section):
 class ImageSection(Section):
     """Section containing an image reference"""
 
-    image_file_name: str
+    image_file_id: str
 
     def __sizeof__(self) -> int:
-        return sys.getsizeof(self.image_file_name) + sys.getsizeof(self.link)
+        return sys.getsizeof(self.image_file_id) + sys.getsizeof(self.link)
 
 
 class BasicExpertInfo(BaseModel):
