@@ -215,6 +215,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "UserFolder", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
+    marketing_campaigns: Mapped[list["MarketingCampaign"]] = relationship(
+        "MarketingCampaign", back_populates="user"
+    )
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -2500,6 +2503,36 @@ Multi-tenancy related tables
 
 class PublicBase(DeclarativeBase):
     __abstract__ = True
+
+
+class MarketingCampaign(Base):
+    __tablename__ = "marketing_campaign"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default="draft"
+    )
+    
+    text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    
+    user: Mapped[User] = relationship("User", back_populates="marketing_campaigns")
 
 
 # Strictly keeps track of the tenant that a given user will authenticate to.
