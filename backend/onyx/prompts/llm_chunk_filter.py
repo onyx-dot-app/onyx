@@ -2,8 +2,8 @@
 # to determine if the chunk is useful towards the user query. This is used as part
 # of the reranking flow
 
-USEFUL_PAT = "Да, полезен"
-NONUSEFUL_PAT = "Бесполезен"
+USEFUL_PAT = "yes"
+NONUSEFUL_PAT = "no"
 SECTION_FILTER_PROMPT = f"""
 Определи, полезен ли справочный раздел для ответа на запрос пользователя.
 Недостаточно, чтобы справочный раздел был связан с запросом, \
