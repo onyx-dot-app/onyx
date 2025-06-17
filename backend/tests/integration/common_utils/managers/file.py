@@ -8,6 +8,7 @@ from typing import Tuple
 import requests
 
 from onyx.file_store.models import FileDescriptor
+from onyx.server.documents.models import FileUploadResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
@@ -70,7 +71,7 @@ class FileManager:
         file_name: str,
         user_performing_action: DATestUser,
         content_type: str = "application/octet-stream",
-    ) -> dict:
+    ) -> FileUploadResponse:
         # Read the file content
         with open(file_path, "rb") as f:
             file_content = f.read()
@@ -105,4 +106,4 @@ class FileManager:
             )
 
         response_json = response.json()
-        return response_json
+        return FileUploadResponse(**response_json)

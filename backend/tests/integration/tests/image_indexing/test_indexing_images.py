@@ -13,9 +13,7 @@ from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.file import FileManager
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
@@ -25,25 +23,16 @@ FILE_PATH = "tests/integration/common_utils/test_files"
 
 
 def test_image_indexing(
-    # reset: None,
+    reset: None,
+    admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
-    )
-
     os.makedirs(FILE_PATH, exist_ok=True)
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
 
     # Use FileManager to upload the test file
     upload_response = FileManager.upload_file_for_connector(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
-    )
-
-    LLMProviderManager.create(
-        name="test_llm",
-        user_performing_action=admin_user,
     )
 
     SettingsManager.update_settings(
@@ -54,7 +43,7 @@ def test_image_indexing(
         user_performing_action=admin_user,
     )
 
-    file_paths = upload_response.get("file_paths", [])
+    file_paths = upload_response.file_paths
 
     if not file_paths:
         pytest.fail("File upload failed - no file paths returned")
@@ -105,13 +94,7 @@ def test_image_indexing(
             vespa_client=vespa_client,
         )
 
-        # Ensure we indexed an image from the sample.pdf file
-        has_sample_pdf_image = False
-        for doc in documents:
-            if doc.image_file_id and FILE_NAME in doc.image_file_id:
-                has_sample_pdf_image = True
-
-        # Assert that at least one document has an image file name containing "sample.pdf"
-        assert (
-            has_sample_pdf_image
-        ), "No document found with an image file name containing 'sample.pdf'"
+        assert len(documents) == 1
+        document = documents[0]
+        assert document.image_file_id is not None
+        assert document.image_file_id == file_paths[0]
