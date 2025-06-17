@@ -384,7 +384,6 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
                 rows.append(row_str)
                 num_empty_consecutive_rows = 0
             else:
-                logger.debug(f"skipping empty row in {file_name}")
                 num_empty_consecutive_rows += 1
 
             if num_empty_consecutive_rows > 100:

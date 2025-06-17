@@ -672,6 +672,8 @@ class GoogleDriveConnector(
             if stage_completion.stage != DriveRetrievalStage.DONE
         ]
 
+        logger.debug(f"Non-completed users remaining: {len(non_completed_org_emails)}")
+
         # don't process too many emails before returning a checkpoint. This is
         # to resolve the case where there are a ton of emails that don't have access
         # to the drive APIs. Without this, we could loop through these emails for
