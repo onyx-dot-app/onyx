@@ -530,5 +530,6 @@ def section_relevance_list_impl(
         items=final_context_sections,
     )
     logger.info(final_context_sections)
+    logger.info(section_relevance)
     logger.info(llm_indices)
     return [ind in llm_indices for ind in range(len(final_context_sections))]
