@@ -1,7 +1,7 @@
 """rework-kg-config
 
 Revision ID: 03bf8be6b53a
-Revises: cec7ec36c505
+Revises: 65bc6e0f8500
 Create Date: 2025-06-16 10:52:34.815335
 
 """
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "03bf8be6b53a"
-down_revision = "cec7ec36c505"
+down_revision = "65bc6e0f8500"
 branch_labels = None
 depends_on = None
 
