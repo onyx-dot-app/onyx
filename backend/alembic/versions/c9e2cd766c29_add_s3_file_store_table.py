@@ -1,7 +1,7 @@
 """modify_file_store_for_external_storage
 
 Revision ID: c9e2cd766c29
-Revises: cec7ec36c505
+Revises: 65bc6e0f8500
 Create Date: 2025-06-13 14:02:09.867679
 
 """
@@ -19,58 +19,64 @@ from onyx.file_store.file_store import get_s3_file_store
 
 # revision identifiers, used by Alembic.
 revision = "c9e2cd766c29"
-down_revision = "cec7ec36c505"
+down_revision = "65bc6e0f8500"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Modify existing file_store table to support external storage
-    op.rename_table("file_store", "file_record")
+    try:
+        # Modify existing file_store table to support external storage
+        op.rename_table("file_store", "file_record")
 
-    # Make lobj_oid nullable (for external storage files)
-    op.alter_column("file_record", "lobj_oid", nullable=True)
+        # Make lobj_oid nullable (for external storage files)
+        op.alter_column("file_record", "lobj_oid", nullable=True)
 
-    # Add external storage columns with generic names
-    op.add_column("file_record", sa.Column("bucket_name", sa.String(), nullable=True))
-    op.add_column("file_record", sa.Column("object_key", sa.String(), nullable=True))
+        # Add external storage columns with generic names
+        op.add_column(
+            "file_record", sa.Column("bucket_name", sa.String(), nullable=True)
+        )
+        op.add_column(
+            "file_record", sa.Column("object_key", sa.String(), nullable=True)
+        )
 
-    # Add timestamps for tracking
-    op.add_column(
-        "file_record",
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-    )
-    op.add_column(
-        "file_record",
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-    )
+        # Add timestamps for tracking
+        op.add_column(
+            "file_record",
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+        )
+        op.add_column(
+            "file_record",
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+        )
 
-    op.alter_column("file_record", "file_name", new_column_name="file_id")
+        op.alter_column("file_record", "file_name", new_column_name="file_id")
+    except Exception as e:
+        if "does not exist" in str(e) or 'relation "file_store" does not exist' in str(
+            e
+        ):
+            print(
+                f"Ran into error - {e}. Likely means we had a partial success in the past, continuing..."
+            )
+        else:
+            raise
 
     print(
         "External storage configured - migrating files from PostgreSQL to external storage..."
     )
-    try:
-        _migrate_files_to_external_storage()
-    except Exception:
-        print("Error during upgrade migration, rolling back …")
-        op.drop_column("file_record", "bucket_name")
-        op.drop_column("file_record", "object_key")
-        op.drop_column("file_record", "created_at")
-        op.drop_column("file_record", "updated_at")
-        op.alter_column("file_record", "lobj_oid", nullable=False)
-        op.rename_table("file_record", "file_store")
-        raise
+    # if we fail midway through this, we'll have a partial success. Running the migration
+    # again should allow us to continue.
+    _migrate_files_to_external_storage()
     print("File migration completed successfully!")
 
     # Remove lobj_oid column
@@ -129,7 +135,6 @@ def _migrate_files_to_postgres() -> None:
     # Obtain DB session from Alembic context
     bind = op.get_bind()
     session = Session(bind=bind)
-    external_store = get_s3_file_store(db_session=session)
 
     # Fetch rows that have external storage pointers (bucket/object_key not NULL)
     result = session.execute(
@@ -149,6 +154,10 @@ def _migrate_files_to_postgres() -> None:
     print(f"Found {total_files} files to migrate back to PostgreSQL large objects.")
 
     migrated_count = 0
+
+    # only create external store if we have files to migrate. This line
+    # makes it so we need to have S3/MinIO configured to run this migration.
+    external_store = get_s3_file_store(db_session=session)
 
     for i, file_id in enumerate(files_to_migrate, 1):
         print(f"Migrating file {i}/{total_files}: {file_id}")
@@ -212,7 +221,10 @@ def _migrate_files_to_external_storage() -> None:
 
     # Find all files currently stored in PostgreSQL (lobj_oid is not null)
     result = session.execute(
-        text("SELECT file_id FROM file_record WHERE lobj_oid IS NOT NULL")
+        text(
+            "SELECT file_id FROM file_record WHERE lobj_oid IS NOT NULL "
+            "AND bucket_name IS NULL AND object_key IS NULL"
+        )
     )
 
     files_to_migrate = [row[0] for row in result.fetchall()]
@@ -260,6 +272,7 @@ def _migrate_files_to_external_storage() -> None:
                     file_metadata = None
 
         # Save to external storage (this will handle the database record update and cleanup)
+        # NOTE: this WILL .commit() the transaction.
         external_store.save_file(
             file_id=file_id,
             content=file_content,
