@@ -1,10 +1,8 @@
 import copy
 import os
-import time
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
-from http import HTTPStatus
 from typing import Any
 from typing import cast
 
@@ -13,7 +11,6 @@ from office365.graph_client import GraphClient  # type: ignore
 from office365.runtime.client_request_exception import ClientRequestException  # type: ignore
 from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
 from office365.teams.channels.channel import Channel  # type: ignore
-from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from office365.teams.team import Team  # type: ignore
 
 from onyx.configs.constants import DocumentSource
@@ -463,48 +460,14 @@ def _collect_documents_for_channel(
         start=start,
     ):
         try:
-            MAX_RETRIES = 10
-            retries = 0
-            replies: list[ChatMessage] | None = None
-            cre: ClientRequestException | None = None
-
-            while retries < MAX_RETRIES:
-                try:
-                    replies = list(
-                        fetch_replies(
-                            graph_client=graph_client,
-                            team_id=team.id,
-                            channel_id=channel.id,
-                            root_message_id=message.id,
-                        )
-                    )
-
-                    cre = None
-                    break
-
-                except ClientRequestException as e:
-                    cre = e
-
-                    if not cre.response:
-                        break
-                    if cre.response.status_code != int(HTTPStatus.TOO_MANY_REQUESTS):
-                        break
-
-                    retry_after = int(cre.response.headers.get("Retry-After", 10))
-                    time.sleep(retry_after)
-                    retries += 1
-
-            if cre or replies is None:
-                failure_message = f"Retrieval of message and its replies failed; {channel.id=} {message.id=}"
-                if cre and cre.response:
-                    failure_message = f"{failure_message}; {cre.response.status_code=}"
-
-                yield ConnectorFailure(
-                    failed_entity=EntityFailure(entity_id=message.id),
-                    failure_message=failure_message,
-                    exception=cre,
+            replies = list(
+                fetch_replies(
+                    graph_client=graph_client,
+                    team_id=team.id,
+                    channel_id=channel.id,
+                    root_message_id=message.id,
                 )
-                continue
+            )
 
             thread = [message]
             thread.extend(replies[::-1])
@@ -517,6 +480,7 @@ def _collect_documents_for_channel(
                 thread=thread,
             ):
                 yield doc
+
         except Exception as e:
             yield ConnectorFailure(
                 failed_entity=EntityFailure(
