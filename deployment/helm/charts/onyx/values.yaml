@@ -6,10 +6,10 @@ postgresql:
   primary:
     persistence:
       storageClass: ""
-      size: 5Gi
+      size: 10Gi
     shmVolume:
       enabled: true
-      sizeLimit: 1Gi
+      sizeLimit: 2Gi
   enabled: true
   auth:
     existingSecret: onyx-secrets
@@ -29,7 +29,7 @@ vespa:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 30Gi
         storageClassName: ""
   enabled: true
   replicaCount: 1
@@ -47,13 +47,14 @@ vespa:
     runAsUser: 0
   resources:
     # The Vespa Helm chart specifies default resources, which are quite modest. We override
-    # them here to increase chances of the chart running successfully.
+    # them here to increase chances of the chart running successfully. If you plan to index at 
+    # scale, you will likely need to increaes these limits further.
     requests:
       cpu: 4000m
       memory: 8000Mi
     limits:
-      cpu: 4000m
-      memory: 16000Mi
+      cpu: 8000m
+      memory: 32000Mi
 
 persistent:
   storageClassName: ""

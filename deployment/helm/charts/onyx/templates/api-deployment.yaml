@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-api-deployment
+  name: {{ include "onyx-stack.fullname" . }}-api-server
   labels:
     {{- include "onyx-stack.labels" . | nindent 4 }}
 spec:
