@@ -233,11 +233,17 @@ def _extract_channel_members(channel: Channel) -> dict[str, BasicExpertInfo]:
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
+    top_message_user_name = (
+        top_message.from_.user.display_name if top_message.from_ else "Unknown User"
+    )
+    top_message_content = top_message.body.content or ""
+    top_message_subject = top_message.subject or "Unknown Subject"
     channel_name = channel.properties.get("displayName", "Unknown")
 
     try:
-        snippet = parse_html_page_basic((top_message.body.content or "").rstrip())
+        snippet = parse_html_page_basic(top_message_content.rstrip())
         snippet = snippet[:50] + "..." if len(snippet) > 50 else snippet
+
     except Exception:
         logger.exception(
             f"Error parsing snippet for message "
@@ -246,9 +252,7 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
         snippet = ""
 
     semantic_identifier = (
-        f"{top_message.from_.user.display_name if top_message.from_ else 'Unknown User'}"
-        " in "
-        f"{channel_name} about {top_message.subject or 'Unknown'}"
+        f"{top_message_user_name} in {channel_name} about {top_message_subject}"
     )
     if snippet:
         semantic_identifier += f": {snippet}"
