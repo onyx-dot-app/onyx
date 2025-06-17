@@ -79,6 +79,16 @@ export function CredentialFieldsRenderer({
               value={method.value}
               className="space-y-4"
             >
+              {/* Show description if method has no fields but has a description */}
+              {Object.keys(method.fields).length === 0 &&
+                method.description && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-md">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      {method.description}
+                    </p>
+                  </div>
+                )}
+
               {Object.entries(method.fields).map(([key, val]) => {
                 if (typeof val === "boolean") {
                   return (

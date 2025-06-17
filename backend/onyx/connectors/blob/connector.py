@@ -64,7 +64,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
         (1) R2: Access Key ID, Secret Access Key, Account ID
-        (2) S3: AWS Access Key ID, AWS Secret Access Key or IAM role
+        (2) S3: AWS Access Key ID, AWS Secret Access Key or IAM role or Assume Role
         (3) GOOGLE_CLOUD_STORAGE: Access Key ID, Secret Access Key, Project ID
         (4) OCI_STORAGE: Namespace, Region, Access Key ID, Secret Access Key
 
@@ -151,6 +151,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 botocore_session._credentials = refreshable  # type: ignore[attr-defined]
                 session = boto3.Session(botocore_session=botocore_session)
                 self.s3_client = session.client("s3")
+            elif authentication_method == "assume_role":
+                # We will assume the instance role to access S3.
+                logger.debug("Using instance role authentication for S3 bucket.")
+                self.s3_client = boto3.client("s3")
             else:
                 raise ConnectorValidationError("Invalid authentication method for S3. ")
 

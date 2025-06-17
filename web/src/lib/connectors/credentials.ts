@@ -14,6 +14,7 @@ export interface AuthMethodOption<TFields> {
   value: string;
   label: string;
   fields: TFields;
+  description?: string;
 }
 export interface CredentialTemplateWithAuth<TFields> {
   authentication_method?: string;
@@ -337,6 +338,13 @@ export const credentialTemplates: Record<ValidSources, any> = {
         fields: {
           aws_role_arn: "",
         },
+      },
+      {
+        value: "assume_role",
+        label: "Assume Role",
+        fields: {},
+        description:
+          "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required.",
       },
     ],
   } as CredentialTemplateWithAuth<S3CredentialJson>,
