@@ -66,7 +66,7 @@ def fetch_replies(
     root_message_id: str,
 ) -> Generator[Message]:
     request_url = (
-        f"teams/{team_id}/channels/{channel_id}" f"/messages/{root_message_id}/replies"
+        f"teams/{team_id}/channels/{channel_id}/messages/{root_message_id}/replies"
     )
 
     response_json = retry(graph_client=graph_client, request_url=request_url)
