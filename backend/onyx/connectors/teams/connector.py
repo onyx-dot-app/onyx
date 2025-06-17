@@ -220,16 +220,13 @@ class TeamsConnector(
         )
 
 
-def _extract_channel_members(channel: Channel) -> dict[str, BasicExpertInfo]:
+def _extract_channel_members(channel: Channel) -> set[str]:
     members = channel.members.get_all(
         # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
     ).execute_query_retry()
 
-    return {
-        member.display_name: BasicExpertInfo(display_name=member.display_name)
-        for member in members
-    }
+    return {member.display_name for member in members}
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
@@ -300,7 +297,11 @@ def _convert_thread_to_document(
 
     # if there are no found post members, grab the members from the parent channel
     if not posters:
-        posters = _extract_channel_members(channel)
+        channel_members = _extract_channel_members(channel)
+        posters = {
+            display_name: BasicExpertInfo(display_name=display_name)
+            for display_name in channel_members
+        }
 
     semantic_string = _construct_semantic_identifier(channel, top_message)
 
