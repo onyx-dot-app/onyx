@@ -52,7 +52,7 @@ vespa:
   resources:
     # The Vespa Helm chart specifies default resources, which are quite modest. We override
     # them here to increase chances of the chart running successfully. If you plan to index at
-    # scale, you will likely need to increaes these limits further.
+    # scale, you will likely need to increase these limits further.
     requests:
       cpu: 4000m
       memory: 8000Mi
