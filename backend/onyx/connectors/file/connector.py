@@ -185,14 +185,14 @@ def _process_file(
             TextSection(link=link, text=extraction_result.text_content.strip())
         )
 
-    # Then any extracted images from docx, etc.
+    # Then any extracted images from docx, PDFs, etc.
     for idx, (img_data, img_name) in enumerate(
         extraction_result.embedded_images, start=1
     ):
         # Store each embedded image as a separate file in FileStore
         # and create a section with the image reference
         try:
-            image_section, _ = _create_image_section(
+            image_section, stored_file_name = _create_image_section(
                 image_data=img_data,
                 db_session=db_session,
                 parent_file_name=file_id,
@@ -200,6 +200,10 @@ def _process_file(
                 idx=idx,
             )
             sections.append(image_section)
+            logger.debug(
+                f"Created ImageSection for embedded image {idx} "
+                f"in {file_name}, stored as: {stored_file_name}"
+            )
         except Exception as e:
             logger.warning(
                 f"Failed to process embedded image {idx} in {file_name}: {e}"

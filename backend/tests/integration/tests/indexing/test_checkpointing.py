@@ -84,13 +84,13 @@ def test_mock_connector_basic_flow(
 
     # Verify results
     with get_session_context_manager() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+        chunks = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
         )
-    assert len(documents) == 1
-    assert documents[0].id == test_doc.id
+    assert len(chunks) == 1
+    assert chunks[0].id == test_doc.id
 
     errors = IndexAttemptManager.get_index_attempt_errors_for_cc_pair(
         cc_pair_id=cc_pair.id,

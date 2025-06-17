@@ -397,6 +397,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: always
     ports:
       - "9004:9000"
       - "9005:9001"

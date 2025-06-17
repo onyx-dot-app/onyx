@@ -233,7 +233,8 @@ class DocumentManager:
         for doc_dict in retrieved_docs_dict:
             doc_id = doc_dict["fields"]["document_id"]
             doc_content = doc_dict["fields"]["content"]
-            image_file_id = doc_dict["fields"].get("image_file_id", None)
+            # still called `image_file_name` in Vespa for backwards compatibility
+            image_file_id = doc_dict["fields"].get("image_file_name", None)
             final_docs.append(
                 SimpleTestDocument(
                     id=doc_id, content=doc_content, image_file_id=image_file_id

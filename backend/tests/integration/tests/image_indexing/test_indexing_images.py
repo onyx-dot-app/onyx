@@ -23,7 +23,7 @@ FILE_PATH = "tests/integration/common_utils/test_files"
 
 
 def test_image_indexing(
-    # reset: None,
+    reset: None,
     admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:
@@ -84,17 +84,23 @@ def test_image_indexing(
     CCPairManager.wait_for_indexing_completion(
         cc_pair=cc_pair,
         after=datetime.now(timezone.utc),
+        timeout=180,
         user_performing_action=admin_user,
     )
 
     with get_session_context_manager() as db_session:
+        # really gets the chunks from Vespa, which is why there are two;
+        # one for the raw text and one for the summarized image.
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
         )
 
-        assert len(documents) == 1
-        document = documents[0]
-        assert document.image_file_id is not None
-        assert document.image_file_id == file_paths[0]
+        assert len(documents) == 2
+        for document in documents:
+            if "These  are  Johns  dogs" in document.content:
+                assert document.image_file_id is None
+            else:
+                assert document.image_file_id is not None
+                assert file_paths[0] in document.image_file_id
