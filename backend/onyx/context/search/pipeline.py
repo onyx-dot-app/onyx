@@ -420,6 +420,8 @@ class SearchPipeline:
             list[InferenceSection], next(self._postprocessing_generator)
         )
 
+        logger.info(self._reranked_sections)
+
         return self._reranked_sections
 
     @property
@@ -527,4 +529,6 @@ def section_relevance_list_impl(
         relevance_sections=section_relevance,
         items=final_context_sections,
     )
+    logger.info(final_context_sections)
+    logger.info(llm_indices)
     return [ind in llm_indices for ind in range(len(final_context_sections))]
