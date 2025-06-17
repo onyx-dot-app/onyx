@@ -37,7 +37,7 @@ spec:
         - name: celery-worker-primary
           securityContext:
             {{- toYaml .Values.celery_worker_primary.securityContext | nindent 12 }}
-          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
           command:
             [

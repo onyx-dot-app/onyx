@@ -37,7 +37,7 @@ spec:
         - name: web-server
           securityContext:
             {{- toYaml .Values.webserver.securityContext | nindent 12 }}
-          image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.webserver.image.pullPolicy }}
           ports:
             - name: http

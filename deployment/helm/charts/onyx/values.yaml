@@ -2,6 +2,10 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+global:
+  # Global version for all Onyx components (overrides .Chart.AppVersion)
+  version: "latest"
+
 postgresql:
   primary:
     persistence:

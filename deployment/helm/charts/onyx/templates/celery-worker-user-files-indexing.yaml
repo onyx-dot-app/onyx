@@ -37,7 +37,7 @@ spec:
         - name: celery-worker-user-files-indexing
           securityContext:
             {{- toYaml .Values.celery_worker_user_files_indexing.securityContext | nindent 12 }}
-          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
           command:
             [
