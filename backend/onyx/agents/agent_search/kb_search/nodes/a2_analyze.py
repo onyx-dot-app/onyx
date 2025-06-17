@@ -271,7 +271,7 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
     ):
         query_type = KGRelationshipDetection.RELATIONSHIPS.value
 
-        if extraction_detected_relationships != relationship_detection:
+        if extraction_detected_relationships:
             logger.warning(
                 "Fyi - Extraction detected relationships: "
                 f"{extraction_detected_relationships}, "
