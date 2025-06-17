@@ -122,12 +122,14 @@ serviceAccount:
   name: ""
 
 nginx:
+  enabled: true
   containerPorts:
     http: 1024
   extraEnvVars:
     - name: DOMAIN
       value: localhost
   service:
+    type: LoadBalancer
     ports:
       http: 80
       onyx: 3000
