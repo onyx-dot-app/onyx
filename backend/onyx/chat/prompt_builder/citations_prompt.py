@@ -128,7 +128,7 @@ def build_citations_system_message(
     if prompt_config.include_citations:
         system_prompt += REQUIRE_CITATION_STATEMENT
     tag_handled_prompt = handle_onyx_date_awareness(
-        system_prompt, prompt_config, add_additional_info_if_no_tag=True
+        system_prompt, prompt_config, add_additional_info_if_no_tag=prompt_config.datetime_aware
     )
 
     return SystemMessage(content=tag_handled_prompt)
