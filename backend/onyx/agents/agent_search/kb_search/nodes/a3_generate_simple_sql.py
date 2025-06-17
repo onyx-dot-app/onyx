@@ -299,8 +299,8 @@ def generate_simple_sql(
                 KG_SQL_GENERATION_TIMEOUT,
                 primary_llm.invoke,
                 prompt=msg,
-                timeout_override=25,
-                max_tokens=1500,
+                timeout_override=KG_SQL_GENERATION_TIMEOUT_OVERRIDE,
+                max_tokens=KG_SQL_GENERATION_MAX_TOKENS,
             )
 
             cleaned_response = (
