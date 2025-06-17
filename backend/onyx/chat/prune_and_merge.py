@@ -115,7 +115,7 @@ def reorder_sections(
     logger.info(section_relevance_list)
     reordered_sections: list[InferenceSection] = []
     if section_relevance_list is not None:
-        for selection_target in [True, False]:
+        for selection_target in [True,]:
             for section, is_relevant in zip(sections, section_relevance_list):
                 if is_relevant == selection_target:
                     reordered_sections.append(section)
@@ -152,6 +152,7 @@ def _apply_pruning(
     sections = reorder_sections(
         sections=sections, section_relevance_list=section_relevance_list
     )
+    logger.info(sections)
     # remove docs that are explicitly marked as not for QA
     sections = _remove_sections_to_ignore(sections=sections)
 
