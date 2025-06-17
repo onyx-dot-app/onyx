@@ -25,7 +25,7 @@ FILE_PATH = "tests/integration/common_utils/test_files"
 
 
 def test_image_indexing(
-    reset: None,
+    # reset: None,
     vespa_client: vespa_fixture,
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)

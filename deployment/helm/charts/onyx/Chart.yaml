@@ -34,3 +34,7 @@ dependencies:
     version: 20.1.0
     repository: https://charts.bitnami.com/bitnami
     condition: redis.enabled
+  - name: minio
+    version: 17.0.4
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: minio.enabled

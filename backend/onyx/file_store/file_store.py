@@ -15,8 +15,6 @@ from mypy_boto3_s3 import S3Client
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import MINIO_ACCESS_KEY
-from onyx.configs.app_configs import MINIO_SECRET_KEY
 from onyx.configs.app_configs import S3_AWS_ACCESS_KEY_ID
 from onyx.configs.app_configs import S3_AWS_SECRET_ACCESS_KEY
 from onyx.configs.app_configs import S3_ENDPOINT_URL
@@ -395,15 +393,11 @@ def get_s3_file_store(db_session: Session) -> S3BackedFileStore:
             "S3_FILE_STORE_BUCKET_NAME configuration is required for S3 file store"
         )
 
-    # Try to get credentials from environment, prioritizing MinIO-specific ones
-    aws_access_key_id = MINIO_ACCESS_KEY or S3_AWS_ACCESS_KEY_ID
-    aws_secret_access_key = MINIO_SECRET_KEY or S3_AWS_SECRET_ACCESS_KEY
-
     return S3BackedFileStore(
         db_session=db_session,
         bucket_name=bucket_name,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
+        aws_access_key_id=S3_AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=S3_AWS_SECRET_ACCESS_KEY,
         aws_region_name=AWS_REGION_NAME,
         s3_endpoint_url=S3_ENDPOINT_URL,
         s3_prefix=S3_FILE_STORE_PREFIX,

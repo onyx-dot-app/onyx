@@ -792,7 +792,5 @@ S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL")
 S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
 
 # S3/MinIO Access Keys
-MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY")
-MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY")
 S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
 S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")

@@ -17,8 +17,6 @@ import pytest
 from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import MINIO_ACCESS_KEY
-from onyx.configs.app_configs import MINIO_SECRET_KEY
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import SqlEngine
@@ -69,8 +67,8 @@ def _get_all_backend_configs() -> List[BackendConfig]:
 
     # MinIO configuration (if endpoint is configured)
     if S3_ENDPOINT_URL:
-        minio_access_key = MINIO_ACCESS_KEY or "minioadmin"
-        minio_secret_key = MINIO_SECRET_KEY or "minioadmin"
+        minio_access_key = "minioadmin"
+        minio_secret_key = "minioadmin"
         if minio_access_key and minio_secret_key:
             configs.append(
                 {

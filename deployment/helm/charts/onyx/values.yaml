@@ -563,6 +563,26 @@ redis:
     existingSecret: onyx-secrets
     existingSecretPasswordKey: redis_password
 
+minio:
+  enabled: true
+  auth:
+    existingSecret: onyx-secrets
+    rootUserSecretKey: s3_aws_access_key_id
+    rootPasswordSecretKey: s3_aws_secret_access_key
+  defaultBuckets: "onyx-file-store-bucket"
+  persistence:
+    enabled: true
+    size: 30Gi
+  service:
+    type: ClusterIP
+    ports:
+      api: 9000
+      console: 9001
+  consoleService:
+    type: ClusterIP
+    ports:
+      http: 9001
+
 ingress:
   enabled: false
   className: ""
@@ -589,6 +609,8 @@ auth:
     oauth_client_secret: ""
     oauth_cookie_secret: ""
     redis_password: "redis_password"
+    s3_aws_access_key_id: "s3_aws_access_key_id"
+    s3_aws_secret_access_key: "s3_aws_secret_access_key"
   # will be overridden by the existingSecret if set
   secretName: "onyx-secrets"
   # set values as strings, they will be base64 encoded
@@ -600,6 +622,8 @@ auth:
     oauth_client_secret: ""
     oauth_cookie_secret: ""
     redis_password: "password"
+    s3_aws_access_key_id: "minioadmin"
+    s3_aws_secret_access_key: "minioadmin"
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
@@ -618,6 +642,9 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
+  # MinIO/S3 Configuration override
+  S3_ENDPOINT_URL: ""  # only used if minio is not enabled
+  S3_FILE_STORE_BUCKET_NAME: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
