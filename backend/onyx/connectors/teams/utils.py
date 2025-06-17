@@ -5,7 +5,6 @@ from datetime import timezone
 from http import HTTPStatus
 
 from office365.graph_client import GraphClient  # type: ignore
-from pydantic import Json
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.teams.models import Message
@@ -14,14 +13,18 @@ from onyx.connectors.teams.models import Message
 def retry(
     graph_client: GraphClient,
     request_url: str,
-) -> Json:
+) -> dict:
     MAX_RETRIES = 10
     retry_number = 0
 
     while retry_number < MAX_RETRIES:
         response = graph_client.execute_request_direct(request_url)
         if response.ok:
-            return response.json()
+            json = response.json()
+            if not isinstance(json, dict):
+                raise RuntimeError(f"Expected a JSON object, instead got {json=}")
+
+            return json
 
         if response.status_code == int(HTTPStatus.TOO_MANY_REQUESTS):
             retry_number += 1
@@ -38,6 +41,23 @@ def retry(
     )
 
 
+def get_next_url(
+    graph_client: GraphClient,
+    json_response: dict,
+) -> str | None:
+    next_url = json_response.get("@odata.nextLink")
+
+    if not next_url:
+        return None
+
+    if not isinstance(next_url, str):
+        raise RuntimeError(
+            f"Expected a string for the `@odata.nextUrl`, instead got {next_url=}"
+        )
+
+    return next_url.removeprefix(graph_client.service_root_url()).removeprefix("/")
+
+
 def fetch_messages(
     graph_client: GraphClient,
     team_id: str,
@@ -48,15 +68,22 @@ def fetch_messages(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
-    request_url = (
+    initial_request_url = (
         f"teams/{team_id}/channels/{channel_id}/messages/delta"
         f"?$filter=lastModifiedDateTime gt {startfmt}"
     )
 
-    json_response = retry(graph_client=graph_client, request_url=request_url)
+    request_url: str | None = initial_request_url
 
-    for value in json_response.get("value", []):
-        yield Message(**value)
+    while request_url:
+        json_response = retry(graph_client=graph_client, request_url=request_url)
+
+        for value in json_response.get("value", []):
+            yield Message(**value)
+
+        request_url = get_next_url(
+            graph_client=graph_client, json_response=json_response
+        )
 
 
 def fetch_replies(
@@ -65,11 +92,18 @@ def fetch_replies(
     channel_id: str,
     root_message_id: str,
 ) -> Generator[Message]:
-    request_url = (
+    initial_request_url = (
         f"teams/{team_id}/channels/{channel_id}/messages/{root_message_id}/replies"
     )
 
-    response_json = retry(graph_client=graph_client, request_url=request_url)
+    request_url: str | None = initial_request_url
 
-    for value in response_json.get("value", []):
-        yield Message(**value)
+    while request_url:
+        json_response = retry(graph_client=graph_client, request_url=request_url)
+
+        for value in json_response.get("value", []):
+            yield Message(**value)
+
+        request_url = get_next_url(
+            graph_client=graph_client, json_response=json_response
+        )
