@@ -1,69 +1,57 @@
 # Onyx File Store
 
-The Onyx file store provides a unified interface for storing files and large binary objects. It supports multiple storage backends including PostgreSQL large objects and external storage systems like AWS S3, MinIO, Azure Blob Storage, and other S3-compatible services.
+The Onyx file store provides a unified interface for storing files and large binary objects in S3-compatible storage systems. It supports AWS S3, MinIO, Azure Blob Storage, Digital Ocean Spaces, and other S3-compatible services.
 
 ## Architecture
 
-The file store uses a single database table (`file_store`) that can handle both PostgreSQL large objects and external storage references. This unified approach allows for easy migration between storage backends and provides flexibility in deployment configurations.
+The file store uses a single database table (`file_record`) to store file metadata while the actual file content is stored in external S3-compatible storage. This approach provides scalability, cost-effectiveness, and decouples file storage from the database.
 
 ### Database Schema
 
-The `file_store` table contains the following columns:
+The `file_record` table contains the following columns:
 
-- `file_name` (primary key): Unique identifier for the file
+- `file_id` (primary key): Unique identifier for the file
 - `display_name`: Human-readable name for the file
 - `file_origin`: Origin/source of the file (enum)
 - `file_type`: MIME type of the file
 - `file_metadata`: Additional metadata as JSON
-- `lobj_oid`: PostgreSQL large object ID (nullable, for PostgreSQL storage)
-- `bucket_name`: External storage bucket/container name (nullable, for external storage)
-- `object_key`: External storage object key/path (nullable, for external storage)
+- `bucket_name`: External storage bucket/container name
+- `object_key`: External storage object key/path
 - `created_at`: Timestamp when the file was created
 - `updated_at`: Timestamp when the file was last updated
 
-## Storage Backends
+## Storage Backend
 
-### PostgreSQL Large Objects (Default)
+### S3-Compatible Storage
 
-Uses PostgreSQL's native large object storage. Files are stored directly in the database as large objects and referenced by their OID.
-
-**Pros:**
-- No additional infrastructure required
-- ACID compliance
-- Backup consistency with database
-
-**Cons:**
-- Database size growth
-- Memory usage during file operations
-- Limited scalability for large files
-
-### External Storage (S3-Compatible)
-
-Stores files in external storage systems while keeping metadata in the database.
+Stores files in external S3-compatible storage systems while keeping metadata in the database.
 
 **Pros:**
 - Scalable storage
 - Cost-effective for large files
 - CDN integration possible
 - Decoupled from database
+- Wide ecosystem support
 
 **Cons:**
 - Additional infrastructure required
-- Eventual consistency considerations
 - Network dependency
+- Eventual consistency considerations
 
 ## Configuration
+
+All configuration is handled via environment variables. The system requires S3-compatible storage to be configured.
 
 ### AWS S3
 
 ```bash
-S3_FILE_STORE_BUCKET_NAME=your-bucket-name
+S3_FILE_STORE_BUCKET_NAME=your-bucket-name  # Defaults to 'onyx-file-store-bucket'
 S3_FILE_STORE_PREFIX=onyx-files  # Optional, defaults to 'onyx-files'
 
 # AWS credentials (use one of these methods):
 # 1. Environment variables
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
+S3_AWS_ACCESS_KEY_ID=your-access-key
+S3_AWS_SECRET_ACCESS_KEY=your-secret-key
 AWS_REGION_NAME=us-east-2  # Optional, defaults to 'us-east-2'
 
 # 2. IAM roles (recommended for EC2/ECS deployments)
@@ -75,10 +63,10 @@ AWS_REGION_NAME=us-east-2  # Optional, defaults to 'us-east-2'
 ```bash
 S3_FILE_STORE_BUCKET_NAME=your-bucket-name
 S3_ENDPOINT_URL=http://localhost:9000  # MinIO endpoint
-AWS_ACCESS_KEY_ID=minioadmin
-AWS_SECRET_ACCESS_KEY=minioadmin
+S3_AWS_ACCESS_KEY_ID=minioadmin
+S3_AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_REGION_NAME=us-east-1  # Any region name
-S3_VERIFY_SSL=false  # Optional, for local development
+S3_VERIFY_SSL=false  # Optional, defaults to false
 ```
 
 ### Digital Ocean Spaces
@@ -86,22 +74,34 @@ S3_VERIFY_SSL=false  # Optional, for local development
 ```bash
 S3_FILE_STORE_BUCKET_NAME=your-space-name
 S3_ENDPOINT_URL=https://nyc3.digitaloceanspaces.com
-AWS_ACCESS_KEY_ID=your-spaces-key
-AWS_SECRET_ACCESS_KEY=your-spaces-secret
+S3_AWS_ACCESS_KEY_ID=your-spaces-key
+S3_AWS_SECRET_ACCESS_KEY=your-spaces-secret
 AWS_REGION_NAME=nyc3
 ```
 
+### Other S3-Compatible Services
+
+The file store works with any S3-compatible service. Simply configure:
+- `S3_FILE_STORE_BUCKET_NAME`: Your bucket/container name
+- `S3_ENDPOINT_URL`: The service endpoint URL
+- `S3_AWS_ACCESS_KEY_ID` and `S3_AWS_SECRET_ACCESS_KEY`: Your credentials
+- `AWS_REGION_NAME`: The region (any valid region name)
+
 ## Implementation
 
-The system uses a unified `FileStore` model that supports both storage types with generic column names (`bucket_name`, `object_key`) instead of S3-specific names. This allows future support for Azure Blob Storage, Google Cloud Storage, and other backends.
+The system uses the `S3BackedFileStore` class that implements the abstract `FileStore` interface. The database uses generic column names (`bucket_name`, `object_key`) to maintain compatibility with different S3-compatible services.
 
 ### File Store Interface
 
-All storage backends implement the `FileStore` abstract base class with methods for file operations like `save_file()`, `read_file()`, `delete_file()`, etc.
+The `FileStore` abstract base class defines the following methods:
 
-### Migration
-
-When migrating between storage backends, existing files continue to work seamlessly. The system detects which storage backend a file uses based on the database record.
+- `initialize()`: Initialize the storage backend (create bucket if needed)
+- `has_file(file_id, file_origin, file_type)`: Check if a file exists
+- `save_file(content, display_name, file_origin, file_type, file_metadata, file_id)`: Save a file
+- `read_file(file_id, mode, use_tempfile)`: Read file content
+- `read_file_record(file_id)`: Get file metadata from database
+- `delete_file(file_id)`: Delete a file and its metadata
+- `get_file_with_mime_type(filename)`: Get file with parsed MIME type
 
 ## Usage Example
 
@@ -112,19 +112,50 @@ from onyx.configs.constants import FileOrigin
 # Get the configured file store
 file_store = get_default_file_store(db_session)
 
+# Initialize the storage backend (creates bucket if needed)
+file_store.initialize()
+
 # Save a file
 with open("example.pdf", "rb") as f:
-    file_store.save_file(
-        file_name="document-123",
+    file_id = file_store.save_file(
         content=f,
         display_name="Important Document.pdf",
         file_origin=FileOrigin.OTHER,
-        file_type="application/pdf"
+        file_type="application/pdf",
+        file_metadata={"department": "engineering", "version": "1.0"}
     )
 
+# Check if a file exists
+exists = file_store.has_file(
+    file_id=file_id,
+    file_origin=FileOrigin.OTHER,
+    file_type="application/pdf"
+)
+
 # Read a file
-file_content = file_store.read_file("document-123")
+file_content = file_store.read_file(file_id)
+
+# Read file with temporary file (for large files)
+file_content = file_store.read_file(file_id, use_tempfile=True)
+
+# Get file metadata
+file_record = file_store.read_file_record(file_id)
+
+# Get file with MIME type detection
+file_with_mime = file_store.get_file_with_mime_type(file_id)
 
 # Delete a file
-file_store.delete_file("document-123")
-``` 
+file_store.delete_file(file_id)
+```
+
+## Initialization
+
+When deploying the application, ensure that:
+
+1. The S3-compatible storage service is accessible
+2. Credentials are properly configured
+3. The bucket specified in `S3_FILE_STORE_BUCKET_NAME` exists or the service account has permissions to create it
+4. Call `file_store.initialize()` during application startup to ensure the bucket exists
+
+The file store will automatically create the bucket if it doesn't exist and the credentials have sufficient permissions.
+ 
