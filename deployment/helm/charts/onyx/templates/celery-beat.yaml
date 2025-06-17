@@ -36,7 +36,7 @@ spec:
           securityContext:
             {{- toYaml .Values.celery_beat.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
-          imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             [
               "celery",

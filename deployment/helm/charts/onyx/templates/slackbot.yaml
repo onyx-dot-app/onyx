@@ -1,0 +1,48 @@
+{{- if .Values.slackbot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-slackbot
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.slackbot.deploymentLabels }}
+      {{- toYaml .Values.slackbot.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.slackbot.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- with .Values.slackbot.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.slackbot.podSecurityContext | nindent 8 }}
+      containers:
+        - name: slackbot
+          securityContext:
+            {{- toYaml .Values.slackbot.securityContext | nindent 12 }}
+          image: "{{ .Values.slackbot.image.repository }}:{{ .Values.slackbot.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
+          command: ["python", "onyx/onyxbot/slack/listener.py"]
+          resources:
+            {{- toYaml .Values.slackbot.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx-stack.envSecrets" . | nindent 12}}
+{{- end }}

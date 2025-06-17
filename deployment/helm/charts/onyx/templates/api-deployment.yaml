@@ -38,7 +38,7 @@ spec:
           securityContext:
             {{- toYaml .Values.api.securityContext | nindent 12 }}
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag | default .Values.global.version }}"
-          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             - "/bin/sh"
             - "-c"

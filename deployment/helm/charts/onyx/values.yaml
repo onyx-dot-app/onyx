@@ -5,6 +5,8 @@
 global:
   # Global version for all Onyx components (overrides .Chart.AppVersion)
   version: "latest"
+  # Global pull policy for all Onyx component images
+  pullPolicy: "IfNotPresent"
 
 postgresql:
   primary:
@@ -39,7 +41,6 @@ vespa:
   replicaCount: 1
   image:
     repository: vespa
-    pullPolicy: IfNotPresent
     tag: "8.526.15"
   podAnnotations: {}
   podLabels:
@@ -82,7 +83,6 @@ inferenceCapability:
     repository: onyxdotapp/onyx-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
-    pullPolicy: IfNotPresent
   containerPorts:
     server: 9000
   podLabels:
@@ -109,7 +109,6 @@ indexCapability:
     repository: onyxdotapp/onyx-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
-    pullPolicy: IfNotPresent
   limitConcurrency: 10
 config:
   envConfigMapName: env-configmap
@@ -147,7 +146,6 @@ webserver:
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-web-server
-    pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   deploymentLabels:
@@ -216,7 +214,6 @@ api:
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
-    pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   deploymentLabels:
@@ -344,7 +341,6 @@ api:
 celery_shared:
   image:
     repository: onyxdotapp/onyx-backend
-    pullPolicy: IfNotPresent
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
   startupProbe:
     # startupProbe fails after 2m
@@ -518,6 +514,30 @@ celery_worker_user_files_indexing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+
+slackbot:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+    app: slack-bot
+  deploymentLabels:
+    app: slack-bot
+  podSecurityContext:
+    {}
+  securityContext:
+    {}
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "500Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2000Mi"
 
 redis:
   enabled: true
