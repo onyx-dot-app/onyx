@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    process_onyx_metadata,
+)
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
@@ -119,58 +120,21 @@ def _process_file(
         )
         return []
 
-    # Prepare doc metadata
-    file_display_name = metadata.get("file_display_name") or os.path.basename(file_name)
-
-    # Timestamps
-    current_datetime = datetime.now(timezone.utc)
-    time_updated = metadata.get("time_updated", current_datetime)
-    if isinstance(time_updated, str):
-        time_updated = time_str_to_utc(time_updated)
-
-    dt_str = metadata.get("doc_updated_at")
-    final_time_updated = time_str_to_utc(dt_str) if dt_str else time_updated
-
-    # Collect owners
-    p_owner_names = metadata.get("primary_owners")
-    s_owner_names = metadata.get("secondary_owners")
-    p_owners = (
-        [BasicExpertInfo(display_name=name) for name in p_owner_names]
-        if p_owner_names
-        else None
+    # Prepare doc metadata (Onyx metadata is settable by the user)
+    onyx_metadata, custom_tags = process_onyx_metadata(metadata)
+    file_display_name = onyx_metadata.get("file_display_name") or os.path.basename(
+        file_name
     )
-    s_owners = (
-        [BasicExpertInfo(display_name=name) for name in s_owner_names]
-        if s_owner_names
-        else None
-    )
+    time_updated = onyx_metadata.get("time_updated") or datetime.now(timezone.utc)
+    primary_owners = onyx_metadata.get("primary_owners")
+    secondary_owners = onyx_metadata.get("secondary_owners")
+    link = onyx_metadata.get("link") or metadata.get("link")
 
-    # Additional tags we store as doc metadata
-    metadata_tags = {
-        k: v
-        for k, v in metadata.items()
-        if k
-        not in [
-            "document_id",
-            "time_updated",
-            "doc_updated_at",
-            "link",
-            "primary_owners",
-            "secondary_owners",
-            "filename",
-            "file_display_name",
-            "title",
-            "connector_type",
-            "pdf_password",
-            "mime_type",
-        ]
-    }
-
+    # These metadata items are not settable by the user
     source_type_str = metadata.get("connector_type")
     source_type = (
         DocumentSource(source_type_str) if source_type_str else DocumentSource.FILE
     )
-
     doc_id = metadata.get("document_id") or f"FILE_CONNECTOR__{file_name}"
     title = metadata.get("title") or file_display_name
 
@@ -198,10 +162,10 @@ def _process_file(
                     source=source_type,
                     semantic_identifier=file_display_name,
                     title=title,
-                    doc_updated_at=final_time_updated,
-                    primary_owners=p_owners,
-                    secondary_owners=s_owners,
-                    metadata=metadata_tags,
+                    doc_updated_at=time_updated,
+                    primary_owners=primary_owners,
+                    secondary_owners=secondary_owners,
+                    metadata=custom_tags,
                 )
             ]
         except Exception as e:
@@ -223,15 +187,26 @@ def _process_file(
         logger.debug(
             f"Found file-specific metadata for {file_name}: {extraction_result.metadata}"
         )
-        metadata.update(extraction_result.metadata)
+        onyx_metadata, more_custom_tags = process_onyx_metadata(
+            extraction_result.metadata
+        )
+
+        # Add tags from file header to final doc metadata
+        custom_tags.update(more_custom_tags)
+
+        # Update any user-specified data
+        primary_owners = onyx_metadata.get("primary_owners") or primary_owners
+        secondary_owners = onyx_metadata.get("secondary_owners") or secondary_owners
+        time_updated = onyx_metadata.get("time_updated") or time_updated
+        file_display_name = onyx_metadata.get("file_display_name") or file_display_name
+        link = onyx_metadata.get("link") or link
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection] = []
-    link_in_meta = metadata.get("link")
     if extraction_result.text_content.strip():
-        logger.debug(f"Creating TextSection for {file_name} with link: {link_in_meta}")
+        logger.debug(f"Creating TextSection for {file_name} with link: {link}")
         sections.append(
-            TextSection(link=link_in_meta, text=extraction_result.text_content.strip())
+            TextSection(link=link, text=extraction_result.text_content.strip())
         )
 
     # Then any extracted images from docx, etc.
@@ -261,10 +236,10 @@ def _process_file(
             source=source_type,
             semantic_identifier=file_display_name,
             title=title,
-            doc_updated_at=final_time_updated,
-            primary_owners=p_owners,
-            secondary_owners=s_owners,
-            metadata=metadata_tags,
+            doc_updated_at=time_updated,
+            primary_owners=primary_owners,
+            secondary_owners=secondary_owners,
+            metadata=custom_tags,
         )
     ]
 

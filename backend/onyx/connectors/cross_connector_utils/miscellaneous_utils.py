@@ -3,6 +3,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 from typing import TypeVar
 
 from dateutil.parser import parse
@@ -79,6 +80,60 @@ def process_in_batches(
 
 def get_metadata_keys_to_ignore() -> list[str]:
     return [IGNORE_FOR_QA]
+
+
+def process_onyx_metadata(
+    metadata: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/connectors/file
+    This function attempts to extract the settable fields and custom tags.
+    """
+    p_owner_names = metadata.get("primary_owners")
+    p_owners = (
+        [BasicExpertInfo(display_name=name) for name in p_owner_names]
+        if p_owner_names
+        else None
+    )
+
+    s_owner_names = metadata.get("secondary_owners")
+    s_owners = (
+        [BasicExpertInfo(display_name=name) for name in s_owner_names]
+        if s_owner_names
+        else None
+    )
+
+    dt_str = metadata.get("doc_updated_at")
+    time_updated = time_str_to_utc(dt_str) if dt_str else None
+
+    return (
+        {
+            "link": metadata.get("link"),
+            "file_display_name": metadata.get("file_display_name"),
+            "primary_owners": p_owners,
+            "secondary_owners": s_owners,
+            "time_updated": time_updated,
+        },
+        {
+            k: v
+            for k, v in metadata.items()
+            if k
+            not in [
+                "document_id",
+                "time_updated",
+                "doc_updated_at",
+                "link",
+                "primary_owners",
+                "secondary_owners",
+                "filename",
+                "file_display_name",
+                "title",
+                "connector_type",
+                "pdf_password",
+                "mime_type",
+            ]
+        },
+    )
 
 
 def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:
