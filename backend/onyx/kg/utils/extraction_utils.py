@@ -1,8 +1,6 @@
 import re
 from collections import defaultdict
 
-from pydantic import ValidationError
-
 from onyx.configs.constants import OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
