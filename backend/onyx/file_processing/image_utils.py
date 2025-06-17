@@ -14,7 +14,7 @@ logger = setup_logger()
 def store_image_and_create_section(
     db_session: Session,
     image_data: bytes,
-    file_name: str,
+    file_id: str,
     display_name: str,
     link: str | None = None,
     media_type: str = "application/octet-stream",
@@ -26,7 +26,7 @@ def store_image_and_create_section(
     Args:
         db_session: Database session
         image_data: Raw image bytes
-        file_name: Base identifier for the file
+        file_id: Base identifier for the file
         display_name: Human-readable name for the image
         media_type: MIME type of the image
         file_origin: Origin of the file (e.g., CONFLUENCE, GOOGLE_DRIVE, etc.)
@@ -34,7 +34,7 @@ def store_image_and_create_section(
     Returns:
         Tuple containing:
         - ImageSection object with image reference
-        - The file_name in FileStore or None if storage failed
+        - The file_id in FileStore or None if storage failed
     """
     # Storage logic
     try:
@@ -44,6 +44,7 @@ def store_image_and_create_section(
             display_name=display_name,
             file_origin=file_origin,
             file_type=media_type,
+            file_id=file_id,
         )
     except Exception as e:
         logger.error(f"Failed to store image: {e}")

@@ -36,7 +36,6 @@ def store_user_file_plaintext(user_file_id: int, plaintext_content: str) -> bool
     Args:
         user_file_id: The ID of the user file
         plaintext_content: The plaintext content to store
-        db_session: The database session (not used directly, we create our own)
 
     Returns:
         bool: True if storage was successful, False otherwise

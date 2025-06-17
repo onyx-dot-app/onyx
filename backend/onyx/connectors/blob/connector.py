@@ -285,7 +285,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             image_section, _ = store_image_and_create_section(
                                 db_session=db_session,
                                 image_data=downloaded_file,
-                                file_name=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
+                                file_id=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
                                 display_name=file_name,
                                 link=link,
                                 file_origin=FileOrigin.CONNECTOR,

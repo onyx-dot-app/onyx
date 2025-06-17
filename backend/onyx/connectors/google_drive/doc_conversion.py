@@ -187,7 +187,7 @@ def _download_and_extract_sections_basic(
                 section, embedded_id = store_image_and_create_section(
                     db_session=db_session,
                     image_data=response_call(),
-                    file_name=file_id,
+                    file_id=file_id,
                     display_name=file_name,
                     media_type=mime_type,
                     file_origin=FileOrigin.CONNECTOR,
@@ -211,7 +211,7 @@ def _download_and_extract_sections_basic(
                     section, embedded_id = store_image_and_create_section(
                         db_session=db_session,
                         image_data=img_data,
-                        file_name=f"{file_id}_img_{idx}",
+                        file_id=f"{file_id}_img_{idx}",
                         display_name=img_name or f"{file_name} - image {idx}",
                         file_origin=FileOrigin.CONNECTOR,
                     )

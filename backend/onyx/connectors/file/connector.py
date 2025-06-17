@@ -53,14 +53,14 @@ def _create_image_section(
         Tuple of (ImageSection, stored_file_name or None)
     """
     # Create a unique identifier for the image
-    file_name = f"{parent_file_name}_embedded_{idx}" if idx > 0 else parent_file_name
+    file_id = f"{parent_file_name}_embedded_{idx}" if idx > 0 else parent_file_name
 
     # Store the image and create a section
     try:
         section, stored_file_name = store_image_and_create_section(
             db_session=db_session,
             image_data=image_data,
-            file_name=file_name,
+            file_id=file_id,
             display_name=display_name,
             link=link,
             file_origin=FileOrigin.CONNECTOR,

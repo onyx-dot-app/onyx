@@ -53,10 +53,10 @@ def test_zip_metadata_handling(
         content_type="application/zip",
     )
 
-    file_paths = upload_response.get("file_paths", [])
+    file_paths = upload_response.file_paths
     assert file_paths, "File upload failed - no file paths returned"
     if has_metadata:
-        metadata = upload_response.get("zip_metadata", {})
+        metadata = upload_response.zip_metadata
         assert metadata, "Metadata should be present"
     else:
         metadata = {}

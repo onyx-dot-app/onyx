@@ -62,7 +62,7 @@ def generate_chat_messages_report(
                     ]
                 )
 
-        # after writing seek to begining of buffer
+        # after writing seek to beginning of buffer
         temp_file.seek(0)
         file_id = file_store.save_file(
             content=temp_file,

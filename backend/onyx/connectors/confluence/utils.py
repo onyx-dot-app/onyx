@@ -228,7 +228,7 @@ def _process_image_attachment(
             section, file_name = store_image_and_create_section(
                 db_session=db_session,
                 image_data=raw_bytes,
-                file_name=Path(attachment["id"]).name,
+                file_id=Path(attachment["id"]).name,
                 display_name=attachment["title"],
                 media_type=media_type,
                 file_origin=FileOrigin.CONNECTOR,
