@@ -318,7 +318,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     file_display_name = (
                         onyx_metadata.get("file_display_name") or file_name
                     )
-                    time_updated = onyx_metadata.get("time_updated") or last_modified
+                    time_updated = onyx_metadata.get("doc_updated_at") or last_modified
                     link = onyx_metadata.get("link") or link
                     primary_owners = onyx_metadata.get("primary_owners")
                     secondary_owners = onyx_metadata.get("secondary_owners")

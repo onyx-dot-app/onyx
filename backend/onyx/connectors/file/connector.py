@@ -120,15 +120,15 @@ def _process_file(
         )
         return []
 
-    # Prepare doc metadata (Onyx metadata is settable by the user)
+    # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)
     file_display_name = onyx_metadata.get("file_display_name") or os.path.basename(
         file_name
     )
-    time_updated = onyx_metadata.get("time_updated") or datetime.now(timezone.utc)
+    time_updated = onyx_metadata.get("doc_updated_at") or datetime.now(timezone.utc)
     primary_owners = onyx_metadata.get("primary_owners")
     secondary_owners = onyx_metadata.get("secondary_owners")
-    link = onyx_metadata.get("link") or metadata.get("link")
+    link = onyx_metadata.get("link")
 
     # These metadata items are not settable by the user
     source_type_str = metadata.get("connector_type")
@@ -182,7 +182,8 @@ def _process_file(
         pdf_pass=pdf_pass,
     )
 
-    # Merge file-specific metadata (from file content) with provided metadata
+    # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/connectors/file
+    # If so, we should add it to any metadata processed so far
     if extraction_result.metadata:
         logger.debug(
             f"Found file-specific metadata for {file_name}: {extraction_result.metadata}"
@@ -191,13 +192,13 @@ def _process_file(
             extraction_result.metadata
         )
 
-        # Add tags from file header to final doc metadata
+        # Add file-specific tags
         custom_tags.update(more_custom_tags)
 
-        # Update any user-specified data
+        # File-specific metadata overrides metadata processed so far
         primary_owners = onyx_metadata.get("primary_owners") or primary_owners
         secondary_owners = onyx_metadata.get("secondary_owners") or secondary_owners
-        time_updated = onyx_metadata.get("time_updated") or time_updated
+        time_updated = onyx_metadata.get("doc_updated_at") or time_updated
         file_display_name = onyx_metadata.get("file_display_name") or file_display_name
         link = onyx_metadata.get("link") or link
 
@@ -280,8 +281,6 @@ class LocalFileConnector(LoadConnector):
 
         with get_session_with_current_tenant() as db_session:
             for file_path in self.file_locations:
-                current_datetime = datetime.now(timezone.utc)
-
                 file_io = _read_file_from_filestore(
                     file_name=file_path,
                     db_session=db_session,
@@ -291,9 +290,6 @@ class LocalFileConnector(LoadConnector):
                     continue
 
                 metadata = self._get_file_metadata(file_path)
-                metadata["time_updated"] = metadata.get(
-                    "time_updated", current_datetime
-                )
                 new_docs = _process_file(
                     file_name=file_path,
                     file=file_io,

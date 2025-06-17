@@ -11,6 +11,7 @@ from dateutil.parser import parse
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import OnyxMetadata
 from onyx.utils.text_processing import is_valid_email
 
 
@@ -84,10 +85,10 @@ def get_metadata_keys_to_ignore() -> list[str]:
 
 def process_onyx_metadata(
     metadata: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[OnyxMetadata, dict[str, Any]]:
     """
     Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/connectors/file
-    This function attempts to extract the settable fields and custom tags.
+    Any unrecognized fields are treated as custom tags.
     """
     p_owner_names = metadata.get("primary_owners")
     p_owners = (
@@ -104,16 +105,16 @@ def process_onyx_metadata(
     )
 
     dt_str = metadata.get("doc_updated_at")
-    time_updated = time_str_to_utc(dt_str) if dt_str else None
+    doc_updated_at = time_str_to_utc(dt_str) if dt_str else None
 
     return (
-        {
-            "link": metadata.get("link"),
-            "file_display_name": metadata.get("file_display_name"),
-            "primary_owners": p_owners,
-            "secondary_owners": s_owners,
-            "time_updated": time_updated,
-        },
+        OnyxMetadata(
+            link=metadata.get("link"),
+            file_display_name=metadata.get("file_display_name"),
+            primary_owners=p_owners,
+            secondary_owners=s_owners,
+            doc_updated_at=doc_updated_at,
+        ),
         {
             k: v
             for k, v in metadata.items()
