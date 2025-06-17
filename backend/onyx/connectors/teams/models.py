@@ -6,24 +6,6 @@ from pydantic import Field
 from pydantic.alias_generators import to_camel
 
 
-class Message(BaseModel):
-    id: str
-    replyToId: str | None
-    subject: str | None
-    from_: "From | None" = Field(alias="from")
-    body: "Body"
-    created_date_time: datetime
-    last_modified_date_time: datetime | None
-    last_edited_date_time: datetime | None
-    deleted_date_time: datetime | None
-    web_url: str
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-    )
-
-
 class Body(BaseModel):
     content_type: str
     content: str | None
@@ -34,8 +16,8 @@ class Body(BaseModel):
     )
 
 
-class From(BaseModel):
-    user: "User"
+class User(BaseModel):
+    display_name: str
 
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -43,8 +25,26 @@ class From(BaseModel):
     )
 
 
-class User(BaseModel):
-    display_name: str
+class From(BaseModel):
+    user: User
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
+class Message(BaseModel):
+    id: str
+    replyToId: str | None
+    subject: str | None
+    from_: From | None = Field(alias="from")
+    body: Body
+    created_date_time: datetime
+    last_modified_date_time: datetime | None
+    last_edited_date_time: datetime | None
+    deleted_date_time: datetime | None
+    web_url: str
 
     model_config = ConfigDict(
         alias_generator=to_camel,
