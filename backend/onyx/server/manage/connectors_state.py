@@ -20,10 +20,10 @@ from onyx.redis.redis_connector import RedisConnector
 
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.server.documents.models import CredentialSnapshot
-from onyx.db.models import SearchSettings
-from onyx.server.documents.models import IndexAttemptSnapshot
-from onyx.background.celery.celery_utils import get_deletion_attempt_snapshot
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
+from onyx.db.models import SearchSettings
+from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
+from onyx.server.documents.models import IndexAttemptSnapshot
 
 def get_connectors_state(
     db_session, tenant_id

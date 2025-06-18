@@ -608,6 +608,15 @@ export function CCPairIndexingStatusTable({
               const statuses =
                 filteredGroupedStatuses[source] || groupedStatuses[source];
 
+              statuses.sort((a, b) => {
+                if (a.connector.name < b.connector.name) {
+                  return -1;
+                } else if (a.connector.name > b.connector.name) {
+                  return 1;
+                } else {
+                  return 0;
+                };
+              });
               const matchingConnectors = statuses.filter((status) =>
                 (status.name || "")
                   .toLowerCase()
