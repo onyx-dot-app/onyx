@@ -28,19 +28,19 @@ pipeline {
             script {
               checkout scm
               if (env.BRANCH_NAME == 'eea') {
-                tagName = 'web'
+                tagNameW = 'web'
               } else {
-                tagName = "web-$BRANCH_NAME"
+                tagNameW = "web-$BRANCH_NAME"
               }
               try {
                 dir('web') {
-                  dockerImage = docker.build("$registry:$tagName", "--no-cache .")
+                  dockerImage = docker.build("$registry:$tagNameW", "--no-cache .")
                   docker.withRegistry( '', 'eeajenkins' ) {
                   dockerImage.push()
                   }    
                 }
               } finally {
-                sh "docker rmi $registry:$tagName"
+                sh "docker rmi $registry:$tagNameW"
               }
             }
           }
@@ -51,19 +51,19 @@ pipeline {
             script {
               checkout scm
               if (env.BRANCH_NAME == 'eea') {
-                tagName = 'backend'
+                tagNameB = 'backend'
               } else {
-                tagName = "backend-$BRANCH_NAME"
+                tagNameB = "backend-$BRANCH_NAME"
               }
               try {
                 dir('backend') {
-                  dockerImage = docker.build("$registry:$tagName", "--no-cache .")
+                  dockerImage = docker.build("$registry:$tagNameB", "--no-cache .")
                   docker.withRegistry( '', 'eeajenkins' ) {
                   dockerImage.push()
                   }
                 }
               } finally {
-                sh "docker rmi $registry:$tagName"
+                sh "docker rmi $registry:$tagNameB"
               }
             }
           }
@@ -74,19 +74,19 @@ pipeline {
             script {
               checkout scm
               if (env.BRANCH_NAME == 'eea') {
-                tagName = 'model_server'
+                tagNameM = 'model_server'
               } else {
-                tagName = "model_server-$BRANCH_NAME"
+                tagNameM = "model_server-$BRANCH_NAME"
               }
               try {
                 dir('backend') {
-                  dockerImage = docker.build("$registry:$tagName", "-f Dockerfile.model_server --no-cache .")
+                  dockerImage = docker.build("$registry:$tagNameM", "-f Dockerfile.model_server --no-cache .")
                   docker.withRegistry( '', 'eeajenkins' ) {
                   dockerImage.push()
                   }
                 }
               } finally {
-                sh "docker rmi $registry:$tagName"
+                sh "docker rmi $registry:$tagNameM"
               }
             }
           }
