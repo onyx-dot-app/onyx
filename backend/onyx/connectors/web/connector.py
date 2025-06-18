@@ -700,7 +700,7 @@ class WebConnector(LoadConnector):
                 break  # success / don't retry
 
             logger.info("---------------------------------------------doc added to batch")
-            logger.info(f"---------------------------------------------batch_size={len(doc_batch)}")
+            logger.info(f"---------------------------------------------batch_size={len(session_ctx.doc_batch)}")
             logger.info(f"---------------------------------------------self.batch_size={self.batch_size}")
 
             if len(session_ctx.doc_batch) >= self.batch_size:
