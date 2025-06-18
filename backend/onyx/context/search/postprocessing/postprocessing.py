@@ -508,15 +508,17 @@ def search_postprocessing(
         else []
     )
 
-    for section in post_processing_results.get(str(llm_filter_task_id), []):
-        logger.info(section.combined_content)
-
-    yield [
+    sections_s = [
         SectionRelevancePiece(
             document_id=section.center_chunk.document_id,
             chunk_id=section.center_chunk.chunk_id,
             relevant=section.center_chunk.unique_id in llm_selected_section_ids,
-            content="",
+            content=section.combined_content,
         )
         for section in (reranked_sections or retrieved_sections)
     ]
+
+    for section in sections_s:
+        logger.info(f"Чанк: {section.chunk_id}\nРелевантен: {section.relevant}\nКонтент: {section.content}")
+
+    yield sections_s

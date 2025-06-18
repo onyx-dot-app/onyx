@@ -604,6 +604,8 @@ def yield_search_responses(
             for section in final_context_sections
         ]
     else:
+        for section in section_relevance:
+            print(section.chunk_id)
         # Use the section_relevance we already computed above
         pruned_sections = prune_sections(
             sections=final_context_sections,
