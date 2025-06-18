@@ -282,34 +282,34 @@ services:
       timeout: 20s
       retries: 3
 
-langflow:
-  image: langflowai/langflow:latest
-  container_name: Langflow
-  user: root
-  ports:
-    - 8082:7860
-  healthcheck:
-    test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/7860' || exit 1
-    interval: 10s
-    timeout: 5s
-    retries: 3
-    start_period: 90s
-  restart: on-failure:5
-  depends_on:
-    - relational_db
-  environment:
-    LANGFLOW_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@relational_db:5432/langflow_db?sslmode=disable
-    LANGFLOW_CONFIG_DIR: /var/lib/langflow
-    LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER:-langflow}
-    LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD:-langflow}
-    LANGFLOW_AUTO_LOGIN: False
-  volumes:
-    - langflow:/var/lib/langflow:rw
-  logging:
-    driver: "json-file"
-    options:
-      max-size: "200m"
-      max-file: "3"  
+  langflow:
+    image: langflowai/langflow:latest
+    container_name: Langflow
+    user: root
+    ports:
+      - 8082:7860
+    healthcheck:
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/7860' || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    restart: on-failure:5
+    depends_on:
+      - relational_db
+    environment:
+      LANGFLOW_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@relational_db:5432/langflow_db?sslmode=disable
+      LANGFLOW_CONFIG_DIR: /var/lib/langflow
+      LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER:-langflow}
+      LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD:-langflow}
+      LANGFLOW_AUTO_LOGIN: False
+    volumes:
+      - langflow:/var/lib/langflow:rw
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "3"  
 
   unoconv:
     image: ghcr.io/unoconv/unoserver-docker
