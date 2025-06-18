@@ -8,7 +8,7 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
-
+from onyx.utils.logger import setup_logger
 
 T = TypeVar(
     "T",
@@ -46,6 +46,8 @@ def dedupe_documents(items: list[T]) -> tuple[list[T], list[int]]:
     return deduped_items, dropped_indices
 
 
+logger = setup_logger()
+
 def relevant_sections_to_indices(
     relevance_sections: list[SectionRelevancePiece] | None, items: list[TSection]
 ) -> list[int]:
@@ -57,6 +59,27 @@ def relevant_sections_to_indices(
         for chunk in relevance_sections
         if chunk.relevant
     }
+
+    logger.info(relevant_set)
+
+    ass = [
+        item
+        for index, item in enumerate(items)
+        if (
+            (
+                isinstance(item, InferenceSection)
+                and (item.center_chunk.document_id, item.center_chunk.chunk_id)
+                in relevant_set
+            )
+            or (
+                not isinstance(item, (InferenceSection))
+                and (item.document_id, item.chunk_ind) in relevant_set
+            )
+        )
+    ]
+
+    for item in ass:
+        print(item.combined_content)
 
     return [
         index
