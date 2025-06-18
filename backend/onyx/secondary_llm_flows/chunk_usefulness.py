@@ -51,7 +51,7 @@ def llm_eval_section(
     messages = _get_usefulness_messages()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
     model_output = message_to_string(llm.invoke(filled_llm_prompt))
-    logger.debug(model_output)
+    logger.info(f"Контент:\n{section_content}\nОтвет: {model_output}")
 
     return _extract_usefulness(model_output)
 

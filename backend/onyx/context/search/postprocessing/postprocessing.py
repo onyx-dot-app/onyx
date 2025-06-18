@@ -508,6 +508,9 @@ def search_postprocessing(
         else []
     )
 
+    for section in reranked_sections:
+        logger.info(section.combined_content)
+
     yield [
         SectionRelevancePiece(
             document_id=section.center_chunk.document_id,
