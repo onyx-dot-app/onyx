@@ -22,8 +22,10 @@ module = "generated.*"
 follow_imports = "silent"
 
 [tool.ruff]
-ignore = []
 line-length = 130
+
+[tool.ruff.lint]
+ignore = []
 select = [
     "E",
     "F",
