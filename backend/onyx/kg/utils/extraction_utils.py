@@ -295,12 +295,6 @@ def kg_process_person(
     Returns:
         tuple containing (implied_entities, implied_relationships, company_participant_emails, account_participant_emails)
     """
-
-    if not kg_config_settings.KG_ENABLED:
-        raise ValueError("KG is not enabled")
-
-    assert isinstance(kg_config_settings.KG_IGNORE_EMAIL_DOMAINS, list)
-
     kg_person = kg_email_processing(person, kg_config_settings)
     if any(
         domain.lower() in kg_person.company.lower()

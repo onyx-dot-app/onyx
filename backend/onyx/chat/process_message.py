@@ -86,6 +86,7 @@ from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
@@ -572,7 +573,7 @@ def stream_chat_message_objects(
 
     kg_config_settings = get_kg_config_settings()
 
-    if kg_config_settings.KG_ENABLED:
+    if is_kg_config_settings_enabled_valid(kg_config_settings):
 
         # Temporarily, until we have a draft UI for the KG Operations/Management
 

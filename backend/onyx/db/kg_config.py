@@ -39,6 +39,14 @@ def validate_kg_settings(kg_config_settings: KGConfigSettings) -> None:
         raise ValueError("KG_VENDOR_DOMAINS is not set")
 
 
+def is_kg_config_settings_enabled_valid(kg_config_settings: KGConfigSettings) -> bool:
+    try:
+        validate_kg_settings(kg_config_settings)
+        return True
+    except Exception:
+        return False
+
+
 def set_kg_processing_in_progress(in_progress: bool) -> None:
     """
     Set the KV_KG_PROCESSING_STATUS_KEY in_progress value in the kv store.
@@ -62,7 +70,7 @@ def is_kg_processing_in_progress() -> bool:
     """
     kv_store = get_kv_store()
     try:
-        stored_value = kv_store.load(KV_KG_PROCESSING_STATUS_KEY)
+        stored_value = kv_store.load(KV_KG_PROCESSING_STATUS_KEY, refresh_cache=True)
         return (
             KGProcessingStatus.model_validate(stored_value).in_progress
             if stored_value
