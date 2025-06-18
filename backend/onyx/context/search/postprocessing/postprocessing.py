@@ -441,17 +441,6 @@ def search_postprocessing(
             )
         )
         rerank_task_id = post_processing_tasks[-1].result_id
-    else:
-        # NOTE: if we don't rerank, we can return the chunks immediately
-        # since we know this is the final order.
-        # This way the user experience isn't delayed by the LLM step
-        if get_search_time_image_analysis_enabled():
-            update_image_sections_with_query(
-                retrieved_sections, search_query.query, llm
-            )
-        _log_top_section_links(search_query.search_type.value, retrieved_sections)
-        yield retrieved_sections
-        sections_yielded = True
 
     llm_filter_task_id = None
     # Only add LLM filtering if not in SKIP mode and if LLM doc relevance is not disabled
@@ -484,20 +473,29 @@ def search_postprocessing(
         post_processing_results.get(str(rerank_task_id)) if rerank_task_id else None,
     )
     if reranked_sections:
-        if sections_yielded:
-            logger.error(
-                "Trying to yield re-ranked sections, but sections were already yielded. This should never happen."
+        _log_top_section_links(search_query.search_type.value, reranked_sections)
+
+        # Add the image processing step here
+        if get_search_time_image_analysis_enabled():
+            update_image_sections_with_query(
+                reranked_sections, search_query.query, llm
             )
-        else:
-            _log_top_section_links(search_query.search_type.value, reranked_sections)
 
-            # Add the image processing step here
-            if get_search_time_image_analysis_enabled():
-                update_image_sections_with_query(
-                    reranked_sections, search_query.query, llm
-                )
-
-            yield reranked_sections
+        yield reranked_sections
+    else:
+        reranked_sections = cast(
+            list[InferenceSection] | None,
+            post_processing_results.get(str(llm_filter_task_id)),
+        )
+        # NOTE: if we don't rerank, we can return the chunks immediately
+        # since we know this is the final order.
+        # This way the user experience isn't delayed by the LLM step
+        if get_search_time_image_analysis_enabled():
+            update_image_sections_with_query(
+                retrieved_sections, search_query.query, llm
+            )
+        _log_top_section_links(search_query.search_type.value, retrieved_sections)
+        yield reranked_sections
 
     llm_selected_section_ids = (
         [
@@ -508,7 +506,7 @@ def search_postprocessing(
         else []
     )
 
-    sections_s = [
+    yield [
         SectionRelevancePiece(
             document_id=section.center_chunk.document_id,
             chunk_id=section.center_chunk.chunk_id,
@@ -517,8 +515,3 @@ def search_postprocessing(
         )
         for section in (reranked_sections or retrieved_sections)
     ]
-
-    for section in sections_s:
-        logger.info(f"Чанк: {section.chunk_id}\nРелевантен: {section.relevant}\nКонтент: {section.content}")
-
-    yield sections_s

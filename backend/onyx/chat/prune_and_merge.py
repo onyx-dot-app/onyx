@@ -111,6 +111,7 @@ def reorder_sections(
 ) -> list[InferenceSection]:
     if section_relevance_list is None:
         return sections
+
     logger.info(sections)
     logger.info(section_relevance_list)
     reordered_sections: list[InferenceSection] = []
@@ -288,9 +289,7 @@ def prune_sections(
     # Assumes the sections are score ordered with highest first
     if section_relevance_list is not None:
         assert len(sections) == len(section_relevance_list)
-    for section in sections:
-        for chunk in section.chunks:
-            logger.info(chunk.is_relevant)
+
     actual_num_chunks = (
         contextual_pruning_config.max_chunks
         * contextual_pruning_config.num_chunk_multiple
