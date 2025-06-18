@@ -281,13 +281,17 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         """
         # Critical validation - check for domain and API key
         if not self.domain:
-            logger.error("CRITICAL ERROR: Missing Freshdesk domain - check credentials!")
+            logger.error(
+                "CRITICAL ERROR: Missing Freshdesk domain - check credentials!"
+            )
             raise ConnectorMissingCredentialError(
                 "Missing required Freshdesk domain in credentials"
             )
             
         if not self.api_key:
-            logger.error("CRITICAL ERROR: Missing Freshdesk API key - check credentials!")
+            logger.error(
+                "CRITICAL ERROR: Missing Freshdesk API key - check credentials!"
+            )
             raise ConnectorMissingCredentialError(
                 "Missing required Freshdesk API key in credentials"
             )
@@ -368,7 +372,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             logger.info(f"Successfully validated Freshdesk KB connector for folder {validation_folder_id}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to validate Freshdesk KB connector: {e}")
-            logger.error(f"Response: {response.text if 'response' in locals() else 'No response'}")
+            logger.error(
+                f"Response: {response.text if 'response' in locals() else 'No response'}"
+            )
             if 'response' in locals():
                 logger.error(f"Status code: {response.status_code}")
             raise ConnectorMissingCredentialError(
@@ -399,7 +405,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 
                 return response.json()
             except requests.exceptions.HTTPError as e:
-                logger.error(f"HTTP error: {e} - {response.text if 'response' in locals() else 'No response'} for URL {url} with params {params}")
+                logger.error(
+                    f"HTTP error: {e} - {response.text if 'response' in locals() else 'No response'} for URL {url} with params {params}"
+                )
                 return None
             except requests.exceptions.RequestException as e:
                 logger.error(f"Request failed: {e} for URL {url}")
@@ -425,7 +433,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             categories = self._make_api_request(categories_url)
             
             if not categories or not isinstance(categories, list):
-                logger.error("Failed to fetch solution categories or unexpected response format")
+                logger.error(
+                    "Failed to fetch solution categories or unexpected response format"
+                )
                 return []
             
             # For each category, get its folders
@@ -481,7 +491,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             article_batch = self._make_api_request(url, params)
 
             if article_batch is None:  # Error occurred
-                logger.error(f"Failed to fetch articles for folder {folder_id}, page {page}.")
+                logger.error(
+                    f"Failed to fetch articles for folder {folder_id}, page {page}."
+                )
                 break
             
             if not isinstance(article_batch, list):
@@ -621,7 +633,10 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             
         # Double check credentials before starting indexing
         if not self.domain or not self.api_key:
-            logger.error(f"CRITICAL ERROR: Missing credentials in load_from_state! domain={self.domain}, api_key_present={'Yes' if self.api_key else 'No'}")
+            logger.error(
+                f"CRITICAL ERROR: Missing credentials in load_from_state! "
+                f"domain={self.domain}, api_key_present={'Yes' if self.api_key else 'No'}"
+            )
             logger.error(f"Base URL: {self.base_url}, Auth: {bool(self.auth)}")
             raise ConnectorMissingCredentialError("Missing required Freshdesk credentials for indexing")
             
@@ -672,7 +687,10 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             
         # Double check credentials before starting polling
         if not self.domain or not self.api_key:
-            logger.error(f"CRITICAL ERROR: Missing credentials in poll_source! domain={self.domain}, api_key_present={'Yes' if self.api_key else 'No'}")
+            logger.error(
+                f"CRITICAL ERROR: Missing credentials in poll_source! "
+                f"domain={self.domain}, api_key_present={'Yes' if self.api_key else 'No'}"
+            )
             logger.error(f"Base URL: {self.base_url}, Auth: {bool(self.auth)}")
             raise ConnectorMissingCredentialError("Missing required Freshdesk credentials for polling")
         
