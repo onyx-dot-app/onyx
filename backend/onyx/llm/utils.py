@@ -381,7 +381,19 @@ def test_llm(llm: LLM) -> str | None:
 def get_model_map() -> dict:
     starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
     starting_map[f"ollama/gemma3:27b"] = {
-        "max_tokens": 12000,
+        "max_tokens": 32000,
+        "litellm_provider": "ollama",
+        "supports_vision": True,
+        "supports_function_calling": True,
+        "supports_parallel_function_calling": True,
+        "supports_response_schema": True,
+        "supports_prompt_caching": True,
+        "supports_system_messages": True,
+        "supports_tool_choice": True,
+    }
+
+    starting_map[f"ollama/gemma3:12b"] = {
+        "max_tokens": 16000,
         "litellm_provider": "ollama",
         "supports_vision": True,
         "supports_function_calling": True,

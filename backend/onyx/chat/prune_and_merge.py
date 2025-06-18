@@ -160,6 +160,8 @@ def _apply_pruning(
 
     final_section_ind = None
     total_tokens = 0
+    for section in sections:
+        logger.info(section.combined_content)
     for ind, section in enumerate(sections):
         section_str = (
             # If using tool message, it will be a bit of an overestimate as the extra json text around the section
@@ -214,10 +216,10 @@ def _apply_pruning(
             break
 
     try:
-        logger.debug(f"Number of documents after pruning: {ind + 1}")
-        logger.debug("Number of tokens per document (pruned):")
+        logger.info(f"Number of documents after pruning: {ind + 1}")
+        logger.info("Number of tokens per document (pruned):")
         for x, y in section_idx_token_count.items():
-            logger.debug(f"{x + 1}: {y}")
+            logger.info(f"{x + 1}: {y}")
     except Exception as e:
         logger.error(f"Error logging prune statistics: {e}")
 
