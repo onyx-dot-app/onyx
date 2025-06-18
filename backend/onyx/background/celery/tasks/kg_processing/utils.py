@@ -20,7 +20,7 @@ def is_kg_processing_blocked() -> bool:
 
 
 def is_kg_processing_requirements_met() -> bool:
-    """Checks that there is no other KG tasks in progress, KG is enabled, valid,
+    """Checks that there are no other KG tasks in progress, KG is enabled, valid,
     and there are documents that need KG processing."""
     if is_kg_processing_blocked():
         return False
@@ -36,7 +36,7 @@ def is_kg_processing_requirements_met() -> bool:
 
 
 def is_kg_clustering_only_requirements_met() -> bool:
-    """Checks that there is no other KG tasks in progress, KG is enabled, valid,
+    """Checks that there are no other KG tasks in progress, KG is enabled, valid,
     and there are documents that need KG clustering."""
     if is_kg_processing_blocked():
         return False
