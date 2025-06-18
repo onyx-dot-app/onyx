@@ -117,6 +117,17 @@ def get_usage_report_data(
     db_session: Session,
     report_display_name: str,
 ) -> IO:
+    """
+    Get the usage report data from the file store.
+
+    Args:
+        db_session: The database session.
+        report_display_name: The display name of the usage report. Also assumes
+                             that the file is stored with this as the ID in the file store.
+
+    Returns:
+        The usage report data.
+    """
     file_store = get_default_file_store(db_session)
     # usage report may be very large, so don't load it all into memory
     return file_store.read_file(

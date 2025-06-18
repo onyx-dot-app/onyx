@@ -147,6 +147,7 @@ def fetch_logo_helper(db_session: Session) -> Response:
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")
     except Exception:
+        logger.exception("Faield to fetch logo file")
         raise HTTPException(
             status_code=404,
             detail="No logo file found",
