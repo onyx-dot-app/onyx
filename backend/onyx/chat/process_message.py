@@ -59,7 +59,6 @@ from onyx.context.search.enums import SearchType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SearchRequest
 from onyx.context.search.retrieval.search_runner import (
     inference_sections_from_ids,
 )
@@ -1212,34 +1211,6 @@ def stream_chat_message_objects(
                 "Performance: Forcing LLMEvaluationType.SKIP to prevent chunk evaluation for ordering-only search"
             )
 
-        search_request = SearchRequest(
-            query=final_msg.message,
-            evaluation_type=(
-                LLMEvaluationType.SKIP
-                if search_for_ordering_only
-                else (
-                    LLMEvaluationType.BASIC
-                    if persona.llm_relevance_filter
-                    else LLMEvaluationType.SKIP
-                )
-            ),
-            human_selected_filters=(
-                retrieval_options.filters if retrieval_options else None
-            ),
-            persona=persona,
-            offset=(retrieval_options.offset if retrieval_options else None),
-            limit=retrieval_options.limit if retrieval_options else None,
-            rerank_settings=new_msg_req.rerank_settings,
-            chunks_above=new_msg_req.chunks_above,
-            chunks_below=new_msg_req.chunks_below,
-            full_doc=new_msg_req.full_doc,
-            enable_auto_detect_filters=(
-                retrieval_options.enable_auto_detect_filters
-                if retrieval_options
-                else None
-            ),
-        )
-
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
                 user_query=final_msg.message,
@@ -1276,7 +1247,8 @@ def stream_chat_message_objects(
             ),
             fast_llm=fast_llm,
             force_use_tool=force_use_tool,
-            search_request=search_request,
+            persona=persona,
+            rerank_settings=new_msg_req.rerank_settings,
             chat_session_id=chat_session_id,
             current_agent_message_id=reserved_message_id,
             tools=tools,

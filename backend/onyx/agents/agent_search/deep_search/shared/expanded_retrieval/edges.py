@@ -22,7 +22,9 @@ def parallel_retrieval_edge(
     """
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = (
-        state.question if state.question else graph_config.inputs.search_request.query
+        state.question
+        if state.question
+        else graph_config.inputs.prompt_builder.raw_user_query
     )
 
     query_expansions = state.expanded_queries + [question]

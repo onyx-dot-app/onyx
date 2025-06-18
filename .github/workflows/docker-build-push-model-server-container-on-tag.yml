@@ -7,10 +7,12 @@ on:
 
 env:
   REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-model-server-cloud' || 'onyxdotapp/onyx-model-server' }}
-  LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
   DOCKER_BUILDKIT: 1
   BUILDKIT_PROGRESS: plain
   DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
+
+  # don't tag cloud images with "latest"
+  LATEST_TAG: ${{ contains(github.ref_name, 'latest') && !contains(github.ref_name, 'cloud') }}
   
 jobs:
 
@@ -166,6 +168,8 @@ jobs:
         env:
           TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
           TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
+          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
         with:
           image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
           severity: "CRITICAL,HIGH"

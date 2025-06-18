@@ -145,7 +145,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: on-failure
+    restart: always
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
@@ -173,7 +173,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: on-failure
+    restart: always
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True

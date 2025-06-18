@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from typing import IO
 from typing import NamedTuple
+from zipfile import BadZipFile
 
 import chardet
 import docx  # type: ignore
@@ -332,8 +333,13 @@ def docx_to_text_and_images(
     return text_content, embedded_images
 
 
-def pptx_to_text(file: IO[Any]) -> str:
-    presentation = pptx.Presentation(file)
+def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
+    try:
+        presentation = pptx.Presentation(file)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'pptx file'}: {e}"
+        logger.warning(error_str)
+        return ""
     text_content = []
     for slide_number, slide in enumerate(presentation.slides, start=1):
         slide_text = f"\nSlide {slide_number}:\n"
@@ -344,8 +350,17 @@ def pptx_to_text(file: IO[Any]) -> str:
     return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
-def xlsx_to_text(file: IO[Any]) -> str:
-    workbook = openpyxl.load_workbook(file, read_only=True)
+def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    try:
+        workbook = openpyxl.load_workbook(file, read_only=True)
+    except BadZipFile as e:
+        error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
+        if file_name.startswith("~"):
+            logger.debug(error_str + " (this is expected for files with ~)")
+        else:
+            logger.warning(error_str)
+        return ""
+
     text_content = []
     for sheet in workbook.worksheets:
         rows = []
@@ -504,13 +519,17 @@ def extract_text_and_images(
         if extension == ".pptx":
             file.seek(0)
             return ExtractionResult(
-                text_content=pptx_to_text(file), embedded_images=[], metadata={}
+                text_content=pptx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
             )
 
         if extension == ".xlsx":
             file.seek(0)
             return ExtractionResult(
-                text_content=xlsx_to_text(file), embedded_images=[], metadata={}
+                text_content=xlsx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
             )
 
         if extension == ".eml":

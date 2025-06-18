@@ -2,6 +2,7 @@
 "use client";
 import React, { useContext } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
 import { LogoComponent } from "@/components/logo/FixedLogo";
@@ -19,10 +20,10 @@ interface Collection {
 
 export function AdminSidebar({ collections }: { collections: Collection[] }) {
   const combinedSettings = useContext(SettingsContext);
+  const pathname = usePathname() ?? "";
   if (!combinedSettings) {
     return null;
   }
-
   const enterpriseSettings = combinedSettings.enterpriseSettings;
 
   return (
@@ -57,7 +58,12 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
             {collection.items.map((item) => (
               <Link key={item.link} href={item.link}>
                 <button
-                  className={`text-sm text-text-700 block flex gap-x-2 items-center w-52 py-2.5 px-2 text-left hover:bg-background-settings-hover dark:hover:bg-neutral-800 rounded`}
+                  className={`text-sm text-text-700 block flex gap-x-2 items-center w-52 py-2.5 px-2 text-left hover:bg-background-settings-hover dark:hover:bg-neutral-800 rounded
+                    ${
+                      pathname.startsWith(item.link)
+                        ? "bg-background-settings-hover dark:bg-neutral-700"
+                        : ""
+                    }`}
                 >
                   {item.name}
                 </button>

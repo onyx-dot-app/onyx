@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-celery-worker-primary
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.celery_worker_primary.autoscaling.enabled }}
+  replicas: {{ .Values.celery_worker_primary.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.celery_worker_primary.deploymentLabels }}
+      {{- toYaml .Values.celery_worker_primary.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.celery_worker_primary.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- with .Values.celery_worker_primary.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.celery_worker_primary.podSecurityContext | nindent 8 }}
+      containers:
+        - name: celery-worker-primary
+          securityContext:
+            {{- toYaml .Values.celery_worker_primary.securityContext | nindent 12 }}
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
+          command:
+            [
+              "celery",
+              "-A",
+              "onyx.background.celery.versioned_apps.primary",
+              "worker",
+              "--loglevel=INFO",
+              "--hostname=primary@%n",
+              "-Q",
+              "celery,periodic_tasks",
+            ]
+          resources:
+            {{- toYaml .Values.celery_worker_primary.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx-stack.envSecrets" . | nindent 12}}

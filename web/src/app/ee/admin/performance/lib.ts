@@ -8,9 +8,9 @@ import {
   convertDateToEndOfDay,
   convertDateToStartOfDay,
   getXDaysAgo,
-} from "./dateUtils";
-import { THIRTY_DAYS } from "./DateRangeSelector";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+} from "../../../../components/dateRangeSelectors/dateUtils";
+import { THIRTY_DAYS } from "../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 
 export const useTimeRange = () => {
   return useState<DateRangePickerValue>({
@@ -65,7 +65,9 @@ export function getDatesList(startDate: Date): string[] {
 
   for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
     const dateStr = d.toISOString().split("T")[0]; // convert date object to 'YYYY-MM-DD' format
-    datesList.push(dateStr);
+    if (dateStr !== undefined) {
+      datesList.push(dateStr);
+    }
   }
 
   return datesList;

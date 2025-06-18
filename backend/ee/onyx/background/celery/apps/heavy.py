@@ -9,9 +9,8 @@ from celery import Task
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
 from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
-from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
-from onyx.background.celery.apps.primary import celery_app
+from onyx.background.celery.apps.heavy import celery_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
@@ -45,6 +44,13 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
     task_id = self.request.id
     start_time = datetime.now(tz=timezone.utc)
 
+    stream = io.StringIO()
+    writer = csv.DictWriter(
+        stream,
+        fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
+    )
+    writer.writeheader()
+
     with get_session_with_current_tenant() as db_session:
         try:
             register_task(
@@ -55,15 +61,23 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 start_time=start_time,
             )
 
-            complete_chat_session_history: list[ChatSessionSnapshot] = (
-                fetch_and_process_chat_session_history(
-                    db_session=db_session,
-                    start=start,
-                    end=end,
-                    feedback_type=None,
-                    limit=None,
-                )
+            snapshot_generator = fetch_and_process_chat_session_history(
+                db_session=db_session,
+                start=start,
+                end=end,
             )
+
+            for snapshot in snapshot_generator:
+                if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
+                    snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+
+                writer.writerows(
+                    qa_pair.to_json()
+                    for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
+                        snapshot
+                    )
+                )
+
         except Exception:
             logger.exception(f"Failed to export query history with {task_id=}")
             mark_task_as_finished_with_id(
@@ -72,31 +86,6 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 success=False,
             )
             raise
-
-    if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-        complete_chat_session_history = [
-            ChatSessionSnapshot(
-                **chat_session_snapshot.model_dump(), user_email=ONYX_ANONYMIZED_EMAIL
-            )
-            for chat_session_snapshot in complete_chat_session_history
-        ]
-
-    qa_pairs: list[QuestionAnswerPairSnapshot] = [
-        qa_pair
-        for chat_session_snapshot in complete_chat_session_history
-        for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
-            chat_session_snapshot
-        )
-    ]
-
-    stream = io.StringIO()
-    writer = csv.DictWriter(
-        stream,
-        fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
-    )
-    writer.writeheader()
-    for row in qa_pairs:
-        writer.writerow(row.to_json())
 
     report_name = construct_query_history_report_name(task_id)
     with get_session_with_current_tenant() as db_session:
@@ -133,6 +122,8 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
 
 celery_app.autodiscover_tasks(
     [
+        "ee.onyx.background.celery.tasks.doc_permission_syncing",
+        "ee.onyx.background.celery.tasks.external_group_syncing",
         "ee.onyx.background.celery.tasks.cleanup",
     ]
 )

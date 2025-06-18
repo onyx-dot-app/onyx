@@ -107,7 +107,10 @@ def choose_tool(
     keyword_thread: TimeoutThread[tuple[bool, list[str]]] | None = None
     expanded_keyword_thread: TimeoutThread[str] | None = None
     expanded_semantic_thread: TimeoutThread[str] | None = None
-    override_kwargs: SearchToolOverrideKwargs | None = None
+    # If we have override_kwargs, add them to the tool_args
+    override_kwargs: SearchToolOverrideKwargs = (
+        force_use_tool.override_kwargs or SearchToolOverrideKwargs()
+    )
 
     using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
     prompt_builder = state.prompt_snapshot or agent_config.inputs.prompt_builder
@@ -122,29 +125,28 @@ def choose_tool(
             not force_use_tool.force_use or force_use_tool.tool_name == SearchTool._NAME
         )
     ):
-        override_kwargs = SearchToolOverrideKwargs()
         # Run in a background thread to avoid blocking the main thread
         embedding_thread = run_in_background(
             get_query_embedding,
-            agent_config.inputs.search_request.query,
+            agent_config.inputs.prompt_builder.raw_user_query,
             agent_config.persistence.db_session,
         )
         keyword_thread = run_in_background(
             query_analysis,
-            agent_config.inputs.search_request.query,
+            agent_config.inputs.prompt_builder.raw_user_query,
         )
 
         if USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH:
 
             expanded_keyword_thread = run_in_background(
                 _expand_query,
-                agent_config.inputs.search_request.query,
+                agent_config.inputs.prompt_builder.raw_user_query,
                 QueryExpansionType.KEYWORD,
                 prompt_builder,
             )
             expanded_semantic_thread = run_in_background(
                 _expand_query,
-                agent_config.inputs.search_request.query,
+                agent_config.inputs.prompt_builder.raw_user_query,
                 QueryExpansionType.SEMANTIC,
                 prompt_builder,
             )
@@ -179,11 +181,9 @@ def choose_tool(
         if embedding_thread and tool.name == SearchTool._NAME:
             # Wait for the embedding thread to finish
             embedding = wait_on_background(embedding_thread)
-            assert override_kwargs is not None, "must have override kwargs"
             override_kwargs.precomputed_query_embedding = embedding
         if keyword_thread and tool.name == SearchTool._NAME:
             is_keyword, keywords = wait_on_background(keyword_thread)
-            assert override_kwargs is not None, "must have override kwargs"
             override_kwargs.precomputed_is_keyword = is_keyword
             override_kwargs.precomputed_keywords = keywords
         return ToolChoiceUpdate(
@@ -272,11 +272,9 @@ def choose_tool(
     if embedding_thread and selected_tool.name == SearchTool._NAME:
         # Wait for the embedding thread to finish
         embedding = wait_on_background(embedding_thread)
-        assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.precomputed_query_embedding = embedding
     if keyword_thread and selected_tool.name == SearchTool._NAME:
         is_keyword, keywords = wait_on_background(keyword_thread)
-        assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.precomputed_is_keyword = is_keyword
         override_kwargs.precomputed_keywords = keywords
 
@@ -287,13 +285,14 @@ def choose_tool(
     ):
         keyword_expansion = wait_on_background(expanded_keyword_thread)
         semantic_expansion = wait_on_background(expanded_semantic_thread)
-        assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.expanded_queries = QueryExpansions(
             keywords_expansions=[keyword_expansion],
             semantic_expansions=[semantic_expansion],
         )
 
-        logger.info(f"Original query: {agent_config.inputs.search_request.query}")
+        logger.info(
+            f"Original query: {agent_config.inputs.prompt_builder.raw_user_query}"
+        )
         logger.info(f"Expanded keyword queries: {keyword_expansion}")
         logger.info(f"Expanded semantic queries: {semantic_expansion}")
 

@@ -18,7 +18,7 @@ spec:
         - name: slack-bot
           image: onyxdotapp/onyx-backend:latest
           imagePullPolicy: IfNotPresent
-          command: ["python", "onyxdotapp/onyxbot/slack/listener.py"]
+          command: ["python", "onyx/onyxbot/slack/listener.py"]
           ports:
             - containerPort: 8000
           resources:
@@ -40,6 +40,17 @@ spec:
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 20
+          # There are some extra values since this is shared between services
+          # There are no conflicts though, extra env variables are simply ignored
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: onyx-secrets
+                  key: redis_password
+          envFrom:
+            - configMapRef:
+                name: env-configmap
 
 ---
 apiVersion: v1

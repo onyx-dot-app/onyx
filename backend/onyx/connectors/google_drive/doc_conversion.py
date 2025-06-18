@@ -24,8 +24,10 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
@@ -162,15 +164,15 @@ def _download_and_extract_sections_basic(
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ):
-        text = xlsx_to_text(io.BytesIO(response_call()))
-        return [TextSection(link=link, text=text)]
+        text = xlsx_to_text(io.BytesIO(response_call()), file_name=file_name)
+        return [TextSection(link=link, text=text)] if text else []
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
-        text = pptx_to_text(io.BytesIO(response_call()))
-        return [TextSection(link=link, text=text)]
+        text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
+        return [TextSection(link=link, text=text)] if text else []
 
     elif is_gdrive_image_mime_type(mime_type):
         # For images, store them for later processing
@@ -220,6 +222,12 @@ def _download_and_extract_sections_basic(
             "application/vnd.google-apps.audio",
             "application/zip",
         ]:
+            return []
+
+        # don't download the file at all if it's an unhandled extension
+        file_ext = get_file_ext(file.get("name", ""))
+        if file_ext not in ALL_ACCEPTED_FILE_EXTENSIONS:
+            logger.warning(f"Skipping file {file.get('name')} due to extension.")
             return []
         # For unsupported file types, try to extract text
         try:

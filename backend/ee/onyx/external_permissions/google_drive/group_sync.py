@@ -60,6 +60,8 @@ def _get_all_folders(
                 logger.debug(f"Folder {folder_id} has already been seen. Skipping.")
                 continue
 
+            seen_folder_ids.add(folder_id)
+
             # Check if the folder has permission IDs but no permissions
             permission_ids = folder.get("permissionIds", [])
             raw_permissions = folder.get("permissions", [])
@@ -75,7 +77,16 @@ def _get_all_folders(
                     for permission in raw_permissions
                 ]
 
+            # Don't include inherited permissions, those will be captured
+            # by the folder/shared drive itself
+            permissions = [
+                permission
+                for permission in permissions
+                if permission.inherited_from is None
+            ]
+
             if not permissions and skip_folders_without_permissions:
+                logger.debug(f"Folder {folder_id} has no permissions. Skipping.")
                 continue
 
             all_folders.append(
@@ -84,7 +95,6 @@ def _get_all_folders(
                     permissions=permissions,
                 )
             )
-            seen_folder_ids.add(folder_id)
 
     return all_folders
 

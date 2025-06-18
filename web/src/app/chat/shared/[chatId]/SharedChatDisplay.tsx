@@ -94,6 +94,21 @@ export function SharedChatDisplay({
     processRawChatHistory(chatSession.messages)
   );
 
+  const firstMessage = messages[0];
+
+  if (firstMessage === undefined) {
+    return (
+      <div className="min-h-full w-full">
+        <div className="mx-auto w-fit pt-8">
+          <Callout type="danger" title="Shared Chat Not Found">
+            No messages found in shared chat.
+          </Callout>
+        </div>
+        <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
+      </div>
+    );
+  }
+
   return (
     <>
       {presentingDocument && (
@@ -106,7 +121,7 @@ export function SharedChatDisplay({
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
-              humanMessage={messages[0]}
+              humanMessage={firstMessage}
               agenticMessage={false}
               isSharedChat={true}
               selectedMessage={
@@ -163,7 +178,7 @@ export function SharedChatDisplay({
             `}
               >
                 <DocumentResults
-                  humanMessage={messages[0]}
+                  humanMessage={firstMessage}
                   agenticMessage={false}
                   modal={false}
                   isSharedChat={true}

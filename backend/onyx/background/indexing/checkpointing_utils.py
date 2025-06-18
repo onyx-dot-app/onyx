@@ -160,11 +160,6 @@ def get_latest_valid_checkpoint(
         f"{latest_valid_checkpoint_candidate.id}. Previous checkpoint: "
         f"{previous_checkpoint}"
     )
-    save_checkpoint(
-        db_session=db_session,
-        index_attempt_id=latest_valid_checkpoint_candidate.id,
-        checkpoint=previous_checkpoint,
-    )
     return previous_checkpoint
 
 

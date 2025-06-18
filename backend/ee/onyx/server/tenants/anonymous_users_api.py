@@ -5,7 +5,6 @@ from fastapi import Response
 from sqlalchemy.exc import IntegrityError
 
 from ee.onyx.auth.users import generate_anonymous_user_jwt_token
-from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from ee.onyx.server.tenants.anonymous_user_path import get_anonymous_user_path
 from ee.onyx.server.tenants.anonymous_user_path import (
     get_tenant_id_for_anonymous_user_path,
@@ -17,6 +16,7 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import optional_user
 from onyx.auth.users import User
+from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine import get_session_with_shared_schema
 from onyx.utils.logger import setup_logger

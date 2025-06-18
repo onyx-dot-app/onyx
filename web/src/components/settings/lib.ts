@@ -42,8 +42,14 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
     const results = await Promise.all(tasks);
 
     let settings: Settings;
-    if (!results[0].ok) {
-      if (results[0].status === 403 || results[0].status === 401) {
+
+    const result_0 = results[0];
+    if (!result_0) {
+      throw new Error("Standard settings fetch failed.");
+    }
+
+    if (!result_0.ok) {
+      if (result_0.status === 403 || result_0.status === 401) {
         settings = {
           auto_scroll: true,
           application_status: ApplicationStatus.ACTIVE,
@@ -59,41 +65,51 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       } else {
         throw new Error(
           `fetchStandardSettingsSS failed: status=${
-            results[0].status
-          } body=${await results[0].text()}`
+            result_0.status
+          } body=${await result_0.text()}`
         );
       }
     } else {
-      settings = await results[0].json();
+      settings = await result_0.json();
     }
 
     let enterpriseSettings: EnterpriseSettings | null = null;
     if (tasks.length > 1) {
-      if (!results[1].ok) {
-        if (results[1].status !== 403 && results[1].status !== 401) {
+      const result_1 = results[1];
+      if (!result_1) {
+        throw new Error("fetchEnterpriseSettingsSS failed.");
+      }
+
+      if (!result_1.ok) {
+        if (result_1.status !== 403 && result_1.status !== 401) {
           throw new Error(
             `fetchEnterpriseSettingsSS failed: status=${
-              results[1].status
-            } body=${await results[1].text()}`
+              result_1.status
+            } body=${await result_1.text()}`
           );
         }
       } else {
-        enterpriseSettings = await results[1].json();
+        enterpriseSettings = await result_1.json();
       }
     }
 
     let customAnalyticsScript: string | null = null;
     if (tasks.length > 2) {
-      if (!results[2].ok) {
-        if (results[2].status !== 403) {
+      const result_2 = results[2];
+      if (!result_2) {
+        throw new Error("fetchCustomAnalyticsScriptSS failed.");
+      }
+
+      if (!result_2.ok) {
+        if (result_2.status !== 403) {
           throw new Error(
             `fetchCustomAnalyticsScriptSS failed: status=${
-              results[2].status
-            } body=${await results[2].text()}`
+              result_2.status
+            } body=${await result_2.text()}`
           );
         }
       } else {
-        customAnalyticsScript = await results[2].json();
+        customAnalyticsScript = await result_2.json();
       }
     }
 

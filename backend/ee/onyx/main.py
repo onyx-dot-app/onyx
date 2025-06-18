@@ -10,6 +10,7 @@ from ee.onyx.configs.app_configs import OIDC_SCOPE_OVERRIDE
 from ee.onyx.configs.app_configs import OPENID_CONFIG_URL
 from ee.onyx.server.analytics.api import router as analytics_router
 from ee.onyx.server.auth_check import check_ee_router_auth
+from ee.onyx.server.documents.cc_pair import router as ee_document_cc_pair_router
 from ee.onyx.server.enterprise_settings.api import (
     admin_router as enterprise_settings_admin_router,
 )
@@ -50,6 +51,7 @@ from onyx.main import get_application as get_application_base
 from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
 from onyx.main import lifespan as lifespan_base
+from onyx.main import use_route_function_names_as_operation_ids
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
@@ -167,6 +169,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, chat_router)
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
+    include_router_with_global_prefix_prepended(application, ee_document_cc_pair_router)
 
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(
@@ -189,5 +192,7 @@ def get_application() -> FastAPI:
     # for debugging discovered routes
     # for route in application.router.routes:
     #     print(f"Path: {route.path}, Methods: {route.methods}")
+
+    use_route_function_names_as_operation_ids(application)
 
     return application

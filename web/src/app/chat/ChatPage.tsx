@@ -544,6 +544,7 @@ export function ChatPage({
       // if this is a seeded chat, then kick off the AI message generation
       if (
         newMessageHistory.length === 1 &&
+        newMessageHistory[0] !== undefined &&
         !submitOnLoadPerformed.current &&
         searchParams?.get(SEARCH_PARAM_NAMES.SEEDED) === "true"
       ) {
@@ -649,7 +650,7 @@ export function ChatPage({
       completeMessageMapOverride || currentMessageMap(completeMessageDetail);
     const newCompleteMessageMap = structuredClone(frozenCompleteMessageMap);
 
-    if (newCompleteMessageMap.size === 0) {
+    if (messages[0] !== undefined && newCompleteMessageMap.size === 0) {
       const systemMessageId = messages[0].parentMessageId || SYSTEM_MESSAGE_ID;
       const firstMessageId = messages[0].messageId;
       const dummySystemMessage: Message = {
@@ -690,7 +691,7 @@ export function ChatPage({
         frozenCompleteMessageMap
       );
       const latestMessage = currentMessageChain[currentMessageChain.length - 1];
-      if (latestMessage) {
+      if (messages[0] !== undefined && latestMessage) {
         newCompleteMessageMap.get(
           latestMessage.messageId
         )!.latestChildMessageId = messages[0].messageId;
@@ -1379,7 +1380,11 @@ export function ChatPage({
     } else if (alternativeAssistant) {
       currentAssistantId = alternativeAssistant.id;
     } else {
-      currentAssistantId = liveAssistant.id;
+      if (liveAssistant) {
+        currentAssistantId = liveAssistant.id;
+      } else {
+        currentAssistantId = 0; // Fallback if no assistant is live
+      }
     }
 
     resetInputBar();
@@ -1438,8 +1443,8 @@ export function ChatPage({
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
           filterManager.selectedTags,
-          selectedFiles.map((file) => file.id),
-          selectedFolders.map((folder) => folder.id)
+          selectedFiles.map((file) => file.id)
+          // selectedFolders.map((folder) => folder.id)
         ),
         selectedDocumentIds: selectedDocuments
           .filter(
@@ -1957,7 +1962,7 @@ export function ChatPage({
   ) => {
     const [_, llmModel] = getFinalLLM(
       llmProviders,
-      liveAssistant,
+      liveAssistant ?? null,
       llmManager.currentLlm
     );
     const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
@@ -1984,7 +1989,7 @@ export function ChatPage({
       formData.append("files", file);
       const response: FileResponse[] = await uploadFile(formData, null);
 
-      if (response.length > 0) {
+      if (response.length > 0 && response[0] !== undefined) {
         const uploadedFile = response[0];
 
         if (intent == UploadIntent.ADD_TO_DOCUMENTS) {
@@ -2392,14 +2397,14 @@ export function ChatPage({
                   ? true
                   : false
               }
-              humanMessage={humanMessage}
+              humanMessage={humanMessage ?? null}
               setPresentingDocument={setPresentingDocument}
               modal={true}
               ref={innerSidebarElementRef}
               closeSidebar={() => {
                 setDocumentSidebarVisible(false);
               }}
-              selectedMessage={aiMessage}
+              selectedMessage={aiMessage ?? null}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
               clearSelectedDocuments={clearSelectedDocuments}
@@ -2549,7 +2554,7 @@ export function ChatPage({
 
           >
             <DocumentResults
-              humanMessage={humanMessage}
+              humanMessage={humanMessage ?? null}
               agenticMessage={
                 aiMessage?.sub_questions?.length! > 0 ||
                 messageHistory.find(
@@ -2564,7 +2569,7 @@ export function ChatPage({
               closeSidebar={() =>
                 setTimeout(() => setDocumentSidebarVisible(false), 300)
               }
-              selectedMessage={aiMessage}
+              selectedMessage={aiMessage ?? null}
               selectedDocuments={selectedDocuments}
               toggleDocumentSelection={toggleDocumentSelection}
               clearSelectedDocuments={clearSelectedDocuments}
@@ -2674,14 +2679,16 @@ export function ChatPage({
                               <div className="h-full  w-[95%] mx-auto flex flex-col justify-center items-center">
                                 <ChatIntro selectedPersona={liveAssistant} />
 
-                                <StarterMessages
-                                  currentPersona={currentPersona}
-                                  onSubmit={(messageOverride) =>
-                                    onSubmit({
-                                      messageOverride,
-                                    })
-                                  }
-                                />
+                                {currentPersona && (
+                                  <StarterMessages
+                                    currentPersona={currentPersona}
+                                    onSubmit={(messageOverride) =>
+                                      onSubmit({
+                                        messageOverride,
+                                      })
+                                    }
+                                  />
+                                )}
                               </div>
                             )}
                           <div

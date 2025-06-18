@@ -22,6 +22,9 @@ from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import process_attachment
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    is_atlassian_date_error,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -75,10 +78,6 @@ ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
 MAX_CACHED_IDS = 100
-
-
-def _should_propagate_error(e: Exception) -> bool:
-    return "field 'updated' is invalid" in str(e)
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
@@ -369,7 +368,7 @@ class ConfluenceConnector(
             )
         except Exception as e:
             logger.error(f"Error converting page {page.get('id', 'unknown')}: {e}")
-            if _should_propagate_error(e):
+            if is_atlassian_date_error(e):  # propagate error to be caught and retried
                 raise
             return ConnectorFailure(
                 failed_document=DocumentFailure(
@@ -448,7 +447,9 @@ class ConfluenceConnector(
                     f"Failed to extract/summarize attachment {attachment['title']}",
                     exc_info=e,
                 )
-                if _should_propagate_error(e):
+                if is_atlassian_date_error(
+                    e
+                ):  # propagate error to be caught and retried
                     raise
                 return ConnectorFailure(
                     failed_document=DocumentFailure(
@@ -538,7 +539,7 @@ class ConfluenceConnector(
         try:
             return self._fetch_document_batches(checkpoint, start, end)
         except Exception as e:
-            if _should_propagate_error(e) and start is not None:
+            if is_atlassian_date_error(e) and start is not None:
                 logger.warning(
                     "Confluence says we provided an invalid 'updated' field. This may indicate"
                     "a real issue, but can also appear during edge cases like daylight"

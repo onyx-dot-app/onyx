@@ -1,7 +1,7 @@
 import React from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
-  destructureValue,
+  parseLlmDescriptor,
   modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
@@ -63,7 +63,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
     : null;
 
   const destructuredCurrentValue = currentLlm
-    ? destructureValue(currentLlm)
+    ? parseLlmDescriptor(currentLlm)
     : null;
 
   const currentLlmName = destructuredCurrentValue?.modelName;

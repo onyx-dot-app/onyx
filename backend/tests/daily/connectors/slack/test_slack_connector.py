@@ -8,11 +8,11 @@ from pytest import FixtureRequest
 from slack_sdk import WebClient
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
 from onyx.connectors.slack.connector import SlackConnector
 from shared_configs.contextvars import get_current_tenant_id
 from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
+from tests.daily.connectors.utils import to_sections
+from tests.daily.connectors.utils import to_text_sections
 
 
 @pytest.fixture
@@ -106,18 +106,7 @@ def test_indexing_channels_with_message_count(
         end=time.time(),
     )
 
-    messages: list[str] = []
-
-    for doc_or_error in docs:
-        if not isinstance(doc_or_error, Document):
-            raise RuntimeError(doc_or_error)
-        messages.extend(
-            section.text
-            for section in doc_or_error.sections
-            if isinstance(section, TextSection)
-        )
-
-    actual_messages = set(messages)
+    actual_messages = set(to_text_sections(to_sections(iter(docs))))
     assert expected_messages == actual_messages
 
 

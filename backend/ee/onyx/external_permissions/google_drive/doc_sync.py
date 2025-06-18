@@ -107,13 +107,8 @@ def _get_permissions_from_slim_doc(
         # We could fetch all ancestors of the file to get the list of folders that
         # might affect the permissions of the file, but this will get replaced with
         # an audit-log based approach in the future so not doing it now.
-        if (
-            permission.permission_details
-            and permission.permission_details.inherited_from
-        ):
-            folder_ids_to_inherit_permissions_from.add(
-                permission.permission_details.inherited_from
-            )
+        if permission.inherited_from:
+            folder_ids_to_inherit_permissions_from.add(permission.inherited_from)
 
         if permission.type == PermissionType.USER:
             if permission.email_address:

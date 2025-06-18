@@ -21,7 +21,7 @@ def format_orig_question_search_input(
     logger.debug("generate_raw_search_data")
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     return ExpandedRetrievalInput(
-        question=graph_config.inputs.search_request.query,
+        question=graph_config.inputs.prompt_builder.raw_user_query,
         base_search=True,
         sub_question_id=None,  # This graph is always and only used for the original question
         log_messages=[],

@@ -40,9 +40,11 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 ITEMS_PER_PAGE = 100
-CURSOR_LOG_FREQUENCY = 100
+CURSOR_LOG_FREQUENCY = 50
 
 _MAX_NUM_RATE_LIMIT_RETRIES = 5
+
+ONE_DAY = timedelta(days=1)
 
 
 def _sleep_after_rate_limit_exception(github_client: Github) -> None:
@@ -118,7 +120,7 @@ def _paginate_until_error(
             "This will retrieve all pages before the one we are resuming from, "
             "which may take a while and consume many API calls."
         )
-        pag_list = pag_list[prev_num_objs:]
+        pag_list = cast(PaginatedList[PullRequest | Issue], pag_list[prev_num_objs:])
         num_objs = 0
 
     try:
@@ -297,6 +299,19 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
         self.cursor_url = None
 
 
+def make_cursor_url_callback(
+    checkpoint: GithubConnectorCheckpoint,
+) -> Callable[[str | None, int], None]:
+    def cursor_url_callback(cursor_url: str | None, num_objs: int) -> None:
+        # we want to maintain the old cursor url so code after retrieval
+        # can determine that we are using the fallback cursor-based pagination strategy
+        if cursor_url:
+            checkpoint.cursor_url = cursor_url
+        checkpoint.num_retrieved = num_objs
+
+    return cursor_url_callback
+
+
 class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
     def __init__(
         self,
@@ -393,6 +408,20 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             _sleep_after_rate_limit_exception(github_client)
             return self._get_all_repos(github_client, attempt_num + 1)
 
+    def _pull_requests_func(
+        self, repo: Repository.Repository
+    ) -> Callable[[], PaginatedList[PullRequest]]:
+        return lambda: repo.get_pulls(
+            state=self.state_filter, sort="updated", direction="desc"
+        )
+
+    def _issues_func(
+        self, repo: Repository.Repository
+    ) -> Callable[[], PaginatedList[Issue]]:
+        return lambda: repo.get_issues(
+            state=self.state_filter, sort="updated", direction="desc"
+        )
+
     def _fetch_from_github(
         self,
         checkpoint: GithubConnectorCheckpoint,
@@ -433,7 +462,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # save checkpoint with repo ids retrieved
             return checkpoint
 
-        assert checkpoint.cached_repo is not None, "No repo saved in checkpoint"
+        if checkpoint.cached_repo is None:
+            raise ValueError("No repo saved in checkpoint")
 
         # Try to access the requester - different PyGithub versions may use different attribute names
         try:
@@ -455,22 +485,13 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             repo_id = checkpoint.cached_repo.id
             repo = self.github_client.get_repo(repo_id)
 
-        def cursor_url_callback(cursor_url: str | None, num_objs: int) -> None:
-            checkpoint.cursor_url = cursor_url
-            checkpoint.num_retrieved = num_objs
+        cursor_url_callback = make_cursor_url_callback(checkpoint)
 
-        # TODO: all PRs are also issues, so we should be able to _only_ get issues
-        # and then filter appropriately whenever include_issues is True
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
-            def pull_requests_func() -> PaginatedList[PullRequest]:
-                return repo.get_pulls(
-                    state=self.state_filter, sort="updated", direction="desc"
-                )
-
             pr_batch = _get_batch_rate_limited(
-                pull_requests_func,
+                self._pull_requests_func(repo),
                 checkpoint.curr_page,
                 checkpoint.cursor_url,
                 checkpoint.num_retrieved,
@@ -521,7 +542,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # if we found any PRs on the page and there are more PRs to get, return the checkpoint.
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
-            if num_prs > 0 and not done_with_prs and not checkpoint.cursor_url:
+            used_cursor = checkpoint.cursor_url is not None
+            logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
+            if num_prs > 0 and not done_with_prs and not used_cursor:
                 return checkpoint
 
             # if we went past the start date during the loop or there are no more
@@ -529,7 +552,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             checkpoint.stage = GithubConnectorStage.ISSUES
             checkpoint.reset()
 
-            if checkpoint.cursor_url:
+            if used_cursor:
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
@@ -538,14 +561,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
             logger.info(f"Fetching issues for repo: {repo.name}")
 
-            def issues_func() -> PaginatedList[Issue]:
-                return repo.get_issues(
-                    state=self.state_filter, sort="updated", direction="desc"
-                )
-
             issue_batch = list(
                 _get_batch_rate_limited(
-                    issues_func,
+                    self._issues_func(repo),
                     checkpoint.curr_page,
                     checkpoint.cursor_url,
                     checkpoint.num_retrieved,
@@ -575,7 +593,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
                 if issue.pull_request is not None:
                     # PRs are handled separately
-                    # TODO: but they shouldn't always be
                     continue
 
                 try:
@@ -593,6 +610,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     )
                     continue
 
+            logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
             # if we found any issues on the page, and we're not done, return the checkpoint.
             # don't return if we're using cursor-based pagination to avoid infinite loops
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
@@ -612,6 +630,10 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 headers=next_repo.raw_headers,
                 raw_data=next_repo.raw_data,
             )
+            checkpoint.stage = GithubConnectorStage.PRS
+            checkpoint.reset()
+
+        logger.info(f"{len(checkpoint.cached_repo_ids)} repos remaining")
 
         return checkpoint
 
@@ -623,7 +645,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         checkpoint: GithubConnectorCheckpoint,
     ) -> CheckpointOutput[GithubConnectorCheckpoint]:
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
-        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
+        # add a day for timezone safety
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc) + ONE_DAY
 
         # Move start time back by 3 hours, since some Issues/PRs are getting dropped
         # Could be due to delayed processing on GitHub side
@@ -694,11 +717,36 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 # Try to get organization first
                 try:
                     org = self.github_client.get_organization(self.repo_owner)
-                    org.get_repos().totalCount  # Just check if we can access repos
-                except GithubException:
+                    total_count = org.get_repos().totalCount
+                    if total_count == 0:
+                        raise ConnectorValidationError(
+                            f"Found no repos for organization: {self.repo_owner}. "
+                            "Does the credential have the right scopes?"
+                        )
+                except GithubException as e:
+                    # Check for missing SSO
+                    MISSING_SSO_ERROR_MESSAGE = "You must grant your Personal Access token access to this organization".lower()
+                    if MISSING_SSO_ERROR_MESSAGE in str(e).lower():
+                        SSO_GUIDE_LINK = (
+                            "https://docs.github.com/en/enterprise-cloud@latest/authentication/"
+                            "authenticating-with-saml-single-sign-on/"
+                            "authorizing-a-personal-access-token-for-use-with-saml-single-sign-on"
+                        )
+                        raise ConnectorValidationError(
+                            f"Your GitHub token is missing authorization to access the "
+                            f"`{self.repo_owner}` organization. Please follow the guide to "
+                            f"authorize your token: {SSO_GUIDE_LINK}"
+                        )
                     # If not an org, try as a user
                     user = self.github_client.get_user(self.repo_owner)
-                    user.get_repos().totalCount  # Just check if we can access repos
+
+                    # Check if we can access any repos
+                    total_count = user.get_repos().totalCount
+                    if total_count == 0:
+                        raise ConnectorValidationError(
+                            f"Found no repos for user: {self.repo_owner}. "
+                            "Does the credential have the right scopes?"
+                        )
 
         except RateLimitExceededException:
             raise UnexpectedValidationError(
@@ -751,15 +799,38 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
 if __name__ == "__main__":
     import os
+    from onyx.connectors.connector_runner import ConnectorRunner
 
+    # Initialize the connector
     connector = GithubConnector(
         repo_owner=os.environ["REPO_OWNER"],
-        repositories=os.environ["REPOSITORIES"],
+        repositories=os.environ.get("REPOSITORIES"),
     )
     connector.load_credentials(
         {"github_access_token": os.environ["ACCESS_TOKEN_GITHUB"]}
     )
-    document_batches = connector.load_from_checkpoint(
-        0, time.time(), connector.build_dummy_checkpoint()
+
+    # Create a time range from epoch to now
+    end_time = datetime.now(timezone.utc)
+    start_time = datetime.fromtimestamp(0, tz=timezone.utc)
+    time_range = (start_time, end_time)
+
+    # Initialize the runner with a batch size of 10
+    runner: ConnectorRunner[GithubConnectorCheckpoint] = ConnectorRunner(
+        connector, batch_size=10, time_range=time_range
     )
-    print(next(document_batches))
+
+    # Get initial checkpoint
+    checkpoint = connector.build_dummy_checkpoint()
+
+    # Run the connector
+    while checkpoint.has_more:
+        for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
+            if doc_batch:
+                print(f"Retrieved batch of {len(doc_batch)} documents")
+                for doc in doc_batch:
+                    print(f"Document: {doc.semantic_identifier}")
+            if failure:
+                print(f"Failure: {failure.failure_message}")
+            if next_checkpoint:
+                checkpoint = next_checkpoint

@@ -367,21 +367,23 @@ def monitor_ccpair_indexing_taskset(
 
     redis_connector_index.reset()
 
-    # mark the CC Pair as `ACTIVE` if it's not already
+    # mark the CC Pair as `ACTIVE` if the attempt was a success and the
+    # CC Pair is not active not already
+    # This should never technically be in this state, but we'll handle it anyway
+    index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
+    index_attempt_is_successful = index_attempt and index_attempt.status.is_successful()
     if (
-        # it should never technically be in this state, but we'll handle it anyway
-        cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
+        index_attempt_is_successful
+        and cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
         or cc_pair.status == ConnectorCredentialPairStatus.INITIAL_INDEXING
     ):
         cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
         db_session.commit()
 
     # if the index attempt is successful, clear the repeated error state
-    if cc_pair.in_repeated_error_state:
-        index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
-        if index_attempt and index_attempt.status.is_successful():
-            cc_pair.in_repeated_error_state = False
-            db_session.commit()
+    if cc_pair.in_repeated_error_state and index_attempt_is_successful:
+        cc_pair.in_repeated_error_state = False
+        db_session.commit()
 
 
 @shared_task(
@@ -898,9 +900,14 @@ def connector_indexing_task(
         )
 
         # special bulletproofing ... truncate long exception messages
-        sanitized_e = type(e)(str(e)[:1024])
-        sanitized_e.__traceback__ = e.__traceback__
-        raise sanitized_e
+        # for exception types that require more args, this will fail
+        # thus the try/except
+        try:
+            sanitized_e = type(e)(str(e)[:1024])
+            sanitized_e.__traceback__ = e.__traceback__
+            raise sanitized_e
+        except Exception:
+            raise e
 
     finally:
         if lock.owned():

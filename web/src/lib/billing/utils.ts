@@ -1,4 +1,4 @@
-import { BillingInformation } from "./page";
+import { BillingInformation } from "./interfaces";
 import useSWR, { mutate } from "swr";
 
 export const updateSubscriptionQuantity = async (seats: number) => {

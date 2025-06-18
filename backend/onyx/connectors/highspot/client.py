@@ -15,6 +15,7 @@ from urllib3.util.retry import Retry
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+PAGE_SIZE = 100
 
 
 class HighspotClientError(Exception):
@@ -186,16 +187,27 @@ class HighspotClient:
 
     def get_spots(self) -> List[Dict[str, Any]]:
         """
-        Get all available spots.
+        Get all available spots, paginated.
 
         Returns:
             List of spots with their names and IDs
         """
-        params = {"right": "view"}
-        response = self._make_request("GET", "spots", params=params)
-        found_spots = response.get("collection", [])
-        logger.info(f"Received {len(found_spots)} spots")
-        return found_spots
+        all_spots = []
+        has_more = True
+        current_offset = 0
+
+        while has_more:
+            params = {"right": "view", "start": current_offset, "limit": PAGE_SIZE}
+            response = self._make_request("GET", "spots", params=params)
+            found_spots = response.get("collection", [])
+            logger.info(f"Received {len(found_spots)} spots at offset {current_offset}")
+            all_spots.extend(found_spots)
+            if len(found_spots) < PAGE_SIZE:
+                has_more = False
+            else:
+                current_offset += PAGE_SIZE
+        logger.info(f"Total spots retrieved: {len(all_spots)}")
+        return all_spots
 
     def get_spot(self, spot_id: str) -> Dict[str, Any]:
         """
@@ -212,7 +224,7 @@ class HighspotClient:
         return self._make_request("GET", f"spots/{spot_id}")
 
     def get_spot_items(
-        self, spot_id: str, offset: int = 0, page_size: int = 100
+        self, spot_id: str, offset: int = 0, page_size: int = PAGE_SIZE
     ) -> Dict[str, Any]:
         """
         Get items in a specific spot.

@@ -1,3 +1,7 @@
+# TODO(rkuo): All of the downgrade_postgres and upgrade_postgres operations here
+# are vulnerable to deadlocks. We could deal with them similar to reset_postgres
+# where we retry out of process
+
 import json
 
 import pytest

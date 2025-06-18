@@ -37,7 +37,6 @@ class GoogleDrivePermission(BaseModel):
     ) -> "GoogleDrivePermission":
         # we seem to only get details for permissions that are inherited
         # we can get multiple details if a permission is inherited from multiple
-        # parents
         permission_details_list = drive_permission.get("permissionDetails", [])
         permission_details: dict[str, Any] | None = (
             permission_details_list[0] if permission_details_list else None
@@ -57,3 +56,9 @@ class GoogleDrivePermission(BaseModel):
                 else None
             ),
         )
+
+    @property
+    def inherited_from(self) -> str | None:
+        if self.permission_details:
+            return self.permission_details.inherited_from
+        return None

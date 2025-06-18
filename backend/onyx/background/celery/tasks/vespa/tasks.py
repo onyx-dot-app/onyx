@@ -640,7 +640,4 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
             f"vespa_metadata_sync_task completed: status={completion_status.value} doc={document_id}"
         )
 
-    if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
-        return False
-
-    return True
+    return completion_status == OnyxCeleryTaskCompletionStatus.SUCCEEDED

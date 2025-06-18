@@ -43,6 +43,19 @@ cd web
 npx playwright test
 ```
 
+To run a single test:
+```
+npx playwright test landing-page.spec.ts
+```
+
+If running locally, interactive options can help you see exactly what is happening in 
+the test.
+
+```
+npx playwright test --ui
+npx playwright test --headed
+```
+
 3. Inspect results
 
 By default, playwright.config.ts is configured to output the results to:

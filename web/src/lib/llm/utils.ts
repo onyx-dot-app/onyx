@@ -75,12 +75,16 @@ export const structureValue = (
   return `${name}__${provider}__${modelName}`;
 };
 
-export const destructureValue = (value: string): LlmDescriptor => {
+export const parseLlmDescriptor = (value: string): LlmDescriptor => {
   const [displayName, provider, modelName] = value.split("__");
+  if (displayName === undefined) {
+    return { name: "Unknown", provider: "", modelName: "" };
+  }
+
   return {
     name: displayName,
-    provider,
-    modelName,
+    provider: provider ?? "",
+    modelName: modelName ?? "",
   };
 };
 

@@ -16,6 +16,7 @@ from fastapi import status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from httpx_oauth.clients.google import GoogleOAuth2
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -157,6 +158,20 @@ def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
         status_code=400,
         content={"message": str(exc)},
     )
+
+
+def use_route_function_names_as_operation_ids(app: FastAPI) -> None:
+    """
+    OpenAPI generation defaults to naming the operation with the
+    function + route + HTTP method, which usually looks very redundant.
+
+    This function changes the operation IDs to be just the function name.
+
+    Should be called only after all routes have been added.
+    """
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            route.operation_id = route.name
 
 
 def include_router_with_global_prefix_prepended(
@@ -310,7 +325,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_query_router)
     include_router_with_global_prefix_prepended(application, admin_router)
     include_router_with_global_prefix_prepended(application, connector_router)
-    include_router_with_global_prefix_prepended(application, user_router)
     include_router_with_global_prefix_prepended(application, credential_router)
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
@@ -447,6 +461,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     # Initialize and instrument the app
     Instrumentator().instrument(application).expose(application)
+
+    use_route_function_names_as_operation_ids(application)
 
     return application
 

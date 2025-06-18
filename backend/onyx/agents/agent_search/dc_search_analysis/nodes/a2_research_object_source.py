@@ -35,18 +35,15 @@ def research_object_source(
     datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
     search_tool = graph_config.tooling.search_tool
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     object, document_source = state.object_source_combination
 
-    if search_tool is None or graph_config.inputs.search_request.persona is None:
+    if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     try:
-        instructions = graph_config.inputs.search_request.persona.prompts[
-            0
-        ].system_prompt
+        instructions = graph_config.inputs.persona.prompts[0].system_prompt
 
         agent_2_instructions = extract_section(
             instructions, "Agent Step 2:", "Agent Step 3:"

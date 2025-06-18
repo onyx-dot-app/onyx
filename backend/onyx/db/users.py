@@ -255,6 +255,9 @@ def add_slack_user_if_not_exists(db_session: Session, email: str) -> User:
 def _get_users_by_emails(
     db_session: Session, lower_emails: list[str]
 ) -> tuple[list[User], list[str]]:
+    """given a list of lowercase emails,
+    returns a list[User] of Users whose emails match and a list[str]
+    the missing emails that had no User"""
     stmt = select(User).filter(func.lower(User.email).in_(lower_emails))  # type: ignore
     found_users = list(db_session.scalars(stmt).unique().all())  # Convert to list
 

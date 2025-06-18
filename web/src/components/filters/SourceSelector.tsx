@@ -11,8 +11,8 @@ import {
   FiTag,
   FiX,
 } from "react-icons/fi";
-import { DateRangeSelector } from "@/components/search/DateRangeSelector";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { SearchDateRangeSelector } from "@/components/dateRangeSelectors/SearchDateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { listSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
 import { TagFilter } from "@/components/search/filtering/TagFilter";
@@ -330,7 +330,10 @@ export function HorizontalFilters({
     <div className="b">
       <div className="flex gap-x-3">
         <div className="w-52">
-          <DateRangeSelector value={timeRange} onValueChange={setTimeRange} />
+          <SearchDateRangeSelector
+            value={timeRange}
+            onValueChange={setTimeRange}
+          />
         </div>
 
         <FilterDropdown

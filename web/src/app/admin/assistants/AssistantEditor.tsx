@@ -25,7 +25,7 @@ import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
-  destructureValue,
+  parseLlmDescriptor,
   modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
@@ -548,6 +548,7 @@ export function AssistantEditor({
 
           const submissionData: PersonaUpsertParameters = {
             ...values,
+            icon_color: values.icon_color ?? null,
             existing_prompt_id: existingPrompt?.id ?? null,
             starter_messages: starterMessages,
             groups: groups,
@@ -1163,7 +1164,7 @@ export function AssistantEditor({
                         setFieldValue("llm_model_provider_override", null);
                       } else {
                         const { modelName, provider, name } =
-                          destructureValue(selected);
+                          parseLlmDescriptor(selected);
                         if (modelName && name) {
                           setFieldValue(
                             "llm_model_version_override",

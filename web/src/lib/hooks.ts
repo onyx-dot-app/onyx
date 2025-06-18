@@ -11,10 +11,10 @@ import {
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import {
-  destructureValue,
+  parseLlmDescriptor,
   findProviderForModel,
   structureValue,
 } from "./llm/utils";
@@ -480,7 +480,7 @@ export function useLlmManager(
     modelName: string | null | undefined
   ): LlmDescriptor => {
     if (modelName) {
-      const model = destructureValue(modelName);
+      const model = parseLlmDescriptor(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
           p.model_configurations
@@ -810,7 +810,12 @@ export function getDisplayNameForModel(modelName: string): string {
   if (modelName.startsWith("bedrock/")) {
     const parts = modelName.split("/");
     const lastPart = parts[parts.length - 1];
-    return MODEL_DISPLAY_NAMES[lastPart] || lastPart;
+    if (lastPart === undefined) {
+      return "";
+    }
+
+    const displayName = MODEL_DISPLAY_NAMES[lastPart];
+    return displayName || lastPart;
   }
 
   return MODEL_DISPLAY_NAMES[modelName] || modelName;

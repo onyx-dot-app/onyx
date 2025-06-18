@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { Tag, ValidSources } from "../types";
 import { Persona } from "@/app/admin/assistants/interfaces";
 

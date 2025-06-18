@@ -7,7 +7,7 @@ import {
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   modelSupportsImageInput,
-  destructureValue,
+  parseLlmDescriptor,
   structureValue,
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -74,18 +74,21 @@ export default function LLMPopover({
             modelConfiguration.is_visible
           ) {
             uniqueModelNames.add(modelConfiguration.name);
-            llmOptionsByProvider[llmProvider.provider].push({
-              name: modelConfiguration.name,
-              value: structureValue(
-                llmProvider.name,
-                llmProvider.provider,
-                modelConfiguration.name
-              ),
-              icon: getProviderIcon(
-                llmProvider.provider,
-                modelConfiguration.name
-              ),
-            });
+            const options = llmOptionsByProvider[llmProvider.provider];
+            if (options) {
+              options.push({
+                name: modelConfiguration.name,
+                value: structureValue(
+                  llmProvider.name,
+                  llmProvider.provider,
+                  modelConfiguration.name
+                ),
+                icon: getProviderIcon(
+                  llmProvider.provider,
+                  modelConfiguration.name
+                ),
+              });
+            }
           }
         });
       });
@@ -121,12 +124,18 @@ export default function LLMPopover({
 
   // Use useCallback to prevent function recreation
   const handleTemperatureChange = useCallback((value: number[]) => {
-    setLocalTemperature(value[0]);
+    const value_0 = value[0];
+    if (value_0 !== undefined) {
+      setLocalTemperature(value_0);
+    }
   }, []);
 
   const handleTemperatureChangeComplete = useCallback(
     (value: number[]) => {
-      llmManager.updateTemperature(value[0]);
+      const value_0 = value[0];
+      if (value_0 !== undefined) {
+        llmManager.updateTemperature(value_0);
+      }
     },
     [llmManager]
   );
@@ -187,7 +196,7 @@ export default function LLMPopover({
                       : "text-text-darker"
                   }`}
                   onClick={() => {
-                    llmManager.updateCurrentLlm(destructureValue(value));
+                    llmManager.updateCurrentLlm(parseLlmDescriptor(value));
                     onSelect?.(value);
                     setIsOpen(false);
                   }}

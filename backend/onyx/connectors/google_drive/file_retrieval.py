@@ -30,7 +30,7 @@ FILE_FIELDS = (
 )
 SLIM_FILE_FIELDS = (
     f"nextPageToken, files(mimeType, driveId, id, name, {PERMISSION_FULL_DESCRIPTION}, "
-    "permissionIds, webViewLink, owners(emailAddress))"
+    "permissionIds, webViewLink, owners(emailAddress), modifiedTime)"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
 

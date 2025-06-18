@@ -36,7 +36,7 @@ class ToolChoice(BaseModel):
     tool: Tool
     tool_args: dict
     id: str | None
-    search_tool_override_kwargs: SearchToolOverrideKwargs | None = None
+    search_tool_override_kwargs: SearchToolOverrideKwargs = SearchToolOverrideKwargs()
 
     class Config:
         arbitrary_types_allowed = True

@@ -114,14 +114,14 @@ async def refresh_access_token(
 
 
 @admin_router.put("")
-def put_settings(
+def admin_ee_put_settings(
     settings: EnterpriseSettings, _: User | None = Depends(current_admin_user)
 ) -> None:
     store_settings(settings)
 
 
 @basic_router.get("")
-def fetch_settings() -> EnterpriseSettings:
+def ee_fetch_settings() -> EnterpriseSettings:
     if MULTI_TENANT:
         tenant_id = get_current_tenant_id()
         if not tenant_id or tenant_id == POSTGRES_DEFAULT_SCHEMA:

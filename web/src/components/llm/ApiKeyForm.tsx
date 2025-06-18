@@ -16,7 +16,7 @@ export const ApiKeyForm = ({
   setPopup: (popup: PopupSpec) => void;
   hideSuccess?: boolean;
 }) => {
-  const defaultProvider = providerOptions[0]?.name;
+  const defaultProvider = providerOptions[0]!.name;
   const providerNameToIndexMap = new Map<string, number>();
   providerOptions.forEach((provider, index) => {
     providerNameToIndexMap.set(provider.name, index);

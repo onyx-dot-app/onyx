@@ -9,8 +9,11 @@ from slack_sdk import WebClient
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
+from onyx.connectors.slack.connector import SlackConnector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -55,9 +58,16 @@ def slack_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
-    slack_client = WebClient(
-        token=cc_pair.credential.credential_json["slack_bot_token"]
+
+    provider = OnyxDBCredentialsProvider(tenant_id, "slack", cc_pair.credential.id)
+    r = get_redis_client(tenant_id=tenant_id)
+    slack_client = SlackConnector.make_slack_web_client(
+        provider.get_provider_key(),
+        cc_pair.credential.credential_json["slack_bot_token"],
+        SlackConnector.MAX_RETRIES,
+        r,
     )
+
     user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
 
     onyx_groups: list[ExternalUserGroup] = []
