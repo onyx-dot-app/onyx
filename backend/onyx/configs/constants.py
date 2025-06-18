@@ -178,6 +178,7 @@ class DocumentSource(str, Enum):
     NOT_APPLICABLE = "not_applicable"
     DISCORD = "discord"
     FRESHDESK = "freshdesk"
+    FRESHDESK_KB = "freshdesk_kb"
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"

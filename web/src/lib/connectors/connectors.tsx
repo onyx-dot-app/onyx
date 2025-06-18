@@ -1199,6 +1199,46 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     values: [],
     advanced_values: [],
   },
+  freshdesk_kb: {
+    description: "Configure Freshdesk Knowledge Base connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter Freshdesk KB folder IDs:",
+        label: "Folder IDs",
+        name: "freshdesk_folder_ids",
+        optional: false,
+        description: "The IDs of Knowledge Base folders to index. For multiple folders, enter comma-separated values (e.g., 5000184231,5000184232)",
+        isTextArea: true
+      }
+    ],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter a single folder ID for backward compatibility (optional):",
+        label: "Single Folder ID",
+        name: "folder_id", // Changed to match connector property name
+        optional: true,
+        description: "For backward compatibility. Prefer using the Folder IDs field above for all configurations."
+      },
+      {
+        type: "text",
+        query: "Enter the portal URL (optional):",
+        label: "Portal URL",
+        name: "freshdesk_portal_url",
+        optional: true,
+        description: "The URL of your Freshdesk portal (e.g., https://support.your-company.com)"
+      },
+      {
+        type: "text",
+        query: "Enter the portal ID (optional):",
+        label: "Portal ID",
+        name: "freshdesk_portal_id",
+        optional: true,
+        description: "The ID of your Freshdesk portal, used for agent URLs"
+      }
+    ]
+  },
   fireflies: {
     description: "Configure Fireflies connector",
     values: [],
@@ -1595,6 +1635,13 @@ export interface AsanaConfig {
 }
 
 export interface FreshdeskConfig {}
+
+export interface FreshdeskKBConfig {
+  freshdesk_folder_ids?: string;
+  folder_id?: string;
+  freshdesk_portal_url?: string;
+  freshdesk_portal_id?: string;
+}
 
 export interface FirefliesConfig {}
 

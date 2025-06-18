@@ -23,6 +23,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.file.connector import LocalFileConnector
 from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.freshdesk.connector import FreshdeskConnector
+from onyx.connectors.freshdesk_kb.connector import FreshdeskKnowledgeBaseConnector
 from onyx.connectors.gitbook.connector import GitbookConnector
 from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.gitlab.connector import GitlabConnector
@@ -116,6 +117,7 @@ def identify_connector_class(
         DocumentSource.XENFORO: XenforoConnector,
         DocumentSource.DISCORD: DiscordConnector,
         DocumentSource.FRESHDESK: FreshdeskConnector,
+        DocumentSource.FRESHDESK_KB: FreshdeskKnowledgeBaseConnector,
         DocumentSource.FIREFLIES: FirefliesConnector,
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
