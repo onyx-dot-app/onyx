@@ -122,13 +122,11 @@ def _process_file(
 
     # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)
-    file_display_name = onyx_metadata.get("file_display_name") or os.path.basename(
-        file_name
-    )
-    time_updated = onyx_metadata.get("doc_updated_at") or datetime.now(timezone.utc)
-    primary_owners = onyx_metadata.get("primary_owners")
-    secondary_owners = onyx_metadata.get("secondary_owners")
-    link = onyx_metadata.get("link")
+    file_display_name = onyx_metadata.file_display_name or os.path.basename(file_name)
+    time_updated = onyx_metadata.doc_updated_at or datetime.now(timezone.utc)
+    primary_owners = onyx_metadata.primary_owners
+    secondary_owners = onyx_metadata.secondary_owners
+    link = onyx_metadata.link
 
     # These metadata items are not settable by the user
     source_type_str = metadata.get("connector_type")
@@ -196,11 +194,11 @@ def _process_file(
         custom_tags.update(more_custom_tags)
 
         # File-specific metadata overrides metadata processed so far
-        primary_owners = onyx_metadata.get("primary_owners") or primary_owners
-        secondary_owners = onyx_metadata.get("secondary_owners") or secondary_owners
-        time_updated = onyx_metadata.get("doc_updated_at") or time_updated
-        file_display_name = onyx_metadata.get("file_display_name") or file_display_name
-        link = onyx_metadata.get("link") or link
+        primary_owners = onyx_metadata.primary_owners or primary_owners
+        secondary_owners = onyx_metadata.secondary_owners or secondary_owners
+        time_updated = onyx_metadata.doc_updated_at or time_updated
+        file_display_name = onyx_metadata.file_display_name or file_display_name
+        link = onyx_metadata.link or link
 
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection] = []

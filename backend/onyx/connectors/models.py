@@ -2,7 +2,6 @@ import sys
 from datetime import datetime
 from enum import Enum
 from typing import Any
-from typing import TypedDict
 
 from pydantic import BaseModel
 from pydantic import model_validator
@@ -339,9 +338,9 @@ class ConnectorFailure(BaseModel):
         return values
 
 
-class OnyxMetadata(TypedDict):
-    link: str | None
-    file_display_name: str | None
-    primary_owners: list[BasicExpertInfo] | None
-    secondary_owners: list[BasicExpertInfo] | None
-    doc_updated_at: datetime | None
+class OnyxMetadata(BaseModel):
+    link: str | None = None
+    file_display_name: str | None = None
+    primary_owners: list[BasicExpertInfo] | None = None
+    secondary_owners: list[BasicExpertInfo] | None = None
+    doc_updated_at: datetime | None = None

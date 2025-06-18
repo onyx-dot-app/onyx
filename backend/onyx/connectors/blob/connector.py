@@ -315,13 +315,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     onyx_metadata, custom_tags = process_onyx_metadata(
                         extraction_result.metadata
                     )
-                    file_display_name = (
-                        onyx_metadata.get("file_display_name") or file_name
-                    )
-                    time_updated = onyx_metadata.get("doc_updated_at") or last_modified
-                    link = onyx_metadata.get("link") or link
-                    primary_owners = onyx_metadata.get("primary_owners")
-                    secondary_owners = onyx_metadata.get("secondary_owners")
+                    file_display_name = onyx_metadata.file_display_name or file_name
+                    time_updated = onyx_metadata.doc_updated_at or last_modified
+                    link = onyx_metadata.link or link
+                    primary_owners = onyx_metadata.primary_owners
+                    secondary_owners = onyx_metadata.secondary_owners
 
                     sections: list[TextSection | ImageSection] = []
                     if extraction_result.text_content.strip():
