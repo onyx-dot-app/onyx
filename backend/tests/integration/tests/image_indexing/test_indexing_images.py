@@ -13,6 +13,7 @@ from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.file import FileManager
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
@@ -33,6 +34,11 @@ def test_image_indexing(
     # Use FileManager to upload the test file
     upload_response = FileManager.upload_file_for_connector(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
+    )
+
+    LLMProviderManager.create(
+        name="test_llm",
+        user_performing_action=admin_user,
     )
 
     SettingsManager.update_settings(
