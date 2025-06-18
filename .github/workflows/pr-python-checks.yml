@@ -57,7 +57,7 @@ jobs:
     - name: Run ruff
       run: |
         cd backend
-        ruff .
+        ruff format .
 
     - name: Check import order with reorder-python-imports
       run: |
