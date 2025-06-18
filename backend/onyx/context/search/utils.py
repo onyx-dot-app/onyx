@@ -79,7 +79,7 @@ def relevant_sections_to_indices(
     ]
 
     for item in ass:
-        print(item.combined_content)
+        print(item)
 
     return [
         index
