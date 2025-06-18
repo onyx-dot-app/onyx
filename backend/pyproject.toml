@@ -20,11 +20,3 @@ disable_error_code = ["var-annotated"]
 [[tool.mypy.overrides]]
 module = "generated.*"
 follow_imports = "silent"
-
-[tool.ruff.lint]
-ignore = []
-select = [
-    "E",
-    "F",
-    "W",
-]
