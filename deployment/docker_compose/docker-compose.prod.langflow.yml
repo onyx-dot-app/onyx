@@ -127,6 +127,7 @@ services:
       - .env
     volumes:
       - db_volume:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     logging:
       driver: json-file
       options:
