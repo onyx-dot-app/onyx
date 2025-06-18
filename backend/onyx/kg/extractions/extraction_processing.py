@@ -1,11 +1,15 @@
 import json
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 from typing import cast
 
 from langchain_core.messages import HumanMessage
+from redis.lock import Lock as RedisLock
 
+from onyx.background.celery.tasks.kg_processing.utils import extend_lock
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_skipped_kg_documents
@@ -328,7 +332,10 @@ def _get_batch_metadata(
 
 
 def kg_extraction(
-    tenant_id: str, index_name: str, processing_chunk_batch_size: int = 8
+    tenant_id: str,
+    index_name: str,
+    lock: RedisLock,
+    processing_chunk_batch_size: int = 8,
 ) -> list[ConnectorExtractionStats]:
     """
     This extraction will try to extract from all chunks that have not been kg-processed yet.
@@ -369,6 +376,8 @@ def kg_extraction(
     # Track which metadata attributes are possible for each entity type
     metadata_tracker = EntityTypeMetadataTracker()
     metadata_tracker.import_typeinfo()
+
+    last_lock_time = time.monotonic()
 
     # Iterate over connectors that are enabled for KG extraction
 
@@ -417,6 +426,9 @@ def kg_extraction(
                 break
 
             document_batch_counter += 1
+            last_lock_time = extend_lock(
+                lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
+            )
 
             connector_extraction_stats = []
             connector_aggregated_kg_extractions_list = []

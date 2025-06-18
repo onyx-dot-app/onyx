@@ -1,9 +1,7 @@
 from onyx.configs.constants import KV_KG_CONFIG_KEY
-from onyx.configs.constants import KV_KG_PROCESSING_STATUS_KEY
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.kg.models import KGConfigSettings
-from onyx.kg.models import KGProcessingStatus
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.utils.logger import setup_logger
 
@@ -44,46 +42,6 @@ def is_kg_config_settings_enabled_valid(kg_config_settings: KGConfigSettings) ->
         validate_kg_settings(kg_config_settings)
         return True
     except Exception:
-        return False
-
-
-def set_kg_processing_in_progress(in_progress: bool) -> None:
-    """
-    Set the KV_KG_PROCESSING_STATUS_KEY in_progress value in the kv store.
-
-    Args:
-        in_progress: Whether KG processing is in progress (True) or not (False)
-    """
-    store = get_kv_store()
-    store.store(
-        KV_KG_PROCESSING_STATUS_KEY,
-        KGProcessingStatus(in_progress=in_progress).model_dump(),
-    )
-
-
-def is_kg_processing_in_progress() -> bool:
-    """
-    Get the current KV_KG_PROCESSING_STATUS_KEY in_progress value.
-
-    Returns:
-        bool: True if KG processing is in progress, False otherwise
-    """
-    kv_store = get_kv_store()
-    try:
-        stored_value = kv_store.load(KV_KG_PROCESSING_STATUS_KEY, refresh_cache=True)
-        return (
-            KGProcessingStatus.model_validate(stored_value).in_progress
-            if stored_value
-            else False
-        )
-    except KvKeyNotFoundError:
-        # Default to False if no status has been set yet
-        logger.debug(
-            f"No kg processing status found in KV store for key: {KV_KG_PROCESSING_STATUS_KEY}"
-        )
-        return False
-    except Exception as e:
-        logger.error(f"Error loading kg processing status from KV store: {str(e)}")
         return False
 
 

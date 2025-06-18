@@ -98,7 +98,6 @@ KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 KV_KG_CONFIG_KEY = "kg_config"
-KV_KG_PROCESSING_STATUS_KEY = "kg_processing_status"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation

@@ -583,8 +583,13 @@ def stream_chat_message_objects(
 
         # TODO: Move these special calls  to endpoints
         if new_msg_req.message == "kg_p":
-            try_creating_kg_processing_task(tenant_id)
-            raise Exception("Extractions done")
+            success = try_creating_kg_processing_task(tenant_id)
+            if success:
+                raise Exception("KG processing scheduled")
+            else:
+                raise Exception(
+                    "Cannot schedule another KG processing while one is already running"
+                )
 
         elif new_msg_req.message.startswith("kg_rs_source"):
             msg_split = [x for x in new_msg_req.message.split(":")]
@@ -597,8 +602,14 @@ def stream_chat_message_objects(
             else:
                 raise Exception("Invalid format for a source reset command")
 
-            try_creating_kg_source_reset_task(tenant_id, source_name, index_str)
-            raise Exception(f"KG index reset for source {source_name} done")
+            success = try_creating_kg_source_reset_task(
+                tenant_id, source_name, index_str
+            )
+            if success:
+                source_name = source_name or "all"
+                raise Exception(f"KG index reset for source '{source_name}' scheduled")
+            else:
+                raise Exception("Cannot reset index while KG processing is running")
 
         elif new_msg_req.message == "kg_setup":
             populate_missing_default_entity_types__commit(db_session=db_session)

@@ -1,10 +1,14 @@
+import time
 from collections.abc import Generator
 from typing import cast
 
 from rapidfuzz.fuzz import ratio
+from redis.lock import Lock as RedisLock
 from sqlalchemy import func
 from sqlalchemy import text
 
+from onyx.background.celery.tasks.kg_processing.utils import extend_lock
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
 from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
 from onyx.db.engine import get_session_with_current_tenant
@@ -290,7 +294,10 @@ def _transfer_batch_relationship_and_update_vespa(
 
 
 def kg_clustering(
-    tenant_id: str, index_name: str, processing_chunk_batch_size: int = 16
+    tenant_id: str,
+    index_name: str,
+    lock: RedisLock,
+    processing_chunk_batch_size: int = 16,
 ) -> None:
     """
     Here we will cluster the extractions based on their cluster frameworks.
@@ -309,12 +316,17 @@ def kg_clustering(
     kg_config_settings = get_kg_config_settings()
     validate_kg_settings(kg_config_settings)
 
+    last_lock_time = time.monotonic()
+
     # Cluster and transfer grounded entities sequentially
     for untransferred_grounded_entities in _get_batch_untransferred_grounded_entities(
         batch_size=processing_chunk_batch_size
     ):
         for entity in untransferred_grounded_entities:
             _cluster_one_grounded_entity(entity)
+        last_lock_time = extend_lock(
+            lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
+        )
     # NOTE: we assume every entity is transferred, as we currently only have grounded entities
     logger.info("Finished transferring all entities")
 
@@ -329,6 +341,9 @@ def kg_clustering(
                     for root_entity in root_entities
                 ]
             )
+            last_lock_time = extend_lock(
+                lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
+            )
     logger.info("Finished creating all parent-child relationships")
 
     # Transfer the relationship types (no need to do in parallel as there's only a few)
@@ -339,6 +354,9 @@ def kg_clustering(
             for relationship_type in relationship_types:
                 transfer_relationship_type(db_session, relationship_type)
             db_session.commit()
+        last_lock_time = extend_lock(
+            lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
+        )
     logger.info("Finished transferring all relationship types")
 
     # Transfer the relationships and update vespa in parallel
@@ -350,6 +368,9 @@ def kg_clustering(
             relationships=untransferred_relationships,
             index_name=index_name,
             tenant_id=tenant_id,
+        )
+        last_lock_time = extend_lock(
+            lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
         )
     logger.info("Finished transferring all relationships")
 

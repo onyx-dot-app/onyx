@@ -1,7 +1,11 @@
+import time
 from typing import Any
 
+from redis.lock import Lock as RedisLock
 from retry import retry
 
+from onyx.background.celery.tasks.kg_processing.utils import extend_lock
+from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine import get_session_with_current_tenant
@@ -62,7 +66,7 @@ def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> N
 
 
 def reset_vespa_kg_index(
-    tenant_id: str, index_name: str, source_name: str | None = None
+    tenant_id: str, index_name: str, lock: RedisLock, source_name: str | None = None
 ) -> None:
     """
     Reset the kg info in vespa for all documents of a given source name,
@@ -72,6 +76,8 @@ def reset_vespa_kg_index(
         f"Resetting kg vespa index {index_name} for tenant {tenant_id}, "
         f"source: {source_name if source_name else 'all'}"
     )
+
+    last_lock_time = time.monotonic()
 
     # Get all documents that need a vespa reset
     with get_session_with_current_tenant() as db_session:
@@ -113,6 +119,9 @@ def reset_vespa_kg_index(
     # Reset the kg fields
     for document_id in document_ids:
         _reset_vespa_for_doc(document_id, tenant_id, index_name)
+        last_lock_time = extend_lock(
+            lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
+        )
 
     logger.info(
         f"Finished resetting kg vespa index {index_name} for tenant {tenant_id}, "

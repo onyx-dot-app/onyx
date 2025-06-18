@@ -67,12 +67,6 @@ def upgrade() -> None:
         f"INSERT INTO key_value_store (key, value) VALUES ('kg_config', '{kg_config_settings}')"
     )
 
-    # same here
-    kg_processing_status = json.dumps({"in_progress": False})
-    op.execute(
-        f"INSERT INTO key_value_store (key, value) VALUES ('kg_processing_status', '{kg_processing_status}')"
-    )
-
     # drop kg config table
     op.drop_table("kg_config")
 
@@ -119,5 +113,4 @@ def downgrade() -> None:
         ],
     )
 
-    op.execute("DELETE FROM key_value_store WHERE key = 'kg_processing_status'")
     op.execute("DELETE FROM key_value_store WHERE key = 'kg_config'")

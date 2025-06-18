@@ -1,3 +1,4 @@
+from redis.lock import Lock as RedisLock
 from sqlalchemy import or_
 
 from onyx.configs.constants import DocumentSource
@@ -18,13 +19,13 @@ from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 
 
 def reset_source_kg_index(
-    source_name: str | None, tenant_id: str, index_name: str
+    source_name: str | None, tenant_id: str, index_name: str, lock: RedisLock
 ) -> None:
     """
     Resets the knowledge graph index and vespa for a source.
     """
     # reset vespa for the source
-    reset_vespa_kg_index(tenant_id, index_name, source_name)
+    reset_vespa_kg_index(tenant_id, index_name, lock, source_name)
 
     with get_session_with_current_tenant() as db_session:
         if source_name is None:
