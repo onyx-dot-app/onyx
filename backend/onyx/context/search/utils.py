@@ -60,45 +60,6 @@ def relevant_sections_to_indices(
         if chunk.relevant
     }
 
-    logger.info(relevant_set)
-    logger.info(items)
-
-    ass = [
-        item
-        for index, item in enumerate(items)
-        if (
-            (
-                isinstance(item, InferenceSection)
-                and (item.center_chunk.document_id, item.center_chunk.chunk_id)
-                in relevant_set
-            )
-            or (
-                not isinstance(item, (InferenceSection))
-                and (item.document_id, item.chunk_ind) in relevant_set
-            )
-        )
-    ]
-
-    logger.info(ass)
-
-    ass = [
-        index
-        for index, item in enumerate(items)
-        if (
-                (
-                        isinstance(item, InferenceSection)
-                        and (item.center_chunk.document_id, item.center_chunk.chunk_id)
-                        in relevant_set
-                )
-                or (
-                        not isinstance(item, (InferenceSection))
-                        and (item.document_id, item.chunk_ind) in relevant_set
-                )
-        )
-    ]
-
-    logger.info(ass)
-
     return [
         index
         for index, item in enumerate(items)
