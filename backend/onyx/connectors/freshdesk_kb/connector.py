@@ -1,8 +1,6 @@
 """Freshdesk Knowledge Base connector implementation for Onyx."""
 
-import json
 import time
-import logging
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
