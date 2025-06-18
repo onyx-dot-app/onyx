@@ -52,14 +52,17 @@ class PgRedisKVStore(KeyValueStore):
                 db_session.add(obj)
             db_session.commit()
 
-    def load(self, key: str) -> JSON_ro:
-        try:
-            redis_value = self.redis_client.get(REDIS_KEY_PREFIX + key)
-            if redis_value:
-                assert isinstance(redis_value, bytes)
-                return json.loads(redis_value.decode("utf-8"))
-        except Exception as e:
-            logger.error(f"Failed to get value from Redis for key '{key}': {str(e)}")
+    def load(self, key: str, refresh_cache: bool = False) -> JSON_ro:
+        if not refresh_cache:
+            try:
+                redis_value = self.redis_client.get(REDIS_KEY_PREFIX + key)
+                if redis_value:
+                    assert isinstance(redis_value, bytes)
+                    return json.loads(redis_value.decode("utf-8"))
+            except Exception as e:
+                logger.error(
+                    f"Failed to get value from Redis for key '{key}': {str(e)}"
+                )
 
         with get_session_context_manager() as db_session:
             obj = db_session.query(KVStore).filter_by(key=key).first()

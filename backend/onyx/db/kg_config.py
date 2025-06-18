@@ -18,7 +18,8 @@ def set_kg_config_settings(kg_config_settings: KGConfigSettings) -> None:
 def get_kg_config_settings() -> KGConfigSettings:
     kv_store = get_kv_store()
     try:
-        stored_config = kv_store.load(KV_KG_CONFIG_KEY)
+        # refresh cache True until beta is over as we may manually update the config in the db
+        stored_config = kv_store.load(KV_KG_CONFIG_KEY, refresh_cache=True)
         return KGConfigSettings.model_validate(stored_config or {})
     except KvKeyNotFoundError:
         # Default to empty kg config if no config have been set yet
