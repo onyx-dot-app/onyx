@@ -508,7 +508,7 @@ def search_postprocessing(
         else []
     )
 
-    for section in reranked_sections:
+    for section in post_processing_results.get(str(llm_filter_task_id), []):
         logger.info(section.combined_content)
 
     yield [
