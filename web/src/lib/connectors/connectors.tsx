@@ -1208,18 +1208,21 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Folder IDs",
         name: "freshdesk_folder_ids",
         optional: false,
-        description: "The IDs of Knowledge Base folders to index. For multiple folders, enter comma-separated values (e.g., 5000184231,5000184232)",
-        isTextArea: true
-      }
+        description:
+          "The IDs of Knowledge Base folders to index. For multiple folders, enter comma-separated values (e.g., 5000184231,5000184232)",
+        isTextArea: true,
+      },
     ],
     advanced_values: [
       {
         type: "text",
-        query: "Enter a single folder ID for backward compatibility (optional):",
+        query:
+          "Enter a single folder ID for backward compatibility (optional):",
         label: "Single Folder ID",
         name: "folder_id", // Changed to match connector property name
         optional: true,
-        description: "For backward compatibility. Prefer using the Folder IDs field above for all configurations."
+        description:
+          "For backward compatibility. Prefer using the Folder IDs field above for all configurations.",
       },
       {
         type: "text",
@@ -1227,7 +1230,8 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Portal URL",
         name: "freshdesk_portal_url",
         optional: true,
-        description: "The URL of your Freshdesk portal (e.g., https://support.your-company.com)"
+        description:
+          "The URL of your Freshdesk portal (e.g., https://support.your-company.com)",
       },
       {
         type: "text",
@@ -1235,9 +1239,9 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Portal ID",
         name: "freshdesk_portal_id",
         optional: true,
-        description: "The ID of your Freshdesk portal, used for agent URLs"
-      }
-    ]
+        description: "The ID of your Freshdesk portal, used for agent URLs",
+      },
+    ],
   },
   fireflies: {
     description: "Configure Fireflies connector",

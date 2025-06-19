@@ -345,7 +345,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     freshdesk_domain: "",
     freshdesk_api_key: "",
     freshdesk_portal_url: "",
-    freshdesk_portal_id: ""
+    freshdesk_portal_id: "",
   } as FreshdeskKBCredentialJson,
   fireflies: {
     fireflies_api_key: "",
