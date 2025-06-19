@@ -6,7 +6,7 @@ disallow_untyped_defs = true
 enable_error_code = ["possibly-undefined"]
 strict_equality = true
 exclude = [
-  "^generated/",
+  "^generated/.*",
 ]
 
 [[tool.mypy.overrides]]
@@ -20,6 +20,7 @@ disable_error_code = ["var-annotated"]
 [[tool.mypy.overrides]]
 module = "generated.*"
 follow_imports = "silent"
+ignore_errors = true
 
 [tool.ruff]
 line-length = 130
