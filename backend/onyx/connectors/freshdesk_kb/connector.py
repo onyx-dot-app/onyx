@@ -1,5 +1,7 @@
 """Freshdesk Knowledge Base connector implementation for Onyx."""
 
+from __future__ import annotations
+
 import time
 from collections.abc import Iterator
 from datetime import datetime, timezone
