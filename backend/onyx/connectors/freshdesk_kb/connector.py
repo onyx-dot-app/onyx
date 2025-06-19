@@ -760,7 +760,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         logger.info(f"Using domain: {self.domain}")
         
         # Explicitly log that we're starting to yield documents
-        logger.info(f"Starting to yield documents from Freshdesk KB folders")
+        logger.info("Starting to yield documents from Freshdesk KB folders")
         yield from self._process_articles(folder_ids)
 
     def poll_source(self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch) -> GenerateDocumentsOutput:
