@@ -4,28 +4,28 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from datetime import datetime
+from datetime import timezone
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import (
-    GenerateDocumentsOutput,
-    GenerateSlimDocumentOutput,
-    LoadConnector,
-    PollConnector,
-    SecondsSinceUnixEpoch,
-    SlimConnector,
-)
-from onyx.connectors.models import (
-    ConnectorMissingCredentialError,
-    Document,
-    SlimDocument,
-    TextSection,
-)
+from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
+from onyx.connectors.interfaces import LoadConnector
+from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 

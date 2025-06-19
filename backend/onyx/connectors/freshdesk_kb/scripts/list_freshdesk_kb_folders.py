@@ -4,11 +4,13 @@ Script to list all available folders in Freshdesk Knowledge Base.
 This helps identify folder IDs to use in the connector configuration.
 """
 
+import argparse
+import json
 import os
 import sys
-import json
-from typing import Dict, List, Any
-import argparse
+from typing import Any
+from typing import Dict
+from typing import List
 
 # Add the onyx module to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../../.."))
