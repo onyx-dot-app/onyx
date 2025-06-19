@@ -29,6 +29,7 @@ from onyx.db.file_record import upsert_filerecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -203,8 +204,9 @@ class S3BackedFileStore(FileStore):
         return self._bucket_name
 
     def _get_s3_key(self, file_name: str) -> str:
-        """Generate S3 key from file name"""
-        return f"{self._s3_prefix}/{file_name}"
+        """Generate S3 key from file name with tenant ID prefix"""
+        tenant_id = get_current_tenant_id()
+        return f"{self._s3_prefix}/{tenant_id}/{file_name}"
 
     def initialize(self) -> None:
         """Initialize the S3 file store by ensuring the bucket exists"""
