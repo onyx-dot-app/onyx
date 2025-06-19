@@ -91,7 +91,7 @@ def _create_metadata_from_article(
     if article_id:
         # Agent URL (the one with portalId)
         if portal_url and portal_id:
-            portal_base = portal_url.rstrip('/')
+            portal_base = portal_url.rstrip("/")
             metadata["agent_url"] = f"{portal_base}/a/solutions/articles/{article_id}?portalId={portal_id}"
         else:
             logger.warning(f"Could not construct agent_url for article {article_id}: missing portal_url or portal_id.")
@@ -183,7 +183,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
     Implements LoadConnector for full indexing and PollConnector for incremental updates.
     """
     def __init__(
-        self, 
+        self,
         freshdesk_folder_id: Optional[str] = None,
         freshdesk_domain: Optional[str] = None,
         freshdesk_api_key: Optional[str] = None,
@@ -193,7 +193,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         connector_specific_config: Optional[dict] = None,
         freshdesk_folder_ids: Optional[str] = None,  # Add direct parameter for folder_ids
         folder_id: Optional[str] = None,  # Allow both field names
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """
         Initialize the Freshdesk Knowledge Base connector.
@@ -691,7 +691,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                             doc = _create_doc_from_article(article_data, self.domain, portal_url, portal_id)
                             current_batch.append(doc)
                         except Exception as e:
-                            article_id = article_data.get('id', 'UNKNOWN')
+                            article_id = article_data.get("id", "UNKNOWN")
                             logger.error(
                                 f"Failed to create document for article {article_id}: {e}"
                             )

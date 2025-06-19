@@ -24,13 +24,19 @@ def parse_args() -> argparse.Namespace:
         description="List all available folders in a Freshdesk Knowledge Base"
     )
     parser.add_argument(
-        "--domain", type=str, required=True, help="Freshdesk domain (e.g., company.freshdesk.com)"
+        "--domain",
+        type=str,
+        required=True,
+        help="Freshdesk domain (e.g., company.freshdesk.com)",
     )
     parser.add_argument(
         "--api-key", type=str, required=True, help="Freshdesk API key"
     )
     parser.add_argument(
-        "--output", type=str, default="folders.json", help="Output JSON file (default: folders.json)"
+        "--output",
+        type=str,
+        default="folders.json",
+        help="Output JSON file (default: folders.json)",
     )
     parser.add_argument(
         "--pretty", action="store_true", help="Pretty-print the output"
@@ -63,11 +69,15 @@ def list_folders(domain: str, api_key: str) -> List[Dict[str, Any]]:
 def format_folders(folders: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Format folder data for display, organizing by category."""
     # Sort folders by category name and then by folder name
-    folders = sorted(folders, key=lambda f: (f.get("category_name", ""), f.get("name", "")))
+    folders = sorted(
+        folders, key=lambda f: (f.get("category_name", ""), f.get("name", ""))
+    )
     
     # Add formatted display name with category
     for folder in folders:
-        folder["display_name"] = f"{folder.get('name')} [Category: {folder.get('category_name', 'Unknown')}]"
+        folder["display_name"] = (
+            f"{folder.get('name')} [Category: {folder.get('category_name', 'Unknown')}]"
+        )
     
     return folders
 
