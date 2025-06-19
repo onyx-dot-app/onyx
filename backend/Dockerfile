@@ -1,5 +1,8 @@
 FROM python:3.11.7-slim-bookworm
 
+# Instead of downloading ffmpeg-linux.zip when installing playwright, we put it in the tmp folder
+COPY ffmpeg-linux.zip /tmp/ffmpeg-linux.zip
+
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
 contains code for both the Community and Enterprise editions of Onyx. If you do not \
@@ -42,6 +45,9 @@ RUN apt-get update && \
     apt-get clean
 
 
+RUN mkdir -p ~/.cache/ms-playwright/ffmpeg-1009 \
+ && unzip /tmp/ffmpeg-linux.zip -d ~/.cache/ms-playwright/ffmpeg-1009 \
+ && touch ~/.cache/ms-playwright/ffmpeg-1009/INSTALLATION_COMPLETE
 
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE
