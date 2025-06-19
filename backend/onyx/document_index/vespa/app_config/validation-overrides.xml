@@ -1,8 +1,0 @@
-<validation-overrides>
-    <allow
-        until="DATE_REPLACEMENT"
-        comment="We need to be able to create/delete indices for swapping models">schema-removal</allow>
-    <allow
-        until="DATE_REPLACEMENT"
-        comment="We need to be able to update the schema for updates to the Onyx schema">indexing-change</allow>
-</validation-overrides>
