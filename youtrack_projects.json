@@ -1,0 +1,146 @@
+[
+  {
+    "shortName": "ABUSE",
+    "createdBy": null,
+    "archived": true,
+    "description": null,
+    "name": "AbuseIO",
+    "id": "0-14",
+    "$type": "Project"
+  },
+  {
+    "shortName": "autospf",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "autospf",
+    "id": "0-19",
+    "$type": "Project"
+  },
+  {
+    "shortName": "SPFOPS",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "AutoSPF Ops Process Optimization",
+    "id": "0-23",
+    "$type": "Project"
+  },
+  {
+    "shortName": "COMMANDO",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "Commando",
+    "id": "0-15",
+    "$type": "Project"
+  },
+  {
+    "shortName": "COMPLIANCE",
+    "createdBy": null,
+    "archived": false,
+    "description": "Compliance Requirements - We update into secureframe.com",
+    "name": "Compliance",
+    "id": "0-18",
+    "$type": "Project"
+  },
+  {
+    "shortName": "DMARC",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "DMARC",
+    "id": "0-20",
+    "$type": "Project"
+  },
+  {
+    "shortName": "MAILHOP",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "Mailhop",
+    "id": "0-5",
+    "$type": "Project"
+  },
+  {
+    "shortName": "MARKETING",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "Marketing",
+    "id": "0-22",
+    "$type": "Project"
+  },
+  {
+    "shortName": "BULLET",
+    "createdBy": null,
+    "archived": true,
+    "description": null,
+    "name": "Outbound Email Filter",
+    "id": "0-6",
+    "$type": "Project"
+  },
+  {
+    "shortName": "PHISH",
+    "createdBy": null,
+    "archived": false,
+    "description": "PhishProtection components:\n\nwww.phishprotection.com\nportal.phishprotection.com\nurlf.phishprotection.com",
+    "name": "PhishProtection",
+    "id": "0-4",
+    "$type": "Project"
+  },
+  {
+    "shortName": "SHELL",
+    "createdBy": null,
+    "archived": false,
+    "description": "## Important Links\n\n- [High-level architecture plan](https://lucid.app/documents/view/f79e45df-3e5b-4ce9-87c0-9e8d646139e9)\n\n- [Diagram of built infrastructure](https://lucid.app/documents/view/7e2963d9-e368-4e3b-9b26-74fb3490b5bf)\n\n- [Shell/TCS Onboarding - Testing Environment](https://docs.google.com/document/d/1oYTyOZTRDdh7jEXW6lXiXDXcBR-asGvv1c18nAnzQNI/edit)\n\n- [Shell Sharepoint for DuoCircle SMTP Service](https://eu001-sp.shell.com/sites/UG-PT-DuoCircleSMTPService)\n  - [Teams channel](https://teams.microsoft.com/_?tenantId=db1e96a8-a3da-442a-930b-235cac24cd5c)\n     (Sign in to the Sharepoint first before trying to access this URL)\n\n----\n\n\n## Shell/TCS Contacts\n_(as of 2025-05-15)_\n\n- Ormrod, David SITILTD-PTIV/EP <David.Ormrod@shell.com>\n- Sathyamurthy, Ravikumar SBOBNG-PTIV/EP <R.Sathyamurthy@shell.com>\n- Kumar H, Naveen SBOBNG-PTIV/EP <Naveen.KumarH@shell.com> \n\n<br>\n\n- duocircle.shell.com super-admins\n   - diptarka.dhar@shell.com\n   - harm.khan@shell.com\n   - lokesh.nagaraju@shell.com\n   - maichunwibou.pamei@shell.com\n   - shinto.antony@shell.com\n   - vijay.dalbanjan@shell.com\n   - viknesh.kumar2@shell.com",
+    "name": "Shell Email Router",
+    "id": "0-21",
+    "$type": "Project"
+  },
+  {
+    "shortName": "MAY",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "Maysoft",
+    "id": "0-25",
+    "$type": "Project"
+  },
+  {
+    "shortName": "META",
+    "createdBy": null,
+    "archived": false,
+    "description": "Project for higher-level goals which cut across the entire set of projects",
+    "name": "Meta",
+    "id": "0-10",
+    "$type": "Project"
+  },
+  {
+    "shortName": "NUREPLY",
+    "createdBy": null,
+    "archived": false,
+    "description": "Cold Emails to Hot Deals\n\nwith AI Powered Cold Emails",
+    "name": "Nureply",
+    "id": "0-24",
+    "$type": "Project"
+  },
+  {
+    "shortName": "TP",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "Test Project",
+    "id": "0-13",
+    "$type": "Project"
+  },
+  {
+    "shortName": "URLDB",
+    "createdBy": null,
+    "archived": false,
+    "description": null,
+    "name": "URL Database",
+    "id": "0-9",
+    "$type": "Project"
+  }
+]

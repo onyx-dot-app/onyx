@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-05-20T22:26:43.652906",
+  "projects_tested": 1,
+  "total_issues": 2183,
+  "issues_per_project": {
+    "DMARC": 2183
+  },
+  "custom_query": null,
+  "query_url": "https://duo.myjetbrains.com/api/issues"
+}
