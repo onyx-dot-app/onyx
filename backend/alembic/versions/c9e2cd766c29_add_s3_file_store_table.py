@@ -1,7 +1,7 @@
 """modify_file_store_for_external_storage
 
 Revision ID: c9e2cd766c29
-Revises: 65bc6e0f8500
+Revises: 03bf8be6b53a
 Create Date: 2025-06-13 14:02:09.867679
 
 """
@@ -19,7 +19,7 @@ from onyx.file_store.file_store import get_s3_file_store
 
 # revision identifiers, used by Alembic.
 revision = "c9e2cd766c29"
-down_revision = "65bc6e0f8500"
+down_revision = "03bf8be6b53a"
 branch_labels = None
 depends_on = None
 
