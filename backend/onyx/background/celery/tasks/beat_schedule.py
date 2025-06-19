@@ -2,6 +2,7 @@ import copy
 from datetime import timedelta
 from typing import Any
 
+from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxCeleryPriority
@@ -103,24 +104,6 @@ beat_task_templates.extend(
             },
         },
         {
-            "name": "check-for-doc-permissions-sync",
-            "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
-            "schedule": timedelta(seconds=30),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        },
-        {
-            "name": "check-for-external-group-sync",
-            "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
-            "schedule": timedelta(seconds=20),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        },
-        {
             "name": "monitor-background-processes",
             "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
             "schedule": timedelta(minutes=5),
@@ -132,6 +115,30 @@ beat_task_templates.extend(
         },
     ]
 )
+
+if ENTERPRISE_EDITION_ENABLED:
+    beat_task_templates.extend(
+        [
+            {
+                "name": "check-for-doc-permissions-sync",
+                "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
+                "schedule": timedelta(seconds=30),
+                "options": {
+                    "priority": OnyxCeleryPriority.MEDIUM,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                },
+            },
+            {
+                "name": "check-for-external-group-sync",
+                "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
+                "schedule": timedelta(seconds=20),
+                "options": {
+                    "priority": OnyxCeleryPriority.MEDIUM,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                },
+            },
+        ]
+    )
 
 # Only add the LLM model update task if the API URL is configured
 if LLM_MODEL_UPDATE_API_URL:
