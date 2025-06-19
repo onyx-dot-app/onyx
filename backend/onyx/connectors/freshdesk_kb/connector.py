@@ -12,8 +12,20 @@ from bs4 import BeautifulSoup
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector, PollConnector, SecondsSinceUnixEpoch, SlimConnector, GenerateSlimDocumentOutput
-from onyx.connectors.models import ConnectorMissingCredentialError, Document, TextSection, SlimDocument
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    PollConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    SlimDocument,
+    TextSection,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -25,11 +37,11 @@ _FRESHDESK_KB_ID_PREFIX = "FRESHDESK_KB_"
 _SOLUTION_ARTICLE_FIELDS_TO_INCLUDE = {
     "id",
     "title",
-    "description", # HTML content
-    "description_text", # Plain text content
+    "description",  # HTML content
+    "description_text",  # Plain text content
     "folder_id",
     "category_id",
-    "status", # 1: Draft, 2: Published
+    "status",  # 1: Draft, 2: Published
     "tags",
     "thumbs_up",
     "thumbs_down",
@@ -40,15 +52,18 @@ _SOLUTION_ARTICLE_FIELDS_TO_INCLUDE = {
 
 
 def _clean_html_content(html_content: str) -> str:
-    """
-    Cleans HTML content, extracting plain text.
+    """Cleans HTML content, extracting plain text.
+    
     Uses BeautifulSoup to parse HTML and get text.
     """
     if not html_content:
         return ""
     try:
         soup = BeautifulSoup(html_content, "html.parser")
-        text_parts = [p.get_text(separator=" ", strip=True) for p in soup.find_all(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])]
+        text_parts = [
+            p.get_text(separator=" ", strip=True)
+            for p in soup.find_all(["p", "li", "h1", "h2", "h3", "h4", "h5", "h6"])
+        ]
         if not text_parts:
             return soup.get_text(separator=" ", strip=True)
         return "\n".join(text_parts)
@@ -57,17 +72,18 @@ def _clean_html_content(html_content: str) -> str:
         return html_content
 
 
-def _create_metadata_from_article(article: dict, domain: str, portal_url: str, portal_id: str) -> dict:
-    """
-    Creates a metadata dictionary from a Freshdesk solution article.
-    """
+def _create_metadata_from_article(
+    article: dict, domain: str, portal_url: str, portal_id: str
+) -> dict:
+    """Creates a metadata dictionary from a Freshdesk solution article."""
     metadata: dict[str, Any] = {}
     article_id = article.get("id")
 
     for key, value in article.items():
         if key not in _SOLUTION_ARTICLE_FIELDS_TO_INCLUDE:
             continue
-        if value is None or (isinstance(value, list) and not value):  # Skip None or empty lists
+        # Skip None or empty lists
+        if value is None or (isinstance(value, list) and not value):
             continue
         metadata[key] = value
     
@@ -99,10 +115,10 @@ def _create_metadata_from_article(article: dict, domain: str, portal_url: str, p
     return metadata
 
 
-def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal_id: str) -> Document:
-    """
-    Creates an Onyx Document from a Freshdesk solution article.
-    """
+def _create_doc_from_article(
+    article: dict, domain: str, portal_url: str, portal_id: str
+) -> Document:
+    """Creates an Onyx Document from a Freshdesk solution article."""
     article_id = str(article.get("id", ""))
     if not article_id:
         raise ValueError("Article missing required 'id' field")
@@ -122,9 +138,14 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
     updated_at_str = article.get("updated_at")
     if updated_at_str:
         try:
-            doc_updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+            doc_updated_at = datetime.fromisoformat(
+                updated_at_str.replace("Z", "+00:00")
+            )
         except (ValueError, AttributeError):
-            logger.warning(f"Failed to parse updated_at timestamp for article {article_id}: {updated_at_str}")
+            logger.warning(
+                f"Failed to parse updated_at timestamp for article {article_id}: "
+                f"{updated_at_str}"
+            )
             doc_updated_at = datetime.now(timezone.utc)
     else:
         doc_updated_at = datetime.now(timezone.utc)
@@ -133,7 +154,11 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
     metadata = _create_metadata_from_article(article, domain, portal_url, portal_id)
     
     # Determine the best link to use
-    link = metadata.get("agent_url") or metadata.get("public_url") or f"https://{domain}/a/solutions/articles/{article_id}"
+    link = (
+        metadata.get("agent_url")
+        or metadata.get("public_url")
+        or f"https://{domain}/a/solutions/articles/{article_id}"
+    )
     
     document = Document(
         id=_FRESHDESK_KB_ID_PREFIX + article_id,
@@ -153,8 +178,8 @@ def _create_doc_from_article(article: dict, domain: str, portal_url: str, portal
 
 
 class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnector):
-    """
-    Onyx Connector for fetching Freshdesk Knowledge Base (Solution Articles) from a specific folder.
+    """Onyx Connector for fetching Freshdesk Knowledge Base (Solution Articles).
+    
     Implements LoadConnector for full indexing and PollConnector for incremental updates.
     """
     def __init__(
@@ -191,7 +216,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         
         # Store connector_specific_config for later use
         self.connector_specific_config = connector_specific_config
-        
+
         # Collect potential folder IDs from all possible sources
         # First, check direct parameters
         self.folder_id = freshdesk_folder_id or folder_id
@@ -199,16 +224,24 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         
         # Then check connector_specific_config
         if connector_specific_config:
-            logger.info(f"connector_specific_config keys: {list(connector_specific_config.keys())}")
+            logger.info(
+                f"connector_specific_config keys: {list(connector_specific_config.keys())}"
+            )
             
             # Check for single folder ID
             if not self.folder_id and "freshdesk_folder_id" in connector_specific_config:
                 self.folder_id = connector_specific_config.get("freshdesk_folder_id")
-                logger.info(f"Using folder_id from connector_specific_config['freshdesk_folder_id']: {self.folder_id}")
+                logger.info(
+                    f"Using folder_id from connector_specific_config['freshdesk_folder_id']: "
+                    f"{self.folder_id}"
+                )
                 
             if not self.folder_id and "folder_id" in connector_specific_config:
                 self.folder_id = connector_specific_config.get("folder_id")
-                logger.info(f"Using folder_id from connector_specific_config['folder_id']: {self.folder_id}")
+                logger.info(
+                    f"Using folder_id from connector_specific_config['folder_id']: "
+                    f"{self.folder_id}"
+                )
                 
             # Check for multi-folder configuration
             if not self.folder_ids and "freshdesk_folder_ids" in connector_specific_config:
@@ -224,11 +257,19 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         
         # Optional portal params
         self.portal_url = freshdesk_portal_url
-        if not self.portal_url and connector_specific_config and "freshdesk_portal_url" in connector_specific_config:
+        if (
+            not self.portal_url
+            and connector_specific_config
+            and "freshdesk_portal_url" in connector_specific_config
+        ):
             self.portal_url = connector_specific_config.get("freshdesk_portal_url")
             
         self.portal_id = freshdesk_portal_id
-        if not self.portal_id and connector_specific_config and "freshdesk_portal_id" in connector_specific_config:
+        if (
+            not self.portal_id
+            and connector_specific_config
+            and "freshdesk_portal_id" in connector_specific_config
+        ):
             self.portal_id = connector_specific_config.get("freshdesk_portal_id")
         
         self.headers = {"Content-Type": "application/json"}
@@ -250,7 +291,8 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 }.items() if not isinstance(val, str)
             ]
             raise ConnectorMissingCredentialError(
-                f"Required Freshdesk KB credentials must be strings. Missing/invalid: {missing}"
+                f"Required Freshdesk KB credentials must be strings. "
+                f"Missing/invalid: {missing}"
             )
 
         self.api_key = str(api_key)
@@ -266,14 +308,18 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             folder_ids_value = credentials.get("freshdesk_folder_ids")
             if folder_ids_value:
                 self.folder_ids = str(folder_ids_value)
-                logger.info(f"Found folder_ids in credentials: {self.folder_ids}")
+                logger.info(
+                    f"Found folder_ids in credentials: {self.folder_ids}"
+                )
         
         # Also check for single folder ID (backward compatibility)
         if "freshdesk_folder_id" in credentials:
             folder_id_value = credentials.get("freshdesk_folder_id")
             if folder_id_value:
                 self.folder_id = str(folder_id_value)
-                logger.info(f"Found single folder_id in credentials: {self.folder_id}")
+                logger.info(
+                    f"Found single folder_id in credentials: {self.folder_id}"
+                )
         
         logger.debug(f"Credentials loaded for domain: {self.domain}")
 
@@ -328,31 +374,45 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         # We need at least one folder ID for validation
         if not folder_ids:
             # Emergency fallback: Check if freshdesk_folder_ids exists in connector_specific_config
-            if hasattr(self, 'connector_specific_config') and self.connector_specific_config:
-                if 'freshdesk_folder_ids' in self.connector_specific_config:
-                    folder_ids_value = self.connector_specific_config.get('freshdesk_folder_ids')
-                    logger.info(f"Using freshdesk_folder_ids directly from connector_specific_config: {folder_ids_value}")
+            if hasattr(self, "connector_specific_config") and self.connector_specific_config:
+                if "freshdesk_folder_ids" in self.connector_specific_config:
+                    folder_ids_value = self.connector_specific_config.get(
+                        "freshdesk_folder_ids"
+                    )
+                    logger.info(
+                        f"Using freshdesk_folder_ids directly from "
+                        f"connector_specific_config: {folder_ids_value}"
+                    )
                     if isinstance(folder_ids_value, str) and folder_ids_value.strip():
                         # Directly use the first ID from the string for validation
-                        folder_id = folder_ids_value.split(',')[0].strip()
+                        folder_id = folder_ids_value.split(",")[0].strip()
                         if folder_id:
                             folder_ids.append(folder_id)
                             # Also set as the folder_id attribute for backward compatibility
                             self.folder_id = folder_id
-                            logger.info(f"Emergency fallback: Using first ID from freshdesk_folder_ids: {folder_id}")
+                            logger.info(
+                                f"Emergency fallback: Using first ID from "
+                                f"freshdesk_folder_ids: {folder_id}"
+                            )
             
             # Final check - if still no folder IDs, raise error
             if not folder_ids:
                 logger.error("No folder IDs found in connector settings")
                 raise ConnectorMissingCredentialError(
-                    "Missing folder ID(s) in connector settings. Please configure at least one folder ID in the Freshdesk KB 'Folder IDs' field."
+                    "Missing folder ID(s) in connector settings. Please configure "
+                    "at least one folder ID in the Freshdesk KB 'Folder IDs' field."
                 )
             
         # Use the first folder ID for validation
         validation_folder_id = folder_ids[0]
-        logger.info(f"Using folder ID {validation_folder_id} for validation (out of {len(folder_ids)} configured folders)")
+        logger.info(
+            f"Using folder ID {validation_folder_id} for validation "
+            f"(out of {len(folder_ids)} configured folders)"
+        )
         
-        logger.info(f"Validating Freshdesk KB connector for {len(folder_ids)} folder(s)")
+        logger.info(
+            f"Validating Freshdesk KB connector for {len(folder_ids)} folder(s)"
+        )
         
         try:
             # Test API by trying to fetch one article from the validation folder
@@ -366,42 +426,59 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             if response.status_code == 200:
                 data = response.json()
                 if isinstance(data, list):
-                    logger.info(f"Validation successful - got {len(data)} articles in response")
+                    logger.info(
+                        f"Validation successful - got {len(data)} articles in response"
+                    )
                 else:
-                    logger.warning(f"Unexpected response format: {type(data)}")
+                    logger.warning(
+                        f"Unexpected response format: {type(data)}"
+                    )
             
             response.raise_for_status()
-            logger.info(f"Successfully validated Freshdesk KB connector for folder {validation_folder_id}")
+            logger.info(
+                f"Successfully validated Freshdesk KB connector for folder "
+                f"{validation_folder_id}"
+            )
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to validate Freshdesk KB connector: {e}")
             logger.error(
                 f"Response: {response.text if 'response' in locals() else 'No response'}"
             )
-            if 'response' in locals():
+            if "response" in locals():
                 logger.error(f"Status code: {response.status_code}")
             raise ConnectorMissingCredentialError(
                 f"Could not connect to Freshdesk API: {e}"
             )
 
-    def _make_api_request(self, url: str, params: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
+    def _make_api_request(
+        self, url: str, params: Optional[Dict[str, Any]] = None
+    ) -> Optional[List[Dict[str, Any]]]:
         """Makes a GET request to the Freshdesk API with rate limit handling."""
         if not self.auth:
-            raise ConnectorMissingCredentialError("Freshdesk KB credentials not loaded.")
+            raise ConnectorMissingCredentialError(
+                "Freshdesk KB credentials not loaded."
+            )
         
         # Verify the URL doesn't have duplicated domains (which could cause SSL errors)
         if ".freshdesk.com.freshdesk.com" in url:
             url = url.replace(".freshdesk.com.freshdesk.com", ".freshdesk.com")
-            logger.warning(f"Fixed malformed URL containing duplicate domain: {url}")
+            logger.warning(
+                f"Fixed malformed URL containing duplicate domain: {url}"
+            )
         
         retries = 3
         for attempt in range(retries):
             try:
-                response = requests.get(url, auth=self.auth, headers=self.headers, params=params)
+                response = requests.get(
+                    url, auth=self.auth, headers=self.headers, params=params
+                )
                 response.raise_for_status()
 
                 if response.status_code == 429:  # Too Many Requests
                     retry_after = int(response.headers.get("Retry-After", 60))
-                    logger.warning(f"Rate limit exceeded. Retrying after {retry_after} seconds.")
+                    logger.warning(
+                        f"Rate limit exceeded. Retrying after {retry_after} seconds."
+                    )
                     time.sleep(retry_after)
                     continue
                 
@@ -420,12 +497,14 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         return None
         
     def list_available_folders(self) -> List[Dict[str, Any]]:
-        """
-        Lists all available Knowledge Base folders from Freshdesk.
+        """Lists all available Knowledge Base folders from Freshdesk.
+        
         Returns a list of folder details that can be used for configuration.
         """
         if not self.base_url:
-            raise ConnectorMissingCredentialError("Freshdesk KB connector not properly configured (base_url missing).")
+            raise ConnectorMissingCredentialError(
+                "Freshdesk KB connector not properly configured (base_url missing)."
+            )
         
         all_folders = []
         
@@ -454,7 +533,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 folders = self._make_api_request(folders_url)
                 
                 if not folders or not isinstance(folders, list):
-                    logger.warning(f"Failed to fetch folders for category {category_id} or empty response")
+                    logger.warning(
+                    f"Failed to fetch folders for category {category_id} or empty response"
+                )
                     continue
                 
                 logger.info(f"Found {len(folders)} folders in category '{category_name}'")
@@ -476,20 +557,27 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             logger.error(traceback.format_exc())
             return []
 
-    def _fetch_articles_from_folder(self, folder_id: str, updated_since: Optional[datetime] = None) -> Iterator[List[dict]]:
-        """
-        Fetches solution articles from a specific folder, handling pagination.
+    def _fetch_articles_from_folder(
+        self, folder_id: str, updated_since: Optional[datetime] = None
+    ) -> Iterator[List[dict]]:
+        """Fetches solution articles from a specific folder, handling pagination.
+        
         Filters by 'updated_since' if provided.
         """
         if not self.base_url or not folder_id:
-            raise ConnectorMissingCredentialError("Freshdesk KB connector not properly configured (base_url or folder_id missing).")
+            raise ConnectorMissingCredentialError(
+                "Freshdesk KB connector not properly configured "
+                "(base_url or folder_id missing)."
+            )
 
         page = 1
         while True:
             url = f"{self.base_url}/solutions/folders/{folder_id}/articles"
             params: dict[str, Any] = {"page": page, "per_page": 30}
 
-            logger.info(f"Fetching articles from Freshdesk KB folder {folder_id}, page {page}...")
+            logger.info(
+                f"Fetching articles from Freshdesk KB folder {folder_id}, page {page}..."
+            )
             article_batch = self._make_api_request(url, params)
 
             if article_batch is None:  # Error occurred
@@ -499,11 +587,16 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 break
             
             if not isinstance(article_batch, list):
-                logger.error(f"Unexpected API response format for articles: {type(article_batch)}. Expected list.")
+                logger.error(
+                    f"Unexpected API response format for articles: "
+                    f"{type(article_batch)}. Expected list."
+                )
                 break
 
             if not article_batch:  # No more articles
-                logger.info(f"No more articles found for folder {folder_id} on page {page}.")
+                logger.info(
+                    f"No more articles found for folder {folder_id} on page {page}."
+                )
                 break
             
             # If updated_since is provided, filter locally
@@ -511,7 +604,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 filtered_batch = []
                 for article in article_batch:
                     if article.get("updated_at"):
-                        article_updated_at = datetime.fromisoformat(article["updated_at"].replace("Z", "+00:00"))
+                        article_updated_at = datetime.fromisoformat(
+                            article["updated_at"].replace("Z", "+00:00")
+                        )
                         if article_updated_at >= updated_since:
                             filtered_batch.append(article)
                 
@@ -529,13 +624,17 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             page += 1
             time.sleep(1)  # Basic rate limiting
 
-    def _process_articles(self, folder_ids: List[str], start_time: Optional[datetime] = None) -> GenerateDocumentsOutput:
-        """
-        Process articles from multiple folders, converting them to Onyx Documents.
+    def _process_articles(
+        self, folder_ids: List[str], start_time: Optional[datetime] = None
+    ) -> GenerateDocumentsOutput:
+        """Process articles from multiple folders, converting them to Onyx Documents.
+        
         Accepts a list of folder IDs to fetch from.
         """
         if not self.domain:
-            raise ConnectorMissingCredentialError("Freshdesk KB domain not loaded.")
+            raise ConnectorMissingCredentialError(
+                "Freshdesk KB domain not loaded."
+            )
             
         
         # Handle case where a single folder ID string is passed
@@ -547,7 +646,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             logger.error("No folder IDs provided for processing")
             raise ValueError("No folder IDs provided for processing")
             
-        logger.info(f"Processing articles from {len(folder_ids)} folders: {folder_ids}")
+        logger.info(
+            f"Processing articles from {len(folder_ids)} folders: {folder_ids}"
+        )
         
         # Use portal_url and portal_id if available, otherwise use None
         portal_url = self.portal_url if self.portal_url else None
@@ -562,12 +663,19 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 folder_article_count = 0
                 
                 # Process articles in batches for this folder
-                for article_list_from_api in self._fetch_articles_from_folder(folder_id, start_time):
+                for article_list_from_api in self._fetch_articles_from_folder(
+                    folder_id, start_time
+                ):
                     if not article_list_from_api:
-                        logger.info(f"Received empty article batch from folder {folder_id} - skipping")
+                        logger.info(
+                            f"Received empty article batch from folder {folder_id} - skipping"
+                        )
                         continue
                     
-                    logger.info(f"Processing batch of {len(article_list_from_api)} articles from folder {folder_id}")
+                    logger.info(
+                        f"Processing batch of {len(article_list_from_api)} articles "
+                        f"from folder {folder_id}"
+                    )
                     folder_article_count += len(article_list_from_api)
                     article_count += len(article_list_from_api)
                     
