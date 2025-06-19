@@ -32,14 +32,13 @@ def try_creating_kg_processing_task(
 
         if not result:
             task_logger.error("send_task for kg processing failed.")
-            return False
+        return bool(result)
+
     except Exception:
         task_logger.exception(
             f"try_creating_kg_processing_task - Unexpected exception for tenant={tenant_id}"
         )
         return False
-
-    return True
 
 
 def try_creating_kg_source_reset_task(
@@ -69,12 +68,10 @@ def try_creating_kg_source_reset_task(
 
         if not result:
             task_logger.error("send_task for kg source reset failed.")
-            return False
+        return bool(result)
 
     except Exception:
         task_logger.exception(
             f"try_creating_kg_source_reset_task - Unexpected exception for tenant={tenant_id}"
         )
         return False
-
-    return True

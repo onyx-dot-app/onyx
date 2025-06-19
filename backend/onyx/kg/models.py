@@ -256,3 +256,7 @@ class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
     account_participant_emails: set[str]
     converted_attributes_to_relationships: set[str]
     document_attributes: dict[str, Any] | None
+
+
+class KGException(Exception):
+    pass

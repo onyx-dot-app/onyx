@@ -57,7 +57,10 @@ class PgRedisKVStore(KeyValueStore):
             try:
                 redis_value = self.redis_client.get(REDIS_KEY_PREFIX + key)
                 if redis_value:
-                    assert isinstance(redis_value, bytes)
+                    if not isinstance(redis_value, bytes):
+                        raise ValueError(
+                            f"Redis value for key '{key}' is not a bytes object"
+                        )
                     return json.loads(redis_value.decode("utf-8"))
             except Exception as e:
                 logger.error(
