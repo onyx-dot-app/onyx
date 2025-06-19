@@ -442,11 +442,11 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             )
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to validate Freshdesk KB connector: {e}")
-            logger.error(
-                f"Response: {response.text if 'response' in locals() else 'No response'}"
-            )
-            if "response" in locals():
+            if response is not None:
+                logger.error(f"Response: {response.text}")
                 logger.error(f"Status code: {response.status_code}")
+            else:
+                logger.error("Response: No response")
             raise ConnectorMissingCredentialError(
                 f"Could not connect to Freshdesk API: {e}"
             )
@@ -486,9 +486,11 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 
                 return response.json()
             except requests.exceptions.HTTPError as e:
-                logger.error(
-                    f"HTTP error: {e} - {response.text if 'response' in locals() else 'No response'} for URL {url} with params {params}"
-                )
+                error_msg = f"HTTP error: {e}"
+                if response is not None:
+                    error_msg += f" - {response.text}"
+                error_msg += f" for URL {url} with params {params}"
+                logger.error(error_msg)
                 return None
             except requests.exceptions.RequestException as e:
                 logger.error(f"Request failed: {e} for URL {url}")
