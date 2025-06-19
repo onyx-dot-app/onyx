@@ -43,7 +43,6 @@ def upgrade() -> None:
     }
 
     # not using the KGConfigSettings model here in case it changes in the future
-    default_coverage_start = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
     kg_config_settings = json.dumps(
         {
             "KG_EXPOSED": current_config_dict.get("KG_EXPOSED", False),
@@ -54,7 +53,8 @@ def upgrade() -> None:
                 "KG_IGNORE_EMAIL_DOMAINS", []
             ),
             "KG_COVERAGE_START": current_config_dict.get(
-                "KG_COVERAGE_START", default_coverage_start
+                "KG_COVERAGE_START",
+                (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
             ),
             "KG_MAX_COVERAGE_DAYS": current_config_dict.get("KG_MAX_COVERAGE_DAYS", 90),
             "KG_MAX_PARENT_RECURSION_DEPTH": current_config_dict.get(
@@ -72,6 +72,36 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # get current config
+    current_config_dict = {
+        "KG_EXPOSED": False,
+        "KG_ENABLED": False,
+        "KG_VENDOR": [],
+        "KG_VENDOR_DOMAINS": [],
+        "KG_IGNORE_EMAIL_DOMAINS": [],
+        "KG_COVERAGE_START": (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
+        "KG_MAX_COVERAGE_DAYS": 90,
+        "KG_MAX_PARENT_RECURSION_DEPTH": 2,
+    }
+    current_configs = (
+        op.get_bind()
+        .execute(text("SELECT value FROM key_value_store WHERE key = 'kg_config'"))
+        .one_or_none()
+    )
+    if current_configs is not None:
+        current_config_dict.update(current_configs[0])
+    insert_values = [
+        {
+            "kg_variable_name": name,
+            "kg_variable_values": (
+                [str(val).lower() if isinstance(val, bool) else str(val)]
+                if not isinstance(val, list)
+                else val
+            ),
+        }
+        for name, val in current_config_dict.items()
+    ]
+
     op.create_table(
         "kg_config",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False, index=True),
@@ -85,32 +115,7 @@ def downgrade() -> None:
             sa.column("kg_variable_name", sa.String),
             sa.column("kg_variable_values", postgresql.ARRAY(sa.String)),
         ),
-        [
-            {"kg_variable_name": "KG_EXPOSED", "kg_variable_values": ["false"]},
-            {"kg_variable_name": "KG_ENABLED", "kg_variable_values": ["false"]},
-            {"kg_variable_name": "KG_VENDOR", "kg_variable_values": []},
-            {"kg_variable_name": "KG_VENDOR_DOMAINS", "kg_variable_values": []},
-            {"kg_variable_name": "KG_IGNORE_EMAIL_DOMAINS", "kg_variable_values": []},
-            {
-                "kg_variable_name": "KG_EXTRACTION_IN_PROGRESS",
-                "kg_variable_values": ["false"],
-            },
-            {
-                "kg_variable_name": "KG_CLUSTERING_IN_PROGRESS",
-                "kg_variable_values": ["false"],
-            },
-            {
-                "kg_variable_name": "KG_COVERAGE_START",
-                "kg_variable_values": [
-                    (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
-                ],
-            },
-            {"kg_variable_name": "KG_MAX_COVERAGE_DAYS", "kg_variable_values": ["90"]},
-            {
-                "kg_variable_name": "KG_MAX_PARENT_RECURSION_DEPTH",
-                "kg_variable_values": ["2"],
-            },
-        ],
+        insert_values,
     )
 
     op.execute("DELETE FROM key_value_store WHERE key = 'kg_config'")
