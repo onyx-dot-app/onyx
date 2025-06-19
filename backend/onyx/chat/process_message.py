@@ -573,48 +573,6 @@ def stream_chat_message_objects(
 
     kg_config_settings = get_kg_config_settings()
 
-    if is_kg_config_settings_enabled_valid(kg_config_settings):
-
-        # Temporarily, until we have a draft UI for the KG Operations/Management
-
-        # get Vespa index
-        search_settings = get_current_search_settings(db_session)
-        index_str = search_settings.index_name
-
-        # TODO: Move these special calls  to endpoints
-        if new_msg_req.message == "kg_p":
-            success = try_creating_kg_processing_task(tenant_id)
-            if success:
-                raise Exception("KG processing scheduled")
-            else:
-                raise Exception(
-                    "Cannot schedule another KG processing while one is already running"
-                )
-
-        elif new_msg_req.message.startswith("kg_rs_source"):
-            msg_split = [x for x in new_msg_req.message.split(":")]
-            if len(msg_split) > 2:
-                raise Exception("Invalid format for a source reset command")
-            elif len(msg_split) == 2:
-                source_name = msg_split[1].strip()
-            elif len(msg_split) == 1:
-                source_name = None
-            else:
-                raise Exception("Invalid format for a source reset command")
-
-            success = try_creating_kg_source_reset_task(
-                tenant_id, source_name, index_str
-            )
-            if success:
-                source_name = source_name or "all"
-                raise Exception(f"KG index reset for source '{source_name}' scheduled")
-            else:
-                raise Exception("Cannot reset index while KG processing is running")
-
-        elif new_msg_req.message == "kg_setup":
-            populate_missing_default_entity_types__commit(db_session=db_session)
-            raise Exception("KG setup done")
-
     try:
         # Move these variables inside the try block
         user_id = user.id if user is not None else None
@@ -643,6 +601,56 @@ def stream_chat_message_objects(
             db_session=db_session,
             default_persona=chat_session.persona,
         )
+
+        # Temporarily, until we have a draft UI for the KG Operations/Management
+        # TODO: Move these to an api endpoint and slap a frontend on it
+        if is_kg_config_settings_enabled_valid(
+            kg_config_settings
+        ) and persona.name.startswith("KG Beta"):
+            # get Vespa index
+            search_settings = get_current_search_settings(db_session)
+            index_str = search_settings.index_name
+
+            if new_msg_req.message == "kg_p":
+                success = try_creating_kg_processing_task(tenant_id)
+                if success:
+                    raise NotImplementedError("KG processing scheduled")
+                else:
+                    raise NotImplementedError(
+                        "Cannot schedule another KG processing while one is already running"
+                    )
+
+            elif new_msg_req.message.startswith("kg_rs_source"):
+                msg_split = [x for x in new_msg_req.message.split(":")]
+                if len(msg_split) > 2:
+                    raise NotImplementedError(
+                        "Invalid format for a source reset command"
+                    )
+                elif len(msg_split) == 2:
+                    source_name = msg_split[1].strip()
+                elif len(msg_split) == 1:
+                    source_name = None
+                else:
+                    raise NotImplementedError(
+                        "Invalid format for a source reset command"
+                    )
+
+                success = try_creating_kg_source_reset_task(
+                    tenant_id, source_name, index_str
+                )
+                if success:
+                    source_name = source_name or "all"
+                    raise NotImplementedError(
+                        f"KG index reset for source '{source_name}' scheduled"
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Cannot reset index while KG processing is running"
+                    )
+
+            elif new_msg_req.message == "kg_setup":
+                populate_missing_default_entity_types__commit(db_session=db_session)
+                raise NotImplementedError("KG setup done")
 
         multi_assistant_milestone, _is_new = create_milestone_if_not_exists(
             user=user,
@@ -1107,6 +1115,10 @@ def stream_chat_message_objects(
         yield StreamingError(error=error_msg)
         db_session.rollback()
         return
+
+    # TODO: remove after moving kg stuff to api endpoint
+    except NotImplementedError:
+        raise
 
     except Exception as e:
         logger.exception(f"Failed to process chat message due to {e}")

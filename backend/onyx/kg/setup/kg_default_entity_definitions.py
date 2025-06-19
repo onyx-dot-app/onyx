@@ -169,12 +169,6 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.SALESFORCE,
         ),
-        "SLACK": KGEntityTypeDefinition(
-            description="A Slack conversation.",
-            attributes=KGEntityTypeAttributes(),
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.SLACK,
-        ),
         "VENDOR": KGEntityTypeDefinition(
             description=f"The Vendor {vendor_name}, 'us'",
             grounding=KGGroundingType.GROUNDED,
