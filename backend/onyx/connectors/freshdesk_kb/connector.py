@@ -53,7 +53,7 @@ _SOLUTION_ARTICLE_FIELDS_TO_INCLUDE = {
 
 def _clean_html_content(html_content: str) -> str:
     """Cleans HTML content, extracting plain text.
-    
+
     Uses BeautifulSoup to parse HTML and get text.
     """
     if not html_content:
@@ -86,23 +86,29 @@ def _create_metadata_from_article(
         if value is None or (isinstance(value, list) and not value):
             continue
         metadata[key] = value
-    
     # Construct URLs
     if article_id:
         # Agent URL (the one with portalId)
         if portal_url and portal_id:
             portal_base = portal_url.rstrip("/")
-            metadata["agent_url"] = f"{portal_base}/a/solutions/articles/{article_id}?portalId={portal_id}"
+            metadata["agent_url"] = (
+                f"{portal_base}/a/solutions/articles/{article_id}?portalId={portal_id}"
+            )
         else:
-            logger.warning(f"Could not construct agent_url for article {article_id}: missing portal_url or portal_id.")
+            logger.warning(
+                f"Could not construct agent_url for article {article_id}: missing portal_url or portal_id."
+            )
 
         # Public/API Domain URL
         if domain:
             public_portal_base = f"https://{domain.rstrip('/')}"
-            metadata["public_url"] = f"{public_portal_base}/a/solutions/articles/{article_id}"
+            metadata["public_url"] = (
+                f"{public_portal_base}/a/solutions/articles/{article_id}"
+            )
         else:
-            logger.warning(f"Could not construct public_url for article {article_id}: missing domain.")
-            
+            logger.warning(
+                f"Could not construct public_url for article {article_id}: missing domain."
+            )
     # Convert status number to human-readable string
     status_number = article.get("status")
     if status_number == 1:
@@ -179,7 +185,7 @@ def _create_doc_from_article(
 
 class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnector):
     """Onyx Connector for fetching Freshdesk Knowledge Base (Solution Articles).
-    
+
     Implements LoadConnector for full indexing and PollConnector for incremental updates.
     """
     def __init__(
@@ -191,13 +197,15 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         freshdesk_portal_id: Optional[str] = None,
         batch_size: int = INDEX_BATCH_SIZE,
         connector_specific_config: Optional[dict] = None,
-        freshdesk_folder_ids: Optional[str] = None,  # Add direct parameter for folder_ids
+        freshdesk_folder_ids: Optional[
+            str
+        ] = None,  # Add direct parameter for folder_ids
         folder_id: Optional[str] = None,  # Allow both field names
         **kwargs: Any,
     ) -> None:
         """
         Initialize the Freshdesk Knowledge Base connector.
-        
+
         Args:
             freshdesk_folder_id: The ID of the folder to fetch articles from
             freshdesk_domain: Freshdesk domain (e.g., "company.freshdesk.com")
@@ -211,9 +219,10 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         self.api_key = freshdesk_api_key
         self.domain = freshdesk_domain
         self.password = "X"  # Freshdesk uses API key as username, 'X' as password
-        
-        logger.debug(f"Initializing Freshdesk KB connector with domain: {freshdesk_domain}")
-        
+
+        logger.debug(
+            f"Initializing Freshdesk KB connector with domain: {freshdesk_domain}"
+        )
         # Store connector_specific_config for later use
         self.connector_specific_config = connector_specific_config
 
@@ -221,15 +230,18 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         # First, check direct parameters
         self.folder_id = freshdesk_folder_id or folder_id
         self.folder_ids: Optional[str | List[str]] = freshdesk_folder_ids
-        
+
         # Then check connector_specific_config
         if connector_specific_config:
             logger.info(
                 f"connector_specific_config keys: {list(connector_specific_config.keys())}"
             )
-            
+
             # Check for single folder ID
-            if not self.folder_id and "freshdesk_folder_id" in connector_specific_config:
+            if (
+                not self.folder_id
+                and "freshdesk_folder_id" in connector_specific_config
+            ):
                 self.folder_id = connector_specific_config.get("freshdesk_folder_id")
                 logger.info(
                     f"Using folder_id from connector_specific_config['freshdesk_folder_id']: "
@@ -244,14 +256,21 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 )
                 
             # Check for multi-folder configuration
-            if not self.folder_ids and "freshdesk_folder_ids" in connector_specific_config:
+            if (
+                not self.folder_ids
+                and "freshdesk_folder_ids" in connector_specific_config
+            ):
                 folder_ids_value = connector_specific_config.get("freshdesk_folder_ids")
                 if isinstance(folder_ids_value, list):
                     self.folder_ids = folder_ids_value
-                    logger.info(f"Using folder_ids (list) from connector_specific_config: {self.folder_ids}")
+                    logger.info(
+                        f"Using folder_ids (list) from connector_specific_config: {self.folder_ids}"
+                    )
                 elif isinstance(folder_ids_value, str):
                     self.folder_ids = folder_ids_value  # Store as string, will be parsed in load_from_state/poll_source
-                    logger.info(f"Using folder_ids (string) from connector_specific_config: {self.folder_ids}")
+                    logger.info(
+                        f"Using folder_ids (string) from connector_specific_config: {self.folder_ids}"
+                    )
         
         logger.debug(f"Connector initialized with folder_id: {self.folder_id}")
         
