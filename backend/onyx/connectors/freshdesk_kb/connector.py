@@ -73,7 +73,7 @@ def _clean_html_content(html_content: str) -> str:
 
 
 def _create_metadata_from_article(
-    article: dict, domain: str, portal_url: str, portal_id: str
+    article: dict, domain: str, portal_url: Optional[str], portal_id: Optional[str]
 ) -> dict:
     """Creates a metadata dictionary from a Freshdesk solution article."""
     metadata: dict[str, Any] = {}
@@ -116,7 +116,7 @@ def _create_metadata_from_article(
 
 
 def _create_doc_from_article(
-    article: dict, domain: str, portal_url: str, portal_id: str
+    article: dict, domain: str, portal_url: Optional[str], portal_id: Optional[str]
 ) -> Document:
     """Creates an Onyx Document from a Freshdesk solution article."""
     article_id = str(article.get("id", ""))
@@ -193,7 +193,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         connector_specific_config: Optional[dict] = None,
         freshdesk_folder_ids: Optional[str] = None,  # Add direct parameter for folder_ids
         folder_id: Optional[str] = None,  # Allow both field names
-        **kwargs
+        **kwargs: Any
     ) -> None:
         """
         Initialize the Freshdesk Knowledge Base connector.
@@ -220,7 +220,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
         # Collect potential folder IDs from all possible sources
         # First, check direct parameters
         self.folder_id = freshdesk_folder_id or folder_id
-        self.folder_ids = freshdesk_folder_ids
+        self.folder_ids: Optional[str | List[str]] = freshdesk_folder_ids
         
         # Then check connector_specific_config
         if connector_specific_config:
@@ -414,6 +414,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             f"Validating Freshdesk KB connector for {len(folder_ids)} folder(s)"
         )
         
+        response = None
         try:
             # Test API by trying to fetch one article from the validation folder
             url = f"{self.base_url}/solutions/folders/{validation_folder_id}/articles"
@@ -467,6 +468,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
             )
         
         retries = 3
+        response = None
         for attempt in range(retries):
             try:
                 response = requests.get(
@@ -688,7 +690,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                             current_batch.append(doc)
                         except Exception as e:
                             article_id = article_data.get('id', 'UNKNOWN')
-                            logger.error(f"Failed to create document for article {article_id}: {e}")
+                            logger.error(
+                                f"Failed to create document for article {article_id}: {e}"
+                            )
                             # Skip this article and continue with others
                     
                     # Yield this batch immediately
@@ -819,8 +823,7 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 # All we need is the ID - no permissions data needed for this connector
                 slim_docs.append(
                     SlimDocument(
-                        id=_FRESHDESK_KB_ID_PREFIX + str(article_id),
-                        perm_sync_data=None,
+                        id=_FRESHDESK_KB_ID_PREFIX + str(article_id)
                     )
                 )
         return slim_docs
@@ -875,9 +878,9 @@ class FreshdeskKnowledgeBaseConnector(LoadConnector, PollConnector, SlimConnecto
                 new_slim_docs = self._get_slim_documents_for_article_batch(article_batch)
                 slim_batch.extend(new_slim_docs)
                 
-                # Heartbeat callback if provided
+                # Progress callback if provided
                 if callback:
-                    callback.heartbeat()
+                    callback.progress("retrieve_all_slim_documents", len(new_slim_docs))
                 
                 if len(slim_batch) >= self.batch_size:
                     logger.info(f"Yielding batch of {len(slim_batch)} slim documents from folder {folder_id}")
