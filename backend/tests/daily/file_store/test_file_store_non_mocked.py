@@ -29,7 +29,7 @@ logger = setup_logger()
 
 TEST_BUCKET_NAME: str = "onyx-file-store-tests"
 TEST_FILE_PREFIX: str = "test-files"
-TEST_TENANT_ID: str = "test-tenant"
+TEST_TENANT_ID: str = "public"
 
 
 # Type definitions for test data
