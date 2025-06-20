@@ -309,6 +309,20 @@ try:
 except ValueError:
     CELERY_WORKER_INDEXING_CONCURRENCY = CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT
 
+CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT = 1
+try:
+    env_value = os.environ.get("CELERY_WORKER_DOCPROCESSING_CONCURRENCY")
+    if not env_value:
+        env_value = os.environ.get("NUM_DOCPROCESSING_WORKERS")
+
+    if not env_value:
+        env_value = str(CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT)
+    CELERY_WORKER_DOCPROCESSING_CONCURRENCY = int(env_value)
+except ValueError:
+    CELERY_WORKER_DOCPROCESSING_CONCURRENCY = (
+        CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
+    )
+
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 1024
 
@@ -746,3 +760,21 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
+
+# TODO: support all blob stores (GCP, Azure, etc.)
+# Document Batch Storage Configuration
+DOCUMENT_BATCH_STORAGE_TYPE = os.environ.get(
+    "DOCUMENT_BATCH_STORAGE_TYPE", "local"
+)  # "local" or "s3"
+
+# Local file storage configuration
+DOCUMENT_BATCH_STORAGE_PATH = os.environ.get(
+    "DOCUMENT_BATCH_STORAGE_PATH", "/tmp/onyx_document_batches"
+)
+
+# S3 configuration for document batch storage
+DOCUMENT_BATCH_S3_BUCKET = os.environ.get(
+    "DOCUMENT_BATCH_S3_BUCKET", "onyx-document-batches"
+)
+DOCUMENT_BATCH_S3_PREFIX = os.environ.get("DOCUMENT_BATCH_S3_PREFIX", "batches/")
+DOCUMENT_BATCH_S3_REGION = os.environ.get("DOCUMENT_BATCH_S3_REGION", "us-east-1")

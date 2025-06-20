@@ -199,7 +199,7 @@ const collections = (
                   <div className="ml-1">Document Processing</div>
                 </div>
               ),
-              link: "/admin/configuration/document-processing",
+              link: "/admin/configuration/docprocessing",
             },
           ],
         },
