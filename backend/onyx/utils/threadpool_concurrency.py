@@ -384,3 +384,24 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                     )
                     next_ind += 1
                 del future_to_index[future]
+
+
+def parallel_yield_from_funcs(
+    funcs: list[Callable[..., R]],
+    max_workers: int = 10,
+) -> Iterator[R]:
+    """
+    Runs the list of functions with thread-level parallelism, yielding
+    results as available. The asynchronous nature of this yielding means
+    that stopping the returned iterator early DOES NOT GUARANTEE THAT NO
+    FURTHER ITEMS WERE PRODUCED by the input funcs. Only use this function
+    if you are consuming all elements from the functions OR it is acceptable
+    for some extra function code to run and not have the result(s) yielded.
+    """
+
+    def func_wrapper(func: Callable[[], R]) -> Iterator[R]:
+        yield func()
+
+    yield from parallel_yield(
+        [func_wrapper(func) for func in funcs], max_workers=max_workers
+    )

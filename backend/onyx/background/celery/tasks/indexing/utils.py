@@ -601,7 +601,7 @@ def try_creating_indexing_task(
         # when the task is sent, we have yet to finish setting up the fence
         # therefore, the task must contain code that blocks until the fence is ready
         result = celery_app.send_task(
-            OnyxCeleryTask.CONNECTOR_INDEXING_PROXY_TASK,
+            OnyxCeleryTask.CONNECTOR_DOCUMENT_EXTRACTION_TASK,
             kwargs=dict(
                 index_attempt_id=index_attempt_id,
                 cc_pair_id=cc_pair.id,
@@ -613,7 +613,9 @@ def try_creating_indexing_task(
             priority=OnyxCeleryPriority.MEDIUM,
         )
         if not result:
-            raise RuntimeError("send_task for connector_indexing_proxy_task failed.")
+            raise RuntimeError(
+                "send_task for connector_document_extraction_task failed."
+            )
 
         # now fill out the fence with the rest of the data
         redis_connector_index.set_active()
