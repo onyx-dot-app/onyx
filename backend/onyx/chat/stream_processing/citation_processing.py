@@ -108,7 +108,7 @@ class CitationProcessor:
             self.curr_segment = self.curr_segment[match_idx:]
             self.non_citation_count = len(self.curr_segment)
 
-        # hold onto the current segment if no citations found, otherwise stream it
+        # hold onto the current segment if potential citations found, otherwise stream
         if not possible_citation_found:
             result += self.curr_segment
             self.non_citation_count += len(self.curr_segment)
