@@ -1,6 +1,8 @@
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import Dict
+from typing import List
 
 import requests
 from hubspot import HubSpot  # type: ignore
@@ -16,7 +18,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
-HUBSPOT_BASE_URL = "https://app.hubspot.com/contacts/"
+HUBSPOT_BASE_URL = "https://app.hubspot.com"
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
 logger = setup_logger()
@@ -29,7 +31,6 @@ class HubSpotConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.access_token = access_token
         self.portal_id: str | None = None
-        self.ticket_base_url = HUBSPOT_BASE_URL
 
     def get_portal_id(self) -> str:
         headers = {
@@ -49,9 +50,173 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         if self.access_token:
             self.portal_id = self.get_portal_id()
-            self.ticket_base_url = f"{HUBSPOT_BASE_URL}{self.portal_id}/ticket/"
 
         return None
+
+    def _get_object_url(self, object_type: str, object_id: str) -> str:
+        """Generate HubSpot URL for different object types"""
+        if object_type == "tickets":
+            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/ticket/{object_id}"
+        elif object_type == "companies":
+            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/company/{object_id}"
+        elif object_type == "deals":
+            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/deal/{object_id}"
+        elif object_type == "contacts":
+            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/contact/{object_id}"
+        else:
+            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/{object_type}/{object_id}"
+
+    def _get_associated_objects(
+        self,
+        api_client: HubSpot,
+        object_id: str,
+        from_object_type: str,
+        to_object_type: str,
+    ) -> List[Dict[str, Any]]:
+        """Get associated objects for a given object"""
+        try:
+            associations = api_client.crm.associations.v4.basic_api.get_page(
+                object_type=from_object_type,
+                object_id=object_id,
+                to_object_type=to_object_type,
+            )
+
+            associated_objects = []
+            if associations.results:
+                object_ids = [assoc.to_object_id for assoc in associations.results]
+
+                # Batch get the associated objects
+                if to_object_type == "contacts":
+                    for obj_id in object_ids:
+                        try:
+                            obj = api_client.crm.contacts.basic_api.get_by_id(
+                                contact_id=obj_id,
+                                properties=[
+                                    "firstname",
+                                    "lastname",
+                                    "email",
+                                    "company",
+                                    "jobtitle",
+                                ],
+                            )
+                            associated_objects.append(obj.to_dict())
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch contact {obj_id}: {e}")
+
+                elif to_object_type == "companies":
+                    for obj_id in object_ids:
+                        try:
+                            obj = api_client.crm.companies.basic_api.get_by_id(
+                                company_id=obj_id,
+                                properties=[
+                                    "name",
+                                    "domain",
+                                    "industry",
+                                    "city",
+                                    "state",
+                                ],
+                            )
+                            associated_objects.append(obj.to_dict())
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch company {obj_id}: {e}")
+
+                elif to_object_type == "deals":
+                    for obj_id in object_ids:
+                        try:
+                            obj = api_client.crm.deals.basic_api.get_by_id(
+                                deal_id=obj_id,
+                                properties=[
+                                    "dealname",
+                                    "amount",
+                                    "dealstage",
+                                    "closedate",
+                                    "pipeline",
+                                ],
+                            )
+                            associated_objects.append(obj.to_dict())
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch deal {obj_id}: {e}")
+
+                elif to_object_type == "tickets":
+                    for obj_id in object_ids:
+                        try:
+                            obj = api_client.crm.tickets.basic_api.get_by_id(
+                                ticket_id=obj_id,
+                                properties=["subject", "content", "hs_ticket_priority"],
+                            )
+                            associated_objects.append(obj.to_dict())
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch ticket {obj_id}: {e}")
+
+            return associated_objects
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to get associations from {from_object_type} to {to_object_type}: {e}"
+            )
+            return []
+
+    def _create_object_section(
+        self, obj: Dict[str, Any], object_type: str
+    ) -> TextSection:
+        """Create a TextSection for an associated object"""
+        obj_id = obj.get("id", "")
+        properties = obj.get("properties", {})
+
+        if object_type == "contacts":
+            name_parts = []
+            if properties.get("firstname"):
+                name_parts.append(properties["firstname"])
+            if properties.get("lastname"):
+                name_parts.append(properties["lastname"])
+            name = " ".join(name_parts) if name_parts else "Unknown Contact"
+
+            content_parts = [f"Contact: {name}"]
+            if properties.get("email"):
+                content_parts.append(f"Email: {properties['email']}")
+            if properties.get("company"):
+                content_parts.append(f"Company: {properties['company']}")
+            if properties.get("jobtitle"):
+                content_parts.append(f"Job Title: {properties['jobtitle']}")
+
+        elif object_type == "companies":
+            name = properties.get("name", "Unknown Company")
+            content_parts = [f"Company: {name}"]
+            if properties.get("domain"):
+                content_parts.append(f"Domain: {properties['domain']}")
+            if properties.get("industry"):
+                content_parts.append(f"Industry: {properties['industry']}")
+            if properties.get("city") and properties.get("state"):
+                content_parts.append(
+                    f"Location: {properties['city']}, {properties['state']}"
+                )
+
+        elif object_type == "deals":
+            name = properties.get("dealname", "Unknown Deal")
+            content_parts = [f"Deal: {name}"]
+            if properties.get("amount"):
+                content_parts.append(f"Amount: ${properties['amount']}")
+            if properties.get("dealstage"):
+                content_parts.append(f"Stage: {properties['dealstage']}")
+            if properties.get("closedate"):
+                content_parts.append(f"Close Date: {properties['closedate']}")
+            if properties.get("pipeline"):
+                content_parts.append(f"Pipeline: {properties['pipeline']}")
+
+        elif object_type == "tickets":
+            name = properties.get("subject", "Unknown Ticket")
+            content_parts = [f"Ticket: {name}"]
+            if properties.get("content"):
+                content_parts.append(f"Content: {properties['content']}")
+            if properties.get("hs_ticket_priority"):
+                content_parts.append(f"Priority: {properties['hs_ticket_priority']}")
+        else:
+            content_parts = [f"{object_type.capitalize()}: {obj_id}"]
+
+        content = "\n".join(content_parts)
+        link = self._get_object_url(object_type, obj_id)
+
+        return TextSection(link=link, text=content)
 
     def _process_tickets(
         self, start: datetime | None = None, end: datetime | None = None
@@ -60,7 +225,16 @@ class HubSpotConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("HubSpot")
 
         api_client = HubSpot(access_token=self.access_token)
-        all_tickets = api_client.crm.tickets.get_all(associations=["contacts", "notes"])
+        all_tickets = api_client.crm.tickets.get_all(
+            properties=[
+                "subject",
+                "content",
+                "hs_ticket_priority",
+                "createdate",
+                "hs_lastmodifieddate",
+            ],
+            associations=["contacts", "companies", "deals"],
+        )
 
         doc_batch: list[Document] = []
 
@@ -71,49 +245,435 @@ class HubSpotConnector(LoadConnector, PollConnector):
             if end is not None and updated_at > end:
                 continue
 
-            title = ticket.properties["subject"]
-            link = self.ticket_base_url + ticket.id
-            content_text = ticket.properties["content"]
+            title = ticket.properties.get("subject") or f"Ticket {ticket.id}"
+            link = self._get_object_url("tickets", ticket.id)
+            content_text = ticket.properties.get("content", "")
 
-            associated_emails: list[str] = []
-            associated_notes: list[str] = []
+            # Main ticket section
+            sections = [TextSection(link=link, text=content_text)]
 
-            if ticket.associations:
-                contacts = ticket.associations.get("contacts")
-                notes = ticket.associations.get("notes")
+            # Metadata with parent object IDs
+            metadata: Dict[str, str | List[str]] = {
+                "ticket_id": ticket.id,
+                "object_type": "ticket",
+            }
 
-                if contacts:
-                    for contact in contacts.results:
-                        contact = api_client.crm.contacts.basic_api.get_by_id(
-                            contact_id=contact.id
-                        )
-                        email = contact.properties.get("email")
-                        if email is not None:
-                            associated_emails.append(email)
+            if ticket.properties.get("hs_ticket_priority"):
+                metadata["priority"] = ticket.properties["hs_ticket_priority"]
 
-                if notes:
-                    for note in notes.results:
-                        note = api_client.crm.objects.notes.basic_api.get_by_id(
-                            note_id=note.id, properties=["content", "hs_body_preview"]
-                        )
-                        preview = note.properties.get("hs_body_preview")
-                        if preview is not None:
-                            associated_notes.append(preview)
+            # Add associated objects as sections
+            associated_contact_ids = []
+            associated_company_ids = []
+            associated_deal_ids = []
 
-            associated_emails_str = " ,".join(associated_emails)
-            associated_notes_str = " ".join(associated_notes)
+            # Get associated contacts
+            associated_contacts = self._get_associated_objects(
+                api_client, ticket.id, "tickets", "contacts"
+            )
+            for contact in associated_contacts:
+                sections.append(self._create_object_section(contact, "contacts"))
+                associated_contact_ids.append(contact["id"])
 
-            content_text = f"{content_text}\n emails: {associated_emails_str} \n notes: {associated_notes_str}"
+            # Get associated companies
+            associated_companies = self._get_associated_objects(
+                api_client, ticket.id, "tickets", "companies"
+            )
+            for company in associated_companies:
+                sections.append(self._create_object_section(company, "companies"))
+                associated_company_ids.append(company["id"])
+
+            # Get associated deals
+            associated_deals = self._get_associated_objects(
+                api_client, ticket.id, "tickets", "deals"
+            )
+            for deal in associated_deals:
+                sections.append(self._create_object_section(deal, "deals"))
+                associated_deal_ids.append(deal["id"])
+
+            # Add association IDs to metadata
+            if associated_contact_ids:
+                metadata["associated_contact_ids"] = associated_contact_ids
+            if associated_company_ids:
+                metadata["associated_company_ids"] = associated_company_ids
+            if associated_deal_ids:
+                metadata["associated_deal_ids"] = associated_deal_ids
 
             doc_batch.append(
                 Document(
-                    id=ticket.id,
-                    sections=[TextSection(link=link, text=content_text)],
+                    id=f"hubspot_ticket_{ticket.id}",
+                    sections=sections,
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
-                    # Is already in tzutc, just replacing the timezone format
                     doc_updated_at=ticket.updated_at.replace(tzinfo=timezone.utc),
-                    metadata={},
+                    metadata=metadata,
+                )
+            )
+
+            if len(doc_batch) >= self.batch_size:
+                yield doc_batch
+                doc_batch = []
+
+        if doc_batch:
+            yield doc_batch
+
+    def _process_companies(
+        self, start: datetime | None = None, end: datetime | None = None
+    ) -> GenerateDocumentsOutput:
+        if self.access_token is None:
+            raise ConnectorMissingCredentialError("HubSpot")
+
+        api_client = HubSpot(access_token=self.access_token)
+        all_companies = api_client.crm.companies.get_all(
+            properties=[
+                "name",
+                "domain",
+                "industry",
+                "city",
+                "state",
+                "description",
+                "createdate",
+                "hs_lastmodifieddate",
+            ],
+            associations=["contacts", "deals", "tickets"],
+        )
+
+        doc_batch: list[Document] = []
+
+        for company in all_companies:
+            updated_at = company.updated_at.replace(tzinfo=None)
+            if start is not None and updated_at < start:
+                continue
+            if end is not None and updated_at > end:
+                continue
+
+            title = company.properties.get("name") or f"Company {company.id}"
+            link = self._get_object_url("companies", company.id)
+
+            # Build main content
+            content_parts = [f"Company: {title}"]
+            if company.properties.get("domain"):
+                content_parts.append(f"Domain: {company.properties['domain']}")
+            if company.properties.get("industry"):
+                content_parts.append(f"Industry: {company.properties['industry']}")
+            if company.properties.get("city") and company.properties.get("state"):
+                content_parts.append(
+                    f"Location: {company.properties['city']}, {company.properties['state']}"
+                )
+            if company.properties.get("description"):
+                content_parts.append(
+                    f"Description: {company.properties['description']}"
+                )
+
+            content_text = "\n".join(content_parts)
+
+            # Main company section
+            sections = [TextSection(link=link, text=content_text)]
+
+            # Metadata with parent object IDs
+            metadata: Dict[str, str | List[str]] = {
+                "company_id": company.id,
+                "object_type": "company",
+            }
+
+            if company.properties.get("industry"):
+                metadata["industry"] = company.properties["industry"]
+            if company.properties.get("domain"):
+                metadata["domain"] = company.properties["domain"]
+
+            # Add associated objects as sections
+            associated_contact_ids = []
+            associated_deal_ids = []
+            associated_ticket_ids = []
+
+            # Get associated contacts
+            associated_contacts = self._get_associated_objects(
+                api_client, company.id, "companies", "contacts"
+            )
+            for contact in associated_contacts:
+                sections.append(self._create_object_section(contact, "contacts"))
+                associated_contact_ids.append(contact["id"])
+
+            # Get associated deals
+            associated_deals = self._get_associated_objects(
+                api_client, company.id, "companies", "deals"
+            )
+            for deal in associated_deals:
+                sections.append(self._create_object_section(deal, "deals"))
+                associated_deal_ids.append(deal["id"])
+
+            # Get associated tickets
+            associated_tickets = self._get_associated_objects(
+                api_client, company.id, "companies", "tickets"
+            )
+            for ticket in associated_tickets:
+                sections.append(self._create_object_section(ticket, "tickets"))
+                associated_ticket_ids.append(ticket["id"])
+
+            # Add association IDs to metadata
+            if associated_contact_ids:
+                metadata["associated_contact_ids"] = associated_contact_ids
+            if associated_deal_ids:
+                metadata["associated_deal_ids"] = associated_deal_ids
+            if associated_ticket_ids:
+                metadata["associated_ticket_ids"] = associated_ticket_ids
+
+            doc_batch.append(
+                Document(
+                    id=f"hubspot_company_{company.id}",
+                    sections=sections,
+                    source=DocumentSource.HUBSPOT,
+                    semantic_identifier=title,
+                    doc_updated_at=company.updated_at.replace(tzinfo=timezone.utc),
+                    metadata=metadata,
+                )
+            )
+
+            if len(doc_batch) >= self.batch_size:
+                yield doc_batch
+                doc_batch = []
+
+        if doc_batch:
+            yield doc_batch
+
+    def _process_deals(
+        self, start: datetime | None = None, end: datetime | None = None
+    ) -> GenerateDocumentsOutput:
+        if self.access_token is None:
+            raise ConnectorMissingCredentialError("HubSpot")
+
+        api_client = HubSpot(access_token=self.access_token)
+        all_deals = api_client.crm.deals.get_all(
+            properties=[
+                "dealname",
+                "amount",
+                "dealstage",
+                "closedate",
+                "pipeline",
+                "description",
+                "createdate",
+                "hs_lastmodifieddate",
+            ],
+            associations=["contacts", "companies", "tickets"],
+        )
+
+        doc_batch: list[Document] = []
+
+        for deal in all_deals:
+            updated_at = deal.updated_at.replace(tzinfo=None)
+            if start is not None and updated_at < start:
+                continue
+            if end is not None and updated_at > end:
+                continue
+
+            title = deal.properties.get("dealname") or f"Deal {deal.id}"
+            link = self._get_object_url("deals", deal.id)
+
+            # Build main content
+            content_parts = [f"Deal: {title}"]
+            if deal.properties.get("amount"):
+                content_parts.append(f"Amount: ${deal.properties['amount']}")
+            if deal.properties.get("dealstage"):
+                content_parts.append(f"Stage: {deal.properties['dealstage']}")
+            if deal.properties.get("closedate"):
+                content_parts.append(f"Close Date: {deal.properties['closedate']}")
+            if deal.properties.get("pipeline"):
+                content_parts.append(f"Pipeline: {deal.properties['pipeline']}")
+            if deal.properties.get("description"):
+                content_parts.append(f"Description: {deal.properties['description']}")
+
+            content_text = "\n".join(content_parts)
+
+            # Main deal section
+            sections = [TextSection(link=link, text=content_text)]
+
+            # Metadata with parent object IDs
+            metadata: Dict[str, str | List[str]] = {
+                "deal_id": deal.id,
+                "object_type": "deal",
+            }
+
+            if deal.properties.get("dealstage"):
+                metadata["deal_stage"] = deal.properties["dealstage"]
+            if deal.properties.get("pipeline"):
+                metadata["pipeline"] = deal.properties["pipeline"]
+            if deal.properties.get("amount"):
+                metadata["amount"] = deal.properties["amount"]
+
+            # Add associated objects as sections
+            associated_contact_ids = []
+            associated_company_ids = []
+            associated_ticket_ids = []
+
+            # Get associated contacts
+            associated_contacts = self._get_associated_objects(
+                api_client, deal.id, "deals", "contacts"
+            )
+            for contact in associated_contacts:
+                sections.append(self._create_object_section(contact, "contacts"))
+                associated_contact_ids.append(contact["id"])
+
+            # Get associated companies
+            associated_companies = self._get_associated_objects(
+                api_client, deal.id, "deals", "companies"
+            )
+            for company in associated_companies:
+                sections.append(self._create_object_section(company, "companies"))
+                associated_company_ids.append(company["id"])
+
+            # Get associated tickets
+            associated_tickets = self._get_associated_objects(
+                api_client, deal.id, "deals", "tickets"
+            )
+            for ticket in associated_tickets:
+                sections.append(self._create_object_section(ticket, "tickets"))
+                associated_ticket_ids.append(ticket["id"])
+
+            # Add association IDs to metadata
+            if associated_contact_ids:
+                metadata["associated_contact_ids"] = associated_contact_ids
+            if associated_company_ids:
+                metadata["associated_company_ids"] = associated_company_ids
+            if associated_ticket_ids:
+                metadata["associated_ticket_ids"] = associated_ticket_ids
+
+            doc_batch.append(
+                Document(
+                    id=f"hubspot_deal_{deal.id}",
+                    sections=sections,
+                    source=DocumentSource.HUBSPOT,
+                    semantic_identifier=title,
+                    doc_updated_at=deal.updated_at.replace(tzinfo=timezone.utc),
+                    metadata=metadata,
+                )
+            )
+
+            if len(doc_batch) >= self.batch_size:
+                yield doc_batch
+                doc_batch = []
+
+        if doc_batch:
+            yield doc_batch
+
+    def _process_contacts(
+        self, start: datetime | None = None, end: datetime | None = None
+    ) -> GenerateDocumentsOutput:
+        if self.access_token is None:
+            raise ConnectorMissingCredentialError("HubSpot")
+
+        api_client = HubSpot(access_token=self.access_token)
+        all_contacts = api_client.crm.contacts.get_all(
+            properties=[
+                "firstname",
+                "lastname",
+                "email",
+                "company",
+                "jobtitle",
+                "phone",
+                "city",
+                "state",
+                "createdate",
+                "lastmodifieddate",
+            ],
+            associations=["companies", "deals", "tickets"],
+        )
+
+        doc_batch: list[Document] = []
+
+        for contact in all_contacts:
+            updated_at = contact.updated_at.replace(tzinfo=None)
+            if start is not None and updated_at < start:
+                continue
+            if end is not None and updated_at > end:
+                continue
+
+            # Build contact name
+            name_parts = []
+            if contact.properties.get("firstname"):
+                name_parts.append(contact.properties["firstname"])
+            if contact.properties.get("lastname"):
+                name_parts.append(contact.properties["lastname"])
+            title = " ".join(name_parts) if name_parts else f"Contact {contact.id}"
+
+            link = self._get_object_url("contacts", contact.id)
+
+            # Build main content
+            content_parts = [f"Contact: {title}"]
+            if contact.properties.get("email"):
+                content_parts.append(f"Email: {contact.properties['email']}")
+            if contact.properties.get("company"):
+                content_parts.append(f"Company: {contact.properties['company']}")
+            if contact.properties.get("jobtitle"):
+                content_parts.append(f"Job Title: {contact.properties['jobtitle']}")
+            if contact.properties.get("phone"):
+                content_parts.append(f"Phone: {contact.properties['phone']}")
+            if contact.properties.get("city") and contact.properties.get("state"):
+                content_parts.append(
+                    f"Location: {contact.properties['city']}, {contact.properties['state']}"
+                )
+
+            content_text = "\n".join(content_parts)
+
+            # Main contact section
+            sections = [TextSection(link=link, text=content_text)]
+
+            # Metadata with parent object IDs
+            metadata: Dict[str, str | List[str]] = {
+                "contact_id": contact.id,
+                "object_type": "contact",
+            }
+
+            if contact.properties.get("email"):
+                metadata["email"] = contact.properties["email"]
+            if contact.properties.get("company"):
+                metadata["company"] = contact.properties["company"]
+            if contact.properties.get("jobtitle"):
+                metadata["job_title"] = contact.properties["jobtitle"]
+
+            # Add associated objects as sections
+            associated_company_ids = []
+            associated_deal_ids = []
+            associated_ticket_ids = []
+
+            # Get associated companies
+            associated_companies = self._get_associated_objects(
+                api_client, contact.id, "contacts", "companies"
+            )
+            for company in associated_companies:
+                sections.append(self._create_object_section(company, "companies"))
+                associated_company_ids.append(company["id"])
+
+            # Get associated deals
+            associated_deals = self._get_associated_objects(
+                api_client, contact.id, "contacts", "deals"
+            )
+            for deal in associated_deals:
+                sections.append(self._create_object_section(deal, "deals"))
+                associated_deal_ids.append(deal["id"])
+
+            # Get associated tickets
+            associated_tickets = self._get_associated_objects(
+                api_client, contact.id, "contacts", "tickets"
+            )
+            for ticket in associated_tickets:
+                sections.append(self._create_object_section(ticket, "tickets"))
+                associated_ticket_ids.append(ticket["id"])
+
+            # Add association IDs to metadata
+            if associated_company_ids:
+                metadata["associated_company_ids"] = associated_company_ids
+            if associated_deal_ids:
+                metadata["associated_deal_ids"] = associated_deal_ids
+            if associated_ticket_ids:
+                metadata["associated_ticket_ids"] = associated_ticket_ids
+
+            doc_batch.append(
+                Document(
+                    id=f"hubspot_contact_{contact.id}",
+                    sections=sections,
+                    source=DocumentSource.HUBSPOT,
+                    semantic_identifier=title,
+                    doc_updated_at=contact.updated_at.replace(tzinfo=timezone.utc),
+                    metadata=metadata,
                 )
             )
 
@@ -125,14 +685,24 @@ class HubSpotConnector(LoadConnector, PollConnector):
             yield doc_batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._process_tickets()
+        """Load all HubSpot objects (tickets, companies, deals, contacts)"""
+        # Process each object type
+        yield from self._process_tickets()
+        yield from self._process_companies()
+        yield from self._process_deals()
+        yield from self._process_contacts()
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         start_datetime = datetime.utcfromtimestamp(start)
         end_datetime = datetime.utcfromtimestamp(end)
-        return self._process_tickets(start_datetime, end_datetime)
+
+        # Process each object type with time filtering
+        yield from self._process_tickets(start_datetime, end_datetime)
+        yield from self._process_companies(start_datetime, end_datetime)
+        yield from self._process_deals(start_datetime, end_datetime)
+        yield from self._process_contacts(start_datetime, end_datetime)
 
 
 if __name__ == "__main__":
