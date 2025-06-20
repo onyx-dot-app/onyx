@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 
@@ -21,14 +22,14 @@ def mock_file_store() -> MagicMock:
 
 
 @pytest.fixture
-def mock_pgfilestore_record() -> MagicMock:
+def mock_filestore_record() -> MagicMock:
     record = MagicMock()
-    record.file_name = "test.txt"
+    record.file_id = uuid4()
+    record.display_name = "test.txt"
     return record
 
 
 @patch("onyx.connectors.file.connector.get_default_file_store")
-@patch("onyx.connectors.file.connector.get_pgfilestore_by_file_name")
 @patch("onyx.connectors.file.connector.get_session_with_current_tenant")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
@@ -36,11 +37,10 @@ def mock_pgfilestore_record() -> MagicMock:
 def test_single_text_file_with_metadata(
     mock_get_unstructured_api_key: MagicMock,
     mock_get_session: MagicMock,
-    mock_get_pgfile: MagicMock,
     mock_get_filestore: MagicMock,
     mock_db_session: MagicMock,
     mock_file_store: MagicMock,
-    mock_pgfilestore_record: MagicMock,
+    mock_filestore_record: MagicMock,
 ) -> None:
     file_content = io.BytesIO(
         b'#ONYX_METADATA={"link": "https://onyx.app", "file_display_name":"my display name", "tag_of_your_choice": "test-tag", \
@@ -49,7 +49,7 @@ def test_single_text_file_with_metadata(
         b"Test answer is 12345"
     )
     mock_get_filestore.return_value = mock_file_store
-    mock_get_pgfile.return_value = mock_pgfilestore_record
+    mock_file_store.read_file_record.return_value = mock_filestore_record
     mock_get_session.return_value.__enter__.return_value = mock_db_session
     mock_file_store.read_file.return_value = file_content
 
@@ -70,7 +70,6 @@ def test_single_text_file_with_metadata(
 
 
 @patch("onyx.connectors.file.connector.get_default_file_store")
-@patch("onyx.connectors.file.connector.get_pgfilestore_by_file_name")
 @patch("onyx.connectors.file.connector.get_session_with_current_tenant")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
@@ -78,18 +77,16 @@ def test_single_text_file_with_metadata(
 def test_two_text_files_with_zip_metadata(
     mock_get_unstructured_api_key: MagicMock,
     mock_get_session: MagicMock,
-    mock_get_pgfile: MagicMock,
     mock_get_filestore: MagicMock,
     mock_db_session: MagicMock,
     mock_file_store: MagicMock,
-    mock_pgfilestore_record: MagicMock,
 ) -> None:
     file1_content = io.BytesIO(b"File 1 content")
     file2_content = io.BytesIO(b"File 2 content")
     mock_get_filestore.return_value = mock_file_store
-    mock_get_pgfile.side_effect = [
-        MagicMock(file_name="file1.txt"),
-        MagicMock(file_name="file2.txt"),
+    mock_file_store.read_file_record.side_effect = [
+        MagicMock(file_id=str(uuid4()), display_name="file1.txt"),
+        MagicMock(file_id=str(uuid4()), display_name="file2.txt"),
     ]
     mock_get_session.return_value.__enter__.return_value = mock_db_session
     mock_file_store.read_file.side_effect = [file1_content, file2_content]
