@@ -17,11 +17,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.connector import JiraConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.onyx_jira.connector import JiraConnector
-from onyx.connectors.onyx_jira.connector import JiraConnectorCheckpoint
 from onyx.utils.logger import setup_logger
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 

@@ -11,7 +11,7 @@ import sqlalchemy as sa
 import json
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.onyx_jira.utils import extract_jira_project
+from onyx.connectors.jira.utils import extract_jira_project
 
 
 # revision identifiers, used by Alembic.

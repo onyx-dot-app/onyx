@@ -24,6 +24,12 @@ from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.jira.utils import best_effort_basic_expert_info
+from onyx.connectors.jira.utils import best_effort_get_field_from_issue
+from onyx.connectors.jira.utils import build_jira_client
+from onyx.connectors.jira.utils import build_jira_url
+from onyx.connectors.jira.utils import extract_text_from_adf
+from onyx.connectors.jira.utils import get_comment_strs
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
@@ -31,14 +37,9 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.connectors.onyx_jira.utils import best_effort_basic_expert_info
-from onyx.connectors.onyx_jira.utils import best_effort_get_field_from_issue
-from onyx.connectors.onyx_jira.utils import build_jira_client
-from onyx.connectors.onyx_jira.utils import build_jira_url
-from onyx.connectors.onyx_jira.utils import extract_text_from_adf
-from onyx.connectors.onyx_jira.utils import get_comment_strs
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
 logger = setup_logger()
@@ -430,9 +431,14 @@ if __name__ == "__main__":
             "jira_api_token": os.environ["JIRA_API_TOKEN"],
         }
     )
-    document_batches = connector.load_from_checkpoint(
-        0,
-        float("inf"),
-        JiraConnectorCheckpoint(has_more=True),
+
+    start = 0
+    end = datetime.now().timestamp()
+
+    print(
+        load_all_docs_from_checkpoint_connector(
+            connector=connector,
+            start=start,
+            end=end,
+        )
     )
-    print(next(document_batches))

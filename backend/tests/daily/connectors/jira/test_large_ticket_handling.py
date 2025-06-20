@@ -7,8 +7,8 @@ import pytest
 from jira.resources import Issue
 from pytest_mock import MockFixture
 
-from onyx.connectors.onyx_jira.connector import _perform_jql_search
-from onyx.connectors.onyx_jira.connector import process_jira_issue
+from onyx.connectors.jira.connector import _perform_jql_search
+from onyx.connectors.jira.connector import process_jira_issue
 
 
 @pytest.fixture

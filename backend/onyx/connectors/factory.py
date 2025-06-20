@@ -39,13 +39,13 @@ from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.loopio.connector import LoopioConnector
 from onyx.connectors.mediawiki.wiki import MediaWikiConnector
 from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
-from onyx.connectors.onyx_jira.connector import JiraConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
