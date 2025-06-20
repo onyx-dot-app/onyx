@@ -2,6 +2,9 @@ FROM python:3.11.7-slim-bookworm
 
 # Instead of downloading ffmpeg-linux.zip when installing playwright, we put it in the tmp folder
 COPY ffmpeg-linux.zip /tmp/ffmpeg-linux.zip
+COPY chromium-linux.zip.part.aa /tmp/chromium-linux.zip.part.aa
+COPY chromium-linux.zip.part.ab /tmp/chromium-linux.zip.part.ab
+RUN cat /tmp/chromium-linux.zip.part.* > /tmp/chromium-linux.zip
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
@@ -48,6 +51,10 @@ RUN apt-get update && \
 RUN mkdir -p ~/.cache/ms-playwright/ffmpeg-1009 \
  && unzip /tmp/ffmpeg-linux.zip -d ~/.cache/ms-playwright/ffmpeg-1009 \
  && touch ~/.cache/ms-playwright/ffmpeg-1009/INSTALLATION_COMPLETE
+
+RUN mkdir -p ~/.cache/ms-playwright/chromium-1097
+RUN unzip /tmp/chromium-linux.zip -d ~/.cache/ms-playwright/chromium-1097
+RUN touch ~/.cache/ms-playwright/chromium-1097/INSTALLATION_COMPLETE
 
 # Install Python dependencies
 # Remove py which is pulled in by retry, py is not needed and is a CVE
