@@ -195,6 +195,11 @@ def thread_to_document(
     primary_owners = _get_owners_from_emails(from_emails)
     secondary_owners = _get_owners_from_emails(other_emails)
 
+    # If emails have no subject, match Gmail's default "no subject"
+    # Search will break without a semantic identifier
+    if not semantic_identifier:
+        semantic_identifier = "(no subject)"
+
     return Document(
         id=id,
         semantic_identifier=semantic_identifier,
