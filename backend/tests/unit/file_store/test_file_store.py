@@ -178,7 +178,7 @@ class TestExternalStorageFileStore:
                 "onyx.file_store.file_store.get_current_tenant_id",
                 return_value="tenant-1",
             ):
-                s3_key: str = file_store._get_s3_key("document.pdf")
+                s3_key = file_store._get_s3_key("document.pdf")
                 assert s3_key == "onyx-files/tenant-1/document.pdf"
 
             # Test with tenant ID "tenant-2"
@@ -186,7 +186,7 @@ class TestExternalStorageFileStore:
                 "onyx.file_store.file_store.get_current_tenant_id",
                 return_value="tenant-2",
             ):
-                s3_key: str = file_store._get_s3_key("document.pdf")
+                s3_key = file_store._get_s3_key("document.pdf")
                 assert s3_key == "onyx-files/tenant-2/document.pdf"
 
             # Test with default tenant (public)
@@ -194,7 +194,7 @@ class TestExternalStorageFileStore:
                 "onyx.file_store.file_store.get_current_tenant_id",
                 return_value="public",
             ):
-                s3_key: str = file_store._get_s3_key("document.pdf")
+                s3_key = file_store._get_s3_key("document.pdf")
                 assert s3_key == "onyx-files/public/document.pdf"
 
     @patch("boto3.client")
