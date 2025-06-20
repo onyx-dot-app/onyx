@@ -13,38 +13,6 @@ pipeline {
 
   stages {
 
-    stage('Build & Push Backend') {
-      when {
-        anyOf {
-          buildingTag()
-          branch 'eea'
-        }
-      }
-      steps {
-            node(label: 'docker-big-jobs') {
-            script {
-              checkout scm
-              if (env.BRANCH_NAME == 'eea') {
-                tagNameB = 'backend'
-              } else {
-                tagNameB = "backend-$BRANCH_NAME"
-              }
-              try {
-                dir('backend') {
-                  dockerImage = docker.build("$registry:$tagNameB", "--no-cache .")
-                  docker.withRegistry( '', 'eeajenkins' ) {
-                  dockerImage.push()
-                  }
-                }
-              } finally {
-                sh "docker rmi $registry:$tagNameB"
-              }
-            }
-          }
-      }
-    }
-
-    
     stage('Build & Push ( on tag )') {
       when {
         anyOf {
@@ -78,6 +46,29 @@ pipeline {
           }
           },
 
+          "BACKEND": {
+            node(label: 'docker-big-jobs') {
+            script {
+              checkout scm
+              if (env.BRANCH_NAME == 'eea') {
+                tagNameB = 'backend'
+              } else {
+                tagNameB = "backend-$BRANCH_NAME"
+              }
+              try {
+                dir('backend') {
+                  dockerImage = docker.build("$registry:$tagNameB", "--no-cache .")
+                  docker.withRegistry( '', 'eeajenkins' ) {
+                  dockerImage.push()
+                  }
+                }
+              } finally {
+                sh "docker rmi $registry:$tagNameB"
+              }
+            }
+          }
+          },
+          
           "MODEL_SERVER": {
             node(label: 'docker-big-jobs') {
             script {
