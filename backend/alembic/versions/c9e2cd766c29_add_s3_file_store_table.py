@@ -16,6 +16,7 @@ from botocore.exceptions import ClientError
 
 from onyx.db._deprecated.pg_file_store import delete_lobj_by_id, read_lobj
 from onyx.file_store.file_store import get_s3_file_store
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # revision identifiers, used by Alembic.
 revision = "c9e2cd766c29"
@@ -153,6 +154,7 @@ def _migrate_files_to_postgres() -> None:
 
     print(f"Found {total_files} files to migrate back to PostgreSQL large objects.")
 
+    _set_tenant_contextvar(session)
     migrated_count = 0
 
     # only create external store if we have files to migrate. This line
@@ -236,6 +238,7 @@ def _migrate_files_to_external_storage() -> None:
 
     print(f"Found {total_files} files to migrate from PostgreSQL to external storage.")
 
+    _set_tenant_contextvar(session)
     migrated_count = 0
 
     for i, file_id in enumerate(files_to_migrate, 1):
@@ -255,9 +258,16 @@ def _migrate_files_to_external_storage() -> None:
         file_metadata = cast(Any, file_record.file_metadata)  # type: ignore
 
         # Read file content from PostgreSQL
-        file_content = read_lobj(
-            lobj_id, db_session=session, mode="b", use_tempfile=True
-        )
+        try:
+            file_content = read_lobj(
+                lobj_id, db_session=session, mode="b", use_tempfile=True
+            )
+        except Exception as e:
+            if "large object" in str(e) and "does not exist" in str(e):
+                print(f"File {file_id} not found in PostgreSQL storage.")
+                continue
+            else:
+                raise
 
         # Handle file_metadata type conversion
         file_metadata = None
@@ -293,3 +303,10 @@ def _migrate_files_to_external_storage() -> None:
     print(
         f"Migration completed: {migrated_count} files staged for commit to external storage."
     )
+
+
+def _set_tenant_contextvar(session: Session) -> None:
+    """Set the tenant contextvar to the default schema"""
+    current_tenant = session.execute(text("SELECT current_schema()")).scalar()
+    print(f"Migrating files for tenant: {current_tenant}")
+    CURRENT_TENANT_ID_CONTEXTVAR.set(current_tenant)
