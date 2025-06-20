@@ -37,8 +37,7 @@ RUN apt-get update && \
         pkg-config \
         gcc \
         nano \
-        vim \
-        postgresql-client && \
+        vim && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -78,6 +77,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
 
+# Install postgresql-client for easy manual tests
+# Install it here to avoid it being cleaned up above
+RUN apt-get update && apt-get install -y postgresql-client
 
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
