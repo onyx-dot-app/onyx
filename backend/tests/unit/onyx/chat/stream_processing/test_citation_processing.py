@@ -452,7 +452,7 @@ def process_text(
         ),
         (
             "Mixed single and comma-separated citations",
-            ["Single [", "2", "]", " and", "a [", "1", ",3]."],
+            ["Single [", "2", "]", " tex", "t [", "1", ",3]."],
             "Single [[1]](https://0.com) anda [[1]](https://0.com)[[2]]().",
             ["doc_0", "doc_1"],
         ),

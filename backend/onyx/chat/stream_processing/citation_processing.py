@@ -98,7 +98,7 @@ class CitationProcessor:
                     self.recent_cited_documents.clear()
 
                 # process the citation string and emit citation info
-                res, citation_info = self.proces_citation(match)
+                res, citation_info = self.process_citation(match)
                 result += res
                 for citation in citation_info:
                     yield citation
@@ -117,12 +117,12 @@ class CitationProcessor:
         if result:
             yield OnyxAnswerPiece(answer_piece=result)
 
-    def proces_citation(self, match: re.Match) -> tuple[str, list[CitationInfo]]:
+    def process_citation(self, match: re.Match) -> tuple[str, list[CitationInfo]]:
         """
         Process a single citation match and return the citation string and the
         citation info. The match string can look like '[1]', '[1, 13, 6], '[[4]]', etc.
         """
-        citation_str = match.group()  # e.g., '[1]', '[1, 2, 3]', '[[1]]', etc.
+        citation_str: str = match.group()  # e.g., '[1]', '[1, 2, 3]', '[[1]]', etc.
         formatted = match.lastindex == 1  # True means already in the form '[[1]]'
 
         final_processed_str = ""
@@ -162,7 +162,6 @@ class CitationProcessor:
                 final_processed_str += f"[[{displayed_citation_num}]]({link})"
 
             # create the citation info
-            link = context_llm_doc.link or ""
             if llm_docid not in self.cited_documents:
                 self.cited_documents.add(llm_docid)
                 final_citation_info.append(
