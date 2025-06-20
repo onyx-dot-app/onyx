@@ -576,6 +576,9 @@ letsencrypt:
   email: "abc@abc.com"
 
 auth:
+  # NOTE: in a production environment, make sure to use the `existingSecret` option
+  # to override the defaults.
+
   # existingSecret onyx-secret for storing smtp, oauth, slack, and other secrets
   # keys are lowercased version of env vars (e.g. SMTP_USER -> smtp_user)
   existingSecret: ""
@@ -584,6 +587,7 @@ auth:
   # the values here reference the keys in secrets below
   secretKeys:
     postgres_password: "postgres_password"
+    db_readonly_password: "db_readonly_password"
     smtp_pass: ""
     oauth_client_id: ""
     oauth_client_secret: ""
@@ -594,7 +598,8 @@ auth:
   # set values as strings, they will be base64 encoded
   # this is used to populate the secrets yaml
   secrets:
-    postgres_password: "postgres"
+    postgres_password: "password"
+    db_readonly_password: "password"
     smtp_pass: ""
     oauth_client_id: ""
     oauth_client_secret: ""
@@ -602,10 +607,15 @@ auth:
     redis_password: "password"
 
 configMap:
+  # Change this to your real domain if you're not using localhost
+  WEB_DOMAIN: "http://localhost:3000"
+
   # Change this for production uses unless Onyx is only accessible behind VPN
   AUTH_TYPE: "disabled"
+
   # 1 Day Default
   SESSION_EXPIRE_TIME_SECONDS: "86400"
+
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
   # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
@@ -618,6 +628,7 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
+
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"
@@ -625,6 +636,7 @@ configMap:
   DISABLE_LLM_DOC_RELEVANCE: ""
   DISABLE_LLM_CHOOSE_SEARCH: ""
   DISABLE_LLM_QUERY_REPHRASE: ""
+
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""
@@ -633,8 +645,7 @@ configMap:
   LANGUAGE_HINT: ""
   LANGUAGE_CHAT_NAMING_HINT: ""
   QA_PROMPT_OVERRIDE: ""
-  # Internet Search Tool
-  BING_API_KEY: ""
+
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
@@ -644,6 +655,7 @@ configMap:
   DISABLE_RERANK_FOR_STREAMING: ""
   MODEL_SERVER_PORT: ""
   MIN_THREADS_ML_MODELS: ""
+
   # Indexing Configs
   VESPA_SEARCHER_THREADS: ""
   NUM_INDEXING_WORKERS: ""
@@ -655,16 +667,19 @@ configMap:
   JIRA_API_VERSION: ""
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
+
   # Worker Parallelism
   CELERY_WORKER_INDEXING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
+
   # OnyxBot SlackBot Configs
   DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   DANSWER_BOT_DISPLAY_ERROR_MSGS: ""
   DANSWER_BOT_RESPOND_EVERY_CHANNEL: ""
   DANSWER_BOT_DISABLE_COT: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
+
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3
   # https://docs.onyx.app/more/telemetry
@@ -673,9 +688,9 @@ configMap:
   LOG_ALL_MODEL_INTERACTIONS: ""
   LOG_DANSWER_MODEL_INTERACTIONS: ""
   LOG_VESPA_TIMING_INFORMATION: ""
-  # Shared or Non-backend Related
-  WEB_DOMAIN: "http://localhost:3000"
+
   # DOMAIN used by nginx
   DOMAIN: "localhost"
+
   # Chat Configs
   HARD_DELETE_CHATS: ""
