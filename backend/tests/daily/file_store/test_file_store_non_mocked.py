@@ -22,12 +22,14 @@ from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import SqlEngine
 from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
 
 TEST_BUCKET_NAME: str = "onyx-file-store-tests"
 TEST_FILE_PREFIX: str = "test-files"
+TEST_TENANT_ID: str = "test-tenant"
 
 
 # Type definitions for test data
@@ -114,13 +116,25 @@ def db_session() -> Generator[Session, None, None]:
         yield session
 
 
+@pytest.fixture(scope="function")
+def tenant_context() -> Generator[None, None, None]:
+    """Set up tenant context for testing"""
+    # Set the tenant context for the test
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+    try:
+        yield
+    finally:
+        # Reset the tenant context after the test
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
 @pytest.fixture(
     scope="function",
     params=_get_all_backend_configs(),
     ids=lambda config: config["backend_name"],
 )
 def file_store(
-    request: pytest.FixtureRequest, db_session: Session
+    request: pytest.FixtureRequest, db_session: Session, tenant_context: None
 ) -> Generator[S3BackedFileStore, None, None]:
     """Create an S3BackedFileStore instance for testing with parametrized backend"""
     backend_config: BackendConfig = request.param
@@ -145,14 +159,14 @@ def file_store(
 
     yield store
 
-    # Cleanup: Remove all test files from the bucket
+    # Cleanup: Remove all test files from the bucket (including tenant-prefixed files)
     try:
         s3_client = store._get_s3_client()
         actual_bucket_name = store._get_bucket_name()
 
-        # List and delete all objects in the test prefix
+        # List and delete all objects in the test prefix (including tenant subdirectories)
         response = s3_client.list_objects_v2(
-            Bucket=actual_bucket_name, Prefix=f"{TEST_FILE_PREFIX}/"
+            Bucket=actual_bucket_name, Prefix=f"{store._s3_prefix}/"
         )
 
         if "Contents" in response:
@@ -217,7 +231,9 @@ class TestS3BackedFileStore:
         assert (
             file_record.bucket_name == file_store._get_bucket_name()
         )  # Use actual bucket name
-        assert file_record.object_key == f"{file_store._s3_prefix}/{file_id}"
+        # The object key should include the tenant ID
+        expected_object_key = f"{file_store._s3_prefix}/{TEST_TENANT_ID}/{file_id}"
+        assert file_record.object_key == expected_object_key
 
     def test_save_and_read_binary_file(self, file_store: S3BackedFileStore) -> None:
         """Test saving and reading a binary file"""
@@ -830,32 +846,40 @@ class TestS3BackedFileStore:
         def save_file_worker(worker_id: int) -> bool:
             """Worker function to save a file with its own database session"""
             try:
-                # Create a new database session for each worker to avoid conflicts
-                with get_session_context_manager() as worker_session:
-                    worker_file_store = S3BackedFileStore(
-                        db_session=worker_session,
-                        bucket_name=current_bucket_name,
-                        aws_access_key_id=current_access_key,
-                        aws_secret_access_key=current_secret_key,
-                        aws_region_name=current_region,
-                        s3_endpoint_url=current_endpoint_url,
-                        s3_prefix=TEST_FILE_PREFIX,
-                        s3_verify_ssl=current_verify_ssl,
-                    )
+                # Set up tenant context for this worker
+                token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
+                try:
+                    # Create a new database session for each worker to avoid conflicts
+                    with get_session_context_manager() as worker_session:
+                        worker_file_store = S3BackedFileStore(
+                            db_session=worker_session,
+                            bucket_name=current_bucket_name,
+                            aws_access_key_id=current_access_key,
+                            aws_secret_access_key=current_secret_key,
+                            aws_region_name=current_region,
+                            s3_endpoint_url=current_endpoint_url,
+                            s3_prefix=TEST_FILE_PREFIX,
+                            s3_verify_ssl=current_verify_ssl,
+                        )
 
-                    file_name: str = f"{base_file_name}_{worker_id}.txt"
-                    content: str = f"Content from worker {worker_id} at {time.time()}"
-                    content_io: BytesIO = BytesIO(content.encode("utf-8"))
+                        file_name: str = f"{base_file_name}_{worker_id}.txt"
+                        content: str = (
+                            f"Content from worker {worker_id} at {time.time()}"
+                        )
+                        content_io: BytesIO = BytesIO(content.encode("utf-8"))
 
-                    worker_file_store.save_file(
-                        file_id=file_name,
-                        content=content_io,
-                        display_name=f"Worker {worker_id} File",
-                        file_origin=file_origin,
-                        file_type=file_type,
-                    )
-                    results.append((file_name, content))
-                    return True
+                        worker_file_store.save_file(
+                            file_id=file_name,
+                            content=content_io,
+                            display_name=f"Worker {worker_id} File",
+                            file_origin=file_origin,
+                            file_type=file_type,
+                        )
+                        results.append((file_name, content))
+                        return True
+                finally:
+                    # Reset the tenant context after the worker completes
+                    CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
             except Exception as e:
                 errors.append((worker_id, str(e)))
                 return False
