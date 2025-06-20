@@ -108,6 +108,7 @@ VERTEXAI_DEFAULT_MODEL = "gemini-2.0-flash"
 VERTEXAI_DEFAULT_FAST_MODEL = "gemini-2.0-flash-lite"
 VERTEXAI_MODEL_NAMES = [
     # 2.5 pro models
+    "gemini-2.5-pro-preview-06-05",
     "gemini-2.5-pro-preview-05-06",
     # 2.0 flash-lite models
     VERTEXAI_DEFAULT_FAST_MODEL,
@@ -128,7 +129,9 @@ VERTEXAI_MODEL_NAMES = [
     "gemini-1.5-flash-001",
     "gemini-1.5-flash-002",
     # Anthropic models
-    "claude-sonnet-4@20250514",
+    "claude-sonnet-4",
+    "claude-opus-4",
+    "claude-3-7-sonnet@20250219",
 ]
 VERTEXAI_VISIBLE_MODEL_NAMES = [
     VERTEXAI_DEFAULT_MODEL,
