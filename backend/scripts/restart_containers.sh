@@ -21,7 +21,7 @@ MINIO_VOLUME=${4:-""}  # Default is empty if not provided
 echo "Stopping existing containers..."
 docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
 
-# Function to start or create PostgreSQL container
+# Start or create PostgreSQL container
 echo "Starting PostgreSQL container..."
 if docker ps -a --format '{{.Names}}' | grep -q "^onyx_postgres$"; then
     echo "PostgreSQL container exists, starting it..."
@@ -35,7 +35,7 @@ else
     fi
 fi
 
-# Function to start or create Vespa container
+# Start or create Vespa container
 echo "Starting Vespa container..."
 if docker ps -a --format '{{.Names}}' | grep -q "^onyx_vespa$"; then
     echo "Vespa container exists, starting it..."
@@ -49,7 +49,7 @@ else
     fi
 fi
 
-# Function to start or create Redis container
+# Start or create Redis container
 echo "Starting Redis container..."
 if docker ps -a --format '{{.Names}}' | grep -q "^onyx_redis$"; then
     echo "Redis container exists, starting it..."
@@ -63,7 +63,7 @@ else
     fi
 fi
 
-# Function to start or create MinIO container
+# Start or create MinIO container
 echo "Starting MinIO container..."
 if docker ps -a --format '{{.Names}}' | grep -q "^onyx_minio$"; then
     echo "MinIO container exists, starting it..."
