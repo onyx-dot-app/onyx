@@ -2,9 +2,6 @@ import os
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import Dict
-from typing import List
-from typing import Set
 
 import pytest
 
@@ -22,12 +19,12 @@ class TestHubSpotConnector:
         return HubSpotConnector(batch_size=10)
 
     @pytest.fixture
-    def credentials(self) -> Dict[str, Any]:
+    def credentials(self) -> dict[str, Any]:
         """Provide test credentials."""
         return {"hubspot_access_token": os.environ["HUBSPOT_ACCESS_TOKEN"]}
 
     def test_load_credentials(
-        self, connector: HubSpotConnector, credentials: Dict[str, Any]
+        self, connector: HubSpotConnector, credentials: dict[str, Any]
     ) -> None:
         """Test that credentials are loaded correctly."""
         result = connector.load_credentials(credentials)
@@ -38,7 +35,7 @@ class TestHubSpotConnector:
         assert isinstance(connector.portal_id, str)
 
     def test_load_from_state_basic_functionality(
-        self, connector: HubSpotConnector, credentials: Dict[str, Any]
+        self, connector: HubSpotConnector, credentials: dict[str, Any]
     ) -> None:
         """Test basic load_from_state functionality."""
         connector.load_credentials(credentials)
@@ -69,13 +66,13 @@ class TestHubSpotConnector:
         assert doc.sections[0].link is not None
 
     def test_document_metadata_structure(
-        self, connector: HubSpotConnector, credentials: Dict[str, Any]
+        self, connector: HubSpotConnector, credentials: dict[str, Any]
     ) -> None:
         """Test that document metadata contains expected fields."""
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
-        all_docs: List[Document] = []
+        all_docs: list[Document] = []
 
         # Collect a few batches to test different object types
         batch_count = 0
@@ -88,7 +85,7 @@ class TestHubSpotConnector:
                 break
 
         # Group documents by object type
-        docs_by_type: Dict[str, List[Document]] = {}
+        docs_by_type: dict[str, list[Document]] = {}
         for doc in all_docs:
             obj_type = doc.metadata["object_type"]
             if obj_type not in docs_by_type:
@@ -130,7 +127,7 @@ class TestHubSpotConnector:
                     assert all(isinstance(id_val, str) for id_val in doc.metadata[key])
 
     def test_associated_objects_as_sections(
-        self, connector: HubSpotConnector, credentials: Dict[str, Any]
+        self, connector: HubSpotConnector, credentials: dict[str, Any]
     ) -> None:
         """Test that associated objects are included as sections."""
         connector.load_credentials(credentials)
@@ -184,7 +181,7 @@ class TestHubSpotConnector:
             print("⚠ No documents with associated objects found in test data")
 
     def test_poll_source_functionality(
-        self, connector: HubSpotConnector, credentials: Dict[str, Any]
+        self, connector: HubSpotConnector, credentials: dict[str, Any]
     ) -> None:
         """Test poll_source with time filtering."""
         connector.load_credentials(credentials)
@@ -214,13 +211,13 @@ class TestHubSpotConnector:
             print("⚠ No documents found in the specified time range")
 
     def test_all_object_types_processed(
-        self, connector: HubSpotConnector, credentials: Dict[str, Any]
+        self, connector: HubSpotConnector, credentials: dict[str, Any]
     ) -> None:
         """Integration test to verify all object types are processed correctly."""
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
-        all_docs: List[Document] = []
+        all_docs: list[Document] = []
         object_types_found = set()
 
         # Collect several batches to ensure we see all object types
@@ -323,20 +320,20 @@ class TestHubSpotConnector:
 
     def test_init_empty_object_types(self) -> None:
         """Test that connector can be initialized with empty object types set."""
-        empty_types: Set[str] = set()
+        empty_types: set[str] = set()
         connector = HubSpotConnector(object_types=empty_types)
         assert connector.object_types == empty_types
         assert len(connector.object_types) == 0
 
     def test_selective_object_fetching_tickets_only(
-        self, credentials: Dict[str, Any]
+        self, credentials: dict[str, Any]
     ) -> None:
         """Test that only tickets are fetched when configured."""
         connector = HubSpotConnector(object_types={"tickets"}, batch_size=5)
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
-        all_docs: List[Document] = []
+        all_docs: list[Document] = []
 
         # Collect a few batches
         batch_count = 0
@@ -358,14 +355,14 @@ class TestHubSpotConnector:
             print("⚠ No ticket documents found in test data")
 
     def test_selective_object_fetching_companies_and_deals(
-        self, credentials: Dict[str, Any]
+        self, credentials: dict[str, Any]
     ) -> None:
         """Test that only companies and deals are fetched when configured."""
         connector = HubSpotConnector(object_types={"companies", "deals"}, batch_size=5)
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
-        all_docs: List[Document] = []
+        all_docs: list[Document] = []
         object_types_found = set()
 
         # Collect a few batches
@@ -400,14 +397,14 @@ class TestHubSpotConnector:
             print("⚠ No company/deal documents found in test data")
 
     def test_empty_object_types_fetches_nothing(
-        self, credentials: Dict[str, Any]
+        self, credentials: dict[str, Any]
     ) -> None:
         """Test that no documents are fetched when object_types is empty."""
         connector = HubSpotConnector(object_types=set(), batch_size=5)
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
-        all_docs: List[Document] = []
+        all_docs: list[Document] = []
 
         # Try to collect batches
         batch_count = 0
@@ -422,7 +419,7 @@ class TestHubSpotConnector:
         print("✓ No documents fetched with empty object_types as expected")
 
     def test_poll_source_respects_object_types(
-        self, credentials: Dict[str, Any]
+        self, credentials: dict[str, Any]
     ) -> None:
         """Test that poll_source respects the object_types configuration."""
         connector = HubSpotConnector(object_types={"contacts"}, batch_size=5)
@@ -436,7 +433,7 @@ class TestHubSpotConnector:
         end_timestamp = int(end_time.timestamp())
 
         document_batches = connector.poll_source(start_timestamp, end_timestamp)
-        all_docs: List[Document] = []
+        all_docs: list[Document] = []
 
         # Collect a few batches
         batch_count = 0
