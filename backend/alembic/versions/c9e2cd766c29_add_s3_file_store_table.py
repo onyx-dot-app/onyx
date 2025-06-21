@@ -220,6 +220,7 @@ def _migrate_files_to_external_storage() -> None:
     bind = op.get_bind()
     session = Session(bind=bind)
     external_store = get_s3_file_store(db_session=session)
+    external_store.initialize()
 
     # Find all files currently stored in PostgreSQL (lobj_oid is not null)
     result = session.execute(
@@ -240,7 +241,6 @@ def _migrate_files_to_external_storage() -> None:
 
     _set_tenant_contextvar(session)
     migrated_count = 0
-    external_store.initialize()
 
     for i, file_id in enumerate(files_to_migrate, 1):
         print(f"Migrating file {i}/{total_files}: {file_id}")
