@@ -371,6 +371,22 @@
         "request": "launch",
         "runtimeExecutable": "bash",
         "runtimeArgs": [
+          "-c",
+          "${workspaceFolder}/backend/scripts/clear_containers.sh && ${workspaceFolder}/backend/scripts/restart_containers.sh"
+        ],
+        "cwd": "${workspaceFolder}",
+        "console": "integratedTerminal",
+        "stopOnEntry": true,
+        "presentation": {
+          "group": "3"
+        }
+      },
+      {
+        "name": "Restart External Volumes and Containers",
+        "type": "node",
+        "request": "launch",
+        "runtimeExecutable": "bash",
+        "runtimeArgs": [
           "${workspaceFolder}/backend/scripts/restart_containers.sh"
         ],
         "cwd": "${workspaceFolder}",
@@ -461,4 +477,3 @@
       }
     ]
   }
-  
