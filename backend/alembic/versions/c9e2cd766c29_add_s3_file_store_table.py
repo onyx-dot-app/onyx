@@ -240,6 +240,7 @@ def _migrate_files_to_external_storage() -> None:
 
     _set_tenant_contextvar(session)
     migrated_count = 0
+    external_store.initialize()
 
     for i, file_id in enumerate(files_to_migrate, 1):
         print(f"Migrating file {i}/{total_files}: {file_id}")
