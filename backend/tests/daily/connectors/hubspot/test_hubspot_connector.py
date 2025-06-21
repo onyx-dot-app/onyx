@@ -87,7 +87,11 @@ class TestHubSpotConnector:
         # Group documents by object type
         docs_by_type: dict[str, list[Document]] = {}
         for doc in all_docs:
-            obj_type = doc.metadata["object_type"]
+            obj_type_value = doc.metadata["object_type"]
+            # Handle the case where metadata value could be a list
+            obj_type = (
+                obj_type_value if isinstance(obj_type_value, str) else obj_type_value[0]
+            )
             if obj_type not in docs_by_type:
                 docs_by_type[obj_type] = []
             docs_by_type[obj_type].append(doc)
@@ -278,9 +282,10 @@ class TestHubSpotConnector:
 
     def test_init_custom_object_types(self) -> None:
         """Test that connector can be initialized with custom object types."""
-        custom_types = {"tickets", "companies"}
+        custom_types = ["tickets", "companies"]
         connector = HubSpotConnector(object_types=custom_types)
-        assert connector.object_types == custom_types
+        expected_set = {"tickets", "companies"}
+        assert connector.object_types == expected_set
         assert "tickets" in connector.object_types
         assert "companies" in connector.object_types
         assert "deals" not in connector.object_types
@@ -299,15 +304,16 @@ class TestHubSpotConnector:
 
     def test_init_single_object_type(self) -> None:
         """Test that connector can be initialized with a single object type."""
-        single_type = {"deals"}
+        single_type = ["deals"]
         connector = HubSpotConnector(object_types=single_type)
-        assert connector.object_types == single_type
+        expected_set = {"deals"}
+        assert connector.object_types == expected_set
         assert len(connector.object_types) == 1
         assert "deals" in connector.object_types
 
     def test_init_invalid_object_types(self) -> None:
         """Test that connector raises error for invalid object types."""
-        invalid_types = {"tickets", "invalid_type", "another_invalid"}
+        invalid_types = ["tickets", "invalid_type", "another_invalid"]
 
         with pytest.raises(ValueError) as exc_info:
             HubSpotConnector(object_types=invalid_types)
@@ -320,16 +326,17 @@ class TestHubSpotConnector:
 
     def test_init_empty_object_types(self) -> None:
         """Test that connector can be initialized with empty object types set."""
-        empty_types: set[str] = set()
+        empty_types: list[str] = []
         connector = HubSpotConnector(object_types=empty_types)
-        assert connector.object_types == empty_types
+        expected_set: set[str] = set()
+        assert connector.object_types == expected_set
         assert len(connector.object_types) == 0
 
     def test_selective_object_fetching_tickets_only(
         self, credentials: dict[str, Any]
     ) -> None:
         """Test that only tickets are fetched when configured."""
-        connector = HubSpotConnector(object_types={"tickets"}, batch_size=5)
+        connector = HubSpotConnector(object_types=["tickets"], batch_size=5)
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
@@ -358,7 +365,7 @@ class TestHubSpotConnector:
         self, credentials: dict[str, Any]
     ) -> None:
         """Test that only companies and deals are fetched when configured."""
-        connector = HubSpotConnector(object_types={"companies", "deals"}, batch_size=5)
+        connector = HubSpotConnector(object_types=["companies", "deals"], batch_size=5)
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
@@ -400,7 +407,7 @@ class TestHubSpotConnector:
         self, credentials: dict[str, Any]
     ) -> None:
         """Test that no documents are fetched when object_types is empty."""
-        connector = HubSpotConnector(object_types=set(), batch_size=5)
+        connector = HubSpotConnector(object_types=[], batch_size=5)
         connector.load_credentials(credentials)
 
         document_batches = connector.load_from_state()
@@ -422,7 +429,7 @@ class TestHubSpotConnector:
         self, credentials: dict[str, Any]
     ) -> None:
         """Test that poll_source respects the object_types configuration."""
-        connector = HubSpotConnector(object_types={"contacts"}, batch_size=5)
+        connector = HubSpotConnector(object_types=["contacts"], batch_size=5)
         connector.load_credentials(credentials)
 
         # Test with a recent time range
@@ -457,11 +464,11 @@ class TestHubSpotConnector:
 
     def test_object_types_immutability(self) -> None:
         """Test that object_types set cannot be modified externally."""
-        original_types = {"tickets", "companies"}
+        original_types = ["tickets", "companies"]
         connector = HubSpotConnector(object_types=original_types)
 
-        # Modifying the original set should not affect the connector
-        original_types.add("deals")
+        # Modifying the original list should not affect the connector
+        original_types.append("deals")
         assert "deals" not in connector.object_types
         assert connector.object_types == {"tickets", "companies"}
 

@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 
 import requests
 from hubspot import HubSpot  # type: ignore
@@ -14,6 +15,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -412,7 +414,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             doc_batch.append(
                 Document(
                     id=f"hubspot_ticket_{ticket.id}",
-                    sections=sections,
+                    sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
                     doc_updated_at=ticket.updated_at.replace(tzinfo=timezone.utc),
@@ -538,7 +540,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             doc_batch.append(
                 Document(
                     id=f"hubspot_company_{company.id}",
-                    sections=sections,
+                    sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
                     doc_updated_at=company.updated_at.replace(tzinfo=timezone.utc),
@@ -662,7 +664,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             doc_batch.append(
                 Document(
                     id=f"hubspot_deal_{deal.id}",
-                    sections=sections,
+                    sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
                     doc_updated_at=deal.updated_at.replace(tzinfo=timezone.utc),
@@ -806,7 +808,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             doc_batch.append(
                 Document(
                     id=f"hubspot_contact_{contact.id}",
-                    sections=sections,
+                    sections=cast(list[TextSection | ImageSection], sections),
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
                     doc_updated_at=contact.updated_at.replace(tzinfo=timezone.utc),
