@@ -141,11 +141,11 @@ export const RenderField: FC<RenderFieldProps> = ({
   const disabled =
     typeof field.disabled === "function"
       ? field.disabled(currentCredential)
-      : field.disabled ?? false;
+      : (field.disabled ?? false);
   const initialValue =
     typeof field.initial === "function"
       ? field.initial(currentCredential)
-      : field.initial ?? "";
+      : (field.initial ?? "");
 
   // if initialValue exists, prepopulate the field with it
   useEffect(() => {
