@@ -1,8 +1,7 @@
+import re
 from datetime import datetime
 from datetime import timezone
 from typing import Any
-from typing import Dict
-from typing import List
 
 import requests
 from hubspot import HubSpot  # type: ignore
@@ -21,16 +20,57 @@ from onyx.utils.logger import setup_logger
 HUBSPOT_BASE_URL = "https://app.hubspot.com"
 HUBSPOT_API_URL = "https://api.hubapi.com/integrations/v1/me"
 
+# Available HubSpot object types
+AVAILABLE_OBJECT_TYPES = {"tickets", "companies", "deals", "contacts"}
+
 logger = setup_logger()
 
 
 class HubSpotConnector(LoadConnector, PollConnector):
     def __init__(
-        self, batch_size: int = INDEX_BATCH_SIZE, access_token: str | None = None
+        self,
+        batch_size: int = INDEX_BATCH_SIZE,
+        access_token: str | None = None,
+        object_types: list[str] | None = None,
     ) -> None:
         self.batch_size = batch_size
         self.access_token = access_token
         self.portal_id: str | None = None
+
+        # Set object types to fetch, default to all available types
+        if object_types is None:
+            self.object_types = AVAILABLE_OBJECT_TYPES.copy()
+        else:
+            object_types_set = set(object_types)
+
+            # Validate provided object types
+            invalid_types = object_types_set - AVAILABLE_OBJECT_TYPES
+            if invalid_types:
+                raise ValueError(
+                    f"Invalid object types: {invalid_types}. Available types: {AVAILABLE_OBJECT_TYPES}"
+                )
+            self.object_types = object_types_set.copy()
+
+    def _clean_html_content(self, html_content: str) -> str:
+        """Clean HTML content and extract raw text"""
+        if not html_content:
+            return ""
+
+        # Remove HTML tags using regex
+        clean_text = re.sub(r"<[^>]+>", "", html_content)
+
+        # Decode common HTML entities
+        clean_text = clean_text.replace("&nbsp;", " ")
+        clean_text = clean_text.replace("&amp;", "&")
+        clean_text = clean_text.replace("&lt;", "<")
+        clean_text = clean_text.replace("&gt;", ">")
+        clean_text = clean_text.replace("&quot;", '"')
+        clean_text = clean_text.replace("&#39;", "'")
+
+        # Clean up whitespace
+        clean_text = " ".join(clean_text.split())
+
+        return clean_text.strip()
 
     def get_portal_id(self) -> str:
         headers = {
@@ -43,7 +83,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             raise Exception("Error fetching portal ID")
 
         data = response.json()
-        return data["portalId"]
+        return str(data["portalId"])
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.access_token = credentials["hubspot_access_token"]
@@ -63,6 +103,10 @@ class HubSpotConnector(LoadConnector, PollConnector):
             return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/deal/{object_id}"
         elif object_type == "contacts":
             return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/contact/{object_id}"
+        elif object_type == "notes":
+            return (
+                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/objects/0-4/{object_id}"
+            )
         else:
             return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/{object_type}/{object_id}"
 
@@ -72,7 +116,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
         object_id: str,
         from_object_type: str,
         to_object_type: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get associated objects for a given object"""
         try:
             associations = api_client.crm.associations.v4.basic_api.get_page(
@@ -156,8 +200,50 @@ class HubSpotConnector(LoadConnector, PollConnector):
             )
             return []
 
+    def _get_associated_notes(
+        self,
+        api_client: HubSpot,
+        object_id: str,
+        object_type: str,
+    ) -> list[dict[str, Any]]:
+        """Get notes associated with a given object"""
+        try:
+            # Get associations to notes (engagement type)
+            associations = api_client.crm.associations.v4.basic_api.get_page(
+                object_type=object_type,
+                object_id=object_id,
+                to_object_type="notes",
+            )
+
+            associated_notes = []
+            if associations.results:
+                note_ids = [assoc.to_object_id for assoc in associations.results]
+
+                # Batch get the associated notes
+                for note_id in note_ids:
+                    try:
+                        # Notes are engagements in HubSpot, use the engagements API
+                        note = api_client.crm.objects.notes.basic_api.get_by_id(
+                            note_id=note_id,
+                            properties=[
+                                "hs_note_body",
+                                "hs_timestamp",
+                                "hs_created_by",
+                                "hubspot_owner_id",
+                            ],
+                        )
+                        associated_notes.append(note.to_dict())
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch note {note_id}: {e}")
+
+            return associated_notes
+
+        except Exception as e:
+            logger.warning(f"Failed to get notes for {object_type} {object_id}: {e}")
+            return []
+
     def _create_object_section(
-        self, obj: Dict[str, Any], object_type: str
+        self, obj: dict[str, Any], object_type: str
     ) -> TextSection:
         """Create a TextSection for an associated object"""
         obj_id = obj.get("id", "")
@@ -169,7 +255,14 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 name_parts.append(properties["firstname"])
             if properties.get("lastname"):
                 name_parts.append(properties["lastname"])
-            name = " ".join(name_parts) if name_parts else "Unknown Contact"
+
+            if name_parts:
+                name = " ".join(name_parts)
+            elif properties.get("email"):
+                # Use email as fallback if no first/last name
+                name = properties["email"]
+            else:
+                name = "Unknown Contact"
 
             content_parts = [f"Contact: {name}"]
             if properties.get("email"):
@@ -210,6 +303,18 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 content_parts.append(f"Content: {properties['content']}")
             if properties.get("hs_ticket_priority"):
                 content_parts.append(f"Priority: {properties['hs_ticket_priority']}")
+        elif object_type == "notes":
+            # Notes have a body property that contains the note content
+            body = properties.get("hs_note_body", "")
+            timestamp = properties.get("hs_timestamp", "")
+
+            # Clean HTML content to get raw text
+            clean_body = self._clean_html_content(body)
+
+            # Use full content, not truncated
+            content_parts = [f"Note: {clean_body}"]
+            if timestamp:
+                content_parts.append(f"Created: {timestamp}")
         else:
             content_parts = [f"{object_type.capitalize()}: {obj_id}"]
 
@@ -240,9 +345,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         for ticket in all_tickets:
             updated_at = ticket.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start:
+            if start is not None and updated_at < start.replace(tzinfo=None):
                 continue
-            if end is not None and updated_at > end:
+            if end is not None and updated_at > end.replace(tzinfo=None):
                 continue
 
             title = ticket.properties.get("subject") or f"Ticket {ticket.id}"
@@ -253,8 +358,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             sections = [TextSection(link=link, text=content_text)]
 
             # Metadata with parent object IDs
-            metadata: Dict[str, str | List[str]] = {
-                "ticket_id": ticket.id,
+            metadata: dict[str, str | list[str]] = {
                 "object_type": "ticket",
             }
 
@@ -289,6 +393,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
             for deal in associated_deals:
                 sections.append(self._create_object_section(deal, "deals"))
                 associated_deal_ids.append(deal["id"])
+
+            # Get associated notes
+            associated_notes = self._get_associated_notes(
+                api_client, ticket.id, "tickets"
+            )
+            for note in associated_notes:
+                sections.append(self._create_object_section(note, "notes"))
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -341,9 +452,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         for company in all_companies:
             updated_at = company.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start:
+            if start is not None and updated_at < start.replace(tzinfo=None):
                 continue
-            if end is not None and updated_at > end:
+            if end is not None and updated_at > end.replace(tzinfo=None):
                 continue
 
             title = company.properties.get("name") or f"Company {company.id}"
@@ -370,7 +481,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             sections = [TextSection(link=link, text=content_text)]
 
             # Metadata with parent object IDs
-            metadata: Dict[str, str | List[str]] = {
+            metadata: dict[str, str | list[str]] = {
                 "company_id": company.id,
                 "object_type": "company",
             }
@@ -408,6 +519,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
             for ticket in associated_tickets:
                 sections.append(self._create_object_section(ticket, "tickets"))
                 associated_ticket_ids.append(ticket["id"])
+
+            # Get associated notes
+            associated_notes = self._get_associated_notes(
+                api_client, company.id, "companies"
+            )
+            for note in associated_notes:
+                sections.append(self._create_object_section(note, "notes"))
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -460,9 +578,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         for deal in all_deals:
             updated_at = deal.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start:
+            if start is not None and updated_at < start.replace(tzinfo=None):
                 continue
-            if end is not None and updated_at > end:
+            if end is not None and updated_at > end.replace(tzinfo=None):
                 continue
 
             title = deal.properties.get("dealname") or f"Deal {deal.id}"
@@ -487,7 +605,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             sections = [TextSection(link=link, text=content_text)]
 
             # Metadata with parent object IDs
-            metadata: Dict[str, str | List[str]] = {
+            metadata: dict[str, str | list[str]] = {
                 "deal_id": deal.id,
                 "object_type": "deal",
             }
@@ -527,6 +645,11 @@ class HubSpotConnector(LoadConnector, PollConnector):
             for ticket in associated_tickets:
                 sections.append(self._create_object_section(ticket, "tickets"))
                 associated_ticket_ids.append(ticket["id"])
+
+            # Get associated notes
+            associated_notes = self._get_associated_notes(api_client, deal.id, "deals")
+            for note in associated_notes:
+                sections.append(self._create_object_section(note, "notes"))
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -581,9 +704,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
         for contact in all_contacts:
             updated_at = contact.updated_at.replace(tzinfo=None)
-            if start is not None and updated_at < start:
+            if start is not None and updated_at < start.replace(tzinfo=None):
                 continue
-            if end is not None and updated_at > end:
+            if end is not None and updated_at > end.replace(tzinfo=None):
                 continue
 
             # Build contact name
@@ -592,7 +715,14 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 name_parts.append(contact.properties["firstname"])
             if contact.properties.get("lastname"):
                 name_parts.append(contact.properties["lastname"])
-            title = " ".join(name_parts) if name_parts else f"Contact {contact.id}"
+
+            if name_parts:
+                title = " ".join(name_parts)
+            elif contact.properties.get("email"):
+                # Use email as fallback if no first/last name
+                title = contact.properties["email"]
+            else:
+                title = f"Contact {contact.id}"
 
             link = self._get_object_url("contacts", contact.id)
 
@@ -617,7 +747,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             sections = [TextSection(link=link, text=content_text)]
 
             # Metadata with parent object IDs
-            metadata: Dict[str, str | List[str]] = {
+            metadata: dict[str, str | list[str]] = {
                 "contact_id": contact.id,
                 "object_type": "contact",
             }
@@ -658,6 +788,13 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 sections.append(self._create_object_section(ticket, "tickets"))
                 associated_ticket_ids.append(ticket["id"])
 
+            # Get associated notes
+            associated_notes = self._get_associated_notes(
+                api_client, contact.id, "contacts"
+            )
+            for note in associated_notes:
+                sections.append(self._create_object_section(note, "notes"))
+
             # Add association IDs to metadata
             if associated_company_ids:
                 metadata["associated_company_ids"] = associated_company_ids
@@ -686,23 +823,31 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Load all HubSpot objects (tickets, companies, deals, contacts)"""
-        # Process each object type
-        yield from self._process_tickets()
-        yield from self._process_companies()
-        yield from self._process_deals()
-        yield from self._process_contacts()
+        # Process each object type based on configuration
+        if "tickets" in self.object_types:
+            yield from self._process_tickets()
+        if "companies" in self.object_types:
+            yield from self._process_companies()
+        if "deals" in self.object_types:
+            yield from self._process_deals()
+        if "contacts" in self.object_types:
+            yield from self._process_contacts()
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        start_datetime = datetime.utcfromtimestamp(start)
-        end_datetime = datetime.utcfromtimestamp(end)
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
 
-        # Process each object type with time filtering
-        yield from self._process_tickets(start_datetime, end_datetime)
-        yield from self._process_companies(start_datetime, end_datetime)
-        yield from self._process_deals(start_datetime, end_datetime)
-        yield from self._process_contacts(start_datetime, end_datetime)
+        # Process each object type with time filtering based on configuration
+        if "tickets" in self.object_types:
+            yield from self._process_tickets(start_datetime, end_datetime)
+        if "companies" in self.object_types:
+            yield from self._process_companies(start_datetime, end_datetime)
+        if "deals" in self.object_types:
+            yield from self._process_deals(start_datetime, end_datetime)
+        if "contacts" in self.object_types:
+            yield from self._process_contacts(start_datetime, end_datetime)
 
 
 if __name__ == "__main__":
@@ -712,6 +857,8 @@ if __name__ == "__main__":
     connector.load_credentials(
         {"hubspot_access_token": os.environ["HUBSPOT_ACCESS_TOKEN"]}
     )
-
+    # Run the first example
     document_batches = connector.load_from_state()
-    print(next(document_batches))
+    first_batch = next(document_batches)
+    for doc in first_batch:
+        print(doc.model_dump_json(indent=2))
