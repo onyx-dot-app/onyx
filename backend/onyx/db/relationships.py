@@ -490,8 +490,9 @@ def get_allowed_relationship_type_pairs(
         entities: List of entity type ID names to filter by
 
     Returns:
-        List of id_names from KGRelationshipType where both source and target entity types
-        are in the provided entities list
+        List of id_names from KGRelationshipType where source or target entity types
+        are in the provided entities list. We also filter out for now the catch-all
+        relationship types 'VENDOR__<relationship>__<target entity type>'
     """
 
     entity_types = list({get_entity_type(entity) for entity in entities})
