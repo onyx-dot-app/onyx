@@ -200,6 +200,9 @@ def generate_simple_sql(
     if state.kg_rel_temp_view_name is None:
         raise ValueError("kg_rel_temp_view_name is not set")
 
+    if state.kg_entity_temp_view_name is None:
+        raise ValueError("kg_entity_temp_view_name is not set")
+
     ## STEP 3 - articulate goals
 
     stream_write_step_activities(writer, _KG_STEP_NR)
@@ -311,9 +314,8 @@ def generate_simple_sql(
             )
             sql_statement = sql_statement.split(";")[0].strip() + ";"
             sql_statement = sql_statement.replace("sql", "").strip()
-            sql_statement = sql_statement.replace("kg_relationship", rel_temp_view)
-            if ent_temp_view:
-                sql_statement = sql_statement.replace("kg_entity", ent_temp_view)
+            sql_statement = sql_statement.replace("relationship_table", rel_temp_view)
+            sql_statement = sql_statement.replace("entity_table", ent_temp_view)
 
             reasoning = (
                 cleaned_response.split("<reasoning>")[1]
@@ -399,7 +401,7 @@ def generate_simple_sql(
 
             if source_documents_sql and ent_temp_view:
                 source_documents_sql = source_documents_sql.replace(
-                    "kg_entity", ent_temp_view
+                    "entity_table", ent_temp_view
                 )
 
             logger.debug(f"A3 source_documents_sql: {source_documents_sql}")

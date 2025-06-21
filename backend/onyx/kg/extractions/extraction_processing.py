@@ -511,7 +511,10 @@ def kg_extraction(
             classification_batch_list = []
             for unprocessed_document in unprocessed_document_batch:
                 # generate document batch for classifications
-                if batch_metadata[unprocessed_document.id].classification_enabled:
+                if (
+                    batch_metadata[unprocessed_document.id].classification_enabled
+                    and batch_metadata[unprocessed_document.id].deep_extraction
+                ):
                     classification_batch_list.append(unprocessed_document.id)
 
             document_classification_content_generator = (

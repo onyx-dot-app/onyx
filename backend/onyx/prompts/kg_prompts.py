@@ -374,7 +374,9 @@ Here are the entities you have identified earlier:
 
 Note that the notation for the entities is <ENTITY_TYPE>::<ENTITY_NAME>.
 
-Here are the options for the relationship types(!) between the entities you have identified earlier:
+Here are the options for the relationship types(!) between the entities you have identified earlier \
+as well as relationship types between the identified entities and other entities \
+not explicitly mentioned:
 {SEPARATOR_LINE}
 ---relationship_type_options---
 {SEPARATOR_LINE}
@@ -432,6 +434,13 @@ relationships.
    - if in doubt and there are multiple relationships between the same two entities, you can extract \
 all of those that may fit with the question.
    - be really thinking through the question which type of relationships should be extracted and which should not.
+
+Other important notes:
+ - For questions that really try to explore in general what a certain entity was involved in like 'what did Paul Smith do \
+in the last 3 months?', and Paul Smith has been extracted i.e. as an entity of type 'EMPLOYEE', then you need to extract \
+all of the possible relationships an empoyee Paul Smith could have.
+ - You are not forced to use all or any of the relationship types listed above. Really look at the question to \
+ determine which relationships are explicitly or implicitly referred to in the question.
 
 {SEPARATOR_LINE}
 
@@ -655,15 +664,15 @@ You are given an original SQL statement that returns a list of entities from a t
 an aggregation of entities from a table. Your task will be to \
 identify the source documents that are relevant to what the SQL statement is returning.
 
-The task is actually quite simple. There are two tables involved - kg_relationship and kg_entity. \
-kg_relationship was used to generate the original SQL statement. Again, returning entities \
-or aggregations of entities. The second table, kg_entity contains the entities and \
+The task is actually quite simple. There are two tables involved - relationship_table and entity_table. \
+relationship_table was used to generate the original SQL statement. Again, returning entities \
+or aggregations of entities. The second table, entity_table contains the entities and \
 the corresponding source_documents. All you need to do is to appropriately join the \
-kg_entity table on the entities that would be retrieved from the original SQL statement, \
-and then return the source_documents from the kg_entity table.
+entity_table table on the entities that would be retrieved from the original SQL statement, \
+and then return the source_documents from the entity_table table.
 
-For your orientation, the kg_relationship table has this structure:
- - Table name: kg_relationship
+For your orientation, the relationship_table table has this structure:
+ - Table name: relationship_table
  - Columns:
    - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
 It is of the form \
@@ -682,18 +691,18 @@ It is of the form \
 been removed. [example: ACCOUNT__has__CONCERN]
    - source_date (str): the 'event' date of the source document [example: 2021-01-01]
 
-The second table, kg_entity, has this structure:
- - Table name: kg_entity
+The second table, entity_table, has this structure:
+ - Table name: entity_table
  - Columns:
    - entity (str): The name of the ENTITY, which is unique in this table. source_entity and target_entity \
-in the kg_relationship table are the same as entity in this table.
+in the relationship_table table are the same as entity in this table.
    - source_document (str): the id of the document that contains the entity.
 
-Again, ultimately, your task is to join the kg_entity table on the entities that would be retrieved from the \
-original SQL statement, and then return the source_documents from the kg_entity table.
+Again, ultimately, your task is to join the entity_table table on the entities that would be retrieved from the \
+original SQL statement, and then return the source_documents from the entity_table table.
 
 The way to do that is to create a common table expression for the original SQL statement and join the \
-kg_entity table suitably on the entities.
+entity_table table suitably on the entities.
 
 Here is the *original* SQL statement:
 {SEPARATOR_LINE}
@@ -712,11 +721,11 @@ You are an expert in generating, understanding and analyzing SQL statements.
 You are given a SQL statement that returned an aggregation of entities in a table. \
 Your task will be to identify the source documents for the entities involved in \
 the answer. For example, should the original SQL statement be \
-'SELECT COUNT(entity) FROM kg_entity where entity_type = "ACCOUNT"' \
+'SELECT COUNT(entity) FROM entity_table where entity_type = "ACCOUNT"' \
 then you should return the source documents that contain the entities of type 'ACCOUNT'.
 
 The table has this structure:
- - Table name: kg_entity
+ - Table name: entity_table
  - Columns:
    - entity (str): The name of the ENTITY, combining the nature of the entity and the id of the entity. \
 It is of the form <entity_type>::<entity_name> [example: ACCOUNT::625482894].
@@ -755,7 +764,7 @@ You are an expert in generating a SQL statement that only uses ONE TABLE that ca
 between TWO ENTITIES. The table has the following structure:
 
 {SEPARATOR_LINE}
- - Table name: kg_relationship
+ - Table name: relationship_table
  - Columns:
    - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
 It is of the form \
@@ -816,7 +825,7 @@ the entities that were matched to them in the Knowledge Graph:
 
 --
 
-Identified relationships in query:
+Here are relationships that were identified as explicitly or implicitly referred to in the question:
 
 ---query_relationships---
 
@@ -893,6 +902,10 @@ updated (by him) last week. So this would likely be a UNION of multiple queries.
 - If you do joins consider the possibility that the second entity does not exist for all examples. \
 Therefore joins should generally be LEFT joins (or RIGHT joins) as appropriate. Think about which \
 entities you are interested in, and which ones provides attributes.
+Another important note:
+ - For questions that really try to explore what a certain entity was involved in like 'what did Paul Smith do \
+in the last 3 months?', and Paul Smith has been extracted ie as an entity of type 'EMPLOYEE', you will \
+want to consider all entities that Paul Smith may be related to that satisfy any potential other conditions.
 - Joins should always be made on entities, not source documents!
 - Try to be as efficient as possible.
 
@@ -942,7 +955,7 @@ You are an expert in generating a SQL statement that only uses ONE TABLE that ca
 and their attributes and other data. The table has the following structure:
 
 {SEPARATOR_LINE}
- - Table name: kg_entity
+ - Table name: entity_table
  - Columns:
    - entity (str): The name of the ENTITY, combining the nature of the entity and the id of the entity. \
 It is of the form <entity_type>::<entity_name> [example: ACCOUNT::625482894].
