@@ -3,7 +3,7 @@ import { AdminBooleanFormField } from "@/components/credentials/CredentialFields
 import { TabOption } from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
-import { TextFormField } from "@/components/Field";
+import { TextFormField, MultiSelectField } from "@/components/Field";
 import ListInput from "./ConnectorInput/ListInput";
 import FileInput from "./ConnectorInput/FileInput";
 import { ConfigurableSources } from "@/lib/types";
@@ -141,11 +141,11 @@ export const RenderField: FC<RenderFieldProps> = ({
   const disabled =
     typeof field.disabled === "function"
       ? field.disabled(currentCredential)
-      : (field.disabled ?? false);
+      : field.disabled ?? false;
   const initialValue =
     typeof field.initial === "function"
       ? field.initial(currentCredential)
-      : (field.initial ?? "");
+      : field.initial ?? "";
 
   // if initialValue exists, prepopulate the field with it
   useEffect(() => {
@@ -185,6 +185,20 @@ export const RenderField: FC<RenderFieldProps> = ({
           description={description}
           options={field.options || []}
           label={label}
+        />
+      ) : field.type === "multiselect" ? (
+        <MultiSelectField
+          name={field.name}
+          label={label}
+          subtext={description}
+          options={
+            field.options?.map((option: { value: string; name: string }) => ({
+              value: option.value,
+              label: option.name,
+            })) || []
+          }
+          selectedInitially={values[field.name] || field.default || []}
+          onChange={(selected) => setFieldValue(field.name, selected)}
         />
       ) : field.type === "number" ? (
         <NumberInput
