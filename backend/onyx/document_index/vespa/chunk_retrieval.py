@@ -11,6 +11,7 @@ import httpx
 from retry import retry
 
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
+from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -337,6 +338,9 @@ def query_vespa(
             else {}
         ),
     )
+
+    if VESPA_LANGUAGE_OVERRIDE:
+        params["language"] = VESPA_LANGUAGE_OVERRIDE
 
     try:
         with get_vespa_http_client() as http_client:
