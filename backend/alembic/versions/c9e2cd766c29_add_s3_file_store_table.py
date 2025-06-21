@@ -160,6 +160,7 @@ def _migrate_files_to_postgres() -> None:
     # only create external store if we have files to migrate. This line
     # makes it so we need to have S3/MinIO configured to run this migration.
     external_store = get_s3_file_store(db_session=session)
+    external_store.initialize()
 
     for i, file_id in enumerate(files_to_migrate, 1):
         print(f"Migrating file {i}/{total_files}: {file_id}")
