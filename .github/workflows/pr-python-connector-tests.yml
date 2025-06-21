@@ -49,6 +49,9 @@ env:
   SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
   SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
 
+  # Hubspot
+  HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
+
   # Airtable
   AIRTABLE_TEST_BASE_ID: ${{ secrets.AIRTABLE_TEST_BASE_ID }}
   AIRTABLE_TEST_TABLE_ID: ${{ secrets.AIRTABLE_TEST_TABLE_ID }}
