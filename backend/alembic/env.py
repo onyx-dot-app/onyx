@@ -21,7 +21,11 @@ from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql.schema import SchemaItem
 from onyx.configs.constants import SSL_CERT_FILE
-from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import (
+    MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA,
+    TENANT_ID_PREFIX,
+)
 from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
 from onyx.db.engine.sql_engine import SqlEngine
@@ -69,7 +73,69 @@ def include_object(
     return True
 
 
-def get_schema_options() -> tuple[str, bool, bool, bool]:
+def extract_tenant_number(tenant_id: str) -> int | None:
+    """
+    Extract the numeric part from a tenant ID for range filtering.
+
+    For tenant IDs like 'tenant_12345678-1234-1234-1234-123456789012',
+    this extracts the first 8 digits after the prefix as an integer.
+
+    Returns None if the tenant ID doesn't match the expected format.
+    """
+    if not tenant_id.startswith(TENANT_ID_PREFIX):
+        return None
+
+    # Remove the prefix
+    uuid_part = tenant_id[len(TENANT_ID_PREFIX) :]
+
+    # Extract the first 8 characters (should be hex digits)
+    if len(uuid_part) >= 8:
+        try:
+            # Convert first 8 hex digits to integer
+            return int(uuid_part[:8], 16)
+        except ValueError:
+            return None
+
+    return None
+
+
+def filter_tenants_by_range(
+    tenant_ids: list[str], start_range: int | None = None, end_range: int | None = None
+) -> list[str]:
+    """
+    Filter tenant IDs by numeric range based on the first 8 hex digits of their UUID.
+
+    Args:
+        tenant_ids: List of tenant IDs to filter
+        start_range: Minimum tenant number (inclusive)
+        end_range: Maximum tenant number (inclusive)
+
+    Returns:
+        Filtered list of tenant IDs
+    """
+    if start_range is None and end_range is None:
+        return tenant_ids
+
+    filtered_tenants = []
+    for tenant_id in tenant_ids:
+        tenant_num = extract_tenant_number(tenant_id)
+        if tenant_num is None:
+            # Include tenants that don't match the expected format
+            filtered_tenants.append(tenant_id)
+            continue
+
+        # Check if tenant number is within range
+        if start_range is not None and tenant_num < start_range:
+            continue
+        if end_range is not None and tenant_num > end_range:
+            continue
+
+        filtered_tenants.append(tenant_id)
+
+    return filtered_tenants
+
+
+def get_schema_options() -> tuple[str, bool, bool, bool, int | None, int | None]:
     x_args_raw = context.get_x_argument()
     x_args = {}
     for arg in x_args_raw:
@@ -85,6 +151,33 @@ def get_schema_options() -> tuple[str, bool, bool, bool]:
     # only applies to online migrations
     continue_on_error = x_args.get("continue", "false").lower() == "true"
 
+    # Tenant range filtering
+    tenant_range_start = None
+    tenant_range_end = None
+
+    if "tenant_range_start" in x_args:
+        try:
+            tenant_range_start = int(x_args["tenant_range_start"])
+        except ValueError:
+            raise ValueError(
+                f"Invalid tenant_range_start value: {x_args['tenant_range_start']}. Must be an integer."
+            )
+
+    if "tenant_range_end" in x_args:
+        try:
+            tenant_range_end = int(x_args["tenant_range_end"])
+        except ValueError:
+            raise ValueError(
+                f"Invalid tenant_range_end value: {x_args['tenant_range_end']}. Must be an integer."
+            )
+
+    # Validate range
+    if tenant_range_start is not None and tenant_range_end is not None:
+        if tenant_range_start > tenant_range_end:
+            raise ValueError(
+                f"tenant_range_start ({tenant_range_start}) cannot be greater than tenant_range_end ({tenant_range_end})"
+            )
+
     if (
         MULTI_TENANT
         and schema_name == POSTGRES_DEFAULT_SCHEMA
@@ -95,7 +188,14 @@ def get_schema_options() -> tuple[str, bool, bool, bool]:
             "Please specify a tenant-specific schema."
         )
 
-    return schema_name, create_schema, upgrade_all_tenants, continue_on_error
+    return (
+        schema_name,
+        create_schema,
+        upgrade_all_tenants,
+        continue_on_error,
+        tenant_range_start,
+        tenant_range_end,
+    )
 
 
 def do_run_migrations(
@@ -146,6 +246,8 @@ async def run_async_migrations() -> None:
         create_schema,
         upgrade_all_tenants,
         continue_on_error,
+        tenant_range_start,
+        tenant_range_end,
     ) = get_schema_options()
 
     # without init_engine, subsequent engine calls fail hard intentionally
@@ -167,9 +269,21 @@ async def run_async_migrations() -> None:
     if upgrade_all_tenants:
         tenant_schemas = get_all_tenant_ids()
 
+        filtered_tenant_schemas = filter_tenants_by_range(
+            tenant_schemas, tenant_range_start, tenant_range_end
+        )
+
+        if tenant_range_start is not None or tenant_range_end is not None:
+            logger.info(
+                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+            )
+            logger.info(
+                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+            )
+
         i_tenant = 0
-        num_tenants = len(tenant_schemas)
-        for schema in tenant_schemas:
+        num_tenants = len(filtered_tenant_schemas)
+        for schema in filtered_tenant_schemas:
             i_tenant += 1
             logger.info(
                 f"Migrating schema: index={i_tenant} num_tenants={num_tenants} schema={schema}"
@@ -221,7 +335,14 @@ def run_migrations_offline() -> None:
     # without init_engine, subsequent engine calls fail hard intentionally
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
-    schema_name, _, upgrade_all_tenants, continue_on_error = get_schema_options()
+    (
+        schema_name,
+        _,
+        upgrade_all_tenants,
+        continue_on_error,
+        tenant_range_start,
+        tenant_range_end,
+    ) = get_schema_options()
     url = build_connection_string()
 
     if upgrade_all_tenants:
@@ -238,7 +359,19 @@ def run_migrations_offline() -> None:
         tenant_schemas = get_all_tenant_ids()
         engine.sync_engine.dispose()
 
-        for schema in tenant_schemas:
+        filtered_tenant_schemas = filter_tenants_by_range(
+            tenant_schemas, tenant_range_start, tenant_range_end
+        )
+
+        if tenant_range_start is not None or tenant_range_end is not None:
+            logger.info(
+                f"Filtering tenants by range: start={tenant_range_start}, end={tenant_range_end}"
+            )
+            logger.info(
+                f"Total tenants: {len(tenant_schemas)}, Filtered tenants: {len(filtered_tenant_schemas)}"
+            )
+
+        for schema in filtered_tenant_schemas:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
