@@ -1,4 +1,3 @@
-import re
 from collections import defaultdict
 
 from onyx.configs.constants import OnyxCallTypes
@@ -18,6 +17,7 @@ from onyx.kg.models import (
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.models import KGEntityTypeClassificationInfo
+from onyx.kg.utils.formatting_utils import extract_email
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.kg.utils.formatting_utils import make_entity_id
@@ -41,7 +41,7 @@ def _update_implied_entities_relationships(
 
     for owner in owner_list or []:
 
-        if not is_email(owner):
+        if extract_email(owner) is None:
             converted_relationships_to_attributes[relationship_type].append(owner)
             continue
 
@@ -431,13 +431,6 @@ def prepare_llm_document_content(
         return KGDocumentClassificationPrompt(
             llm_prompt=None,
         )
-
-
-def is_email(email: str) -> bool:
-    """
-    Check if a string is a valid email address.
-    """
-    return re.match(r"[^@]+@[^@]+\.[^@]+", email) is not None
 
 
 def trackinfo_to_str(trackinfo: KGAttributeTrackInfo | None) -> str:
