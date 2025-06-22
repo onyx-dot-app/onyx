@@ -1,0 +1,10 @@
+previews:
+  generation: automatic
+
+services:
+  - type: compose
+    name: onyx-pr
+    dockerfilePath: deployment/docker_compose/docker-compose.railway.yml
+    env: docker
+    plan: standard-16             # 4 vCPU / 16 GB VM
+    previewEnv: true
