@@ -45,7 +45,6 @@ from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
 from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
-from onyx.kg.utils.extraction_utils import is_email
 from onyx.kg.utils.extraction_utils import (
     kg_document_entities_relationships_attribute_generation,
 )
@@ -54,6 +53,7 @@ from onyx.kg.utils.extraction_utils import prepare_llm_content_extraction
 from onyx.kg.utils.extraction_utils import prepare_llm_document_content
 from onyx.kg.utils.extraction_utils import trackinfo_to_str
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
+from onyx.kg.utils.formatting_utils import extract_email
 from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import get_entity_type
@@ -1045,14 +1045,14 @@ def _kg_chunk_batch_extraction(
         if chunk.metadata:
             for attribute, value in chunk.metadata.items():
                 if isinstance(value, str):
-                    if is_email(value):
+                    if email := extract_email(value):
                         (
                             implied_attribute_entities,
                             implied_attribute_relationships,
                             attribute_company_participant_emails,
                             attribute_account_participant_emails,
                         ) = kg_process_person(
-                            person=value,
+                            person=email,
                             core_document_id_name=kg_document_extractions.kg_core_document_id_name,
                             implied_entities=implied_attribute_entities,
                             implied_relationships=implied_attribute_relationships,
@@ -1069,14 +1069,14 @@ def _kg_chunk_batch_extraction(
                 elif isinstance(value, list):
                     email_attribute = False
                     for item in value:
-                        if is_email(item):
+                        if email := extract_email(item):
                             (
                                 implied_attribute_entities,
                                 implied_attribute_relationships,
                                 attribute_company_participant_emails,
                                 attribute_account_participant_emails,
                             ) = kg_process_person(
-                                person=item,
+                                person=email,
                                 core_document_id_name=kg_document_extractions.kg_core_document_id_name,
                                 implied_entities=implied_attribute_entities,
                                 implied_relationships=implied_attribute_relationships,
