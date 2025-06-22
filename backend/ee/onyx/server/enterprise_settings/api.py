@@ -26,7 +26,7 @@ from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user_with_expired_token
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.utils import BasicAuthenticationError

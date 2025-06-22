@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 
 from onyx.configs.constants import DEFAULT_BOOST
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from tests.integration.common_utils.reset import downgrade_postgres
 from tests.integration.common_utils.reset import upgrade_postgres
 

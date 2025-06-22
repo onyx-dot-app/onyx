@@ -17,11 +17,11 @@ from onyx.configs.app_configs import OAUTH_SLACK_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.db.credentials import create_credential
-from onyx.db.engine import get_current_tenant_id
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
+from shared_configs.contextvars import get_current_tenant_id
 
 
 class SlackOAuth:

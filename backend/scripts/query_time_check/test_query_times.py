@@ -9,7 +9,7 @@ from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionTyp
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import DOC_EMBEDDING_DIM
 from onyx.context.search.models import IndexFilters
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import VespaIndex

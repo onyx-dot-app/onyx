@@ -24,7 +24,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.llm.factory import get_default_llms
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool

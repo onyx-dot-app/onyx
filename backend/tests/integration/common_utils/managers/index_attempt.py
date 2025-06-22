@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 import requests
 
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.enums import IndexModelStatus
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus

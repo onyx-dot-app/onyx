@@ -12,10 +12,10 @@ from ee.onyx.server.oauth.slack import SlackOAuth
 from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import DocumentSource
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 

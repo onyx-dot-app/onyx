@@ -16,7 +16,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.models import ConnectorCredentialPair

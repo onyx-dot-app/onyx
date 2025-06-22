@@ -29,7 +29,7 @@ from onyx.configs.kg_configs import KG_SQL_GENERATION_TIMEOUT_OVERRIDE
 from onyx.configs.kg_configs import KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX
 from onyx.configs.kg_configs import KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX
 from onyx.configs.kg_configs import KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX
-from onyx.db.engine import get_db_readonly_user_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_db_readonly_user_session_with_current_tenant
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import ENTITY_SOURCE_DETECTION_PROMPT

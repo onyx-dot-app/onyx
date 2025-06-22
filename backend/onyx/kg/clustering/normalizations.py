@@ -18,7 +18,7 @@ from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
 from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS
 from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_THRESHOLD
 from onyx.configs.kg_configs import KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import KGEntity
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
 from onyx.kg.models import NormalizedEntities

@@ -32,7 +32,7 @@ from onyx.configs.onyxbot_configs import (
     DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS,
 )
 from onyx.connectors.slack.utils import SlackTextCleaner
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms

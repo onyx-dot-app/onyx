@@ -38,10 +38,10 @@ from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.retrieval.search_runner import (
     download_nltk_data,
 )
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bot

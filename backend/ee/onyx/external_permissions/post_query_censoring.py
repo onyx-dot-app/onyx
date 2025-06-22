@@ -3,7 +3,7 @@ from ee.onyx.external_permissions.sync_params import get_all_censoring_enabled_s
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.pipeline import InferenceChunk
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 

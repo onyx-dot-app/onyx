@@ -3,7 +3,7 @@ from typing import cast
 
 from redis.client import Redis
 
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KeyValueStore
 from onyx.key_value_store.interface import KvKeyNotFoundError

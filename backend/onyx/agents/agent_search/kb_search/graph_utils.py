@@ -19,7 +19,7 @@ from onyx.chat.models import SubQuestionPiece
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.db.document import get_kg_doc_info_for_entity_name
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import get_document_id_for_entity
 from onyx.db.entities import get_entity_name
 from onyx.db.entity_type import get_entity_types

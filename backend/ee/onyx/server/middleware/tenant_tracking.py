@@ -11,7 +11,7 @@ from ee.onyx.auth.users import decode_anonymous_user_jwt_token
 from onyx.auth.api_key import extract_tenant_from_api_key_header
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
-from onyx.db.engine import is_valid_schema_name
+from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA

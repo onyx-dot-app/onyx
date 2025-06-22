@@ -11,7 +11,7 @@ from onyx.context.search.models import SavedSearchSettings
 from onyx.context.search.models import SearchSettingsCreationRequest
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import User

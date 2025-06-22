@@ -16,7 +16,7 @@ from onyx.db.document import get_skipped_kg_documents
 from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
 from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entities import upsert_staging_entity
 from onyx.db.entity_type import get_entity_types

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.entity_type import get_configured_entity_types
 from onyx.db.entity_type import update_entity_types_and_related_connectors__commit
 from onyx.db.kg_config import disable_kg

@@ -10,7 +10,7 @@ from ee.onyx.external_permissions.salesforce.utils import (
 )
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.context.search.models import InferenceChunk
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

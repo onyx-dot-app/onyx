@@ -56,7 +56,7 @@ from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import Persona
 from onyx.llm.chat_llm import LLMRateLimitError

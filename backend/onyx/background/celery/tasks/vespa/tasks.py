@@ -35,7 +35,7 @@ from onyx.db.document_set import fetch_document_sets
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.document_set import get_document_set_by_id
 from onyx.db.document_set import mark_document_set_as_synced
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import DocumentSet

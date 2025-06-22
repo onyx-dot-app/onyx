@@ -10,7 +10,7 @@ from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import InputType
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT

@@ -25,7 +25,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.configs.kg_configs import KG_ENTITY_EXTRACTION_TIMEOUT
 from onyx.configs.kg_configs import KG_RELATIONSHIP_EXTRACTION_TIMEOUT
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import get_user_view_names
 from onyx.db.relationships import get_allowed_relationship_type_pairs

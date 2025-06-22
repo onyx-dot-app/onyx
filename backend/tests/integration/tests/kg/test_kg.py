@@ -8,7 +8,7 @@ import requests
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import set_kg_config_settings
 from onyx.db.models import Connector

@@ -16,7 +16,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import QueryHistoryType
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.tasks import delete_task_with_id
 from onyx.db.tasks import mark_task_as_finished_with_id
 from onyx.db.tasks import mark_task_as_started_with_id

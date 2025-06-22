@@ -7,7 +7,7 @@ import pytest
 
 from onyx.connectors.models import InputType
 from onyx.db.document import get_documents_for_cc_pair
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

@@ -25,7 +25,7 @@ from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RerankMetricsContainer
 from onyx.context.search.models import SearchQuery
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )

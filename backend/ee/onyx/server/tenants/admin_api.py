@@ -10,7 +10,7 @@ from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from onyx.auth.users import auth_backend
 from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import User
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.utils.logger import setup_logger
 

@@ -19,7 +19,7 @@ from onyx.configs.app_configs import REDIS_HOST
 from onyx.configs.app_configs import REDIS_PASSWORD
 from onyx.configs.app_configs import REDIS_PORT
 from onyx.configs.app_configs import REDIS_SSL
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex

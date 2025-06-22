@@ -12,7 +12,7 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.file_processing.html_utils import web_html_cleanup

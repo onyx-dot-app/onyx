@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.input_prompt import disable_input_prompt_for_user
 from onyx.db.input_prompt import fetch_input_prompt_by_id
 from onyx.db.input_prompt import fetch_input_prompts_by_user

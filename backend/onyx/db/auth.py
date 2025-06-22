@@ -17,8 +17,8 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
 from onyx.db.api_key import get_api_key_email_pattern
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_context_manager
+from onyx.db.engine.async_sql_engine import get_async_session
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User

@@ -4,7 +4,7 @@ import sys
 import psycopg2
 from sqlalchemy.orm import Session
 
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 
 # makes it so `PYTHONPATH=.` is not required when running this script
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

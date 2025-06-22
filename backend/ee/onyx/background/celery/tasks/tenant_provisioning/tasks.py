@@ -19,7 +19,7 @@ from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.models import AvailableTenant
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT

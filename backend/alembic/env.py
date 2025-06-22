@@ -1,12 +1,12 @@
 from typing import Any, Literal
-from onyx.db.engine import get_iam_auth_token
+from onyx.db.engine.iam_auth import get_iam_auth_token
 from onyx.configs.app_configs import USE_IAM_AUTH
 from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.db.engine import build_connection_string
-from onyx.db.engine import get_all_tenant_ids
+from onyx.db.engine.sql_engine import build_connection_string
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text
@@ -24,7 +24,7 @@ from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)

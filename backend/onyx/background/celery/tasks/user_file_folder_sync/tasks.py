@@ -21,7 +21,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_with_user_files,
 )
 from onyx.db.document import get_document
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair

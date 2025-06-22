@@ -6,7 +6,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 
 from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Credential
 from onyx.redis.redis_pool import get_redis_client
 

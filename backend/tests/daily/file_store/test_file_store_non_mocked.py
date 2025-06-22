@@ -18,8 +18,8 @@ from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_context_manager
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

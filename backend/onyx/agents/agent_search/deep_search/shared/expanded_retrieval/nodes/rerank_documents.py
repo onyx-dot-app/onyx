@@ -24,7 +24,7 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.postprocessing.postprocessing import rerank_sections
 from onyx.context.search.postprocessing.postprocessing import should_rerank
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
 from onyx.utils.timing import log_function_time
 

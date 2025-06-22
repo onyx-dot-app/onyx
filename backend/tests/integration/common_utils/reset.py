@@ -11,11 +11,11 @@ from onyx.configs.app_configs import POSTGRES_HOST
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
-from onyx.db.engine import build_connection_string
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import SYNC_DB_API
+from onyx.db.engine.sql_engine import build_connection_string
+from onyx.db.engine.sql_engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import SYNC_DB_API
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.document_index_utils import get_multipass_config
