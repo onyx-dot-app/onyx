@@ -10,7 +10,6 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.orm import sessionmaker
 
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -100,14 +99,6 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
                 cparams["ssl"] = ssl_context
 
     return _ASYNC_ENGINE
-
-
-engine = get_sqlalchemy_async_engine()
-AsyncSessionLocal = sessionmaker(  # type: ignore
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
 
 
 async def get_async_session(
