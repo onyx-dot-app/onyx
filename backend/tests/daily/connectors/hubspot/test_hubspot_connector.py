@@ -7,6 +7,7 @@ import pytest
 
 from onyx.connectors.hubspot.connector import AVAILABLE_OBJECT_TYPES
 from onyx.connectors.hubspot.connector import HubSpotConnector
+from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 
 
@@ -22,6 +23,20 @@ class TestHubSpotConnector:
     def credentials(self) -> dict[str, Any]:
         """Provide test credentials."""
         return {"hubspot_access_token": os.environ["HUBSPOT_ACCESS_TOKEN"]}
+
+    def test_credentials_properties_raise_exception_when_none(self) -> None:
+        """Test that access_token and portal_id properties raise exceptions when not set."""
+        connector = HubSpotConnector()
+
+        # access_token should raise exception when not set
+        with pytest.raises(ConnectorMissingCredentialError) as exc_info:
+            _ = connector.access_token
+        assert "HubSpot access token not set" in str(exc_info.value)
+
+        # portal_id should raise exception when not set
+        with pytest.raises(ConnectorMissingCredentialError) as exc_info:
+            _ = connector.portal_id
+        assert "HubSpot portal ID not set" in str(exc_info.value)
 
     def test_load_credentials(
         self, connector: HubSpotConnector, credentials: dict[str, Any]
@@ -477,3 +492,29 @@ class TestHubSpotConnector:
         connector_types.add("contacts")
         # The connector should still have the original types since we made a copy
         # Note: This test verifies our implementation makes a copy in __init__
+
+    def test_url_generation(self) -> None:
+        """Test that URLs are generated correctly for different object types."""
+        connector = HubSpotConnector()
+        connector.portal_id = "12345"  # Mock portal ID
+
+        # Test URL generation for each object type
+        ticket_url = connector._get_object_url("tickets", "67890")
+        expected_ticket_url = "https://app.hubspot.com/contacts/12345/record/0-5/67890"
+        assert ticket_url == expected_ticket_url
+
+        company_url = connector._get_object_url("companies", "11111")
+        expected_company_url = "https://app.hubspot.com/contacts/12345/record/0-2/11111"
+        assert company_url == expected_company_url
+
+        deal_url = connector._get_object_url("deals", "22222")
+        expected_deal_url = "https://app.hubspot.com/contacts/12345/record/0-3/22222"
+        assert deal_url == expected_deal_url
+
+        contact_url = connector._get_object_url("contacts", "33333")
+        expected_contact_url = "https://app.hubspot.com/contacts/12345/record/0-1/33333"
+        assert contact_url == expected_contact_url
+
+        note_url = connector._get_object_url("notes", "44444")
+        expected_note_url = "https://app.hubspot.com/contacts/12345/objects/0-4/44444"
+        assert note_url == expected_note_url

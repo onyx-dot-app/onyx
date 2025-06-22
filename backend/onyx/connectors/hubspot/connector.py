@@ -36,8 +36,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
         object_types: list[str] | None = None,
     ) -> None:
         self.batch_size = batch_size
-        self.access_token = access_token
-        self.portal_id: str | None = None
+        self._access_token = access_token
+        self._portal_id: str | None = None
 
         # Set object types to fetch, default to all available types
         if object_types is None:
@@ -52,6 +52,30 @@ class HubSpotConnector(LoadConnector, PollConnector):
                     f"Invalid object types: {invalid_types}. Available types: {AVAILABLE_OBJECT_TYPES}"
                 )
             self.object_types = object_types_set.copy()
+
+    @property
+    def access_token(self) -> str:
+        """Get the access token, raising an exception if not set."""
+        if self._access_token is None:
+            raise ConnectorMissingCredentialError("HubSpot access token not set")
+        return self._access_token
+
+    @access_token.setter
+    def access_token(self, value: str | None) -> None:
+        """Set the access token."""
+        self._access_token = value
+
+    @property
+    def portal_id(self) -> str:
+        """Get the portal ID, raising an exception if not set."""
+        if self._portal_id is None:
+            raise ConnectorMissingCredentialError("HubSpot portal ID not set")
+        return self._portal_id
+
+    @portal_id.setter
+    def portal_id(self, value: str | None) -> None:
+        """Set the portal ID."""
+        self._portal_id = value
 
     def _clean_html_content(self, html_content: str) -> str:
         """Clean HTML content and extract raw text"""
@@ -88,23 +112,28 @@ class HubSpotConnector(LoadConnector, PollConnector):
         return str(data["portalId"])
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self.access_token = credentials["hubspot_access_token"]
-
-        if self.access_token:
-            self.portal_id = self.get_portal_id()
-
+        self.access_token = cast(str, credentials["hubspot_access_token"])
+        self.portal_id = self.get_portal_id()
         return None
 
     def _get_object_url(self, object_type: str, object_id: str) -> str:
         """Generate HubSpot URL for different object types"""
         if object_type == "tickets":
-            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/ticket/{object_id}"
+            return (
+                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-5/{object_id}"
+            )
         elif object_type == "companies":
-            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/company/{object_id}"
+            return (
+                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-2/{object_id}"
+            )
         elif object_type == "deals":
-            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/deal/{object_id}"
+            return (
+                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-3/{object_id}"
+            )
         elif object_type == "contacts":
-            return f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/contact/{object_id}"
+            return (
+                f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/record/0-1/{object_id}"
+            )
         elif object_type == "notes":
             return (
                 f"{HUBSPOT_BASE_URL}/contacts/{self.portal_id}/objects/0-4/{object_id}"
@@ -328,9 +357,6 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def _process_tickets(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        if self.access_token is None:
-            raise ConnectorMissingCredentialError("HubSpot")
-
         api_client = HubSpot(access_token=self.access_token)
         all_tickets = api_client.crm.tickets.get_all(
             properties=[
@@ -432,9 +458,6 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def _process_companies(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        if self.access_token is None:
-            raise ConnectorMissingCredentialError("HubSpot")
-
         api_client = HubSpot(access_token=self.access_token)
         all_companies = api_client.crm.companies.get_all(
             properties=[
@@ -558,9 +581,6 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def _process_deals(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        if self.access_token is None:
-            raise ConnectorMissingCredentialError("HubSpot")
-
         api_client = HubSpot(access_token=self.access_token)
         all_deals = api_client.crm.deals.get_all(
             properties=[
@@ -682,9 +702,6 @@ class HubSpotConnector(LoadConnector, PollConnector):
     def _process_contacts(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        if self.access_token is None:
-            raise ConnectorMissingCredentialError("HubSpot")
-
         api_client = HubSpot(access_token=self.access_token)
         all_contacts = api_client.crm.contacts.get_all(
             properties=[
