@@ -1,6 +1,7 @@
 {
     "version": "2.0.0",
     "tasks": [
+    /*
         {
             "type": "austin",
             "label": "Profile celery beat",
@@ -20,6 +21,7 @@
               "--loglevel=INFO"
             ]
         },
+     */
         {
             "type": "shell",
             "label": "Generate Onyx OpenAPI Python client",

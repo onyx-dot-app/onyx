@@ -1,6 +1,7 @@
 {
   "extends": "next/core-web-vitals",
-  "plugins": ["unused-imports"],
+  "plugins": ["unused-imports", "@typescript-eslint"],
+  "parser": "@typescript-eslint/parser",
   "rules": {
     "@next/next/no-img-element": "off",
     "react-hooks/exhaustive-deps": "off",

@@ -26,6 +26,7 @@ COPY . .
 
 # Install dependencies
 RUN npm ci
+RUN npx orval --config orval.config.js
 
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true

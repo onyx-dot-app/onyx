@@ -354,7 +354,7 @@ class FailedConnectorIndexingStatus(BaseModel):
 class ConnectorStatus(BaseModel):
     """
     Represents the status of a connector,
-    including indexing status elated information
+    including indexing status related information
     """
 
     cc_pair_id: int

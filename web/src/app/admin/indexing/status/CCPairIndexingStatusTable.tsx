@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
-  ConnectorIndexingStatus,
   ConnectorSummary,
   GroupedConnectorSummaries,
   ValidSources,
@@ -42,6 +41,7 @@ import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types";
 import { FilterComponent, FilterOptions } from "./FilterComponent";
+import { ConnectorIndexingStatus } from "@/lib/generated/onyx-api/model";
 
 function SummaryRow({
   source,
@@ -122,7 +122,7 @@ function ConnectorRow({
   invisible,
   isEditable,
 }: {
-  ccPairsIndexingStatus: ConnectorIndexingStatus<any, any>;
+  ccPairsIndexingStatus: ConnectorIndexingStatus;
   invisible?: boolean;
   isEditable: boolean;
 }) {
@@ -182,7 +182,9 @@ border border-border dark:border-neutral-700
               icon={FiRefreshCw}
             >
               Inherited from{" "}
-              {getSourceDisplayName(ccPairsIndexingStatus.connector.source)}
+              {getSourceDisplayName(
+                ccPairsIndexingStatus.connector.source as ValidSources
+              )}
             </Badge>
           ) : (
             <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
@@ -217,8 +219,8 @@ export function CCPairIndexingStatusTable({
   ccPairsIndexingStatuses,
   editableCcPairsIndexingStatuses,
 }: {
-  ccPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
-  editableCcPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
+  ccPairsIndexingStatuses: ConnectorIndexingStatus[];
+  editableCcPairsIndexingStatuses: ConnectorIndexingStatus[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -258,12 +260,12 @@ export function CCPairIndexingStatusTable({
     groupSummaries,
     filteredGroupedStatuses,
   } = useMemo(() => {
-    const grouped: Record<ValidSources, ConnectorIndexingStatus<any, any>[]> =
-      {} as Record<ValidSources, ConnectorIndexingStatus<any, any>[]>;
+    const grouped: Record<ValidSources, ConnectorIndexingStatus[]> =
+      {} as Record<ValidSources, ConnectorIndexingStatus[]>;
 
     // First, add editable connectors
     editableCcPairsIndexingStatuses.forEach((status) => {
-      const source = status.connector.source;
+      const source = status.connector.source as ValidSources;
       if (!grouped[source]) {
         grouped[source] = [];
       }
@@ -272,7 +274,7 @@ export function CCPairIndexingStatusTable({
 
     // Then, add non-editable connectors
     ccPairsIndexingStatuses.forEach((status) => {
-      const source = status.connector.source;
+      const source = status.connector.source as ValidSources;
       if (!grouped[source]) {
         grouped[source] = [];
       }
@@ -310,10 +312,8 @@ export function CCPairIndexingStatusTable({
     });
 
     // Apply filters to create filtered grouped statuses
-    const filteredGrouped: Record<
-      ValidSources,
-      ConnectorIndexingStatus<any, any>[]
-    > = {} as Record<ValidSources, ConnectorIndexingStatus<any, any>[]>;
+    const filteredGrouped: Record<ValidSources, ConnectorIndexingStatus[]> =
+      {} as Record<ValidSources, ConnectorIndexingStatus[]>;
 
     sorted.forEach((source) => {
       const statuses = grouped[source];
@@ -495,10 +495,9 @@ export function CCPairIndexingStatusTable({
                 },
                 refresh_freq: 86400,
                 prune_freq: null,
-                indexing_start: new Date("2023-07-01T12:00:00Z"),
+                indexing_start: new Date("2023-07-01T12:00:00Z").toString(),
                 id: 1,
                 credential_ids: [],
-                access_type: "public",
                 time_created: "2023-07-01T12:00:00Z",
                 time_updated: "2023-07-01T12:00:00Z",
               },
@@ -520,6 +519,8 @@ export function CCPairIndexingStatusTable({
               latest_index_attempt: null,
               groups: [], // Add this line
               in_repeated_error_state: false,
+              owner: "",
+              in_progress: false,
             }}
             isEditable={false}
           />

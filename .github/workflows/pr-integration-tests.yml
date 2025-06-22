@@ -52,7 +52,7 @@ jobs:
         env:
           PYTHONPATH: "."
         run: |
-          python scripts/onyx_openapi_schema.py --filename generated/openapi.json
+          python scripts/onyx_openapi_schema.py -f generated/openapi.json
 
       - name: Generate OpenAPI Python client
         working-directory: ./backend
