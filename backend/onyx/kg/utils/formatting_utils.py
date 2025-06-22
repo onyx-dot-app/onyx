@@ -184,7 +184,7 @@ def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGP
     else:
         # TODO: maybe store a list of domains for each account and use that to match
         # right now, gmail and other random domains are being converted into accounts
-        company = company_domain.capitalize()
+        company = company_domain.title()
 
     return KGPerson(name=name, company=company, employee=employee)
 
