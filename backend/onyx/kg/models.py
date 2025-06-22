@@ -44,18 +44,36 @@ class KGAttributeTrackInfo(BaseModel):
     values: set[str] | None
 
 
+class KGAttributeEntityOption(str, Enum):
+    FROM_EMAIL = "from_email"  # use email to determine type (ACCOUNT or EMPLOYEE)
+
+
+class KGAttributeImplicationProperty(BaseModel):
+    # type of implied entity to create
+    # if str, will create an implied entity of that type
+    # if KGAttributeEntityOption, will determine the type based on the option
+    implied_entity_type: str | KGAttributeEntityOption
+    # name of the implied relationship to create (from implied entity to this entity)
+    implied_relationship_name: str
+
+
+class KGAttributeProperty(BaseModel):
+    # name of attribute to map metadata to
+    name: str
+    # whether to keep this attribute in the entity
+    keep: bool
+    # properties for creating implied entities and relations from this metadata
+    implication_property: KGAttributeImplicationProperty | None = None
+
+
 class KGEntityTypeClassificationInfo(BaseModel):
     extraction: bool
     description: str
 
 
 class KGEntityTypeAttributes(BaseModel):
-    # mapping of metadata keys to their corresponding attribute names
-    # there are several special attributes that you can map to:
-    # - key: used to populate the entity_key field of the kg entity
-    # - parent: used to populate the parent_key field of the kg entity
-    # - subtype: special attribute that can be filtered for
-    metadata_attributes: dict[str, str] = {}
+    # information on how to use the metadata to extract attributes, implied entities, and relations
+    metadata_attributes: dict[str, KGAttributeProperty] = {}
     # a metadata key: value pair to match for to differentiate entities from the same source
     entity_filter_attributes: dict[str, Any] = {}
     # mapping of classification names to their corresponding classification info

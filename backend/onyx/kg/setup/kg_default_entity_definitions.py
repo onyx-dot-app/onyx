@@ -6,6 +6,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.entity_type import KGEntityType
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import validate_kg_settings
+from onyx.kg.models import KGAttributeEntityOption
+from onyx.kg.models import KGAttributeImplicationProperty
+from onyx.kg.models import KGAttributeProperty
 from onyx.kg.models import KGEntityTypeAttributes
 from onyx.kg.models import KGEntityTypeClassificationInfo
 from onyx.kg.models import KGEntityTypeDefinition
@@ -18,11 +21,22 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             description="A formal Linear ticket about a product issue or improvement request.",
             attributes=KGEntityTypeAttributes(
                 metadata_attributes={
-                    "team": "team",
-                    "state": "state",
-                    "priority": "priority",
-                    "created_at": "created_at",
-                    "completed_at": "completed_at",
+                    "team": KGAttributeProperty(name="team", keep=True),
+                    "state": KGAttributeProperty(name="state", keep=True),
+                    "priority": KGAttributeProperty(name="priority", keep=True),
+                    "estimate": KGAttributeProperty(name="estimate", keep=True),
+                    "created_at": KGAttributeProperty(name="created_at", keep=True),
+                    "started_at": KGAttributeProperty(name="started_at", keep=True),
+                    "completed_at": KGAttributeProperty(name="completed_at", keep=True),
+                    "due_date": KGAttributeProperty(name="due_date", keep=True),
+                    "assignee": KGAttributeProperty(
+                        name="assignee",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_assignee_of",
+                        ),
+                    ),
                 },
             ),
             grounding=KGGroundingType.GROUNDED,
@@ -34,14 +48,35 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             ),
             attributes=KGEntityTypeAttributes(
                 metadata_attributes={
-                    "issuetype": "subtype",
-                    "key": "key",
-                    "parent": "parent",
-                    "status": "status",
-                    "priority": "priority",
-                    "project_name": "project",
-                    "created": "created_at",
-                    "updated": "updated",
+                    "issuetype": KGAttributeProperty(name="subtype", keep=True),
+                    "status": KGAttributeProperty(name="status", keep=True),
+                    "priority": KGAttributeProperty(name="priority", keep=True),
+                    "project_name": KGAttributeProperty(name="project", keep=True),
+                    "created": KGAttributeProperty(name="created_at", keep=True),
+                    "updated": KGAttributeProperty(name="updated_at", keep=True),
+                    "resolution_date": KGAttributeProperty(
+                        name="completed_at", keep=True
+                    ),
+                    "duedate": KGAttributeProperty(name="due_date", keep=True),
+                    "reporter_email": KGAttributeProperty(
+                        name="creator",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_creator_of",
+                        ),
+                    ),
+                    "assignee_email": KGAttributeProperty(
+                        name="assignee",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_assignee_of",
+                        ),
+                    ),
+                    # not using implication property as that only captures 1 depth
+                    "key": KGAttributeProperty(name="key", keep=True),
+                    "parent": KGAttributeProperty(name="parent", keep=True),
                 },
             ),
             grounding=KGGroundingType.GROUNDED,
@@ -51,16 +86,34 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             description="A formal engineering request to merge proposed changes into the codebase.",
             attributes=KGEntityTypeAttributes(
                 metadata_attributes={
-                    "repo": "repository",
-                    "state": "state",
-                    "num_commits": "num_commits",
-                    "num_files_changed": "num_files_changed",
-                    "labels": "labels",
-                    "merged": "merged",
-                    "merged_at": "merged_at",
-                    "closed_at": "closed_at",
-                    "created_at": "created_at",
-                    "updated_at": "updated_at",
+                    "repo": KGAttributeProperty(name="repository", keep=True),
+                    "state": KGAttributeProperty(name="state", keep=True),
+                    "num_commits": KGAttributeProperty(name="num_commits", keep=True),
+                    "num_files_changed": KGAttributeProperty(
+                        name="num_files_changed", keep=True
+                    ),
+                    "labels": KGAttributeProperty(name="labels", keep=True),
+                    "merged": KGAttributeProperty(name="merged", keep=True),
+                    "merged_at": KGAttributeProperty(name="merged_at", keep=True),
+                    "closed_at": KGAttributeProperty(name="closed_at", keep=True),
+                    "created_at": KGAttributeProperty(name="created_at", keep=True),
+                    "updated_at": KGAttributeProperty(name="updated_at", keep=True),
+                    "user": KGAttributeProperty(
+                        name="creator",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_creator_of",
+                        ),
+                    ),
+                    "assignees": KGAttributeProperty(
+                        name="assignees",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_assignee_of",
+                        ),
+                    ),
                 },
                 entity_filter_attributes={"object_type": "PullRequest"},
             ),
@@ -71,12 +124,28 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             description="A formal engineering ticket about an issue, idea, inquiry, or task.",
             attributes=KGEntityTypeAttributes(
                 metadata_attributes={
-                    "repo": "repository",
-                    "state": "state",
-                    "labels": "labels",
-                    "closed_at": "closed_at",
-                    "created_at": "created_at",
-                    "updated_at": "updated_at",
+                    "repo": KGAttributeProperty(name="repository", keep=True),
+                    "state": KGAttributeProperty(name="state", keep=True),
+                    "labels": KGAttributeProperty(name="labels", keep=True),
+                    "closed_at": KGAttributeProperty(name="closed_at", keep=True),
+                    "created_at": KGAttributeProperty(name="created_at", keep=True),
+                    "updated_at": KGAttributeProperty(name="updated_at", keep=True),
+                    "user": KGAttributeProperty(
+                        name="creator",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_creator_of",
+                        ),
+                    ),
+                    "assignees": KGAttributeProperty(
+                        name="assignees",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_assignee_of",
+                        ),
+                    ),
                 },
                 entity_filter_attributes={"object_type": "Issue"},
             ),
@@ -116,27 +185,6 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             grounding=KGGroundingType.GROUNDED,
             grounded_source_name=DocumentSource.FIREFLIES,
         ),
-        "GONG": KGEntityTypeDefinition(
-            description=(
-                f"A phone call transcript between us ({vendor_name}) "
-                "and another account or individuals, or an internal meeting."
-            ),
-            attributes=KGEntityTypeAttributes(),
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.GONG,
-        ),
-        "GOOGLE_DRIVE": KGEntityTypeDefinition(
-            description="A Google Drive document.",
-            attributes=KGEntityTypeAttributes(),
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.GOOGLE_DRIVE,
-        ),
-        "GMAIL": KGEntityTypeDefinition(
-            description="An email.",
-            attributes=KGEntityTypeAttributes(),
-            grounding=KGGroundingType.GROUNDED,
-            grounded_source_name=DocumentSource.GMAIL,
-        ),
         "ACCOUNT": KGEntityTypeDefinition(
             description=(
                 "A company that was, is, or potentially could be a customer of the vendor "
@@ -152,17 +200,31 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
             description="A sales opportunity.",
             attributes=KGEntityTypeAttributes(
                 metadata_attributes={
-                    "name": "name",
-                    "stage_name": "stage",
-                    "type": "type",
-                    "amount": "amount",
-                    "fiscal_year": "fiscal_year",
-                    "fiscal_quarter": "fiscal_quarter",
-                    "is_closed": "is_closed",
-                    "close_date": "close_date",
-                    "probability": "probability",
-                    "created_date": "created_at",
-                    "last_modified_date": "updated_at",
+                    "name": KGAttributeProperty(name="name", keep=True),
+                    "stage_name": KGAttributeProperty(name="stage", keep=True),
+                    "type": KGAttributeProperty(name="type", keep=True),
+                    "amount": KGAttributeProperty(name="amount", keep=True),
+                    "fiscal_year": KGAttributeProperty(name="fiscal_year", keep=True),
+                    "fiscal_quarter": KGAttributeProperty(
+                        name="fiscal_quarter", keep=True
+                    ),
+                    "is_closed": KGAttributeProperty(name="is_closed", keep=True),
+                    "close_date": KGAttributeProperty(name="close_date", keep=True),
+                    "probability": KGAttributeProperty(
+                        name="close_probability", keep=True
+                    ),
+                    "created_date": KGAttributeProperty(name="created_at", keep=True),
+                    "last_modified_date": KGAttributeProperty(
+                        name="updated_at", keep=True
+                    ),
+                    "account": KGAttributeProperty(
+                        name="account",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type="ACCOUNT",
+                            implied_relationship_name="is_account_of",
+                        ),
+                    ),
                 },
                 entity_filter_attributes={"object_type": "Opportunity"},
             ),
