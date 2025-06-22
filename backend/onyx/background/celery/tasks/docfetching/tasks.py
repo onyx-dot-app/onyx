@@ -32,7 +32,7 @@ from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.index_attempt import transition_attempt_to_in_progress
-from onyx.storage.document_batch_storage import get_document_batch_storage
+from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
