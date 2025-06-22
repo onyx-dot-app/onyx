@@ -329,6 +329,10 @@ def _run_indexing(
             ),
             search_settings_status=index_attempt_start.search_settings.status,
             doc_extraction_completed=False,
+            batches_total=0,
+            is_batch_processed=[],
+            total_failures=0,
+            net_doc_change=0,
         )
 
         last_successful_index_poll_range_end = (

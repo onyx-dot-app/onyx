@@ -218,7 +218,7 @@ const collections = (
                   <div className="ml-1">Document Processing</div>
                 </div>
               ),
-              link: "/admin/configuration/docprocessing",
+              link: "/admin/configuration/docfetching",
             },
             ...(kgExposed
               ? [

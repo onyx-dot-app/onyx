@@ -66,7 +66,7 @@ POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
-POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME = "celery_worker_docprocessing"
+POSTGRES_CELERY_WORKER_docfetching_APP_NAME = "celery_worker_docfetching"
 POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_CELERY_WORKER_KG_PROCESSING_APP_NAME = "celery_worker_kg_processing"
@@ -473,7 +473,7 @@ class OnyxCeleryTask:
     # New split indexing tasks
     CONNECTOR_DOCUMENT_EXTRACTION_TASK = "connector_document_extraction_task"
     DOCUMENT_INDEXING_PIPELINE_TASK = "document_indexing_pipeline_task"
-    MONITOR_DOCPROCESSING_COMPLETION = "monitor_docprocessing_completion"
+    MONITOR_docfetching_COMPLETION = "monitor_docfetching_completion"
 
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"

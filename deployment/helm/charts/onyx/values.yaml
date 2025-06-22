@@ -538,16 +538,16 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
-celery_worker_docprocessing:
+celery_worker_docfetching:
   replicaCount: 1
   autoscaling:
     enabled: false
   podAnnotations: {}
   podLabels:
     scope: onyx-backend-celery
-    app: celery-worker-docprocessing
+    app: celery-worker-docfetching
   deploymentLabels:
-    app: celery-worker-docprocessing
+    app: celery-worker-docfetching
   podSecurityContext:
     {}
   securityContext:

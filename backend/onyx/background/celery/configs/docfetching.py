@@ -1,5 +1,5 @@
 import onyx.background.celery.configs.base as shared_config
-from onyx.configs.app_configs import CELERY_WORKER_DOCPROCESSING_CONCURRENCY
+from onyx.configs.app_configs import CELERY_WORKER_docfetching_CONCURRENCY
 
 broker_url = shared_config.broker_url
 broker_connection_retry_on_startup = shared_config.broker_connection_retry_on_startup
@@ -18,6 +18,6 @@ task_acks_late = shared_config.task_acks_late
 
 # Document processing worker configuration
 # Similar to indexing worker since it does similar CPU/memory intensive work
-worker_concurrency = CELERY_WORKER_DOCPROCESSING_CONCURRENCY
+worker_concurrency = CELERY_WORKER_docfetching_CONCURRENCY
 worker_pool = "threads"
 worker_prefetch_multiplier = 1

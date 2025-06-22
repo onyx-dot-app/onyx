@@ -11,7 +11,7 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
-from onyx.configs.constants import POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME
+from onyx.configs.constants import POSTGRES_CELERY_WORKER_docfetching_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -20,7 +20,7 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 celery_app = Celery(__name__)
-celery_app.config_from_object("onyx.background.celery.configs.docprocessing")
+celery_app.config_from_object("onyx.background.celery.configs.docfetching")
 celery_app.Task = app_base.TenantAwareTask  # type: ignore [misc]
 
 
@@ -59,7 +59,7 @@ def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
 def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
 
-    SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME)
+    SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_docfetching_APP_NAME)
     pool_size = cast(int, sender.concurrency)  # type: ignore
     SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
 
@@ -97,6 +97,6 @@ for bootstep in base_bootsteps:
 
 celery_app.autodiscover_tasks(
     [
-        "onyx.background.celery.tasks.docprocessing",
+        "onyx.background.celery.tasks.docfetching",
     ]
 )
