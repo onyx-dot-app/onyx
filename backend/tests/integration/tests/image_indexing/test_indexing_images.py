@@ -5,7 +5,7 @@ from datetime import timezone
 import pytest
 
 from onyx.connectors.models import InputType
-from onyx.db.engine.sql_engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -94,7 +94,7 @@ def test_image_indexing(
         user_performing_action=admin_user,
     )
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_shared_schema() as db_session:
         # really gets the chunks from Vespa, which is why there are two;
         # one for the raw text and one for the summarized image.
         documents = DocumentManager.fetch_documents_for_cc_pair(

@@ -18,7 +18,7 @@ from botocore.exceptions import ClientError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
@@ -112,7 +112,7 @@ def db_session() -> Generator[Session, None, None]:
         pool_size=10,
         max_overflow=5,
     )
-    with get_session_context_manager() as session:
+    with get_session_with_shared_schema() as session:
         yield session
 
 
@@ -850,7 +850,7 @@ class TestS3BackedFileStore:
                 token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
                 try:
                     # Create a new database session for each worker to avoid conflicts
-                    with get_session_context_manager() as worker_session:
+                    with get_session_with_shared_schema() as worker_session:
                         worker_file_store = S3BackedFileStore(
                             db_session=worker_session,
                             bucket_name=current_bucket_name,

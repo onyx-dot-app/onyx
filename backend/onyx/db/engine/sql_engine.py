@@ -1,4 +1,3 @@
-import contextlib
 import os
 import re
 import threading
@@ -10,7 +9,6 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
-from sqlalchemy import text
 from sqlalchemy.engine import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -21,7 +19,6 @@ from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_IDLE_SESSIONS_TIMEOUT
 from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
@@ -301,8 +298,8 @@ def get_readonly_sqlalchemy_engine() -> Engine:
 
 @contextmanager
 def get_session_with_current_tenant() -> Generator[Session, None, None]:
+    """Standard way to get a DB session."""
     tenant_id = get_current_tenant_id()
-
     with get_session_with_tenant(tenant_id=tenant_id) as session:
         yield session
 
@@ -326,49 +323,26 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    with engine.connect() as connection:
-        dbapi_connection = connection.connection
-        cursor = dbapi_connection.cursor()
-        try:
-            # NOTE: don't use `text()` here since we're using the cursor directly
-            cursor.execute(f'SET search_path = "{tenant_id}"')
-            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-                cursor.execute(
-                    f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                )
-        except Exception:
-            raise RuntimeError(f"search_path not set for {tenant_id}")
-        finally:
-            cursor.close()
+    # no need to use the schema translation map for self-hosted + default schema
+    if not MULTI_TENANT:
+        with Session(bind=engine, expire_on_commit=False) as session:
+            yield session
+        return
 
-        try:
-            # automatically rollback or close
-            with Session(bind=connection, expire_on_commit=False) as session:
-                yield session
-        finally:
-            # always reset the search path on exit
-            if MULTI_TENANT:
-                if not dbapi_connection.is_valid:
-                    logger.warning(
-                        "dbapi_connection is None, likely the original connection expired."
-                    )
-                    return
-                cursor = dbapi_connection.cursor()
-
-                try:
-                    cursor.execute('SET search_path TO "$user", public')
-                except Exception as e:
-                    logger.warning(f"Failed to reset search path: {e}")
-                    connection.rollback()
-                finally:
-                    cursor.close()
+    # Create connection with schema translation to handle querying the right schema
+    schema_translate_map = {None: tenant_id}
+    with engine.connect().execution_options(
+        schema_translate_map=schema_translate_map
+    ) as connection:
+        with Session(bind=connection, expire_on_commit=False) as session:
+            yield session
 
 
 def get_session() -> Generator[Session, None, None]:
     """For use w/ Depends for FastAPI endpoints.
 
     Has some additional validation, and likely should be merged
-    with get_session_context_manager in the future."""
+    with get_session_with_shared_schema in the future."""
     tenant_id = get_current_tenant_id()
     if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
         raise BasicAuthenticationError(detail="User must authenticate")
@@ -376,16 +350,8 @@ def get_session() -> Generator[Session, None, None]:
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_shared_schema() as db_session:
         yield db_session
-
-
-@contextlib.contextmanager
-def get_session_context_manager() -> Generator[Session, None, None]:
-    """Context manager for database sessions."""
-    tenant_id = get_current_tenant_id()
-    with get_session_with_tenant(tenant_id=tenant_id) as session:
-        yield session
 
 
 @contextmanager
@@ -403,30 +369,16 @@ def get_db_readonly_user_session_with_current_tenant() -> (
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    with readonly_engine.connect() as connection:
-        dbapi_connection = connection.connection
-        cursor = dbapi_connection.cursor()
-        try:
-            cursor.execute(f'SET search_path = "{tenant_id}"')
-            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-                cursor.execute(
-                    text(
-                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                    )
-                )
-        finally:
-            cursor.close()
+    # no need to use the schema translation map for self-hosted + default schema
+    if not MULTI_TENANT:
+        with Session(readonly_engine, expire_on_commit=False) as session:
+            yield session
+        return
 
+    # no need to use the schema translation map for self-hosted + default schema
+    schema_translate_map = {None: tenant_id}
+    with readonly_engine.connect().execution_options(
+        schema_translate_map=schema_translate_map
+    ) as connection:
         with Session(bind=connection, expire_on_commit=False) as session:
-            try:
-                yield session
-            finally:
-                if MULTI_TENANT:
-                    cursor = dbapi_connection.cursor()
-                    try:
-                        cursor.execute('SET search_path TO "$user", public')
-                    except Exception as e:
-                        logger.warning(f"Failed to reset search path: {e}")
-                        connection.rollback()
-                    finally:
-                        cursor.close()
+            yield session

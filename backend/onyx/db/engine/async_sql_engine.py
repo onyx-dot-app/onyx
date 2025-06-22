@@ -7,7 +7,6 @@ import asyncpg  # type: ignore
 from fastapi import HTTPException
 from sqlalchemy import event
 from sqlalchemy import pool
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -18,7 +17,6 @@ from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.configs.app_configs import POSTGRES_DB
 from onyx.configs.app_configs import POSTGRES_HOST
-from onyx.configs.app_configs import POSTGRES_IDLE_SESSIONS_TIMEOUT
 from onyx.configs.app_configs import POSTGRES_POOL_PRE_PING
 from onyx.configs.app_configs import POSTGRES_POOL_RECYCLE
 from onyx.configs.app_configs import POSTGRES_PORT
@@ -31,6 +29,7 @@ from onyx.db.engine.sql_engine import build_connection_string
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.sql_engine import USE_IAM_AUTH
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -122,20 +121,26 @@ async def get_async_session(
     if tenant_id is None:
         tenant_id = get_current_tenant_id()
 
+    if not is_valid_schema_name(tenant_id):
+        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
     engine = get_sqlalchemy_async_engine()
 
-    async with AsyncSession(engine, expire_on_commit=False) as async_session:
-        if POSTGRES_IDLE_SESSIONS_TIMEOUT:
-            await async_session.execute(
-                text(
-                    f"SET idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                )
-            )
+    # no need to use the schema translation map for self-hosted + default schema
+    if not MULTI_TENANT:
+        async with AsyncSession(bind=engine, expire_on_commit=False) as session:
+            yield session
+        return
 
-        if not is_valid_schema_name(tenant_id):
-            raise HTTPException(status_code=400, detail="Invalid tenant ID")
-
-        yield async_session
+    # Create connection with schema translation to handle querying the right schema
+    schema_translate_map = {None: tenant_id}
+    async with engine.connect().execution_options(
+        schema_translate_map=schema_translate_map
+    ) as connection:
+        async with AsyncSession(
+            bind=connection, expire_on_commit=False
+        ) as async_session:
+            yield async_session
 
 
 def get_async_session_context_manager(

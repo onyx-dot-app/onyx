@@ -3,7 +3,7 @@ from ee.onyx.external_permissions.sync_params import get_all_censoring_enabled_s
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.pipeline import InferenceChunk
-from onyx.db.engine.sql_engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
 
@@ -22,7 +22,7 @@ def _get_all_censoring_enabled_sources() -> set[DocumentSource]:
     for every single chunk.
     """
     all_censoring_enabled_sources = get_all_censoring_enabled_sources()
-    with get_session_context_manager() as db_session:
+    with get_session_with_shared_schema() as db_session:
         enabled_sync_connectors = get_all_auto_sync_cc_pairs(db_session)
         return {
             cc_pair.connector.source
