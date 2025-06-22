@@ -158,6 +158,15 @@ def aggregate_kg_extractions(
     return aggregated_kg_extractions
 
 
+def extract_email(email: str) -> str | None:
+    """
+    Extract an email from an arbitrary string (if any).
+    Only the first email is returned.
+    """
+    match = re.search(r"([A-Za-z0-9._+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)", email)
+    return match.group(0) if match else None
+
+
 def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGPerson:
     """
     Process the email.
@@ -173,6 +182,8 @@ def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGP
     if employee:
         company = kg_config_settings.KG_VENDOR
     else:
+        # TODO: maybe store a list of domains for each account and use that to match
+        # right now, gmail and other random domains are being converted into accounts
         company = company_domain.capitalize()
 
     return KGPerson(name=name, company=company, employee=employee)
