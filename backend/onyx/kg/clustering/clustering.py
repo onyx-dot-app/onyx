@@ -282,10 +282,7 @@ def _transfer_batch_relationship_and_update_vespa(
     # update vespa in parallel
     batch_update_requests = run_functions_tuples_in_parallel(
         [
-            (
-                get_kg_vespa_info_update_requests_for_document,
-                (document_id, index_name, tenant_id),
-            )
+            (get_kg_vespa_info_update_requests_for_document, (document_id,))
             for document_id in docs_to_update
         ]
     )

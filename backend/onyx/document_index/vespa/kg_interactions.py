@@ -1,5 +1,3 @@
-from retry import retry
-
 from onyx.db.document import get_document_kg_entities_and_relationships
 from onyx.db.document import get_num_chunks_for_document
 from onyx.db.engine import get_session_with_current_tenant
@@ -11,7 +9,6 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-@retry(tries=3, delay=1, backoff=2)
 def update_kg_chunks_vespa_info(
     kg_update_requests: list[KGUChunkUpdateRequest],
     index_name: str,
@@ -34,7 +31,7 @@ def update_kg_chunks_vespa_info(
 
 
 def get_kg_vespa_info_update_requests_for_document(
-    document_id: str, index_name: str, tenant_id: str
+    document_id: str,
 ) -> list[KGUChunkUpdateRequest]:
     """Get the kg_info update requests for a document."""
     # get all entities and relationships tied to the document
