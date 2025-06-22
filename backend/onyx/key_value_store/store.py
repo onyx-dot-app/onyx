@@ -3,7 +3,7 @@ from typing import cast
 
 from redis.client import Redis
 
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KeyValueStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -39,7 +39,7 @@ class PgRedisKVStore(KeyValueStore):
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
-        with get_session_with_shared_schema() as db_session:
+        with get_session_with_current_tenant() as db_session:
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = plain_val
@@ -67,7 +67,7 @@ class PgRedisKVStore(KeyValueStore):
                     f"Failed to get value from Redis for key '{key}': {str(e)}"
                 )
 
-        with get_session_with_shared_schema() as db_session:
+        with get_session_with_current_tenant() as db_session:
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if not obj:
                 raise KvKeyNotFoundError
@@ -92,7 +92,7 @@ class PgRedisKVStore(KeyValueStore):
         except Exception as e:
             logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
 
-        with get_session_with_shared_schema() as db_session:
+        with get_session_with_current_tenant() as db_session:
             result = db_session.query(KVStore).filter_by(key=key).delete()  # type: ignore
             if result == 0:
                 raise KvKeyNotFoundError

@@ -79,7 +79,7 @@ from onyx.db.chat import reserve_message_id
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.chat import update_chat_session_updated_at_timestamp
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
@@ -1240,7 +1240,7 @@ def stream_chat_message(
     is_connected: Callable[[], bool] | None = None,
 ) -> Iterator[str]:
     start_time = time.time()
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         objects = stream_chat_message_objects(
             new_msg_req=new_msg_req,
             user=user,

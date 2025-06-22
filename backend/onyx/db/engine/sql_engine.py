@@ -342,7 +342,7 @@ def get_session() -> Generator[Session, None, None]:
     """For use w/ Depends for FastAPI endpoints.
 
     Has some additional validation, and likely should be merged
-    with get_session_with_shared_schema in the future."""
+    with get_session_with_current_tenant in the future."""
     tenant_id = get_current_tenant_id()
     if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
         raise BasicAuthenticationError(detail="User must authenticate")
@@ -350,7 +350,7 @@ def get_session() -> Generator[Session, None, None]:
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         yield db_session
 
 

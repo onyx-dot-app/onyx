@@ -3,7 +3,7 @@ import os
 import pytest
 
 from onyx.auth.schemas import UserRole
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
@@ -47,7 +47,7 @@ instantiate the session directly within the test.
 """
 # @pytest.fixture
 # def db_session() -> Generator[Session, None, None]:
-#     with get_session_with_shared_schema() as session:
+#     with get_session_with_current_tenant() as session:
 #         yield session
 
 
@@ -62,7 +62,7 @@ def initialize_db() -> None:
 
 @pytest.fixture
 def vespa_client() -> vespa_fixture:
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
         return vespa_fixture(index_name=search_settings.index_name)
 

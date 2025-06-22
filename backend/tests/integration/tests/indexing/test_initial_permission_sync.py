@@ -10,7 +10,7 @@ from onyx.connectors.mock_connector.connector import EXTERNAL_USER_GROUP_IDS
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import InputType
 from onyx.db.document import get_documents_by_ids
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
@@ -87,7 +87,7 @@ def test_mock_connector_initial_permission_sync(
     assert finished_index_attempt.status == IndexingStatus.SUCCESS
 
     # Verify document was indexed
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
@@ -104,7 +104,7 @@ def test_mock_connector_initial_permission_sync(
     assert len(errors) == 0
 
     # Verify permissions were set during indexing by checking the document in the database
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         db_docs = get_documents_by_ids(
             db_session=db_session,
             document_ids=[test_doc.id],

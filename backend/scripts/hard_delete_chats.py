@@ -7,7 +7,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 print(parent_dir)
 sys.path.append(parent_dir)
 
-from onyx.db.engine.sql_engine import get_session_with_shared_schema  # noqa: E402
+from onyx.db.engine.sql_engine import get_session_with_current_tenant  # noqa: E402
 from onyx.db.engine.sql_engine import SqlEngine  # noqa: E402
 from onyx.db.models import ChatSession  # noqa: E402
 from onyx.db.chat import delete_chat_session  # noqa: E402
@@ -16,7 +16,7 @@ from onyx.db.chat import delete_chat_session  # noqa: E402
 def main() -> None:
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         deleted_sessions = (
             db_session.query(ChatSession).filter(ChatSession.deleted.is_(True)).all()
         )

@@ -12,7 +12,7 @@ from onyx.configs.app_configs import POSTGRES_PASSWORD
 from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SYNC_DB_API
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
@@ -285,14 +285,14 @@ def reset_postgres(
     upgrade_postgres(database=database, config_name=config_name, revision="head")
     if setup_onyx:
         logger.info("Setting up Postgres...")
-        with get_session_with_shared_schema() as db_session:
+        with get_session_with_current_tenant() as db_session:
             setup_postgres(db_session)
 
 
 def reset_vespa() -> None:
     """Wipe all data from the Vespa index."""
 
-    with get_session_with_shared_schema() as db_session:
+    with get_session_with_current_tenant() as db_session:
         # swap to the correct default model
         check_and_perform_index_swap(db_session)
 
