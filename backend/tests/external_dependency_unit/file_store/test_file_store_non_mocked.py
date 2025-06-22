@@ -70,20 +70,19 @@ def _get_all_backend_configs() -> List[BackendConfig]:
     if S3_ENDPOINT_URL:
         minio_access_key = "minioadmin"
         minio_secret_key = "minioadmin"
-        if minio_access_key and minio_secret_key:
-            configs.append(
-                {
-                    "endpoint_url": S3_ENDPOINT_URL,
-                    "access_key": minio_access_key,
-                    "secret_key": minio_secret_key,
-                    "region": "us-east-1",
-                    "verify_ssl": False,
-                    "backend_name": "MinIO",
-                }
-            )
+        configs.append(
+            {
+                "endpoint_url": S3_ENDPOINT_URL,
+                "access_key": minio_access_key,
+                "secret_key": minio_secret_key,
+                "region": "us-east-1",
+                "verify_ssl": False,
+                "backend_name": "MinIO",
+            }
+        )
 
     # AWS S3 configuration (if credentials are available)
-    if S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
+    elif S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
         configs.append(
             {
                 "endpoint_url": None,

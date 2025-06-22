@@ -241,6 +241,9 @@ def _migrate_files_to_external_storage() -> None:
     external_store.initialize()
     print(f"Found {total_files} files to migrate from PostgreSQL to external storage.")
 
+    external_store.initialize()
+    print("External store initialized")
+
     _set_tenant_contextvar(session)
     migrated_count = 0
 
