@@ -121,7 +121,6 @@ def aggregate_kg_extractions(
         entities=defaultdict(int),
         relationships=defaultdict(lambda: defaultdict(int)),
         terms=defaultdict(int),
-        attributes=defaultdict(dict),
     )
     for connector_aggregated_kg_extractions in connector_aggregated_kg_extractions_list:
         for (
@@ -187,33 +186,3 @@ def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGP
         company = company_domain.title()
 
     return KGPerson(name=name, company=company, employee=employee)
-
-
-def generalize_entities(entities: list[str]) -> set[str]:
-    """
-    Generalize entities to their superclass.
-    """
-    return {make_entity_id(get_entity_type(entity), "*") for entity in entities}
-
-
-def generalize_relationships(relationships: list[str]) -> set[str]:
-    """
-    Generalize relationships to their superclass.
-    """
-    generalized_relationships: set[str] = set()
-    for relationship in relationships:
-        assert (
-            len(relationship.split("__")) == 3
-        ), "Relationship is not in the correct format"
-        source_entity, relationship_type, target_entity = split_relationship_id(
-            relationship
-        )
-        source_general = make_entity_id(get_entity_type(source_entity), "*")
-        target_general = make_entity_id(get_entity_type(target_entity), "*")
-        generalized_relationships |= {
-            make_relationship_id(source_general, relationship_type, target_entity),
-            make_relationship_id(source_entity, relationship_type, target_general),
-            make_relationship_id(source_general, relationship_type, target_general),
-        }
-
-    return generalized_relationships

@@ -114,8 +114,6 @@ class KGUChunkUpdateRequest(BaseModel):
     entities: set[str] | None = None
     relationships: set[str] | None = None
     terms: set[str] | None = None
-    converted_attributes: set[str] | None = None
-    attributes: dict[str, str | list[str]] | None = None
 
 
 class KGUDocumentUpdateRequest(BaseModel):
@@ -585,16 +583,13 @@ class VespaIndex(DocumentIndex):
         # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficient for
         # indexing / updates / deletes since we have to make a large volume of requests.
 
-        with (
-            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
-            httpx_client as http_client,
-        ):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor:
             for update_batch in batch_generator(updates, batch_size):
                 future_to_document_id = {
                     executor.submit(
                         _kg_update_chunk,
                         update,
-                        http_client,
+                        httpx_client,
                     ): update.document_id
                     for update in update_batch
                 }

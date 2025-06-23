@@ -20,7 +20,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
         "LINEAR": KGEntityTypeDefinition(
             description="A formal Linear ticket about a product issue or improvement request.",
             attributes=KGEntityTypeAttributes(
-                metadata_attributes={
+                metadata_attribute_conversion={
                     "team": KGAttributeProperty(name="team", keep=True),
                     "state": KGAttributeProperty(name="state", keep=True),
                     "priority": KGAttributeProperty(name="priority", keep=True),
@@ -47,7 +47,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
                 "A formal Jira ticket about a product issue or improvement request."
             ),
             attributes=KGEntityTypeAttributes(
-                metadata_attributes={
+                metadata_attribute_conversion={
                     "issuetype": KGAttributeProperty(name="subtype", keep=True),
                     "status": KGAttributeProperty(name="status", keep=True),
                     "priority": KGAttributeProperty(name="priority", keep=True),
@@ -85,7 +85,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
         "GITHUB_PR": KGEntityTypeDefinition(
             description="A formal engineering request to merge proposed changes into the codebase.",
             attributes=KGEntityTypeAttributes(
-                metadata_attributes={
+                metadata_attribute_conversion={
                     "repo": KGAttributeProperty(name="repository", keep=True),
                     "state": KGAttributeProperty(name="state", keep=True),
                     "num_commits": KGAttributeProperty(name="num_commits", keep=True),
@@ -123,7 +123,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
         "GITHUB_ISSUE": KGEntityTypeDefinition(
             description="A formal engineering ticket about an issue, idea, inquiry, or task.",
             attributes=KGEntityTypeAttributes(
-                metadata_attributes={
+                metadata_attribute_conversion={
                     "repo": KGAttributeProperty(name="repository", keep=True),
                     "state": KGAttributeProperty(name="state", keep=True),
                     "labels": KGAttributeProperty(name="labels", keep=True),
@@ -199,7 +199,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
         "OPPORTUNITY": KGEntityTypeDefinition(
             description="A sales opportunity.",
             attributes=KGEntityTypeAttributes(
-                metadata_attributes={
+                metadata_attribute_conversion={
                     "name": KGAttributeProperty(name="name", keep=True),
                     "stage_name": KGAttributeProperty(name="stage", keep=True),
                     "type": KGAttributeProperty(name="type", keep=True),

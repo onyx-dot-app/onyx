@@ -73,7 +73,7 @@ class KGEntityTypeClassificationInfo(BaseModel):
 
 class KGEntityTypeAttributes(BaseModel):
     # information on how to use the metadata to extract attributes, implied entities, and relations
-    metadata_attributes: dict[str, KGAttributeProperty] = {}
+    metadata_attribute_conversion: dict[str, KGAttributeProperty] = {}
     # a metadata key: value pair to match for to differentiate entities from the same source
     entity_filter_attributes: dict[str, Any] = {}
     # mapping of classification names to their corresponding classification info
@@ -141,7 +141,6 @@ class KGAggregatedExtractions(BaseModel):
     entities: dict[str, int]
     relationships: dict[str, dict[str, int]]
     terms: dict[str, int]
-    attributes: dict[str, dict[str, str | list[str]]]
 
 
 class KGBatchExtractionStats(BaseModel):
@@ -214,7 +213,7 @@ class KGExtractionInstructions(BaseModel):
 
 
 class KGEntityTypeInstructions(BaseModel):
-    metadata_attribute_conversion: dict[str, str]
+    metadata_attribute_conversion: dict[str, KGAttributeProperty]
     classification_instructions: KGClassificationInstructions
     extraction_instructions: KGExtractionInstructions
     filter_instructions: dict[str, Any] | None = None
@@ -222,7 +221,8 @@ class KGEntityTypeInstructions(BaseModel):
 
 class KGEnhancedDocumentMetadata(BaseModel):
     entity_type: str | None
-    document_attributes: dict[str, Any] | None
+    metadata_attribute_conversion: dict[str, KGAttributeProperty] | None
+    document_metadata: dict[str, Any] | None
     deep_extraction: bool
     classification_enabled: bool
     classification_instructions: KGClassificationInstructions | None
@@ -269,11 +269,8 @@ class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
     kg_core_document_id_name: str
     implied_entities: set[str]
     implied_relationships: set[str]
-    converted_relationships_to_attributes: dict[str, list[str]]
     company_participant_emails: set[str]
     account_participant_emails: set[str]
-    converted_attributes_to_relationships: set[str]
-    document_attributes: dict[str, Any] | None
 
 
 class KGException(Exception):
