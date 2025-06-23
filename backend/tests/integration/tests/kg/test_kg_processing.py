@@ -55,7 +55,7 @@ def reset_for_test() -> None:
 
 
 @pytest.fixture()
-def kg_test_docs() -> tuple[list[str], int, KGEntityType]:
+def kg_test_docs() -> tuple[list[str], int, list[KGEntityType]]:
 
     # create admin user
     admin_user: DATestUser = UserManager.create(email="admin@onyx-test.com.app")
@@ -149,6 +149,7 @@ def kg_test_docs() -> tuple[list[str], int, KGEntityType]:
         ),
     }
 
+    kg_entity_types: list[KGEntityType] = []
     with get_session_with_current_tenant() as db_session:
         for (
             entity_type_id_name,
@@ -167,6 +168,7 @@ def kg_test_docs() -> tuple[list[str], int, KGEntityType]:
                 grounded_source_name=grounded_source_name,
                 active=entity_type_definition.active,
             )
+            kg_entity_types.append(kg_entity_type)
             db_session.add(kg_entity_type)
         db_session.commit()
 
@@ -177,7 +179,7 @@ def kg_test_docs() -> tuple[list[str], int, KGEntityType]:
         )
         db_session.commit()
 
-    return ([doc1.id, doc2.id], cc_pair.id, kg_entity_type)
+    return ([doc1.id, doc2.id], cc_pair.id, kg_entity_types)
 
 
 def wait_until_kg_processing_done(timeout: float = 60) -> bool:
