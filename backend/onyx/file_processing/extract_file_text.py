@@ -335,6 +335,9 @@ def docx_to_text_and_images(
     for rel_id, rel in doc.part.rels.items():
         if "image" in rel.reltype:
             # image is typically in rel.target_part.blob
+            if rel.is_external:
+                logger.debug(f"Skipped external image: {rel.target_ref}")
+                continue
             image_bytes = rel.target_part.blob
             image_name = rel.target_part.partname
             # store

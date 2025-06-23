@@ -100,9 +100,10 @@ def _summarize_image(
     )
 
     try:
-        return message_to_string(llm.invoke(messages))
+        return message_to_string(llm.invoke(messages, timeout_override=600))
 
     except Exception as e:
+        logger.info(e)
         raise ValueError(f"Summarization failed. Messages: {messages}") from e
 
 

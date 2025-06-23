@@ -531,6 +531,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                     processed_section.text = "[Error processing image]"
 
                 processed_sections.append(processed_section)
+                logger.info(f"Успешно обработано изображение! {processed_section}")
 
             # For TextSection, create a base Section with text and link
             elif isinstance(section, TextSection):
