@@ -244,7 +244,7 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
                 "are NOT included here. If in doubt, do NOT extract."
             ),
             grounding=KGGroundingType.GROUNDED,
-            active=True,
+            active=False,
             grounded_source_name=None,
         ),
     }

@@ -5,6 +5,7 @@ from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.document import DocumentSource
 from onyx.db.models import Connector
 from onyx.db.models import KGEntityType
+from onyx.kg.models import KGAttributeEntityOption
 from onyx.server.kg.models import EntityType
 
 
@@ -45,14 +46,36 @@ def get_entity_types(
 
 
 def get_configured_entity_types(db_session: Session) -> list[KGEntityType]:
+    # get entity types from configured sources
     configured_connector_sources = {
         source.value.lower()
         for source in fetch_unique_document_sources(db_session=db_session)
     }
-
-    return (
+    entity_types = (
         db_session.query(KGEntityType)
         .filter(KGEntityType.grounded_source_name.in_(configured_connector_sources))
+        .all()
+    )
+    entity_type_set = {et.id_name for et in entity_types}
+
+    # get implied entity types from those entity types
+    for et in entity_types:
+        for prop in et.parsed_attributes.metadata_attribute_conversion.values():
+            if prop.implication_property is None:
+                continue
+
+            implied_et = prop.implication_property.implied_entity_type
+            if implied_et == KGAttributeEntityOption.FROM_EMAIL:
+                if "ACCOUNT" not in entity_type_set:
+                    entity_type_set.add("ACCOUNT")
+                if "EMPLOYEE" not in entity_type_set:
+                    entity_type_set.add("EMPLOYEE")
+            elif isinstance(implied_et, str):
+                if implied_et not in entity_type_set:
+                    entity_type_set.add(implied_et)
+    return (
+        db_session.query(KGEntityType)
+        .filter(KGEntityType.id_name.in_(entity_type_set))
         .all()
     )
 
