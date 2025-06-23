@@ -404,6 +404,11 @@ def generate_simple_sql(
                     "entity_table", ent_temp_view
                 )
 
+            if source_documents_sql and rel_temp_view:
+                source_documents_sql = source_documents_sql.replace(
+                    "relationship_table", rel_temp_view
+                )
+
             logger.debug(f"A3 source_documents_sql: {source_documents_sql}")
 
         scalar_result = None

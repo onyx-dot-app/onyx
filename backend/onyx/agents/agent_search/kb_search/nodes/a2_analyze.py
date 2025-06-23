@@ -265,10 +265,7 @@ def analyze(
 Format: {output_format.value}, Broken down question: {broken_down_question}"
 
     extraction_detected_relationships = len(query_graph_relationships) > 0
-    if (
-        extraction_detected_relationships
-        or relationship_detection == KGRelationshipDetection.RELATIONSHIPS.value
-    ):
+    if extraction_detected_relationships:
         query_type = KGRelationshipDetection.RELATIONSHIPS.value
 
         if extraction_detected_relationships:

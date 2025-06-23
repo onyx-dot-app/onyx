@@ -41,8 +41,9 @@ QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"entities": [<a list of entities of the prescribed entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization)>. Each entity \
 also should be followed by a list of comma-separated attribute filters for the entity, if referred to in the \
-question for that entity. Example: 'ACCOUNT::* -- [account_type: customer, status: active]' should the question be \
-'list all customer accounts', and ACCOUNT was an entity type with this attribute key/value allowed.] \
+question for that entity. CRITICAL: you can only use attributes that are mentioned above for the \
+entity type in question. Example: 'ACCOUNT::* -- [account_type: customer, status: active]' should the question be \
+'list all customer accounts', and ACCOUNT was an entity type with these attribute key/values allowed.] \
 "time_filter": <if needed, a SQL-like filter for a field called 'event_date'. Do not select anything here \
 unless you are sure that the question asks for that filter. Only apply a time_filter if the question explicitly \
 mentions a specific date, time period, or event that can be directly translated into a date filter. Do not assume \
@@ -267,12 +268,14 @@ Here is the text you are asked to extract knowledge from, if needed with additio
 QUERY_ENTITY_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction and using knowledge graphs. You are given a question \
 and asked to extract entities (with attributes if applicable) that you can reliably identify, which will then
-be matched with a known entity in the knowledge graph. You are also asked to extract time filters SHOULD \
-there be an explicit mention of a date or time frame in the QUESTION (note: last, first, etc.. DO NOT \
+be matched with a known entity in the knowledge graph. You are also asked to extract time constraints information \
+from the QUESTION. Some time constraints will be captured by entity attributes if \
+the entity type has a fitting attribute (example: 'created_at' could be a candidate for that), other times
+we will extracty an explicit time filter if no attribute fits. (Note regarding 'last', 'first', etc.: DO NOT \
 imply the need for a time filter just because the question asks for something that is not the current date. \
-They will relate to ordering that we will handle separately).
+They will relate to ordering that we will handle separately later).
 
-Today is ---today_date--- and the user asking is ---user_name---, which may or may not be relevant.
+In case useful, today is ---today_date--- and the user asking is ---user_name---, which may or may not be relevant.
 Here are the entity types that are available for extraction. Some of them may have \
 a description, others should be obvious. Also, notice that some may have attributes associated with them, which will \
 be important later.
@@ -337,6 +340,13 @@ and the value would need to be taken from the specification, as the question may
 actual attribute may be implied.
    - don't just look at the entities that are mentioned in the question but also those that the question \
 may be about.
+  - be very careful that you only extract attributes that are listed above for the entity type in question! Do \
+not make up attributes even if they are implied! Particularly if there is a relationship type that would \
+would actually represent that information, you MUST not extract the information as an attribute. We \
+will extract the relationship type later.
+  - For the values of attributes, look at the possible values above! For example 'open' may refer to \
+'backlog', 'todo', 'in progress', etc. In cases like that construct a ';'-separated list of values that you think may fit \
+what is implied in the question (in the exanple: 'open; backlog; todo; in progress').
 
 Also, if you think the name or the title of an entity is given but name or title are not mentioned \
 explicitly as an attribute, then you should indeed extract the name/title as the entity name.
@@ -592,7 +602,11 @@ If a SQL search is chosen, i.e., documents have to be identified first, there ar
 1. SIMPLE: You think you can answer the question using a database that is aware of the entities, relationships \
 above, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
 'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', \
-'what did (someone) work on...'etc.
+'what did (someone) work on...'etc. Often it is also used in cases like 'what did John work on since April?'. Here, \
+the user would expect to just see the list. So chose 'SIMPLE' here unless there are REALLY CLEAR \
+follow-up instructions for each item (like 'summarize...' , 'anaylyze...', 'what are tyhe main poinst of...'.) If \
+it is a 'what did...'-type question, chose 'SIMPLE'!
+
 2. DEEP: You think you really should ALSO leverage the actual text of sources to answer the question, which sits \
 in a vector database. Examples are 'what is discussed in...', 'summarize', 'what is the discussion about...',\
 'how does... relate to...', 'are there any mentions of... in..', 'what are the main points in...', \
