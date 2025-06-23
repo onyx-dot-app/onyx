@@ -222,6 +222,8 @@ class S3BackedFileStore(FileStore):
         if len(file_name) < max_file_name_length:
             return "/".join(prefix_and_tenant_parts + [file_name])
 
+        logger.info(f"File name is too long: {file_name}. Truncating.")
+
         # For long file names, use a hash-based approach to ensure uniqueness
         file_hash = hashlib.sha256(file_name.encode("utf-8")).hexdigest()
         # Use first part of original name + hash to maintain some readability
