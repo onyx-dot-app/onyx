@@ -71,6 +71,14 @@ SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
 NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
 
 
+#####
+# Teams
+#####
+TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+
+
 ####
 # Celery Job Frequency
 ####
