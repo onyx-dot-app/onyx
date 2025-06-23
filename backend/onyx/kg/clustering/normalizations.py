@@ -33,6 +33,7 @@ from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 logger = setup_logger()
@@ -82,12 +83,13 @@ def _normalize_one_entity(
         metadata = MetaData()
         if allowed_docs_temp_view_name is None:
             raise ValueError("allowed_docs_temp_view_name is not available")
-        if allowed_docs_temp_view_name.startswith('"tenant'):
+        if MULTI_TENANT:
             effective_schema_allowed_docs_temp_view_name = (
-                allowed_docs_temp_view_name.split(".")[1]
+                allowed_docs_temp_view_name.split(".")[-1]
             )
         else:
             effective_schema_allowed_docs_temp_view_name = allowed_docs_temp_view_name
+
         allowed_docs_temp_view = Table(
             effective_schema_allowed_docs_temp_view_name,
             metadata,
