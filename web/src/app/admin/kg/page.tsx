@@ -39,6 +39,7 @@ import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { useIsKGExposed } from "./utils";
 
 function createDomainField(
   name: string,
@@ -516,10 +517,7 @@ function Main() {
 }
 
 export default function Page() {
-  const { data: kgExposed, isLoading } = useSWR<boolean>(
-    "/api/admin/kg/exposed",
-    errorHandlingFetcher
-  );
+  const { kgExposed, isLoading } = useIsKGExposed();
 
   if (isLoading) {
     return <></>;

@@ -42,6 +42,7 @@ import Link from "next/link";
 import { Button } from "../ui/button";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useIsKGExposed } from "@/app/admin/kg/utils";
 
 const connectors_items = () => [
   {
@@ -153,7 +154,7 @@ const collections = (
   enableCloud: boolean,
   enableEnterprise: boolean,
   settings: CombinedSettings | null,
-  kgExposed?: boolean | null
+  kgExposed: boolean
 ) => [
   {
     name: "Connectors",
@@ -392,13 +393,11 @@ export function ClientLayout({
   enableEnterprise: boolean;
   enableCloud: boolean;
 }) {
-  const { data: kgExposed, isLoading } = useSWR<boolean>(
-    "/api/admin/kg/exposed",
-    errorHandlingFetcher
-  );
+  const { kgExposed, isLoading } = useIsKGExposed();
 
   const isCurator =
     user?.role === UserRole.CURATOR || user?.role === UserRole.GLOBAL_CURATOR;
+
   const pathname = usePathname();
   const settings = useContext(SettingsContext);
   const [userSettingsOpen, setUserSettingsOpen] = useState(false);
