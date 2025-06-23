@@ -5,8 +5,10 @@ from datetime import timezone
 from http import HTTPStatus
 
 from office365.graph_client import GraphClient  # type: ignore
+from office365.teams.channels.channel import Channel  # type: ignore
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
 
 
@@ -109,15 +111,20 @@ def fetch_replies(
         )
 
 
-def fetch_permissions(
-    graph_client: GraphClient,
-    team_id: str,
-    channel_id: str,
-) -> None:
-    initial_request_url = f"teams/{team_id}/channels/{channel_id}/members"
-    _json_response = retry(graph_client=graph_client, request_url=initial_request_url)
-    ...
+def fetch_expert_infos(channel: Channel) -> list[BasicExpertInfo]:
+    members = channel.members.get_all(
+        # explicitly needed because of incorrect type definitions provided by the `office365` library
+        page_loaded=lambda _: None
+    ).execute_query_retry()
 
-    # yield 0
-    # for value in json_response.get("value", []):
-    #     yield value
+    expert_infos = []
+    for member in members:
+        if email := member.properties.get("email"):
+            expert_infos.append(
+                BasicExpertInfo(
+                    display_name=member.display_name,
+                    email=email,
+                )
+            )
+
+    return expert_infos

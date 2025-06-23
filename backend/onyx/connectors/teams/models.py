@@ -17,6 +17,7 @@ class Body(BaseModel):
 
 
 class User(BaseModel):
+    id: str
     display_name: str
 
     model_config = ConfigDict(
