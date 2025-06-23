@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import uuid
 from abc import ABC
@@ -206,7 +207,32 @@ class S3BackedFileStore(FileStore):
     def _get_s3_key(self, file_name: str) -> str:
         """Generate S3 key from file name with tenant ID prefix"""
         tenant_id = get_current_tenant_id()
-        return f"{self._s3_prefix}/{tenant_id}/{file_name}"
+
+        # Strip slashes from prefix and tenant_id to avoid double slashes
+        prefix_clean = self._s3_prefix.strip("/")
+        tenant_clean = tenant_id.strip("/")
+
+        # Handle long file names that could exceed S3's 1024 character key limit
+        # S3 key format: {prefix}/{tenant_id}/{file_name}
+        # We need to account for the prefix, tenant_id, and forward slashes
+        prefix_and_tenant_parts = [prefix_clean, tenant_clean]
+        prefix_and_tenant = "/".join(prefix_and_tenant_parts) + "/"
+        max_file_name_length = 1024 - len(prefix_and_tenant)
+
+        if len(file_name) < max_file_name_length:
+            return "/".join(prefix_and_tenant_parts + [file_name])
+
+        # For long file names, use a hash-based approach to ensure uniqueness
+        file_hash = hashlib.sha256(file_name.encode("utf-8")).hexdigest()
+        # Use first part of original name + hash to maintain some readability
+        readable_part = file_name[
+            : max(0, max_file_name_length - 65)
+        ]  # 64 chars for hash + 1 for separator
+        if readable_part:
+            truncated_name = f"{readable_part}_{file_hash}"
+        else:
+            truncated_name = file_hash
+        return "/".join(prefix_and_tenant_parts + [truncated_name])
 
     def initialize(self) -> None:
         """Initialize the S3 file store by ensuring the bucket exists"""
