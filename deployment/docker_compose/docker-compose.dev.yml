@@ -129,6 +129,11 @@ services:
       # Seeding configuration
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
       - ONYX_QUERY_HISTORY_TYPE=${ONYX_QUERY_HISTORY_TYPE:-}
+
+      # Vespa Language Forcing
+      # See: https://docs.vespa.ai/en/linguistics.html 
+      - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
+
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
