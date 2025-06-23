@@ -258,11 +258,7 @@ def _get_batch_metadata(
             unprocessed_document.id
             for unprocessed_document in unprocessed_document_batch
         ],
-        connector_source,
-        index_name,
-        kg_config_settings=kg_config_settings,
         batch_size=processing_chunk_batch_size,
-        num_classification_chunks=1,
     )
 
     for first_chunk_list in first_chunk_generator:
@@ -517,48 +513,46 @@ def kg_extraction(
                 ):
                     classification_batch_list.append(unprocessed_document.id)
 
-            document_classification_content_generator = (
-                get_document_classification_content_for_kg_processing(
-                    classification_batch_list,
-                    connector_source,
-                    index_name,
-                    kg_config_settings=kg_config_settings,
-                    batch_size=processing_chunk_batch_size,
-                    entity_type=batch_metadata[unprocessed_document.id].entity_type,
-                )
-            )
+            # document_classification_content_generator = (
+            #     get_document_classification_content_for_kg_processing(
+            #         document_ids=classification_batch_list,
+            #         kg_config_settings=kg_config_settings,
+            #         batch_size=processing_chunk_batch_size,
+            #         entity_type=batch_metadata[unprocessed_document.id].entity_type,
+            #     )
+            # )
 
-            # Document classification
-            #    - Decide whether a document should be processed or ignored, and
-            #    - Store document type in postgres later
+            # # Document classification
+            # #    - Decide whether a document should be processed or ignored, and
+            # #    - Store document type in postgres later
 
             classification_outcomes = []
-            try:
-                for (
-                    generated_doc_classification_content_list
-                ) in document_classification_content_generator:
-                    doc_ids = [
-                        content.document_id
-                        for content in generated_doc_classification_content_list
-                    ]
-                    batch_classification_instructions = {}
-                    for doc_id in doc_ids:
-                        if doc_id in batch_metadata:
-                            batch_classification_instructions[doc_id] = batch_metadata[
-                                doc_id
-                            ].classification_instructions
-                        else:
-                            batch_classification_instructions[doc_id] = None
-                    classification_outcomes.extend(
-                        _kg_document_classification(
-                            generated_doc_classification_content_list,
-                            batch_classification_instructions,
-                            kg_config_settings,
-                        )
-                    )
-            except Exception as e:
-                logger.error(f"Error in document classification: {e}")
-                raise e
+            # try:
+            #     for (
+            #         generated_doc_classification_content_list
+            #     ) in document_classification_content_generator:
+            #         doc_ids = [
+            #             content.document_id
+            #             for content in generated_doc_classification_content_list
+            #         ]
+            #         batch_classification_instructions = {}
+            #         for doc_id in doc_ids:
+            #             if doc_id in batch_metadata:
+            #                 batch_classification_instructions[doc_id] = batch_metadata[
+            #                     doc_id
+            #                 ].classification_instructions
+            #             else:
+            #                 batch_classification_instructions[doc_id] = None
+            #         classification_outcomes.extend(
+            #             _kg_document_classification(
+            #                 generated_doc_classification_content_list,
+            #                 batch_classification_instructions,
+            #                 kg_config_settings,
+            #             )
+            #         )
+            # except Exception as e:
+            #     logger.error(f"Error in document classification: {e}")
+            #     raise e
 
             # collect documents to process in batch and capture classification results
 
