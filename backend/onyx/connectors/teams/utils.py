@@ -12,7 +12,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
 
 
-def retry(
+def _retry(
     graph_client: GraphClient,
     request_url: str,
 ) -> dict:
@@ -43,7 +43,7 @@ def retry(
     )
 
 
-def get_next_url(
+def _get_next_url(
     graph_client: GraphClient,
     json_response: dict,
 ) -> str | None:
@@ -78,12 +78,12 @@ def fetch_messages(
     request_url: str | None = initial_request_url
 
     while request_url:
-        json_response = retry(graph_client=graph_client, request_url=request_url)
+        json_response = _retry(graph_client=graph_client, request_url=request_url)
 
         for value in json_response.get("value", []):
             yield Message(**value)
 
-        request_url = get_next_url(
+        request_url = _get_next_url(
             graph_client=graph_client, json_response=json_response
         )
 
@@ -101,12 +101,12 @@ def fetch_replies(
     request_url: str | None = initial_request_url
 
     while request_url:
-        json_response = retry(graph_client=graph_client, request_url=request_url)
+        json_response = _retry(graph_client=graph_client, request_url=request_url)
 
         for value in json_response.get("value", []):
             yield Message(**value)
 
-        request_url = get_next_url(
+        request_url = _get_next_url(
             graph_client=graph_client, json_response=json_response
         )
 
