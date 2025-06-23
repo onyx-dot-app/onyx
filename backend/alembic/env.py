@@ -73,64 +73,48 @@ def include_object(
     return True
 
 
-def extract_tenant_number(tenant_id: str) -> int | None:
-    """
-    Extract the numeric part from a tenant ID for range filtering.
-
-    For tenant IDs like 'tenant_12345678-1234-1234-1234-123456789012',
-    this extracts the first 8 digits after the prefix as an integer.
-
-    Returns None if the tenant ID doesn't match the expected format.
-    """
-    if not tenant_id.startswith(TENANT_ID_PREFIX):
-        return None
-
-    # Remove the prefix
-    uuid_part = tenant_id[len(TENANT_ID_PREFIX) :]
-
-    # Extract the first 8 characters (should be hex digits)
-    if len(uuid_part) >= 8:
-        try:
-            # Convert first 8 hex digits to integer
-            return int(uuid_part[:8], 16)
-        except ValueError:
-            return None
-
-    return None
-
-
 def filter_tenants_by_range(
     tenant_ids: list[str], start_range: int | None = None, end_range: int | None = None
 ) -> list[str]:
     """
-    Filter tenant IDs by numeric range based on the first 8 hex digits of their UUID.
+    Filter tenant IDs by alphabetical position range.
 
     Args:
         tenant_ids: List of tenant IDs to filter
-        start_range: Minimum tenant number (inclusive)
-        end_range: Maximum tenant number (inclusive)
+        start_range: Starting position in alphabetically sorted list (1-based, inclusive)
+        end_range: Ending position in alphabetically sorted list (1-based, inclusive)
 
     Returns:
-        Filtered list of tenant IDs
+        Filtered list of tenant IDs in their original order
     """
     if start_range is None and end_range is None:
         return tenant_ids
 
+    # Separate tenant IDs from non-tenant schemas
+    tenant_schemas = [tid for tid in tenant_ids if tid.startswith(TENANT_ID_PREFIX)]
+    non_tenant_schemas = [
+        tid for tid in tenant_ids if not tid.startswith(TENANT_ID_PREFIX)
+    ]
+
+    # Sort tenant schemas alphabetically
+    sorted_tenant_schemas = sorted(tenant_schemas)
+
+    # Apply range filtering (convert to 0-based indexing)
+    start_idx = (start_range - 1) if start_range is not None else 0
+    end_idx = end_range if end_range is not None else len(sorted_tenant_schemas)
+
+    # Ensure indices are within bounds
+    start_idx = max(0, start_idx)
+    end_idx = min(len(sorted_tenant_schemas), end_idx)
+
+    # Get the filtered tenant schemas
+    filtered_tenant_schemas = sorted_tenant_schemas[start_idx:end_idx]
+
+    # Combine with non-tenant schemas and preserve original order
     filtered_tenants = []
     for tenant_id in tenant_ids:
-        tenant_num = extract_tenant_number(tenant_id)
-        if tenant_num is None:
-            # Include tenants that don't match the expected format
+        if tenant_id in filtered_tenant_schemas or tenant_id in non_tenant_schemas:
             filtered_tenants.append(tenant_id)
-            continue
-
-        # Check if tenant number is within range
-        if start_range is not None and tenant_num < start_range:
-            continue
-        if end_range is not None and tenant_num > end_range:
-            continue
-
-        filtered_tenants.append(tenant_id)
 
     return filtered_tenants
 
@@ -177,6 +161,10 @@ def get_schema_options() -> tuple[str, bool, bool, bool, int | None, int | None]
             raise ValueError(
                 f"tenant_range_start ({tenant_range_start}) cannot be greater than tenant_range_end ({tenant_range_end})"
             )
+
+    # If tenant range parameters are specified, automatically enable upgrade_all_tenants
+    if tenant_range_start is not None or tenant_range_end is not None:
+        upgrade_all_tenants = True
 
     if (
         MULTI_TENANT
