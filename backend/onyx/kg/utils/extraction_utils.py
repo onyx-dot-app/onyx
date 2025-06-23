@@ -451,12 +451,8 @@ class EntityTypeMetadataTracker:
                 )
                 self.entity_attr_info[entity_type][attribute] = trackinfo
 
-            # if we see to many different values, we stop tracking
-            if (
-                trackinfo.values is None
-                or len(trackinfo.values) > KG_METADATA_TRACKING_THRESHOLD
-            ):
-                trackinfo.values = None
+            # None means marked as don't track
+            if trackinfo.values is None:
                 continue
 
             # track the value
@@ -464,3 +460,7 @@ class EntityTypeMetadataTracker:
                 trackinfo.values.add(value)
             else:
                 trackinfo.values.update(value)
+
+            # if we see to many different values, we stop tracking
+            if len(trackinfo.values) > KG_METADATA_TRACKING_THRESHOLD:
+                trackinfo.values = None

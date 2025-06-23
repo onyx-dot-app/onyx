@@ -937,9 +937,14 @@ def get_unprocessed_kg_document_batch_for_connector(
         .where(
             and_(
                 DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DbDocument.doc_updated_at >= kg_coverage_start,
-                DbDocument.doc_updated_at
-                >= datetime.now() - timedelta(days=kg_max_coverage_days),
+                or_(
+                    DbDocument.doc_updated_at.is_(None),
+                    DbDocument.doc_updated_at
+                    >= max(
+                        kg_coverage_start,
+                        datetime.now() - timedelta(days=kg_max_coverage_days),
+                    ),
+                ),
                 or_(
                     DbDocument.kg_stage.is_(None),
                     DbDocument.kg_stage == KGStage.NOT_STARTED,
@@ -1185,14 +1190,17 @@ def check_for_documents_needing_kg_processing(
         .where(
             and_(
                 Connector.kg_processing_enabled.is_(True),
-                DbDocument.doc_updated_at >= kg_coverage_start,
-                DbDocument.doc_updated_at
-                >= datetime.now() - timedelta(days=kg_max_coverage_days),
                 or_(
-                    or_(
-                        DbDocument.kg_stage.is_(None),
-                        DbDocument.kg_stage == KGStage.NOT_STARTED,
+                    DbDocument.doc_updated_at.is_(None),
+                    DbDocument.doc_updated_at
+                    >= max(
+                        kg_coverage_start,
+                        datetime.now() - timedelta(days=kg_max_coverage_days),
                     ),
+                ),
+                or_(
+                    DbDocument.kg_stage.is_(None),
+                    DbDocument.kg_stage == KGStage.NOT_STARTED,
                     DbDocument.doc_updated_at > DbDocument.kg_processing_time,
                 ),
             )
