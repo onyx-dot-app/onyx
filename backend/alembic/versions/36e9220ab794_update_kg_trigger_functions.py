@@ -19,7 +19,7 @@ depends_on = None
 
 
 def _get_tenant_contextvar(session: Session) -> str:
-    """Set the tenant contextvar to the default schema"""
+    """Get the current schema for the migration"""
     current_tenant = session.execute(text("SELECT current_schema()")).scalar()
     if isinstance(current_tenant, str):
         return current_tenant
