@@ -107,3 +107,17 @@ def fetch_replies(
         request_url = get_next_url(
             graph_client=graph_client, json_response=json_response
         )
+
+
+def fetch_permissions(
+    graph_client: GraphClient,
+    team_id: str,
+    channel_id: str,
+) -> None:
+    initial_request_url = f"teams/{team_id}/channels/{channel_id}/members"
+    _json_response = retry(graph_client=graph_client, request_url=initial_request_url)
+    ...
+
+    # yield 0
+    # for value in json_response.get("value", []):
+    #     yield value

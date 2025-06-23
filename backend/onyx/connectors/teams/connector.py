@@ -32,6 +32,7 @@ from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
 from onyx.connectors.teams.utils import fetch_messages
+from onyx.connectors.teams.utils import fetch_permissions
 from onyx.connectors.teams.utils import fetch_replies
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -106,7 +107,7 @@ class TeamsConnector(
             # make sure it doesn't take forever, since this is a syncronous call
             found_teams = run_with_timeout(
                 timeout=10,
-                func=_collect_all_team_ids,
+                func=_collect_all_teams,
                 graph_client=self.graph_client,
                 requested=self.requested_team_list,
             )
@@ -173,7 +174,7 @@ class TeamsConnector(
         todos = checkpoint.todo_team_ids
 
         if todos is None:
-            root_todos = _collect_all_team_ids(
+            root_todos = _collect_all_teams(
                 graph_client=self.graph_client,
                 requested=self.requested_team_list,
             )
@@ -230,7 +231,27 @@ class TeamsConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
-    ) -> GenerateSlimDocumentOutput: ...
+    ) -> GenerateSlimDocumentOutput:
+        teams = _collect_all_teams(
+            graph_client=self.graph_client,
+            requested=self.requested_team_list,
+        )
+
+        for team in teams:
+            team = _get_team_by_id(
+                graph_client=self.graph_client,
+                team_id=team,
+            )
+            channels = _collect_all_channels_from_team(team=team)
+            for channel in channels:
+                if not channel.id:
+                    continue
+
+                fetch_permissions(
+                    graph_client=self.graph_client, team_id=team, channel_id=channel.id
+                )
+
+        yield []
 
 
 def _extract_channel_members(channel: Channel) -> set[str]:
@@ -335,10 +356,10 @@ def _update_request_url(request: RequestOptions, next_url: str) -> None:
     request.url = next_url
 
 
-def _collect_all_team_ids(
+def _collect_all_teams(
     graph_client: GraphClient,
     requested: list[str] | None = None,
-) -> list[str]:
+) -> list[Team]:
     team_ids: list[str] = []
     next_url: str | None = None
 
@@ -362,55 +383,51 @@ def _collect_all_team_ids(
             )
 
         team_collection = query.execute_query()
-
-        filtered_team_ids = [
-            team_id
-            for team_id in [
-                _filter_team_id(team=team, requested=requested)
-                for team in team_collection
-            ]
-            if team_id
-        ]
-
+        filtered_team_ids = iter(
+            team
+            for team in team_collection
+            if _filter_team(team=team, requested=requested)
+        )
         team_ids.extend(filtered_team_ids)
 
-        if team_collection.has_next:
-            if not isinstance(team_collection._next_request_url, str):
-                raise ValueError(
-                    f"The next request url field should be a string, instead got {type(team_collection._next_request_url)}"
-                )
-            next_url = team_collection._next_request_url
-        else:
+        if not team_collection.has_next:
             break
+
+        if not isinstance(team_collection._next_request_url, str):
+            raise ValueError(
+                f"The next request url field should be a string, instead got {type(team_collection._next_request_url)}"
+            )
+
+        next_url = team_collection._next_request_url
 
     return team_ids
 
 
-def _filter_team_id(
+def _filter_team(
     team: Team,
     requested: list[str] | None = None,
-) -> str | None:
+) -> bool:
     """
-    Returns the Team ID if:
+    Returns the true if:
         - Team is not expired / deleted
         - Team has a display-name and ID
         - Team display-name is in the requested teams list
 
-    Otherwise, returns `None`.
+    Otherwise, returns false.
     """
 
     if not team.id or not team.display_name:
-        return None
+        return False
 
     if requested and team.display_name not in requested:
-        return None
+        return False
 
     props = team.properties
 
     if props.get("expirationDateTime") or props.get("deletedDateTime"):
-        return None
+        return False
 
-    return team.id
+    return True
 
 
 def _get_team_by_id(
@@ -518,20 +535,22 @@ if __name__ == "__main__":
 
     teams_env_var = os.environ.get("TEAMS", None)
     teams = teams_env_var.split(",") if teams_env_var else []
-    connector = TeamsConnector(teams=teams)
 
-    connector.load_credentials(
+    teams_connector = TeamsConnector(teams=teams)
+    teams_connector.load_credentials(
         {
             "teams_client_id": app_id,
             "teams_directory_id": dir_id,
             "teams_client_secret": secret,
         }
     )
+    teams_connector.validate_connector_settings()
 
-    connector.validate_connector_settings()
+    for slim_doc in teams_connector.retrieve_all_slim_documents():
+        ...
 
     for doc in load_everything_from_checkpoint_connector(
-        connector=connector,
+        connector=teams_connector,
         start=0.0,
         end=datetime.now(tz=timezone.utc).timestamp(),
     ):
