@@ -35,7 +35,13 @@ logger = setup_logger()
     trail=False,
 )
 def export_query_history_task(
-    self: Task, *, start: datetime, end: datetime, start_time: datetime
+    self: Task,
+    *,
+    start: datetime,
+    end: datetime,
+    start_time: datetime,
+    # Need to include the tenant_id since the TenantAwareTask needs this
+    tenant_id: str,
 ) -> None:
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")
