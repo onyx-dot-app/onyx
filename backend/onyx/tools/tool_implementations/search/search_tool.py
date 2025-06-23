@@ -1,3 +1,4 @@
+import copy
 import json
 from collections.abc import Callable
 from collections.abc import Generator
@@ -323,7 +324,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             yield from self._build_response_for_specified_sections(query)
             return
 
-        retrieval_options = self.retrieval_options or RetrievalDetails()
+        retrieval_options = copy.deepcopy(self.retrieval_options) or RetrievalDetails()
         if document_sources or time_cutoff:
             # if empty, just start with an empty filters object
             if not retrieval_options.filters:
