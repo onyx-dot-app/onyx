@@ -82,8 +82,14 @@ def _normalize_one_entity(
         metadata = MetaData()
         if allowed_docs_temp_view_name is None:
             raise ValueError("allowed_docs_temp_view_name is not available")
+        if allowed_docs_temp_view_name.startswith('"tenant'):
+            effective_schema_allowed_docs_temp_view_name = (
+                allowed_docs_temp_view_name.split(".")[1]
+            )
+        else:
+            effective_schema_allowed_docs_temp_view_name = allowed_docs_temp_view_name
         allowed_docs_temp_view = Table(
-            allowed_docs_temp_view_name,
+            effective_schema_allowed_docs_temp_view_name,
             metadata,
             autoload_with=db_session.get_bind(),
         )
