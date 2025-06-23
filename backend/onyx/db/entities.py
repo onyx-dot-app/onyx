@@ -199,8 +199,8 @@ def merge_entities(
             alternative_names=list(alternative_names),
             occurrences=parent.occurrences + child.occurrences,
             attributes=parent.attributes | child.attributes,
-            entity_key=child.entity_key,
-            parent_key=child.parent_key,
+            entity_key=parent.entity_key or child.entity_key,
+            parent_key=parent.parent_key or child.parent_key,
         )
         .returning(KGEntity)
     )
