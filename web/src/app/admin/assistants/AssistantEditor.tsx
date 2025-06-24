@@ -1180,7 +1180,7 @@ export function AssistantEditor({
                 {showAdvancedOptions && (
                   <>
                     <div className="max-w-4xl w-full">
-                      {user?.role == UserRole.ADMIN && (
+                      {user?.role === UserRole.ADMIN && (
                         <BooleanFormField
                           onChange={(checked) => {
                             if (checked) {
@@ -1474,7 +1474,7 @@ export function AssistantEditor({
                                   {option.name}
                                 </span>
                               </div>
-                              {isAdminPage && (
+                              {user?.role === UserRole.ADMIN && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
