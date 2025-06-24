@@ -122,7 +122,6 @@ export function AssistantEditor({
   llmProviders,
   tools,
   shouldAddAssistantToUserPreferences,
-  admin,
 }: {
   existingPersona?: FullPersona | null;
   ccPairs: CCPairBasicInfo[];
@@ -132,7 +131,6 @@ export function AssistantEditor({
   llmProviders: LLMProviderView[];
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
-  admin?: boolean;
 }) {
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
 
@@ -1476,7 +1474,7 @@ export function AssistantEditor({
                                   {option.name}
                                 </span>
                               </div>
-                              {admin && (
+                              {isAdminPage && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1593,32 +1591,33 @@ export function AssistantEditor({
                   </>
                 )}
 
-                <div className="mt-12 gap-x-2 w-full justify-end flex">
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || isRequestSuccessful}
-                  >
-                    {isUpdate ? "Update" : "Create"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => router.back()}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-
-                <div className="flex justify-end">
-                  {existingPersona && (
+                <div className="mt-12 w-full flex justify-between items-center">
+                  <div>
+                    {existingPersona && (
+                      <Button
+                        variant="destructive"
+                        onClick={openDeleteModal}
+                        type="button"
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-x-2">
                     <Button
-                      variant="destructive"
-                      onClick={openDeleteModal}
-                      type="button"
+                      type="submit"
+                      disabled={isSubmitting || isRequestSuccessful}
                     >
-                      Delete
+                      {isUpdate ? "Update" : "Create"}
                     </Button>
-                  )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => router.back()}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
               </Form>
             </>

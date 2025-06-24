@@ -3,17 +3,9 @@ import CardSection from "@/components/admin/CardSection";
 import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
-  const resolvedParams = await params;
-  const [values, error] = await fetchAssistantEditorInfoSS(resolvedParams.id);
-
-  const isAdmin = searchParams?.admin === "true";
+export default async function Page(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const [values, error] = await fetchAssistantEditorInfoSS(params.id);
 
   if (!values) {
     return (
@@ -27,11 +19,7 @@ export default async function Page({
         <div className="px-32">
           <div className="mx-auto container">
             <CardSection className="!border-none !bg-transparent !ring-none">
-              <AssistantEditor
-                {...values}
-                defaultPublic={false}
-                admin={isAdmin}
-              />
+              <AssistantEditor {...values} defaultPublic={false} />
             </CardSection>
           </div>
         </div>

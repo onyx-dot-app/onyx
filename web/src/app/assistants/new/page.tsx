@@ -3,14 +3,8 @@ import { AssistantEditor } from "@/app/admin/assistants/AssistantEditor";
 import { fetchAssistantEditorInfoSS } from "@/lib/assistants/fetchPersonaEditorInfoSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined };
-}) {
+export default async function Page() {
   const [values, error] = await fetchAssistantEditorInfoSS();
-
-  const isAdmin = searchParams?.admin === "true";
 
   let body;
   if (!values) {
@@ -29,7 +23,6 @@ export default async function Page({
                 {...values}
                 defaultPublic={false}
                 shouldAddAssistantToUserPreferences={true}
-                admin={isAdmin}
               />
             </CardSection>
           </div>
