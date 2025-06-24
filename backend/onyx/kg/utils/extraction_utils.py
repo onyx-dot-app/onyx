@@ -273,6 +273,7 @@ def kg_process_person(
     ):
         return None
 
+    person_entity = None
     if kg_person.employee and "EMPLOYEE" in active_entity_types:
         person_entity = make_entity_id("EMPLOYEE", kg_person.name)
     elif not kg_person.employee and "ACCOUNT" in active_entity_types:
