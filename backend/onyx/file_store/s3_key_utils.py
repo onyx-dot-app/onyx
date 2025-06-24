@@ -13,6 +13,11 @@ import re
 import urllib.parse
 from re import Match
 
+# Constants for S3 key generation
+HASH_LENGTH = 64  # SHA256 hex digest length
+HASH_SEPARATOR_LENGTH = 1  # Length of underscore separator
+HASH_WITH_SEPARATOR_LENGTH = HASH_LENGTH + HASH_SEPARATOR_LENGTH
+
 
 def _encode_special_char(match: Match[str]) -> str:
     """Helper function to URL encode special characters."""
@@ -145,8 +150,8 @@ def generate_s3_key(
     file_hash = hashlib.sha256(file_name.encode("utf-8")).hexdigest()
 
     # Calculate how much space we have for the readable part
-    # Reserve 65 characters for hash (64 chars + 1 underscore)
-    readable_part_max_length = max(0, max_file_name_length - 65)
+    # Reserve space for hash (64 chars) + underscore separator (1 char)
+    readable_part_max_length = max(0, max_file_name_length - HASH_WITH_SEPARATOR_LENGTH)
 
     if readable_part_max_length > 0:
         # Use first part of sanitized name + hash to maintain some readability
