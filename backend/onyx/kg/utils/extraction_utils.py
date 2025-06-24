@@ -100,9 +100,9 @@ def kg_document_entities_relationships_attribute_generation(
 
     # Chunk treatment variables
 
-    document_is_from_call = document_entity_type.lower() in {
+    document_is_from_call = document_entity_type.lower() in (
         call_type.value.lower() for call_type in OnyxCallTypes
-    }
+    )
 
     # Get core entity
 
@@ -275,21 +275,19 @@ def kg_process_person(
 
     if kg_person.employee and "EMPLOYEE" in active_entity_types:
         person_entity = make_entity_id("EMPLOYEE", kg_person.name)
-        return (
-            person_entity,
-            make_relationship_id(person_entity, relationship_type, document_entity_id),
-            f"{kg_person.name} -- ({kg_person.company})",
-            "",
-        )
-
     elif not kg_person.employee and "ACCOUNT" in active_entity_types:
         person_entity = make_entity_id("ACCOUNT", kg_person.company)
+
+    if person_entity:
+        is_account = person_entity.startswith("ACCOUNT")
+        participant_email = f"{kg_person.name} -- ({kg_person.company})"
         return (
             person_entity,
             make_relationship_id(person_entity, relationship_type, document_entity_id),
-            "",
-            f"{kg_person.name} -- ({kg_person.company})",
+            participant_email if not is_account else "",
+            participant_email if is_account else "",
         )
+
     return None
 
 
