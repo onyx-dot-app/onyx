@@ -27,6 +27,7 @@ from onyx.db.file_record import get_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.file_record import upsert_filerecord
 from onyx.db.models import FileRecord as FileStoreModel
+from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -206,7 +207,19 @@ class S3BackedFileStore(FileStore):
     def _get_s3_key(self, file_name: str) -> str:
         """Generate S3 key from file name with tenant ID prefix"""
         tenant_id = get_current_tenant_id()
-        return f"{self._s3_prefix}/{tenant_id}/{file_name}"
+
+        s3_key = generate_s3_key(
+            file_name=file_name,
+            prefix=self._s3_prefix,
+            tenant_id=tenant_id,
+            max_key_length=1024,
+        )
+
+        # Log if truncation occurred (when the key is exactly at the limit)
+        if len(s3_key) == 1024:
+            logger.info(f"File name was too long and was truncated: {file_name}")
+
+        return s3_key
 
     def initialize(self) -> None:
         """Initialize the S3 file store by ensuring the bucket exists"""

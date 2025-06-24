@@ -54,8 +54,8 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
-from onyx.db.engine import get_session
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback

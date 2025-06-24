@@ -10,7 +10,7 @@ from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.db.notification import dismiss_all_notifications

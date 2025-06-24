@@ -11,8 +11,8 @@ import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.celery_utils import make_probe_path
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.configs.constants import POSTGRES_CELERY_BEAT_APP_NAME
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST

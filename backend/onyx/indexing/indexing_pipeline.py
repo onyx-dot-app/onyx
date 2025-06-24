@@ -41,7 +41,7 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings

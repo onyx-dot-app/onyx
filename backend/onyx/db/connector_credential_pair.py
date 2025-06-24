@@ -18,7 +18,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import Connector
@@ -148,7 +148,7 @@ def get_connector_credential_pairs_for_user_parallel(
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
 ) -> list[ConnectorCredentialPair]:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         return get_connector_credential_pairs_for_user(
             db_session,
             user,
@@ -208,7 +208,7 @@ def get_cc_pair_groups_for_ids(
 def get_cc_pair_groups_for_ids_parallel(
     cc_pair_ids: list[int],
 ) -> list[UserGroup__ConnectorCredentialPair]:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         return get_cc_pair_groups_for_ids(db_session, cc_pair_ids)
 
 

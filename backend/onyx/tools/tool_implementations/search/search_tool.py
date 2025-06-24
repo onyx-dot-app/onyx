@@ -342,7 +342,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 # Overwrite time-cutoff should supercede existing time-cutoff, even if defined
                 retrieval_options.filters.time_cutoff = time_cutoff
 
-        retrieval_options = retrieval_options or RetrievalDetails()
+        retrieval_options = copy.deepcopy(retrieval_options) or RetrievalDetails()
         retrieval_options.filters = retrieval_options.filters or BaseFilters()
         if kg_entities:
             retrieval_options.filters.kg_entities = kg_entities

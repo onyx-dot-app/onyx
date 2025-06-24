@@ -13,7 +13,7 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.persona import get_persona_by_id
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM

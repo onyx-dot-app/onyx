@@ -33,7 +33,7 @@ from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
 from onyx.chat.models import ToolResponse
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.llm.factory import get_default_llms
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
@@ -195,7 +195,7 @@ if __name__ == "__main__":
             query="Do a search to tell me what is the difference between astronomy and astrology?",
         )
 
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             config = get_test_config(db_session, primary_llm, fast_llm, search_request)
             assert (
                 config.persistence is not None

@@ -19,7 +19,7 @@ from ee.onyx.db.analytics import fetch_query_analytics
 from ee.onyx.db.analytics import user_can_view_assistant_stats
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 
 router = APIRouter(prefix="/analytics")

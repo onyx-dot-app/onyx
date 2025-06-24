@@ -222,17 +222,6 @@ try:
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
 
-# Experimental setting to control idle transactions
-POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT = 0  # milliseconds
-try:
-    POSTGRES_IDLE_SESSIONS_TIMEOUT = int(
-        os.environ.get(
-            "POSTGRES_IDLE_SESSIONS_TIMEOUT", POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT
-        )
-    )
-except ValueError:
-    POSTGRES_IDLE_SESSIONS_TIMEOUT = POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT
-
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
 

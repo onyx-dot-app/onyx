@@ -97,9 +97,9 @@ from onyx.db.auth import get_default_admin_user_emails
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_context_manager
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.async_sql_engine import get_async_session
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User

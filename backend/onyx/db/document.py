@@ -28,7 +28,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
 from onyx.db.enums import AccessType
@@ -299,7 +299,7 @@ def get_document_counts_for_cc_pairs(
 def get_document_counts_for_cc_pairs_parallel(
     cc_pairs: list[ConnectorCredentialPairIdentifier],
 ) -> Sequence[tuple[int, int, int]]:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         return get_document_counts_for_cc_pairs(db_session, cc_pairs)
 
 

@@ -25,7 +25,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.configs.kg_configs import KG_ENTITY_EXTRACTION_TIMEOUT
 from onyx.configs.kg_configs import KG_RELATIONSHIP_EXTRACTION_TIMEOUT
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import get_user_view_names
 from onyx.db.relationships import get_allowed_relationship_type_pairs
@@ -35,6 +35,7 @@ from onyx.prompts.kg_prompts import QUERY_ENTITY_EXTRACTION_PROMPT
 from onyx.prompts.kg_prompts import QUERY_RELATIONSHIP_EXTRACTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -80,10 +81,12 @@ def extract_ert(
     stream_write_step_activities(writer, _KG_STEP_NR)
 
     # Create temporary views. TODO: move into parallel step, if ultimately materialized
-    kg_views = get_user_view_names(user_email)
+    tenant_id = get_current_tenant_id()
+    kg_views = get_user_view_names(user_email, tenant_id)
     with get_session_with_current_tenant() as db_session:
         create_views(
             db_session,
+            tenant_id=tenant_id,
             user_email=user_email,
             allowed_docs_view_name=kg_views.allowed_docs_view_name,
             kg_relationships_view_name=kg_views.kg_relationships_view_name,

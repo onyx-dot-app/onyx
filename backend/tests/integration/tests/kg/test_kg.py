@@ -8,7 +8,7 @@ import requests
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import set_kg_config_settings
 from onyx.db.models import Connector
@@ -35,7 +35,7 @@ def reset_for_test() -> None:
 @pytest.fixture()
 def connectors() -> None:
     """Set up connectors for tests."""
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         # Create Salesforce connector
         connector_data = ConnectorBase(
             name="Salesforce Test",
@@ -194,7 +194,7 @@ def test_update_kg_entity_types(connectors: None) -> None:
     ), f"Error response: {res3.status_code} - {res3.text}"
 
     # Check connector kg_processing is enabled
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         connector = (
             db_session.query(Connector)
             .filter(Connector.name == "Salesforce Test")

@@ -45,9 +45,9 @@ from sqlalchemy import and_
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair

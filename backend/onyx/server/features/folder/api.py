@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.chat import get_chat_session_by_id
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.folder import add_chat_to_folder
 from onyx.db.folder import create_folder
 from onyx.db.folder import delete_folder

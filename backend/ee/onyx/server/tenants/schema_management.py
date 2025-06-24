@@ -8,8 +8,8 @@ from sqlalchemy.schema import CreateSchema
 
 from alembic import command
 from alembic.config import Config
-from onyx.db.engine import build_connection_string
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import build_connection_string
+from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 
 logger = logging.getLogger(__name__)
 

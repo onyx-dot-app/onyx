@@ -11,7 +11,7 @@ from onyx.background.celery.tasks.kg_processing.utils import extend_lock
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.kg_configs import KG_CLUSTERING_RETRIEVE_THRESHOLD
 from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import KGEntity
 from onyx.db.entities import KGEntityExtractionStaging
 from onyx.db.entities import merge_entities

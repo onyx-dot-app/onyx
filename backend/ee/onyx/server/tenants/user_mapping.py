@@ -5,8 +5,8 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import get_pending_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.invited_users import write_pending_users
-from onyx.db.engine import get_session_with_shared_schema
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import UserTenantMapping
 from onyx.server.manage.models import TenantSnapshot
 from onyx.utils.logger import setup_logger

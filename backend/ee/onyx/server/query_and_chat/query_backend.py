@@ -31,7 +31,7 @@ from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import get_prompt_by_id
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id

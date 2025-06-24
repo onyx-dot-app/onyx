@@ -28,8 +28,8 @@ from onyx.auth.users import exceptions
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import MilestoneRecordType
-from onyx.db.engine import get_session_with_shared_schema
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider

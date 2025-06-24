@@ -34,7 +34,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus

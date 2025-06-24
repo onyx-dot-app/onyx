@@ -25,12 +25,12 @@ from onyx.connectors.confluence.utils import CONFLUENCE_OAUTH_TOKEN_URL
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.credentials import update_credential_json
-from onyx.db.engine import get_current_tenant_id
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 

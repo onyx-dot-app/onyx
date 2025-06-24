@@ -13,7 +13,7 @@ from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import update_chat_session
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse

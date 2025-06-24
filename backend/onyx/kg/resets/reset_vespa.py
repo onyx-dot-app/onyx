@@ -8,7 +8,7 @@ from onyx.background.celery.tasks.kg_processing.utils import extend_lock
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_num_chunks_for_document
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType

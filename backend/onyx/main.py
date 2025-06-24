@@ -48,9 +48,9 @@ from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import SqlEngine
-from onyx.db.engine import warm_up_connections
+from onyx.db.engine.connection_warmup import warm_up_connections
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
@@ -254,7 +254,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
             # set up the file store (e.g. create bucket if needed). On multi-tenant,
             # this is done via IaC

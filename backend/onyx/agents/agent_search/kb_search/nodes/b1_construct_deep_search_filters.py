@@ -13,7 +13,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.configs.kg_configs import KG_FILTER_CONSTRUCTION_TIMEOUT
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entity_type import get_entity_types_with_grounded_source_name
 from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.prompts.kg_prompts import SEARCH_FILTER_CONSTRUCTION_PROMPT

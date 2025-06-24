@@ -9,7 +9,7 @@ from onyx.auth.users import current_user
 from onyx.auth.users import get_user_manager
 from onyx.auth.users import User
 from onyx.auth.users import UserManager
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.users import get_user_by_email
 from onyx.server.features.password.models import ChangePasswordRequest
 from onyx.server.features.password.models import UserResetRequest

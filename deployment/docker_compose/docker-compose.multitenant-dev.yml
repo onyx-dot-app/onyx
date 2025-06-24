@@ -111,6 +111,10 @@ services:
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       # Seeding configuration
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
+
+      # Vespa Language Forcing
+      # See: https://docs.vespa.ai/en/linguistics.html 
+      - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:

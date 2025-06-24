@@ -4,7 +4,7 @@ from redis.lock import Lock as RedisLock
 
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.document import check_for_documents_needing_kg_processing
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.models import KGEntityExtractionStaging

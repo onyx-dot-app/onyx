@@ -16,7 +16,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import QueryHistoryType
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.tasks import delete_task_with_id
 from onyx.db.tasks import mark_task_as_finished_with_id
 from onyx.db.tasks import mark_task_as_started_with_id
@@ -35,7 +35,13 @@ logger = setup_logger()
     trail=False,
 )
 def export_query_history_task(
-    self: Task, *, start: datetime, end: datetime, start_time: datetime
+    self: Task,
+    *,
+    start: datetime,
+    end: datetime,
+    start_time: datetime,
+    # Need to include the tenant_id since the TenantAwareTask needs this
+    tenant_id: str,
 ) -> None:
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")

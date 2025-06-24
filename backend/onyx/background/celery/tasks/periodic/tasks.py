@@ -15,7 +15,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PostgresAdvisoryLocks
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 
 
 @shared_task(

@@ -5,8 +5,8 @@ from pathlib import Path
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.context.search.models import RerankingDetails
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.factory import get_default_document_index

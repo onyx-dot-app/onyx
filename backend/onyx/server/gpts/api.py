@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.server.onyx_api.ingestion import api_key_dep

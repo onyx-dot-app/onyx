@@ -27,7 +27,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.configs.kg_configs import KG_STRATEGY_GENERATION_TIMEOUT
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import get_document_id_for_entity
 from onyx.kg.clustering.normalizations import normalize_entities
 from onyx.kg.clustering.normalizations import normalize_relationships
@@ -265,10 +265,7 @@ def analyze(
 Format: {output_format.value}, Broken down question: {broken_down_question}"
 
     extraction_detected_relationships = len(query_graph_relationships) > 0
-    if (
-        extraction_detected_relationships
-        or relationship_detection == KGRelationshipDetection.RELATIONSHIPS.value
-    ):
+    if extraction_detected_relationships:
         query_type = KGRelationshipDetection.RELATIONSHIPS.value
 
         if extraction_detected_relationships:

@@ -23,7 +23,7 @@ from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id

@@ -5,7 +5,7 @@ from slack_sdk.errors import SlackApiError
 
 from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks

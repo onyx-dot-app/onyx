@@ -23,7 +23,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import OnyxExtensionType

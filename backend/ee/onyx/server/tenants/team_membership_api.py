@@ -9,7 +9,7 @@ from ee.onyx.server.tenants.user_mapping import remove_users_from_tenant
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import User
 from onyx.db.auth import get_user_count
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_user_by_email
 from onyx.server.manage.models import UserByEmail

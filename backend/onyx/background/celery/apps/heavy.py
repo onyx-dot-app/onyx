@@ -12,7 +12,7 @@ from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_HEAVY_APP_NAME
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 

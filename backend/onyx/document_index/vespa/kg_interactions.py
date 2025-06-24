@@ -1,6 +1,6 @@
 from onyx.db.document import get_document_kg_entities_and_relationships
 from onyx.db.document import get_num_chunks_for_document
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.utils.logger import setup_logger

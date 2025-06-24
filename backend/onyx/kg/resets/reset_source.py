@@ -2,7 +2,7 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy import or_
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair

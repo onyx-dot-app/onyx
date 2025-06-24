@@ -27,10 +27,10 @@ from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType

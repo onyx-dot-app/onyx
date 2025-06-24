@@ -24,7 +24,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.llm.factory import get_default_llms
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -61,7 +61,7 @@ example_ids = test_data["example_ids"]
 
 failed_example_ids: list[int] = []
 
-with get_session_context_manager() as db_session:
+with get_session_with_current_tenant() as db_session:
     output_data: dict[str, Any] = {}
 
     primary_llm, fast_llm = get_default_llms()
@@ -105,7 +105,7 @@ with get_session_context_manager() as db_session:
 
             answer_tokens: dict[str, list[str]] = defaultdict(list)
 
-            with get_session_context_manager() as db_session:
+            with get_session_with_current_tenant() as db_session:
                 config = get_test_config(
                     db_session, primary_llm, fast_llm, search_request
                 )

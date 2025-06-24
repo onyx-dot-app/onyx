@@ -16,7 +16,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import SubQueryPiece
 from onyx.db.document import get_base_llm_doc_information
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.utils.logger import setup_logger
 
 
