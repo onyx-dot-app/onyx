@@ -1127,7 +1127,6 @@ def _kg_chunk_batch_extraction(
         terms=defaultdict(int),
     )
 
-    # TODO: don't extract generalied entities & relations in the first place
     for chunk_result in succeeded_chunk_extraction:
         aggregated_kg_extractions.grounded_entities_document_ids[
             chunk_result.core_entity
@@ -1139,8 +1138,6 @@ def _kg_chunk_batch_extraction(
             if len(relationship_split) == 3:
                 source_entity = relationship_split[0]
                 target_entity = relationship_split[2]
-                if "*" in source_entity or "*" in target_entity:
-                    continue
                 if source_entity not in mentioned_chunk_entities:
                     aggregated_kg_extractions.entities[source_entity] = 1
                     mentioned_chunk_entities.add(source_entity)
@@ -1158,8 +1155,6 @@ def _kg_chunk_batch_extraction(
             ] += 1
 
         for kg_entity in chunk_result.entities or set():
-            if "*" in kg_entity:
-                continue
             if kg_entity not in mentioned_chunk_entities:
                 aggregated_kg_extractions.entities[kg_entity] = 1
                 mentioned_chunk_entities.add(kg_entity)
@@ -1167,8 +1162,6 @@ def _kg_chunk_batch_extraction(
                 aggregated_kg_extractions.entities[kg_entity] += 1
 
         for kg_term in chunk_result.terms or set():
-            if "*" in kg_term:
-                continue
             if kg_term not in aggregated_kg_extractions.terms:
                 aggregated_kg_extractions.terms[kg_term] = 1
             else:
