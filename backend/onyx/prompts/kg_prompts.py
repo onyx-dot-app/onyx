@@ -42,7 +42,7 @@ QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization)>. Each entity \
 also should be followed by a list of comma-separated attribute filters for the entity, if referred to in the \
 question for that entity. CRITICAL: you can only use attributes that are mentioned above for the \
-entity type in question. Example: 'ACCOUNT::* -- [account_type: customer, status: active]' should the question be \
+entity type in question. Example: 'ACCOUNT::* -- [account_type: customer, status: active]' if the question is \
 'list all customer accounts', and ACCOUNT was an entity type with these attribute key/values allowed.] \
 "time_filter": <if needed, a SQL-like filter for a field called 'event_date'. Do not select anything here \
 unless you are sure that the question asks for that filter. Only apply a time_filter if the question explicitly \
@@ -271,7 +271,7 @@ and asked to extract entities (with attributes if applicable) that you can relia
 be matched with a known entity in the knowledge graph. You are also asked to extract time constraints information \
 from the QUESTION. Some time constraints will be captured by entity attributes if \
 the entity type has a fitting attribute (example: 'created_at' could be a candidate for that), other times
-we will extracty an explicit time filter if no attribute fits. (Note regarding 'last', 'first', etc.: DO NOT \
+we will extract an explicit time filter if no attribute fits. (Note regarding 'last', 'first', etc.: DO NOT \
 imply the need for a time filter just because the question asks for something that is not the current date. \
 They will relate to ordering that we will handle separately later).
 
@@ -342,7 +342,7 @@ actual attribute may be implied.
 may be about.
   - be very careful that you only extract attributes that are listed above for the entity type in question! Do \
 not make up attributes even if they are implied! Particularly if there is a relationship type that would \
-would actually represent that information, you MUST not extract the information as an attribute. We \
+actually represent that information, you MUST not extract the information as an attribute. We \
 will extract the relationship type later.
   - For the values of attributes, look at the possible values above! For example 'open' may refer to \
 'backlog', 'todo', 'in progress', etc. In cases like that construct a ';'-separated list of values that you think may fit \
@@ -604,8 +604,8 @@ above, and is generally suitable if it is enough to either list or count entitie
 'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', \
 'what did (someone) work on...'etc. Often it is also used in cases like 'what did John work on since April?'. Here, \
 the user would expect to just see the list. So chose 'SIMPLE' here unless there are REALLY CLEAR \
-follow-up instructions for each item (like 'summarize...' , 'anaylyze...', 'what are tyhe main poinst of...'.) If \
-it is a 'what did...'-type question, chose 'SIMPLE'!
+follow-up instructions for each item (like 'summarize...' , 'analyze...', 'what are the main points of...'.) If \
+it is a 'what did...'-type question, choose 'SIMPLE'!
 
 2. DEEP: You think you really should ALSO leverage the actual text of sources to answer the question, which sits \
 in a vector database. Examples are 'what is discussed in...', 'summarize', 'what is the discussion about...',\
