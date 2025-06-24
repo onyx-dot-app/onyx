@@ -18,7 +18,6 @@ from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import delete_from_kg_entities__no_commit
-from onyx.db.entities import get_all_entity_types
 from onyx.db.entities import upsert_staging_entity
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
@@ -32,7 +31,6 @@ from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import upsert_staging_relationship
 from onyx.db.relationships import upsert_staging_relationship_type
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGBatchExtractionStats
 from onyx.kg.models import KGChunkFormat
@@ -329,7 +327,7 @@ def kg_extraction(
     index_name: str,
     lock: RedisLock,
     processing_chunk_batch_size: int = 8,
-) -> list[ConnectorExtractionStats]:
+) -> None:
     """
     This extraction will try to extract from all chunks that have not been kg-processed yet.
 
@@ -351,32 +349,26 @@ def kg_extraction(
     validate_kg_settings(kg_config_settings)
 
     # get connector ids that are enabled for KG extraction
-
     with get_session_with_current_tenant() as db_session:
         kg_enabled_connectors = get_kg_enabled_connectors(db_session)
-
-    connector_extraction_stats: list[ConnectorExtractionStats] = []
 
     document_classification_extraction_instructions = (
         _get_classification_extraction_instructions()
     )
 
+    # get entity type info
     with get_session_with_current_tenant() as db_session:
-
-        all_entity_types = get_all_entity_types(db_session)
-        entity_metadata_conversion_instructions = {
-            entity_type.id_name: entity_type.parsed_attributes.metadata_attribute_conversion
-            for entity_type in all_entity_types
-        }
-
-        active_entity_type_names = {
+        all_entity_types = get_entity_types(db_session)
+        active_entity_types = {
             entity_type.id_name
             for entity_type in get_entity_types(db_session, active=True)
         }
 
-        tracked_entity_types = [
-            x.id_name for x in get_entity_types(db_session, active=None)
-        ]
+        # entity_type: (metadata: conversion property)
+        entity_metadata_conversion_instructions = {
+            entity_type.id_name: entity_type.parsed_attributes.metadata_attribute_conversion
+            for entity_type in all_entity_types
+        }
 
     # Track which metadata attributes are possible for each entity type
     metadata_tracker = EntityTypeMetadataTracker()
@@ -385,7 +377,6 @@ def kg_extraction(
     last_lock_time = time.monotonic()
 
     # Iterate over connectors that are enabled for KG extraction
-
     for kg_enabled_connector in kg_enabled_connectors:
         connector_id = kg_enabled_connector.id
         connector_coverage_days = kg_enabled_connector.kg_coverage_days
@@ -419,8 +410,6 @@ def kg_extraction(
             last_lock_time = extend_lock(
                 lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
             )
-
-            connector_extraction_stats = []
 
             logger.info(f"Processing document batch {document_batch_counter}")
 
@@ -506,7 +495,7 @@ def kg_extraction(
                     kg_document_entities_relationships_attribute_generation(
                         unprocessed_document,
                         batch_metadata[unprocessed_document.id],
-                        active_entity_type_names,
+                        active_entity_types,
                         kg_config_settings,
                     )
                 )
@@ -544,7 +533,7 @@ def kg_extraction(
                     entity_type = entity_type.upper()
                     entity_name = entity_name.capitalize()
 
-                    if entity_type not in active_entity_type_names:
+                    if entity_type not in active_entity_types:
                         continue
 
                     try:
@@ -602,11 +591,7 @@ def kg_extraction(
                             f"Error adding entity {entity}. Error message: {e}"
                         )
 
-                for (
-                    document_id,
-                    relationship,
-                ) in batch_relationships:
-
+                for document_id, relationship in batch_relationships:
                     relationship_split = split_relationship_id(relationship)
 
                     if len(relationship_split) != 3:
@@ -621,20 +606,14 @@ def kg_extraction(
                     target_entity_type = get_entity_type(target_entity)
 
                     if (
-                        source_entity_type not in tracked_entity_types
-                        or target_entity_type not in tracked_entity_types
+                        source_entity_type not in active_entity_types
+                        or target_entity_type not in active_entity_types
                     ):
                         continue
 
                     relationship_type_id_name = extract_relationship_type_id(
                         relationship
                     )
-
-                    if (
-                        source_entity_type not in active_entity_type_names
-                        or target_entity_type not in active_entity_type_names
-                    ):
-                        continue
 
                     with get_session_with_current_tenant() as db_session:
                         try:
@@ -689,7 +668,6 @@ def kg_extraction(
                 db_session.commit()
 
     metadata_tracker.export_typeinfo()
-    return connector_extraction_stats
 
 
 # TODO: this only needs to run if deep extraction is true with some refactoring in
