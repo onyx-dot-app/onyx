@@ -502,148 +502,141 @@ def kg_extraction(
 
                 # TODO 2. perform deep extraction and classification
 
-                # Populate the KG database with the extracted entities, relationships, and terms
+            # Populate the KG database with the extracted entities, relationships, and terms
+            batch_entities: list[tuple[str | None, str]] = []
+            batch_relationships: list[tuple[str, str]] = []
 
-                batch_entities: list[tuple[str | None, str]] = []
-                batch_relationships: list[tuple[str, str]] = []
+            for document_id, implied_metadata in batch_implied_metadata.items():
+                batch_entities += [
+                    (None, implied_entity)
+                    for implied_entity in implied_metadata.implied_entities
+                ]
+                batch_entities.append(
+                    (document_id, implied_metadata.kg_core_document_id_name)
+                )
+                batch_relationships += [
+                    (document_id, implied_relationship)
+                    for implied_relationship in implied_metadata.implied_relationships
+                ]
 
-                for document_id, implied_metadata in batch_implied_metadata.items():
-                    batch_entities += [
-                        (None, implied_entity)
-                        for implied_entity in implied_metadata.implied_entities
-                    ]
-                    batch_entities.append(
-                        (document_id, implied_metadata.kg_core_document_id_name)
+            for potential_document_id, entity in batch_entities:
+                # verify the entity is valid
+                parts = split_entity_id(entity)
+                if len(parts) != 2:
+                    logger.error(
+                        f"Invalid entity {entity} in aggregated_kg_extractions.entities"
                     )
-                    batch_relationships += [
-                        (document_id, implied_relationship)
-                        for implied_relationship in implied_metadata.implied_relationships
-                    ]
+                    continue
 
-                for potential_document_id, entity in batch_entities:
-                    # verify the entity is valid
-                    parts = split_entity_id(entity)
-                    if len(parts) != 2:
-                        logger.error(
-                            f"Invalid entity {entity} in aggregated_kg_extractions.entities"
+                entity_type, entity_name = parts
+                entity_type = entity_type.upper()
+                entity_name = entity_name.capitalize()
+
+                if entity_type not in active_entity_types:
+                    continue
+
+                try:
+                    with get_session_with_current_tenant() as db_session:
+
+                        entity_attributes: dict[str, Any] = {}
+
+                        if potential_document_id:
+                            entity_attributes = (
+                                batch_metadata[potential_document_id].document_metadata
+                                or {}
+                            )
+
+                        # For now, do document classifications
+
+                        # only keep selected attributes (and translate the attribute names)
+                        metadata_attributes = entity_metadata_conversion_instructions[
+                            entity_type
+                        ]
+
+                        keep_attributes = {
+                            metadata_attributes[attr_name].name: attr_val
+                            for attr_name, attr_val in entity_attributes.items()
+                            if (
+                                attr_name in metadata_attributes
+                                and metadata_attributes[attr_name].keep
+                            )
+                        }
+
+                        if potential_document_id:
+                            event_time = get_document_updated_at(
+                                potential_document_id, db_session
+                            )
+                        else:
+                            event_time = None
+
+                        upserted_entity = upsert_staging_entity(
+                            db_session=db_session,
+                            name=entity_name,
+                            entity_type=entity_type,
+                            document_id=potential_document_id,
+                            occurrences=1,
+                            attributes=keep_attributes,
+                            event_time=event_time,
                         )
-                        continue
+                        metadata_tracker.track_metadata(
+                            entity_type, upserted_entity.attributes
+                        )
 
-                    entity_type, entity_name = parts
-                    entity_type = entity_type.upper()
-                    entity_name = entity_name.capitalize()
+                        db_session.commit()
+                except Exception as e:
+                    logger.error(f"Error adding entity {entity}. Error message: {e}")
 
-                    if entity_type not in active_entity_types:
-                        continue
+            for document_id, relationship in batch_relationships:
+                relationship_split = split_relationship_id(relationship)
 
+                if len(relationship_split) != 3:
+                    logger.error(
+                        f"Invalid relationship {relationship} in aggregated_kg_extractions.relationships"
+                    )
+                    continue
+
+                source_entity, relationship_type, target_entity = relationship_split
+
+                source_entity_type = get_entity_type(source_entity)
+                target_entity_type = get_entity_type(target_entity)
+
+                if (
+                    source_entity_type not in active_entity_types
+                    or target_entity_type not in active_entity_types
+                ):
+                    continue
+
+                relationship_type_id_name = extract_relationship_type_id(relationship)
+
+                with get_session_with_current_tenant() as db_session:
                     try:
-                        with get_session_with_current_tenant() as db_session:
-
-                            entity_attributes: dict[str, Any] = {}
-
-                            if potential_document_id:
-                                entity_attributes = (
-                                    batch_metadata[
-                                        potential_document_id
-                                    ].document_metadata
-                                    or {}
-                                )
-
-                            # For now, do document classifications
-
-                            # only keep selected attributes (and translate the attribute names)
-                            metadata_attributes = (
-                                entity_metadata_conversion_instructions[entity_type]
-                            )
-
-                            keep_attributes = {
-                                metadata_attributes[attr_name].name: attr_val
-                                for attr_name, attr_val in entity_attributes.items()
-                                if (
-                                    attr_name in metadata_attributes
-                                    and metadata_attributes[attr_name].keep
-                                )
-                            }
-
-                            if potential_document_id:
-                                event_time = get_document_updated_at(
-                                    potential_document_id, db_session
-                                )
-                            else:
-                                event_time = None
-
-                            upserted_entity = upsert_staging_entity(
-                                db_session=db_session,
-                                name=entity_name,
-                                entity_type=entity_type,
-                                document_id=potential_document_id,
-                                occurrences=1,
-                                attributes=keep_attributes,
-                                event_time=event_time,
-                            )
-                            metadata_tracker.track_metadata(
-                                entity_type, upserted_entity.attributes
-                            )
-
-                            db_session.commit()
+                        upsert_staging_relationship_type(
+                            db_session=db_session,
+                            source_entity_type=source_entity_type.upper(),
+                            relationship_type=relationship_type,
+                            target_entity_type=target_entity_type.upper(),
+                            definition=False,
+                            extraction_count=1,
+                        )
+                        db_session.commit()
                     except Exception as e:
                         logger.error(
-                            f"Error adding entity {entity}. Error message: {e}"
+                            f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
                         )
-
-                for document_id, relationship in batch_relationships:
-                    relationship_split = split_relationship_id(relationship)
-
-                    if len(relationship_split) != 3:
-                        logger.error(
-                            f"Invalid relationship {relationship} in aggregated_kg_extractions.relationships"
-                        )
-                        continue
-
-                    source_entity, relationship_type, target_entity = relationship_split
-
-                    source_entity_type = get_entity_type(source_entity)
-                    target_entity_type = get_entity_type(target_entity)
-
-                    if (
-                        source_entity_type not in active_entity_types
-                        or target_entity_type not in active_entity_types
-                    ):
-                        continue
-
-                    relationship_type_id_name = extract_relationship_type_id(
-                        relationship
-                    )
 
                     with get_session_with_current_tenant() as db_session:
                         try:
-                            upsert_staging_relationship_type(
+                            upsert_staging_relationship(
                                 db_session=db_session,
-                                source_entity_type=source_entity_type.upper(),
-                                relationship_type=relationship_type,
-                                target_entity_type=target_entity_type.upper(),
-                                definition=False,
-                                extraction_count=1,
+                                relationship_id_name=relationship,
+                                source_document_id=document_id,
+                                occurrences=1,
                             )
                             db_session.commit()
                         except Exception as e:
                             logger.error(
-                                f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
+                                f"Error adding relationship {relationship} to the database: {e}"
                             )
-
-                        with get_session_with_current_tenant() as db_session:
-                            try:
-                                upsert_staging_relationship(
-                                    db_session=db_session,
-                                    relationship_id_name=relationship,
-                                    source_document_id=document_id,
-                                    occurrences=1,
-                                )
-                                db_session.commit()
-                            except Exception as e:
-                                logger.error(
-                                    f"Error adding relationship {relationship} to the database: {e}"
-                                )
 
             # Populate the Documents table with the kg information for the documents
 
