@@ -29,6 +29,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
 from onyx.connectors.teams.utils import fetch_expert_infos
@@ -41,8 +42,9 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
-PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
-PRIVATE_MEMBERSHIP_TYPE = "private"  # private teams channel
+_SLIM_DOC_BATCH_SIZE = 5000
+_PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
+_PRIVATE_MEMBERSHIP_TYPE = "private"  # private teams channel
 
 
 class TeamsCheckpoint(ConnectorCheckpoint):
@@ -236,21 +238,56 @@ class TeamsConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        yield []
+        start = start or 0
 
-        # teams = _collect_all_teams(
-        #     graph_client=self.graph_client,
-        #     requested=self.requested_team_list,
-        # )
-        # for team in teams:
-        #     if not team.id:
-        #         raise RuntimeError
-        #     channels = _collect_all_channels_from_team(team=team)
-        #     for channel in channels:
-        #         if not channel.id:
-        #             raise RuntimeError
-        #         for member in fetch_members_in_channel(graph_client=self.graph_client, team_id=team.id, channel_id=channel.id):
-        #             ...
+        teams = _collect_all_teams(
+            graph_client=self.graph_client,
+            requested=self.requested_team_list,
+        )
+
+        for team in teams:
+            if not team.id:
+                continue
+
+            channels = _collect_all_channels_from_team(
+                team=team,
+            )
+
+            for channel in channels:
+                if not channel.id:
+                    continue
+
+                expert_infos = fetch_expert_infos(channel=channel)
+                is_public = _is_channel_public(channel=channel)
+
+                messages = fetch_messages(
+                    graph_client=self.graph_client,
+                    team_id=team.id,
+                    channel_id=channel.id,
+                    start=start,
+                )
+
+                slim_doc_buffer = []
+
+                for message in messages:
+                    slim_doc_buffer.append(
+                        SlimDocument(
+                            id=message.id,
+                            external_access=ExternalAccess(
+                                external_user_emails=set(
+                                    expert_info.email
+                                    for expert_info in expert_infos
+                                    if expert_info.email
+                                ),
+                                external_user_group_ids=set(),
+                                is_public=is_public,
+                            ),
+                        )
+                    )
+
+                    if len(slim_doc_buffer) >= _SLIM_DOC_BATCH_SIZE:
+                        yield slim_doc_buffer
+                        slim_doc_buffer = []
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
@@ -313,16 +350,9 @@ def _convert_thread_to_document(
         return None
 
     semantic_string = _construct_semantic_identifier(channel, top_message)
+    is_public = _is_channel_public(channel=channel)
 
-    is_public: bool
-    if channel.membership_type == PUBLIC_MEMBERSHIP_TYPE:
-        is_public = True
-    elif channel.membership_type == PRIVATE_MEMBERSHIP_TYPE:
-        is_public = False
-    else:
-        is_public = False
-
-    doc = Document(
+    return Document(
         id=top_message.id,
         sections=[TextSection(link=top_message.web_url, text=thread_text)],
         source=DocumentSource.TEAMS,
@@ -337,7 +367,6 @@ def _convert_thread_to_document(
             is_public=is_public,
         ),
     )
-    return doc
 
 
 def _update_request_url(request: RequestOptions, next_url: str) -> None:
@@ -512,6 +541,19 @@ def _collect_documents_for_channel(
                 failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
                 exception=e,
             )
+
+
+def _is_channel_public(channel: Channel) -> bool:
+    if not channel.membership_type:
+        return False
+
+    if channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE:
+        return True
+
+    if channel.membership_type == _PRIVATE_MEMBERSHIP_TYPE:
+        return False
+
+    return False
 
 
 if __name__ == "__main__":
