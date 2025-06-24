@@ -3,8 +3,8 @@ set -e
 
 cleanup() {
   echo "Error occurred. Cleaning up..."
-  docker stop onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
-  docker rm onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
+  docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
+  docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
 }
 
 # Trap errors and output a message, then cleanup
@@ -16,11 +16,12 @@ trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
 VESPA_VOLUME=${1:-""}  # Default is empty if not provided
 POSTGRES_VOLUME=${2:-""}  # Default is empty if not provided
 REDIS_VOLUME=${3:-""}  # Default is empty if not provided
+MINIO_VOLUME=${4:-""}  # Default is empty if not provided
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
-docker stop onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
-docker rm onyx_postgres onyx_vespa onyx_redis 2>/dev/null || true
+docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
+docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio 2>/dev/null || true
 
 # Start the PostgreSQL container with optional volume
 echo "Starting PostgreSQL container..."
@@ -44,6 +45,14 @@ if [[ -n "$REDIS_VOLUME" ]]; then
     docker run --detach --name onyx_redis --publish 6379:6379 -v $REDIS_VOLUME:/data redis
 else
     docker run --detach --name onyx_redis --publish 6379:6379 redis
+fi
+
+# Start the MinIO container with optional volume
+echo "Starting MinIO container..."
+if [[ -n "$MINIO_VOLUME" ]]; then
+    docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -v $MINIO_VOLUME:/data minio/minio server /data --console-address ":9001"
+else
+    docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data --console-address ":9001"
 fi
 
 # Ensure alembic runs in the correct directory

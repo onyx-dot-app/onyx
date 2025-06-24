@@ -13,7 +13,7 @@ services:
       - index
       - cache
       - inference_model_server
-    restart: always
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
@@ -165,7 +165,7 @@ services:
       - cache
       - inference_model_server
       - indexing_model_server
-    restart: always
+    restart: unless-stopped
     environment:
       - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
       - JWT_PUBLIC_KEY_URL=${JWT_PUBLIC_KEY_URL:-} # used for JWT authentication of users via API
@@ -317,7 +317,7 @@ services:
         - NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED=${NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED:-false}
     depends_on:
       - api_server
-    restart: always
+    restart: unless-stopped
     environment:
       - INTERNAL_URL=http://api_server:8080
       - WEB_DOMAIN=${WEB_DOMAIN:-}
@@ -340,7 +340,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: always
+    restart: unless-stopped
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
@@ -371,7 +371,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: always
+    restart: unless-stopped
     environment:
       - INDEX_BATCH_SIZE=${INDEX_BATCH_SIZE:-}
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
@@ -397,7 +397,7 @@ services:
     image: postgres:15.2-alpine
     shm_size: 1g
     command: -c 'max_connections=250'
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
@@ -411,7 +411,7 @@ services:
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
     image: vespaengine/vespa:8.526.15
-    restart: always
+    restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
@@ -427,7 +427,7 @@ services:
 
   nginx:
     image: nginx:1.23.4-alpine
-    restart: always
+    restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
@@ -456,7 +456,7 @@ services:
 
   cache:
     image: redis:7.4-alpine
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
@@ -465,7 +465,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    restart: always
+    restart: unless-stopped
     ports:
       - "9004:9000"
       - "9005:9001"

@@ -14,7 +14,7 @@ services:
       - index
       - cache
       - inference_model_server
-    restart: always
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -61,7 +61,7 @@ services:
       - cache
       - inference_model_server
       - indexing_model_server
-    restart: always
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -115,7 +115,7 @@ services:
         - NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=${NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED:-}
     depends_on:
       - api_server
-    restart: always
+    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -130,7 +130,7 @@ services:
     image: postgres:15.2-alpine
     shm_size: 1g
     command: -c 'max_connections=250'
-    restart: always
+    restart: unless-stopped
     # POSTGRES_USER and POSTGRES_PASSWORD should be set in .env file
     env_file:
       - .env
@@ -154,7 +154,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: always
+    restart: unless-stopped
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       # Set to debug to get more fine-grained logs
@@ -182,7 +182,7 @@ services:
       else
         exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
       fi"
-    restart: always
+    restart: unless-stopped
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
@@ -203,7 +203,7 @@ services:
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
     image: vespaengine/vespa:8.526.15
-    restart: always
+    restart: unless-stopped
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
@@ -219,7 +219,7 @@ services:
 
   nginx:
     image: nginx:1.23.4-alpine
-    restart: always
+    restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
@@ -254,7 +254,7 @@ services:
   # follows https://pentacent.medium.com/nginx-and-lets-encrypt-with-docker-in-less-than-5-minutes-b4b8a60d3a71
   certbot:
     image: certbot/certbot
-    restart: always
+    restart: unless-stopped
     volumes:
       - ../data/certbot/conf:/etc/letsencrypt
       - ../data/certbot/www:/var/www/certbot
@@ -267,7 +267,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    restart: always
+    restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -283,7 +283,7 @@ services:
 
   cache:
     image: redis:7.4-alpine
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
