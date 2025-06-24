@@ -82,68 +82,6 @@ def get_document_classification_content_for_kg_processing(
                 )
             yield classification_contents
 
-        # will not populate content, so classification will not work
-        # for document_id in batch_document_ids:
-        #     # ... existing code for getting chunks and processing ...
-        #     first_num_classification_chunks: list[dict] = get_chunks_via_visit_api(
-        #         chunk_request=VespaChunkRequest(
-        #             document_id=document_id,
-        #             max_chunk_ind=num_classification_chunks - 1,
-        #             min_chunk_ind=0,
-        #         ),
-        #         index_name=index_name,
-        #         filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
-        #         field_names=[
-        #             "document_id",
-        #             "chunk_id",
-        #             "title",
-        #             "content",
-        #             "metadata",
-        #             "source_type",
-        #             "primary_owners",
-        #             "secondary_owners",
-        #         ],
-        #         get_large_chunks=False,
-        #     )
-
-        #     if len(first_num_classification_chunks) == 0:
-        #         continue
-
-        #     first_num_classification_chunks = sorted(
-        #         first_num_classification_chunks, key=lambda x: x["fields"]["chunk_id"]
-        #     )[:num_classification_chunks]
-
-        #     classification_content = _get_classification_content_from_chunks(
-        #         first_num_classification_chunks,
-        #         kg_config_settings,
-        #     )
-
-        #     metadata = first_num_classification_chunks[0]["fields"]["metadata"]
-        #     if isinstance(metadata, str):
-        #         metadata = json.loads(metadata)
-        #     assert isinstance(metadata, dict) or metadata is None
-
-        #     classification_content_list.append(
-        #         KGClassificationContent(
-        #             document_id=document_id,
-        #             classification_content=classification_content,
-        #             source_type=first_num_classification_chunks[0]["fields"][
-        #                 "source_type"
-        #             ],
-        #             source_metadata=metadata,
-        #             entity_type=entity_type,
-        #         )
-        #     )
-
-        # # Yield the batch of classification content
-        # if classification_content_list:
-        #     yield classification_content_list
-        #     classification_content_list = []
-
-    # Yield any remaining items
-    # if classification_content_list:
-    #     yield classification_content_list
-
 
 def get_document_chunks_for_kg_processing(
     document_id: str,

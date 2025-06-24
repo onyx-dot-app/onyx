@@ -513,6 +513,7 @@ def kg_extraction(
                 ):
                     classification_batch_list.append(unprocessed_document.id)
 
+            # TODO: revisit in deep extraction. Should probably happen inside process_batch_extraction
             # document_classification_content_generator = (
             #     get_document_classification_content_for_kg_processing(
             #         document_ids=classification_batch_list,
