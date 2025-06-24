@@ -567,7 +567,7 @@ class VespaIndex(DocumentIndex):
     ) -> None:
         """Runs a batch of updates in parallel via the ThreadPoolExecutor."""
 
-        @retry(tries=3, delay=1, backoff=2, jitter=[0.0, 1.0])
+        @retry(tries=3, delay=1, backoff=2, jitter=(0.0, 1.0))
         def _kg_update_chunk(
             update: KGVespaChunkUpdateRequest, http_client: httpx.Client
         ) -> httpx.Response:
