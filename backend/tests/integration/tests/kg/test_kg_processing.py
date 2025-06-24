@@ -10,7 +10,7 @@ from onyx.background.celery.tasks.kg_processing.utils import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import set_kg_config_settings
 from onyx.db.models import Connector

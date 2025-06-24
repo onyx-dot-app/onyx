@@ -418,7 +418,8 @@ def process_kg_commands(
             raise KGException("KG processing scheduled")
         else:
             raise KGException(
-                "Cannot schedule another KG processing while one is already running"
+                "Cannot schedule another KG processing if one is already running "
+                "or there are no documents to process"
             )
 
     elif message.startswith("kg_rs_source"):
