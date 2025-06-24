@@ -2495,3 +2495,28 @@ class TenantAnonymousUserPath(Base):
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
     )
+
+
+# Knowledge map DB Models
+class KnowledgeMap(Base):
+    __tablename__ = "knowledge_map"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str] = mapped_column(String)
+    document_set_id: Mapped[int] = mapped_column(
+        ForeignKey("document_set.id", ondelete="CASCADE"),
+    )
+    flowise_pipeline_id: Mapped[str] = mapped_column(String)
+
+
+class KnowledgeMapAnswer(Base):
+    __tablename__ = "knowledge_map_answer"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("document.id", ondelete="CASCADE"),
+    )
+    knowledge_map_id: Mapped[int] = mapped_column(ForeignKey("knowledge_map.id", ondelete="CASCADE"))
+    topic: Mapped[str] = mapped_column(String)
+    answer: Mapped[str] = mapped_column(String)

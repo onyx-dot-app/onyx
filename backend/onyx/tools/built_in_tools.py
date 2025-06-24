@@ -15,6 +15,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
@@ -52,6 +53,12 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         description="Инструмент Langflow",
         in_code_tool_id=LangflowTool.__name__,
         display_name=LangflowTool._DISPLAY_NAME
+    ),
+    InCodeToolInfo(
+        cls=KnowledgeMapTool,
+        description="Инструмент Карта Знаний",
+        in_code_tool_id=KnowledgeMapTool.__name__,
+        display_name=KnowledgeMapTool.NAME
     ),
     InCodeToolInfo(
         cls=ResumeTool,

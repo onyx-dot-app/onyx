@@ -427,7 +427,6 @@ class DefaultMultiLLM(LLM):
         # to a dict representation
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
-        logger.info(processed_prompt)
 
         try:
             return litellm.completion(
@@ -524,7 +523,6 @@ class DefaultMultiLLM(LLM):
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
-        logger.info(prompt)
 
         response = cast(
             litellm.ModelResponse,

@@ -40,6 +40,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens
@@ -238,6 +239,13 @@ def construct_tools(
                         pipeline_id=persona.pipeline_id,
                         prompt_config=prompt_config,
                         llm_config=llm.config
+                    )
+                ]
+            elif tool_cls.__name__ == KnowledgeMapTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    KnowledgeMapTool(
+                        db_session=db_session,
+                        llm=llm
                     )
                 ]
             elif tool_cls.__name__ == ResumeTool.__name__:

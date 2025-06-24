@@ -137,6 +137,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.knowledge_map.knowledge_map_tool import KnowledgeMapTool
 from onyx.tools.tool_implementations.langflow.langflow_tool import LANGFLOW_RESPONSE_SUMMARY_ID, \
     LangflowResponseSummary, LangflowTool
 from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool, ResumeResponseSummary
@@ -303,6 +304,9 @@ def _get_force_search_settings(
 
     if any(isinstance(tool, LangflowTool) for tool in tools):
         return ForceUseTool(force_use=True, tool_name=LangflowTool.NAME)
+
+    if any(isinstance(tool, KnowledgeMapTool) for tool in tools):
+        return ForceUseTool(force_use=True, tool_name=KnowledgeMapTool.NAME)
 
     if any(isinstance(tool, ResumeTool) for tool in tools):
         return ForceUseTool(force_use=True, tool_name=ResumeTool.NAME)

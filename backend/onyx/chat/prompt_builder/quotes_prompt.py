@@ -12,6 +12,9 @@ from onyx.prompts.direct_qa_prompts import JSON_PROMPT
 from onyx.prompts.prompt_utils import build_complete_context_str
 from onyx.prompts.prompt_utils import handle_onyx_date_awareness
 
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 def _build_strong_llm_quotes_prompt(
     question: str,
