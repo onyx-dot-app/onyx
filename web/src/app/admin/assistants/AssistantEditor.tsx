@@ -373,7 +373,7 @@ export function AssistantEditor({
   const canShowKnowledgeSource =
     ccPairs.length > 0 &&
     searchTool &&
-    !(user?.role != "admin" && documentSets.length === 0);
+    !(user?.role === UserRole.BASIC && documentSets.length === 0);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -385,12 +385,9 @@ export function AssistantEditor({
           }
         `}
       </style>
-      {!admin && (
-        <div className="absolute top-4 left-4">
-          <BackButton />
-        </div>
-      )}
-
+      <div className="absolute top-4 left-4">
+        <BackButton />
+      </div>
       {presentingDocument && (
         <TextView
           presentingDocument={presentingDocument}
@@ -972,12 +969,11 @@ export function AssistantEditor({
                         )}
 
                         {values.knowledge_source === "user_files" &&
-                          !existingPersona?.is_default_persona &&
-                          !admin && (
+                          !existingPersona?.is_default_persona && (
                             <div className="text-sm flex flex-col items-start">
                               <SubLabel>
-                                Click below to add documents or folders from the
-                                My Document feature
+                                Click below to add documents or folders from My
+                                Documents
                               </SubLabel>
                               {(values.user_file_ids.length > 0 ||
                                 values.user_folder_ids.length > 0) && (
@@ -1017,7 +1013,7 @@ export function AssistantEditor({
                                 <SubLabel>
                                   <>
                                     Select which{" "}
-                                    {!user || user.role === "admin" ? (
+                                    {!user || user.role !== UserRole.BASIC ? (
                                       <Link
                                         href="/admin/documents/sets"
                                         className="font-semibold underline hover:underline text-text"
@@ -1068,7 +1064,7 @@ export function AssistantEditor({
                                     </div>
                                   )}
                                 />
-                              ) : (
+                              ) : user?.role !== UserRole.BASIC ? (
                                 <p className="text-sm">
                                   <Link
                                     href="/admin/documents/sets/new"
@@ -1076,6 +1072,11 @@ export function AssistantEditor({
                                   >
                                     + Create Document Set
                                   </Link>
+                                </p>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">
+                                  Ask a curator or admin to create a document
+                                  set!
                                 </p>
                               )}
                             </div>
