@@ -18,6 +18,11 @@ from onyx.kg.models import KGStage
 from onyx.kg.utils.formatting_utils import make_entity_id
 
 
+def get_all_entity_types(db_session: Session) -> list[KGEntityType]:
+    """Get all entity types."""
+    return db_session.query(KGEntityType).all()
+
+
 def upsert_staging_entity(
     db_session: Session,
     name: str,
