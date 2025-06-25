@@ -23,7 +23,6 @@ from sqlalchemy.sql.schema import SchemaItem
 from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import (
     MULTI_TENANT,
-    POSTGRES_DEFAULT_SCHEMA,
     TENANT_ID_PREFIX,
 )
 from onyx.db.models import Base
@@ -96,7 +95,10 @@ def filter_tenants_by_range(
         tid for tid in tenant_ids if not tid.startswith(TENANT_ID_PREFIX)
     ]
 
-    # Sort tenant schemas alphabetically
+    # Sort tenant schemas alphabetically.
+    # NOTE: can cause missed schemas if a schema is created in between workers
+    # fetching of all tenant IDs. We accept this risk for now. Just re-running
+    # the migration will fix the issue.
     sorted_tenant_schemas = sorted(tenant_schemas)
 
     # Apply range filtering (convert to 0-based indexing)
@@ -119,7 +121,9 @@ def filter_tenants_by_range(
     return filtered_tenants
 
 
-def get_schema_options() -> tuple[str, bool, bool, bool, int | None, int | None]:
+def get_schema_options() -> (
+    tuple[bool, bool, bool, int | None, int | None, list[str] | None]
+):
     x_args_raw = context.get_x_argument()
     x_args = {}
     for arg in x_args_raw:
@@ -127,7 +131,7 @@ def get_schema_options() -> tuple[str, bool, bool, bool, int | None, int | None]
             if "=" in pair:
                 key, value = pair.split("=", 1)
                 x_args[key.strip()] = value.strip()
-    schema_name = x_args.get("schema", POSTGRES_DEFAULT_SCHEMA)
+
     create_schema = x_args.get("create_schema", "true").lower() == "true"
     upgrade_all_tenants = x_args.get("upgrade_all_tenants", "false").lower() == "true"
 
@@ -162,27 +166,55 @@ def get_schema_options() -> tuple[str, bool, bool, bool, int | None, int | None]
                 f"tenant_range_start ({tenant_range_start}) cannot be greater than tenant_range_end ({tenant_range_end})"
             )
 
-    # If tenant range parameters are specified, automatically enable upgrade_all_tenants
-    if tenant_range_start is not None or tenant_range_end is not None:
+    # Specific schema names filtering (replaces both schema_name and the old tenant_ids approach)
+    specific_schema_names = None
+    if "specific_schema_names" in x_args:
+        schema_names_str = x_args["specific_schema_names"].strip()
+        if schema_names_str:
+            # Split by comma and strip whitespace
+            specific_schema_names = [
+                name.strip() for name in schema_names_str.split(",") if name.strip()
+            ]
+            if specific_schema_names:
+                logger.info(f"Specific schema names specified: {specific_schema_names}")
+
+    # Validate that only one method is used at a time
+    range_filtering = tenant_range_start is not None or tenant_range_end is not None
+    specific_filtering = (
+        specific_schema_names is not None and len(specific_schema_names) > 0
+    )
+
+    if range_filtering and specific_filtering:
+        raise ValueError(
+            "Cannot use both tenant range filtering (tenant_range_start/tenant_range_end) "
+            "and specific schema filtering (specific_schema_names) at the same time. "
+            "Please use only one filtering method."
+        )
+
+    if upgrade_all_tenants and specific_filtering:
+        raise ValueError(
+            "Cannot use both upgrade_all_tenants=true and specific_schema_names at the same time. "
+            "Use either upgrade_all_tenants=true for all tenants, or specific_schema_names for specific schemas."
+        )
+
+    # If any filtering parameters are specified, we're not doing the default single schema migration
+    if range_filtering:
         upgrade_all_tenants = True
 
-    if (
-        MULTI_TENANT
-        and schema_name == POSTGRES_DEFAULT_SCHEMA
-        and not upgrade_all_tenants
-    ):
+    # Validate multi-tenant requirements
+    if MULTI_TENANT and not upgrade_all_tenants and not specific_filtering:
         raise ValueError(
-            "Cannot run default migrations in public schema when multi-tenancy is enabled. "
-            "Please specify a tenant-specific schema."
+            "In multi-tenant mode, you must specify either upgrade_all_tenants=true "
+            "or provide specific_schema_names. Cannot run default migration."
         )
 
     return (
-        schema_name,
         create_schema,
         upgrade_all_tenants,
         continue_on_error,
         tenant_range_start,
         tenant_range_end,
+        specific_schema_names,
     )
 
 
@@ -230,12 +262,12 @@ def provide_iam_token_for_alembic(
 
 async def run_async_migrations() -> None:
     (
-        schema_name,
         create_schema,
         upgrade_all_tenants,
         continue_on_error,
         tenant_range_start,
         tenant_range_end,
+        specific_schema_names,
     ) = get_schema_options()
 
     # without init_engine, subsequent engine calls fail hard intentionally
@@ -254,7 +286,33 @@ async def run_async_migrations() -> None:
         ) -> None:
             provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
 
-    if upgrade_all_tenants:
+    if specific_schema_names:
+        # Use specific schema names directly without fetching all tenants
+        logger.info(f"Migrating specific schema names: {specific_schema_names}")
+
+        i_schema = 0
+        num_schemas = len(specific_schema_names)
+        for schema in specific_schema_names:
+            i_schema += 1
+            logger.info(
+                f"Migrating schema: index={i_schema} num_schemas={num_schemas} schema={schema}"
+            )
+            try:
+                async with engine.connect() as connection:
+                    await connection.run_sync(
+                        do_run_migrations,
+                        schema_name=schema,
+                        create_schema=create_schema,
+                    )
+            except Exception as e:
+                logger.error(f"Error migrating schema {schema}: {e}")
+                if not continue_on_error:
+                    logger.error("--continue=true is not set, raising exception!")
+                    raise
+
+                logger.warning("--continue=true is set, continuing to next schema.")
+
+    elif upgrade_all_tenants:
         tenant_schemas = get_all_tenant_ids()
 
         filtered_tenant_schemas = filter_tenants_by_range(
@@ -292,17 +350,13 @@ async def run_async_migrations() -> None:
                 logger.warning("--continue=true is set, continuing to next schema.")
 
     else:
-        try:
-            logger.info(f"Migrating schema: {schema_name}")
-            async with engine.connect() as connection:
-                await connection.run_sync(
-                    do_run_migrations,
-                    schema_name=schema_name,
-                    create_schema=create_schema,
-                )
-        except Exception as e:
-            logger.error(f"Error migrating schema {schema_name}: {e}")
-            raise
+        # This should not happen in the new design since we require either
+        # upgrade_all_tenants=true or specific_schema_names in multi-tenant mode
+        # and for non-multi-tenant mode, we should use specific_schema_names with the default schema
+        raise ValueError(
+            "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
+            "or specific_schema_names for specific schemas."
+        )
 
     await engine.dispose()
 
@@ -324,16 +378,36 @@ def run_migrations_offline() -> None:
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     (
-        schema_name,
-        _,
+        create_schema,
         upgrade_all_tenants,
         continue_on_error,
         tenant_range_start,
         tenant_range_end,
+        specific_schema_names,
     ) = get_schema_options()
     url = build_connection_string()
 
-    if upgrade_all_tenants:
+    if specific_schema_names:
+        # Use specific schema names directly without fetching all tenants
+        logger.info(f"Migrating specific schema names: {specific_schema_names}")
+
+        for schema in specific_schema_names:
+            logger.info(f"Migrating schema: {schema}")
+            context.configure(
+                url=url,
+                target_metadata=target_metadata,  # type: ignore
+                literal_binds=True,
+                include_object=include_object,
+                version_table_schema=schema,
+                include_schemas=True,
+                script_location=config.get_main_option("script_location"),
+                dialect_opts={"paramstyle": "named"},
+            )
+
+            with context.begin_transaction():
+                context.run_migrations()
+
+    elif upgrade_all_tenants:
         engine = create_async_engine(url)
 
         if USE_IAM_AUTH:
@@ -375,20 +449,11 @@ def run_migrations_offline() -> None:
             with context.begin_transaction():
                 context.run_migrations()
     else:
-        logger.info(f"Migrating schema: {schema_name}")
-        context.configure(
-            url=url,
-            target_metadata=target_metadata,  # type: ignore
-            literal_binds=True,
-            include_object=include_object,
-            version_table_schema=schema_name,
-            include_schemas=True,
-            script_location=config.get_main_option("script_location"),
-            dialect_opts={"paramstyle": "named"},
+        # This should not happen in the new design
+        raise ValueError(
+            "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
+            "or specific_schema_names for specific schemas."
         )
-
-        with context.begin_transaction():
-            context.run_migrations()
 
 
 def run_migrations_online() -> None:

@@ -15,6 +15,7 @@ DOCKER_IMAGE=""  # Must be specified via command line
 JOB_PREFIX="migration-job"
 JOB_TIMEOUT="3600"  # 1 hour timeout for jobs
 CLEANUP_JOBS="true"  # Whether to cleanup jobs after completion
+SCHEMA_NAMES=""  # Comma-separated list of specific schema names to migrate
 
 # Colors for output
 RED='\033[0;31m'
@@ -135,7 +136,7 @@ EOF
     fi
 }
 
-# Function to create migration job YAML
+# Function to create migration job YAML for range-based migration
 create_job_yaml() {
     local job_name=$1
     local start_range=$2
@@ -207,6 +208,77 @@ spec:
 EOF
 }
 
+# Function to create migration job YAML for specific schema names
+create_job_yaml_for_schemas() {
+    local job_name=$1
+    local schema_names=$2
+    
+    cat <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: $job_name
+  namespace: $NAMESPACE
+  labels:
+    app: parallel-migration
+    migration-batch: "$(date +%Y%m%d-%H%M%S)"
+spec:
+  activeDeadlineSeconds: $JOB_TIMEOUT
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: parallel-migration-pod
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: migration-worker
+        image: $DOCKER_IMAGE
+        command: ["bash", "-c"]
+        args:
+        - |
+          set -e
+          cd /opt/onyx/backend
+          echo "Starting migration for specific schemas: $schema_names at \$(date)"
+          $MIGRATION_COMMAND -x specific_schema_names="$schema_names" -x continue=true
+          echo "Migration completed for specific schemas: $schema_names at \$(date)"
+        env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: host
+              optional: true
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: username
+              optional: true
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
+              optional: true
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: database
+              optional: true
+        - name: POSTGRES_PORT
+          value: "5432"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+EOF
+}
+
 # Function to start migration job
 start_migration_job() {
     local job_name=$1
@@ -218,6 +290,26 @@ start_migration_job() {
     
     # Create job YAML and apply it
     create_job_yaml "$job_name" "$start_range" "$end_range" | kubectl apply -f -
+    
+    if [ $? -eq 0 ]; then
+        print_success "Job $job_name created successfully"
+        return 0
+    else
+        print_error "Failed to create job $job_name"
+        return 1
+    fi
+}
+
+# Function to start migration job for specific schema names
+start_migration_job_for_schemas() {
+    local job_name=$1
+    local schema_names=$2
+    local log_file=$3
+    
+    print_info "Creating migration job: $job_name (specific schemas: $schema_names)"
+    
+    # Create job YAML and apply it
+    create_job_yaml_for_schemas "$job_name" "$schema_names" | kubectl apply -f -
     
     if [ $? -eq 0 ]; then
         print_success "Job $job_name created successfully"
@@ -314,7 +406,39 @@ main() {
     # Validate prerequisites
     validate_prerequisites
     
-    # Get tenant count
+    # Check if specific schema names are provided
+    if [ -n "$SCHEMA_NAMES" ]; then
+        print_info "Using specific schema names: $SCHEMA_NAMES"
+        
+        # Create a single job for the specific schema names
+        local job_name="${JOB_PREFIX}-specific-$(date +%s)"
+        local log_file="$LOG_DIR/${job_name}.log"
+        
+        print_info "Creating single migration job for specific schemas"
+        print_info "Log files will be written to: $LOG_DIR"
+        
+        # Create migration job for specific schemas
+        if start_migration_job_for_schemas "$job_name" "$SCHEMA_NAMES" "$log_file"; then
+            local job_names=("$job_name")
+            
+            # Monitor job and wait for completion
+            if monitor_jobs "${job_names[@]}"; then
+                print_success "Migration completed successfully for specific schemas!"
+                cleanup_jobs "${job_names[@]}"
+                exit 0
+            else
+                print_error "Migration failed for specific schemas"
+                print_info "Check log files in $LOG_DIR for details"
+                cleanup_jobs "${job_names[@]}"
+                exit 1
+            fi
+        else
+            print_error "Failed to start migration job for specific schemas"
+            exit 1
+        fi
+    fi
+    
+    # Get tenant count for range-based migration
     local tenant_count
     tenant_count=$(get_tenant_count)
     print_info "Total tenants to migrate: $tenant_count"
@@ -428,22 +552,26 @@ Optional Options:
     -c, --command       Migration command (default: alembic upgrade head)
     -j, --max-jobs      Maximum number of jobs to create (default: auto-calculate)
     -t, --timeout       Job timeout in seconds (default: 3600)
+    --schema-names      Comma-separated list of specific schema names to migrate
     --no-cleanup        Don't cleanup jobs after completion (useful for debugging)
 
 Examples:
-    $0 -i onyxdotapp/onyx-backend:latest                    # Basic usage with latest image
-    $0 -i onyxdotapp/onyx-backend:v1.2.3 -j 5              # Use specific tag with 5 jobs
-    $0 -i my-registry/onyx-backend:dev -n production       # Use custom image in production namespace
-    $0 -i onyxdotapp/onyx-backend:latest --no-cleanup      # Leave jobs for debugging
-    $0 -i onyxdotapp/onyx-backend:latest -t 7200           # 2 hour timeout
+    $0 -i onyxdotapp/onyx-backend:latest                              # Basic usage with latest image
+    $0 -i onyxdotapp/onyx-backend:v1.2.3 -j 5                        # Use specific tag with 5 jobs
+    $0 -i my-registry/onyx-backend:dev -n production                 # Use custom image in production namespace
+    $0 -i onyxdotapp/onyx-backend:latest --no-cleanup                # Leave jobs for debugging
+    $0 -i onyxdotapp/onyx-backend:latest -t 7200                     # 2 hour timeout
+    $0 -i onyxdotapp/onyx-backend:latest --schema-names "schema1,schema2,schema3"  # Migrate specific schemas
 
 The script will:
 1. Validate prerequisites and Docker image
-2. Create a temporary pod to count total tenants
-3. Calculate optimal number of jobs based on tenant count
-4. Create Kubernetes Jobs with tenant range assignments
-5. Monitor job progress and collect logs
-6. Cleanup jobs after completion (unless --no-cleanup is specified)
+2. If --schema-names is specified: Create a single job for those specific schemas
+3. If --schema-names is NOT specified: 
+   - Create a temporary pod to count total tenants
+   - Calculate optimal number of jobs based on tenant count
+   - Create Kubernetes Jobs with tenant range assignments
+4. Monitor job progress and collect logs
+5. Cleanup jobs after completion (unless --no-cleanup is specified)
 
 Each job gets:
 - Resource limits (2GB RAM, 1 CPU)
@@ -491,6 +619,10 @@ while [[ $# -gt 0 ]]; do
                 print_error "Invalid timeout value: $JOB_TIMEOUT. Must be a positive integer."
                 exit 1
             fi
+            shift 2
+            ;;
+        --schema-names)
+            SCHEMA_NAMES="$2"
             shift 2
             ;;
         --no-cleanup)
