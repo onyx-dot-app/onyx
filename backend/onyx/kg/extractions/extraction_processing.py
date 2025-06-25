@@ -562,12 +562,11 @@ def kg_extraction(
                             )
                         }
 
+                        event_time = None
                         if potential_document_id:
                             event_time = get_document_updated_at(
                                 potential_document_id, db_session
                             )
-                        else:
-                            event_time = None
 
                         upserted_entity = upsert_staging_entity(
                             db_session=db_session,
