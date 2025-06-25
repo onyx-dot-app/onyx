@@ -300,6 +300,41 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  paperless_ngx: {
+    description: "Configure Paperless-ngx connector",
+    values: [
+      {
+        type: "text",
+        label: "Ingest Only From Tags Filter",
+        name: "ingest_tags",
+        optional: true,
+        description:
+          "Comma-delimited list of tags to be ingested (case-insensitive). If not set, documents with any or no " +
+          "tags will be ingested, limited only by the user token permissions and any username filters.",
+      },
+      {
+        type: "text",
+        label: "Ingest Only From Users Filter",
+        name: "ingest_usernames",
+        optional: true,
+        description:
+          "Comma-delimited list of Paperless-ngx usernames of document owners to be ingested (case-insensitive). " +
+          "If not set, documents from all users and with no owner will be ingested, " +
+          "limited only by the user token permissions and any tag filters.",
+      },
+      {
+        type: "checkbox",
+        label: "Ingest No Owner Documents Filter",
+        name: "ingest_noowner",
+        default: false,
+        optional: true,
+        description:
+          "Check to ingest documents with no owner set. Only has an effect if users filter is also set. " +
+          "Otherwise, they are always included by default.",
+      },
+    ],
+    advanced_values: [],
+  },
   google_drive: {
     description: "Configure Google Drive connector",
     values: [
