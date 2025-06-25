@@ -42,6 +42,14 @@ class ExternalAccess:
 
     @classmethod
     def empty(cls) -> "ExternalAccess":
+        """
+        A helper function that returns an *empty* set of external user-emails and group-ids, and sets `is_public` to `False`.
+        This effectively makes the document in question "private" or inaccessible to anyone else.
+
+        This is especially helpful to use when you are performing permission-syncing, and some document's permissions aren't able
+        to determined (for whatever reason). Setting its `ExternalAccess` to "private" is a feasible fallback.
+        """
+
         return cls(
             external_user_emails=set(),
             external_user_group_ids=set(),
