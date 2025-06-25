@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import or_
@@ -149,9 +151,8 @@ def get_structured_tags_for_document(
     if not document:
         raise ValueError("Invalid Document, cannot find tags")
 
-    document_metadata: dict[str, str | list[str]] = {}
+    document_metadata: dict[str, Any] = {}
     for tag in document.tags:
-        tag: Tag
         if tag.tag_key in document_metadata:
             # NOTE: we convert to list if there are multiple values for the same key
             # Thus, it won't know if a tag is a list if it only contains one value
