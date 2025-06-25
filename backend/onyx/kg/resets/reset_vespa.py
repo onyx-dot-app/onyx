@@ -2,7 +2,6 @@ import time
 from typing import Any
 
 from redis.lock import Lock as RedisLock
-from retry import retry
 
 from onyx.background.celery.tasks.kg_processing.utils import extend_lock
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
@@ -22,7 +21,6 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-@retry(tries=3, delay=1, backoff=2)
 def _reset_vespa_for_doc(document_id: str, tenant_id: str, index_name: str) -> None:
     vespa_index = VespaIndex(
         index_name=index_name,

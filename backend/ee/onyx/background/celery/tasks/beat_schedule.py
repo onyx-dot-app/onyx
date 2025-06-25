@@ -20,39 +20,36 @@ from shared_configs.configs import MULTI_TENANT
 
 ee_beat_system_tasks: list[dict] = []
 
-ee_beat_task_templates: list[dict] = []
-ee_beat_task_templates.extend(
-    [
-        {
-            "name": "autogenerate-usage-report",
-            "task": OnyxCeleryTask.AUTOGENERATE_USAGE_REPORT_TASK,
-            "schedule": timedelta(days=30),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+ee_beat_task_templates: list[dict] = [
+    {
+        "name": "autogenerate-usage-report",
+        "task": OnyxCeleryTask.AUTOGENERATE_USAGE_REPORT_TASK,
+        "schedule": timedelta(days=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-ttl-management",
-            "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
-            "schedule": timedelta(hours=CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-ttl-management",
+        "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
+        "schedule": timedelta(hours=CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "export-query-history-cleanup-task",
-            "task": OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
-            "schedule": timedelta(hours=1),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-                "queue": OnyxCeleryQueues.CSV_GENERATION,
-            },
+    },
+    {
+        "name": "export-query-history-cleanup-task",
+        "task": OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.CSV_GENERATION,
         },
-    ]
-)
+    },
+]
 
 ee_tasks_to_schedule: list[dict] = []
 

@@ -121,7 +121,6 @@ def aggregate_kg_extractions(
         entities=defaultdict(int),
         relationships=defaultdict(lambda: defaultdict(int)),
         terms=defaultdict(int),
-        attributes=defaultdict(dict),
     )
     for connector_aggregated_kg_extractions in connector_aggregated_kg_extractions_list:
         for (
@@ -158,6 +157,15 @@ def aggregate_kg_extractions(
     return aggregated_kg_extractions
 
 
+def extract_email(email: str) -> str | None:
+    """
+    Extract an email from an arbitrary string (if any).
+    Only the first email is returned.
+    """
+    match = re.search(r"([A-Za-z0-9._+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)", email)
+    return match.group(0) if match else None
+
+
 def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGPerson:
     """
     Process the email.
@@ -173,36 +181,8 @@ def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGP
     if employee:
         company = kg_config_settings.KG_VENDOR
     else:
-        company = company_domain.capitalize()
+        # TODO: maybe store a list of domains for each account and use that to match
+        # right now, gmail and other random domains are being converted into accounts
+        company = company_domain.title()
 
     return KGPerson(name=name, company=company, employee=employee)
-
-
-def generalize_entities(entities: list[str]) -> set[str]:
-    """
-    Generalize entities to their superclass.
-    """
-    return {make_entity_id(get_entity_type(entity), "*") for entity in entities}
-
-
-def generalize_relationships(relationships: list[str]) -> set[str]:
-    """
-    Generalize relationships to their superclass.
-    """
-    generalized_relationships: set[str] = set()
-    for relationship in relationships:
-        assert (
-            len(relationship.split("__")) == 3
-        ), "Relationship is not in the correct format"
-        source_entity, relationship_type, target_entity = split_relationship_id(
-            relationship
-        )
-        source_general = make_entity_id(get_entity_type(source_entity), "*")
-        target_general = make_entity_id(get_entity_type(target_entity), "*")
-        generalized_relationships |= {
-            make_relationship_id(source_general, relationship_type, target_entity),
-            make_relationship_id(source_entity, relationship_type, target_general),
-            make_relationship_id(source_general, relationship_type, target_general),
-        }
-
-    return generalized_relationships

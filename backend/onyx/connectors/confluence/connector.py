@@ -24,6 +24,7 @@ from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import process_attachment
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
 )
@@ -680,3 +681,56 @@ class ConfluenceConnector(
                 "No Confluence spaces found. Either your credentials lack permissions, or "
                 "there truly are no spaces in this Confluence instance."
             )
+
+
+if __name__ == "__main__":
+    import os
+    from onyx.utils.variable_functionality import global_version
+    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+
+    # For connector permission testing, set EE to true.
+    global_version.set_ee()
+
+    # base url
+    wiki_base = os.environ["CONFLUENCE_URL"]
+
+    # auth stuff
+    username = os.environ["CONFLUENCE_USERNAME"]
+    access_token = os.environ["CONFLUENCE_ACCESS_TOKEN"]
+    is_cloud = os.environ["CONFLUENCE_IS_CLOUD"].lower() == "true"
+
+    # space + page
+    space = os.environ["CONFLUENCE_SPACE_KEY"]
+    # page_id = os.environ["CONFLUENCE_PAGE_ID"]
+
+    confluence_connector = ConfluenceConnector(
+        wiki_base=wiki_base,
+        space=space,
+        is_cloud=is_cloud,
+        # page_id=page_id,
+    )
+
+    credentials_provider = OnyxStaticCredentialsProvider(
+        None,
+        DocumentSource.CONFLUENCE,
+        {
+            "confluence_username": username,
+            "confluence_access_token": access_token,
+        },
+    )
+    confluence_connector.set_credentials_provider(credentials_provider)
+
+    start = 0.0
+    end = datetime.now().timestamp()
+
+    # Fetch all `SlimDocuments`.
+    for slim_doc in confluence_connector.retrieve_all_slim_documents():
+        print(slim_doc)
+
+    # Fetch all `Documents`.
+    for doc in load_all_docs_from_checkpoint_connector(
+        connector=confluence_connector,
+        start=start,
+        end=end,
+    ):
+        print(doc)

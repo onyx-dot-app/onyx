@@ -8,6 +8,7 @@ from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import JIRA_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
@@ -15,6 +16,7 @@ from ee.onyx.external_permissions.confluence.group_sync import confluence_group_
 from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
+from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
 from ee.onyx.external_permissions.perm_sync_types import CensoringFuncType
 from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
@@ -91,6 +93,14 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             group_sync_func=confluence_group_sync,
             group_sync_is_cc_pair_agnostic=True,
         ),
+    ),
+    DocumentSource.JIRA: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=jira_doc_sync,
+            initial_index_should_sync=True,
+        ),
+        group_sync_config=None,
     ),
     DocumentSource.SLACK: SyncConfig(
         doc_sync_config=DocSyncConfig(

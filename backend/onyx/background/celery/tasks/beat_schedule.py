@@ -25,96 +25,110 @@ CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0
 CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 
 # tasks that run in either self-hosted on cloud
-beat_task_templates: list[dict] = []
-
-beat_task_templates.extend(
-    [
-        {
-            "name": "check-for-kg-processing",
-            "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
-            "schedule": timedelta(seconds=60),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+beat_task_templates: list[dict] = [
+    {
+        "name": "check-for-kg-processing",
+        "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
+        "schedule": timedelta(seconds=60),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-kg-processing-clustering-only",
-            "task": OnyxCeleryTask.CHECK_KG_PROCESSING_CLUSTERING_ONLY,
-            "schedule": timedelta(seconds=600),
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-kg-processing-clustering-only",
+        "task": OnyxCeleryTask.CHECK_KG_PROCESSING_CLUSTERING_ONLY,
+        "schedule": timedelta(seconds=600),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-indexing",
-            "task": OnyxCeleryTask.CHECK_FOR_INDEXING,
-            "schedule": timedelta(seconds=15),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-indexing",
+        "task": OnyxCeleryTask.CHECK_FOR_INDEXING,
+        "schedule": timedelta(seconds=15),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-checkpoint-cleanup",
-            "task": OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
-            "schedule": timedelta(hours=1),
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-checkpoint-cleanup",
+        "task": OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-connector-deletion",
-            "task": OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
-            "schedule": timedelta(seconds=20),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-connector-deletion",
+        "task": OnyxCeleryTask.CHECK_FOR_CONNECTOR_DELETION,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-vespa-sync",
-            "task": OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
-            "schedule": timedelta(seconds=20),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-vespa-sync",
+        "task": OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-user-file-folder-sync",
-            "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
-            "schedule": timedelta(
-                days=1
-            ),  # This should essentially always be triggered manually for user folder updates.
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-user-file-folder-sync",
+        "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
+        "schedule": timedelta(
+            days=1
+        ),  # This should essentially always be triggered manually for user folder updates.
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "check-for-pruning",
-            "task": OnyxCeleryTask.CHECK_FOR_PRUNING,
-            "schedule": timedelta(seconds=20),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
+    },
+    {
+        "name": "check-for-pruning",
+        "task": OnyxCeleryTask.CHECK_FOR_PRUNING,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-        {
-            "name": "monitor-background-processes",
-            "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
-            "schedule": timedelta(minutes=5),
-            "options": {
-                "priority": OnyxCeleryPriority.LOW,
-                "expires": BEAT_EXPIRES_DEFAULT,
-                "queue": OnyxCeleryQueues.MONITORING,
-            },
+    },
+    {
+        "name": "check-for-doc-permissions-sync",
+        "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
+        "schedule": timedelta(seconds=30),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
         },
-    ]
-)
+    },
+    {
+        "name": "check-for-external-group-sync",
+        "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
+        "schedule": timedelta(seconds=20),
+        "options": {
+            "priority": OnyxCeleryPriority.MEDIUM,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
+        "name": "monitor-background-processes",
+        "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "queue": OnyxCeleryQueues.MONITORING,
+        },
+    },
+]
 
 if ENTERPRISE_EDITION_ENABLED:
     beat_task_templates.extend(

@@ -1,3 +1,6 @@
+from datetime import datetime
+from datetime import timezone
+
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -76,6 +79,9 @@ def upsert_ingestion_doc(
     tenant_id = get_current_tenant_id()
 
     doc_info.document.from_ingestion_api = True
+
+    if doc_info.document.doc_updated_at is None:
+        doc_info.document.doc_updated_at = datetime.now(tz=timezone.utc)
 
     document = Document.from_base(doc_info.document)
 

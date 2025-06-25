@@ -45,7 +45,10 @@ def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
 
 
 def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
-    if hasattr(jira_issue.fields, field):
+    if hasattr(jira_issue, field):
+        return getattr(jira_issue, field)
+
+    if hasattr(jira_issue, "fields") and hasattr(jira_issue.fields, field):
         return getattr(jira_issue.fields, field)
 
     try:
@@ -135,6 +138,17 @@ def get_comment_strs(
             continue
 
     return comment_strs
+
+
+def get_jira_project_key_from_issue(issue: Issue) -> str | None:
+    if not hasattr(issue, "fields"):
+        return None
+    if not hasattr(issue.fields, "project"):
+        return None
+    if not hasattr(issue.fields.project, "key"):
+        return None
+
+    return issue.fields.project.key
 
 
 class CustomFieldExtractor:

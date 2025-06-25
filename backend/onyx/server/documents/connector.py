@@ -619,11 +619,14 @@ def get_connector_status(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorStatus]:
+    # This method is only used document set and group creation/editing
+    # Therefore, it is okay to get non-editable, but public cc_pairs
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
         eager_load_connector=True,
         eager_load_credential=True,
+        get_editable=False,
     )
 
     group_cc_pair_relationships = get_cc_pair_groups_for_ids(
