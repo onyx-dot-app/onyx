@@ -60,6 +60,13 @@ def generic_doc_sync(
     for doc_batch in slim_connector.retrieve_all_slim_documents(callback=callback):
         logger.info(f"Got {len(doc_batch)} slim documents from {doc_source}")
 
+        # `existing_doc_ids` and `doc_batch` may be non-subsets of one another (i.e., `existing_doc_ids` is not a subset of
+        # `doc_batch`, and `doc_batch` is not a subset of `existing_doc_ids`).
+        #
+        # In that case, we want to:
+        # 1. Make private all the ids which are in `existing_doc_ids` and are *not* in `doc_batch`.
+        # 2. Yield the rest of the `ExternalAccess`s.
+
         yield from make_missing_docs_inaccessible(
             fetched_slim_docs=doc_batch,
             existing_doc_ids=existing_doc_ids,
