@@ -138,12 +138,15 @@ VERTEXAI_VISIBLE_MODEL_NAMES = [
     VERTEXAI_DEFAULT_FAST_MODEL,
 ]
 
+LLAMA_STACK_PROVIDER_NAME = "openai"
+LLAMA_STACK_MODEL_NAMES: list[str] = []
 
 _PROVIDER_TO_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+    LLAMA_STACK_PROVIDER_NAME: LLAMA_STACK_MODEL_NAMES,
 }
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
@@ -151,6 +154,7 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
+    LLAMA_STACK_PROVIDER_NAME: [],  # No pre-selected visible models
 }
 
 
@@ -171,6 +175,34 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=LLAMA_STACK_PROVIDER_NAME,
+            display_name="Llama Stack",
+            api_key_required=False,
+            api_base_required=False,
+            api_version_required=False,
+            custom_config_keys=[
+                CustomConfigKey(
+                    name="LLAMA_STACK_SERVER_URL",
+                    display_name="Llama Stack Server URL",
+                    description="The base URL for your Llama Stack server.",
+                    is_required=True,
+                    is_secret=False,
+                ),
+                CustomConfigKey(
+                    name="LLAMA_STACK_API_KEY",  # TODO: need to accept multiple API keys
+                    display_name="Llama Stack LLM API Key",
+                    description="The API key for your LLM provider on Llama Stack.",
+                    is_required=False,
+                    is_secret=True,
+                ),
+            ],
+            model_configurations=fetch_model_configurations_for_provider(
+                LLAMA_STACK_PROVIDER_NAME
+            ),
+            default_model=None,
+            default_fast_model=None,
         ),
         WellKnownLLMProviderDescriptor(
             name=ANTHROPIC_PROVIDER_NAME,

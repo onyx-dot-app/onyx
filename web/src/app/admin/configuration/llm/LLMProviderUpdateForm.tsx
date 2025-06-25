@@ -51,6 +51,17 @@ export function LLMProviderUpdateForm({
 
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
+  // Track dynamically fetched model configurations
+  const [dynamicModelConfigurations, setDynamicModelConfigurations] = useState<
+    { name: string; is_visible: boolean }[]
+  >([]);
+
+  // Combine original and dynamically fetched model configurations
+  const allModelConfigurations = [
+    ...llmProviderDescriptor.model_configurations,
+    ...dynamicModelConfigurations,
+  ];
+
   // Define the initial values based on the provider's requirements
   const initialValues = {
     name:
@@ -148,11 +159,28 @@ export function LLMProviderUpdateForm({
           ...rest
         } = values;
 
+        // Transform api_base for Llama Stack to append /v1/openai/v1 if not already present
+        let llamaStackOpenAiApiBase =
+          rest.custom_config?.LLAMA_STACK_SERVER_URL;
+        if (
+          llmProviderDescriptor.display_name === "Llama Stack" &&
+          rest.custom_config?.LLAMA_STACK_SERVER_URL
+        ) {
+          const baseUrl = rest.custom_config?.LLAMA_STACK_SERVER_URL.replace(
+            /\/+$/,
+            ""
+          ); // Remove trailing slashes
+          if (!baseUrl.endsWith("/v1/openai/v1")) {
+            llamaStackOpenAiApiBase = `${baseUrl}/v1/openai/v1`;
+          }
+        }
+
         // Create the final payload with proper typing
         const finalValues = {
           ...rest,
+          api_base: llamaStackOpenAiApiBase,
           api_key_changed: values.api_key !== initialValues.api_key,
-          model_configurations: llmProviderDescriptor.model_configurations.map(
+          model_configurations: allModelConfigurations.map(
             (modelConfiguration): ModelConfigurationUpsertRequest => ({
               name: modelConfiguration.name,
               is_visible: visibleModels.includes(modelConfiguration.name),
@@ -330,23 +358,112 @@ export function LLMProviderUpdateForm({
             }
           })}
 
+          {llmProviderDescriptor.display_name === "Llama Stack" && (
+            <div className="my-4">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={async () => {
+                  const serverUrl =
+                    formikProps.values.custom_config?.LLAMA_STACK_SERVER_URL;
+                  if (!serverUrl) {
+                    setPopup?.({
+                      type: "error",
+                      message: "Please enter the Llama Stack Server URL first.",
+                    });
+                    return;
+                  }
+                  try {
+                    const response = await fetch(
+                      "/api/admin/llm/llama-stack-models",
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          server_url: serverUrl,
+                          model_type: "llm",
+                        }),
+                      }
+                    );
+                    if (!response.ok) {
+                      throw new Error("Failed to fetch models from backend.");
+                    }
+                    const data = await response.json();
+                    if (!Array.isArray(data.models)) {
+                      throw new Error("Invalid response from backend.");
+                    }
+                    // Map models to the expected format for model_configurations
+                    console.log("data.models", data.models);
+                    const newModelConfigurations = data.models.map(
+                      (model: any) => ({
+                        name: model.identifier,
+                        is_visible: true,
+                        max_input_tokens: null,
+                      })
+                    );
+
+                    // Update the dynamic model configurations state
+                    setDynamicModelConfigurations(newModelConfigurations);
+
+                    // Update form fields
+                    formikProps.setFieldValue(
+                      "model_configurations",
+                      newModelConfigurations
+                    );
+
+                    // Update selected model names to include all fetched models by default
+                    const modelNames = newModelConfigurations.map(
+                      (config: { name: string; is_visible: boolean }) =>
+                        config.name
+                    );
+                    formikProps.setFieldValue(
+                      "selected_model_names",
+                      modelNames
+                    );
+
+                    // Set the first model as default if no default is set
+                    if (
+                      !formikProps.values.default_model_name &&
+                      modelNames.length > 0
+                    ) {
+                      formikProps.setFieldValue(
+                        "default_model_name",
+                        modelNames[0]
+                      );
+                    }
+
+                    setPopup?.({
+                      type: "success",
+                      message: `Fetched ${newModelConfigurations.length} models from Llama Stack server.`,
+                    });
+                  } catch (err: any) {
+                    setPopup?.({
+                      type: "error",
+                      message: err.message || "Error fetching models.",
+                    });
+                  }
+                }}
+              >
+                Fetch available models
+              </Button>
+            </div>
+          )}
+
           {!firstTimeConfiguration && (
             <>
               <Separator />
 
-              {llmProviderDescriptor.model_configurations.length > 0 ? (
+              {allModelConfigurations.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
                   subtext="The model to use by default for this provider unless otherwise specified."
                   label="Default Model"
-                  options={llmProviderDescriptor.model_configurations.map(
-                    (modelConfiguration) => ({
-                      // don't clean up names here to give admins descriptive names / handle duplicates
-                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                      name: modelConfiguration.name,
-                      value: modelConfiguration.name,
-                    })
-                  )}
+                  options={allModelConfigurations.map((modelConfiguration) => ({
+                    // don't clean up names here to give admins descriptive names / handle duplicates
+                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                    name: modelConfiguration.name,
+                    value: modelConfiguration.name,
+                  }))}
                   maxHeight="max-h-56"
                 />
               ) : (
@@ -367,14 +484,14 @@ export function LLMProviderUpdateForm({
               )}
 
               {!llmProviderDescriptor.single_model_supported &&
-                (llmProviderDescriptor.model_configurations.length > 0 ? (
+                (allModelConfigurations.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
                     subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
             for this provider. If \`Default\` is specified, will use
             the Default Model configured above.`}
                     label="[Optional] Fast Model"
-                    options={llmProviderDescriptor.model_configurations.map(
+                    options={allModelConfigurations.map(
                       (modelConfiguration) => ({
                         // don't clean up names here to give admins descriptive names / handle duplicates
                         // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
@@ -404,7 +521,7 @@ export function LLMProviderUpdateForm({
                 />
                 {showAdvancedOptions && (
                   <>
-                    {llmProviderDescriptor.model_configurations.length > 0 && (
+                    {allModelConfigurations.length > 0 && (
                       <div className="w-full">
                         <MultiSelectField
                           selectedInitially={
@@ -413,7 +530,7 @@ export function LLMProviderUpdateForm({
                           name="selected_model_names"
                           label="Display Models"
                           subtext="Select the models to make available to users. Unselected models will not be available."
-                          options={llmProviderDescriptor.model_configurations.map(
+                          options={allModelConfigurations.map(
                             (modelConfiguration) => ({
                               value: modelConfiguration.name,
                               // don't clean up names here to give admins descriptive names / handle duplicates

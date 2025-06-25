@@ -2,10 +2,12 @@ from collections.abc import Callable
 from datetime import datetime
 from datetime import timezone
 
+import httpx
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -386,3 +388,50 @@ def get_provider_contextual_cost(
             )
 
     return costs
+
+
+@admin_router.post("/llama-stack-models")
+async def fetch_llama_stack_models(
+    request: Request,
+    _: User | None = Depends(current_admin_user),
+) -> dict:
+    """Proxy endpoint to fetch models from a Llama Stack server URL, filtered by model type.
+
+    Request body should contain:
+    - server_url: URL of the Llama Stack server
+    - model_type: Optional type to filter by ("llm" or "embedding"), defaults to "llm"
+    """
+    try:
+        body = await request.json()
+        server_url = body.get("server_url") if body else None
+        model_type = body.get("model_type", "llm") if body else "llm"
+    except Exception:
+        server_url = None
+        model_type = "llm"
+    if not server_url:
+        raise HTTPException(
+            status_code=400, detail="Missing server_url in request body."
+        )
+    try:
+        llama_url = server_url.rstrip("/") + "/v1/models"
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(llama_url, timeout=10)
+            resp.raise_for_status()
+            resp_json = resp.json()
+            models = resp_json.get("data")
+            if not isinstance(models, list):
+                raise Exception(
+                    "Invalid response from Llama Stack server: missing 'data' list."
+                )
+
+            # Filter models to only include those with the specified model_type
+            filtered_models = [
+                model for model in models if model.get("model_type") == model_type
+            ]
+
+            return {"models": filtered_models}
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to fetch models from Llama Stack server: {str(e)}",
+        )
