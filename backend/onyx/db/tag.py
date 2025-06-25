@@ -142,6 +142,31 @@ def find_tags(
     return list(tags)
 
 
+def get_structured_tags_for_document(
+    document_id: str, db_session: Session
+) -> dict[str, str | list[str]]:
+    document = db_session.get(Document, document_id)
+    if not document:
+        raise ValueError("Invalid Document, cannot find tags")
+
+    document_metadata: dict[str, str | list[str]] = {}
+    for tag in document.tags:
+        tag: Tag
+        if tag.tag_key in document_metadata:
+            # NOTE: we convert to list if there are multiple values for the same key
+            # Thus, it won't know if a tag is a list if it only contains one value
+            if isinstance(document_metadata[tag.tag_key], str):
+                document_metadata[tag.tag_key] = [
+                    document_metadata[tag.tag_key],
+                    tag.tag_value,
+                ]
+            else:
+                document_metadata[tag.tag_key].append(tag.tag_value)
+        else:
+            document_metadata[tag.tag_key] = tag.tag_value
+    return document_metadata
+
+
 def delete_document_tags_for_documents__no_commit(
     document_ids: list[str], db_session: Session
 ) -> None:

@@ -193,7 +193,12 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             team {
                                 name
                             }
+                            creator {
+                                name
+                                email
+                            }
                             assignee {
+                                name
                                 email
                             }
                             previousIdentifiers
@@ -277,7 +282,8 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             k: str(v)
                             for k, v in {
                                 "team": (node.get("team") or {}).get("name"),
-                                "assignee": (node.get("assignee") or {}).get("email"),
+                                "creator": node.get("creator"),
+                                "assignee": node.get("assignee"),
                                 "state": (node.get("state") or {}).get("name"),
                                 "priority": node.get("priority"),
                                 "estimate": node.get("estimate"),

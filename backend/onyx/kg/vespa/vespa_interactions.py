@@ -1,6 +1,5 @@
 import json
 from collections.abc import Generator
-from typing import Any
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCallTypes
@@ -8,9 +7,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Connector
 from onyx.db.models import Document
-from onyx.db.models import Document__Tag
 from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import Tag
+from onyx.db.tag import get_structured_tags_for_document
 from onyx.document_index.vespa.chunk_retrieval import get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
@@ -37,24 +35,7 @@ def get_document_classification_content_for_kg_processing(
         with get_session_with_current_tenant() as db_session:
             for document_id in document_ids[i : i + batch_size]:
                 # get document metadata
-                tags = (
-                    db_session.query(Tag)
-                    .join(Document__Tag, Tag.id == Document__Tag.tag_id)
-                    .filter(Document__Tag.document_id == document_id)
-                    .all()
-                )
-                metadata: dict[str, Any] = {}
-                for tag in tags:
-                    if tag.tag_key in metadata:
-                        if isinstance(metadata[tag.tag_key], str):
-                            metadata[tag.tag_key] = [
-                                metadata[tag.tag_key],
-                                tag.tag_value,
-                            ]
-                        else:
-                            metadata[tag.tag_key].append(tag.tag_value)
-                    else:
-                        metadata[tag.tag_key] = tag.tag_value
+                metadata = get_structured_tags_for_document(document_id, db_session)
 
                 # get document source type
                 source_type = DocumentSource(

@@ -458,6 +458,7 @@ class EntityTypeMetadataTracker:
             if isinstance(value, str):
                 trackinfo.values.add(value)
             else:
+                trackinfo.type = KGAttributeTrackType.LIST
                 trackinfo.values.update(value)
 
             # if we see to many different values, we stop tracking
