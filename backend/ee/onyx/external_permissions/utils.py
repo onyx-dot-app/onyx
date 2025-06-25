@@ -13,7 +13,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def make_missing_docs_inaccessible(
+def _make_missing_docs_inaccessible(
     fetched_slim_docs: list[SlimDocument],
     existing_doc_ids: list[str],
 ) -> Generator[DocExternalAccess]:
@@ -67,7 +67,7 @@ def generic_doc_sync(
         # 1. Make private all the ids which are in `existing_doc_ids` and are *not* in `doc_batch`.
         # 2. Yield the rest of the `ExternalAccess`s.
 
-        yield from make_missing_docs_inaccessible(
+        yield from _make_missing_docs_inaccessible(
             fetched_slim_docs=doc_batch,
             existing_doc_ids=existing_doc_ids,
         )
