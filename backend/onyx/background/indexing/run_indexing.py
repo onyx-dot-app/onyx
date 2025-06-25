@@ -184,7 +184,7 @@ class ConnectorStopSignal(Exception):
     """A custom exception used to signal a stop in processing."""
 
 
-class RunIndexingContext(BaseModel):
+class DocExtractionContext(BaseModel):
     index_name: str
     cc_pair_id: int
     connector_id: int
@@ -195,15 +195,19 @@ class RunIndexingContext(BaseModel):
     is_primary: bool
     should_fetch_permissions_during_indexing: bool
     search_settings_status: IndexModelStatus
-    doc_extraction_completed: bool
-    batches_total: int
-    is_batch_processed: list[bool]
+    doc_extraction_complete_batch_num: int
+
+
+class DocIndexingContext(BaseModel):
+    batches_done: int
+    unfinished_batches: set[int]
     total_failures: int
     net_doc_change: int
+    total_chunks: int
 
 
 def _check_connector_and_attempt_status(
-    db_session_temp: Session, ctx: RunIndexingContext, index_attempt_id: int
+    db_session_temp: Session, ctx: DocExtractionContext, index_attempt_id: int
 ) -> None:
     """
     Checks the status of the connector credential pair and index attempt.
@@ -303,7 +307,7 @@ def _run_indexing(
             index_attempt_start.connector_credential_pair.last_successful_index_time
             is not None
         )
-        ctx = RunIndexingContext(
+        ctx = DocExtractionContext(
             index_name=index_attempt_start.search_settings.index_name,
             cc_pair_id=index_attempt_start.connector_credential_pair.id,
             connector_id=db_connector.id,
@@ -328,11 +332,7 @@ def _run_indexing(
                 and (from_beginning or not has_successful_attempt)
             ),
             search_settings_status=index_attempt_start.search_settings.status,
-            doc_extraction_completed=False,
-            batches_total=0,
-            is_batch_processed=[],
-            total_failures=0,
-            net_doc_change=0,
+            doc_extraction_complete_batch_num=-1,
         )
 
         last_successful_index_poll_range_end = (

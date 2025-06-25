@@ -1,21 +1,37 @@
 import json
 from abc import ABC
 from abc import abstractmethod
+from enum import Enum
 from io import StringIO
+from typing import cast
 from typing import List
 from typing import Optional
+from typing import TypeAlias
 
 from sqlalchemy.orm import Session
 
-from onyx.background.indexing.run_indexing import RunIndexingContext
+from onyx.background.indexing.run_indexing import DocExtractionContext
+from onyx.background.indexing.run_indexing import DocIndexingContext
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import Document
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
-from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+class DocumentBatchStorageStateType(str, Enum):
+    EXTRACTION = "extraction"
+    INDEXING = "indexing"
+
+
+DocumentStorageState: TypeAlias = DocExtractionContext | DocIndexingContext
+
+STATE_TYPE_TO_MODEL: dict[str, type[DocumentStorageState]] = {
+    DocumentBatchStorageStateType.EXTRACTION.value: DocExtractionContext,
+    DocumentBatchStorageStateType.INDEXING.value: DocIndexingContext,
+}
 
 
 class DocumentBatchStorage(ABC):
@@ -39,12 +55,20 @@ class DocumentBatchStorage(ABC):
         """Delete a specific batch."""
 
     @abstractmethod
-    def store_extraction_state(self, state: RunIndexingContext) -> None:
+    def store_extraction_state(self, state: DocExtractionContext) -> None:
         """Store extraction state metadata."""
 
     @abstractmethod
-    def get_extraction_state(self) -> RunIndexingContext | None:
+    def get_extraction_state(self) -> DocExtractionContext | None:
         """Get extraction state metadata."""
+
+    @abstractmethod
+    def store_indexing_state(self, state: DocIndexingContext) -> None:
+        """Store indexing state metadata."""
+
+    @abstractmethod
+    def get_indexing_state(self) -> DocIndexingContext | None:
+        """Get indexing state metadata."""
 
     @abstractmethod
     def cleanup_all_batches(self) -> None:
@@ -74,9 +98,9 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         """Generate file name for a document batch."""
         return f"document_batch_{self.base_path.replace('/', '_')}_{batch_id}.json"
 
-    def _get_state_file_name(self) -> str:
+    def _get_state_file_name(self, state_type: str) -> str:
         """Generate file name for extraction state."""
-        return f"extraction_state_{self.base_path.replace('/', '_')}.json"
+        return f"{state_type}_state_{self.base_path.replace('/', '_')}.json"
 
     def store_batch(self, batch_id: str, documents: list[Document]) -> None:
         """Store a batch of documents using FileStore."""
@@ -146,9 +170,9 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             logger.warning(f"Failed to delete batch {batch_id}: {e}")
             # Don't raise - batch might not exist, which is acceptable
 
-    def store_extraction_state(self, state: RunIndexingContext) -> None:
-        """Store extraction state using FileStore."""
-        file_name = self._get_state_file_name()
+    def _store_state(self, state: DocumentStorageState, state_type: str) -> None:
+        """Store state using FileStore."""
+        file_name = self._get_state_file_name(state_type)
         try:
             data = json.dumps(state.model_dump(mode="json"), indent=2)
             content = StringIO(data)
@@ -156,24 +180,24 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             self.file_store.save_file(
                 file_id=file_name,
                 content=content,
-                display_name=f"Extraction State {self.base_path}",
+                display_name=f"{state_type.capitalize()} State {self.base_path}",
                 file_origin=FileOrigin.OTHER,
                 file_type="application/json",
                 file_metadata={
                     "tenant_id": self.tenant_id,
                     "index_attempt_id": str(self.index_attempt_id),
-                    "type": "extraction_state",
+                    "type": f"{state_type}_state",
                 },
             )
 
-            logger.debug(f"Stored extraction state to FileStore as {file_name}")
+            logger.debug(f"Stored {state_type} state to FileStore as {file_name}")
         except Exception as e:
-            logger.error(f"Failed to store extraction state: {e}")
+            logger.error(f"Failed to store {state_type} state: {e}")
             raise
 
-    def get_extraction_state(self) -> RunIndexingContext | None:
-        """Get extraction state from FileStore."""
-        file_name = self._get_state_file_name()
+    def _get_state(self, state_type: str) -> DocumentStorageState | None:
+        """Get state from FileStore."""
+        file_name = self._get_state_file_name(state_type)
         try:
             # Check if file exists
             if not self.file_store.has_file(
@@ -186,12 +210,34 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             content_io = self.file_store.read_file(file_name)
             data = content_io.read().decode("utf-8")
 
-            state = RunIndexingContext.model_validate(json.loads(data))
-            logger.debug("Retrieved extraction state from FileStore")
+            state = STATE_TYPE_TO_MODEL[state_type].model_validate(json.loads(data))
+            logger.debug(f"Retrieved {state_type} state from FileStore")
             return state
         except Exception as e:
-            logger.error(f"Failed to retrieve extraction state: {e}")
+            logger.error(f"Failed to retrieve {state_type} state: {e}")
             return None
+
+    def store_extraction_state(self, state: DocExtractionContext) -> None:
+        """Store extraction state using FileStore."""
+        self._store_state(state, DocumentBatchStorageStateType.EXTRACTION.value)
+
+    def get_extraction_state(self) -> DocExtractionContext | None:
+        """Get extraction state from FileStore."""
+        return cast(
+            DocExtractionContext | None,
+            self._get_state(DocumentBatchStorageStateType.EXTRACTION.value),
+        )
+
+    def store_indexing_state(self, state: DocIndexingContext) -> None:
+        """Store indexing state using FileStore."""
+        self._store_state(state, DocumentBatchStorageStateType.INDEXING.value)
+
+    def get_indexing_state(self) -> DocIndexingContext | None:
+        """Get indexing state from FileStore."""
+        return cast(
+            DocIndexingContext | None,
+            self._get_state(DocumentBatchStorageStateType.INDEXING.value),
+        )
 
     def cleanup_all_batches(self) -> None:
         """Clean up all batches and state for this index attempt."""
@@ -209,13 +255,14 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             except Exception as e:
                 logger.warning(f"Failed to delete batch file {file_name}: {e}")
 
-        # Delete extraction state
-        try:
-            state_file_name = self._get_state_file_name()
-            self.file_store.delete_file(state_file_name)
-            deleted_count += 1
-        except Exception as e:
-            logger.warning(f"Failed to delete extraction state: {e}")
+        # Delete state
+        for state_type in DocumentBatchStorageStateType:
+            try:
+                state_file_name = self._get_state_file_name(state_type.value)
+                self.file_store.delete_file(state_file_name)
+                deleted_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to delete extraction state: {e}")
 
         # Clear tracked files
         self._batch_files.clear()
@@ -229,8 +276,6 @@ def get_document_batch_storage(
     tenant_id: str, index_attempt_id: int, db_session: Session
 ) -> DocumentBatchStorage:
     """Factory function to get the configured document batch storage implementation."""
-    # Set tenant ID for the file store
-    get_current_tenant_id(tenant_id)
     # The get_default_file_store will now correctly use S3BackedFileStore
     # or other configured stores based on environment variables
     file_store = get_default_file_store(db_session)

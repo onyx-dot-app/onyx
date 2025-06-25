@@ -31,7 +31,9 @@ class RedisConnectorIndex:
         PREFIX + "_generator_complete"
     )  # connectorindexing_generator_complete
 
-    GENERATOR_LOCK_PREFIX = "da_lock:indexing"
+    FILESTORE_LOCK_PREFIX = "da_lock:indexing:filestore"
+    DB_LOCK_PREFIX = "da_lock:indexing:db"
+    PER_WORKER_LOCK_PREFIX = "da_lock:indexing:per_worker"
 
     TERMINATE_PREFIX = PREFIX + "_terminate"  # connectorindexing_terminate
     TERMINATE_TTL = 600
@@ -53,32 +55,41 @@ class RedisConnectorIndex:
     def __init__(
         self,
         tenant_id: str,
-        id: int,
+        cc_pair_id: int,
         search_settings_id: int,
         redis: redis.Redis,
     ) -> None:
         self.tenant_id: str = tenant_id
-        self.id = id
+        self.cc_pair_id = cc_pair_id
         self.search_settings_id = search_settings_id
         self.redis = redis
 
-        self.fence_key: str = f"{self.FENCE_PREFIX}_{id}/{search_settings_id}"
+        self.fence_key: str = f"{self.FENCE_PREFIX}_{cc_pair_id}/{search_settings_id}"
         self.generator_progress_key = (
-            f"{self.GENERATOR_PROGRESS_PREFIX}_{id}/{search_settings_id}"
+            f"{self.GENERATOR_PROGRESS_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
         self.generator_complete_key = (
-            f"{self.GENERATOR_COMPLETE_PREFIX}_{id}/{search_settings_id}"
+            f"{self.GENERATOR_COMPLETE_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
-        self.generator_lock_key = (
-            f"{self.GENERATOR_LOCK_PREFIX}_{id}/{search_settings_id}"
+        self.filestore_lock_key = (
+            f"{self.FILESTORE_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
-        self.terminate_key = f"{self.TERMINATE_PREFIX}_{id}/{search_settings_id}"
-        self.watchdog_key = f"{self.WATCHDOG_PREFIX}_{id}/{search_settings_id}"
+        self.per_worker_lock_key = (
+            f"{self.PER_WORKER_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
+        )
+        self.db_lock_key = f"{self.DB_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
+        self.terminate_key = (
+            f"{self.TERMINATE_PREFIX}_{cc_pair_id}/{search_settings_id}"
+        )
+        self.watchdog_key = f"{self.WATCHDOG_PREFIX}_{cc_pair_id}/{search_settings_id}"
 
-        self.active_key = f"{self.ACTIVE_PREFIX}_{id}/{search_settings_id}"
+        self.active_key = f"{self.ACTIVE_PREFIX}_{cc_pair_id}/{search_settings_id}"
         self.connector_active_key = (
-            f"{self.CONNECTOR_ACTIVE_PREFIX}_{id}/{search_settings_id}"
+            f"{self.CONNECTOR_ACTIVE_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
+
+    def lock_key_by_batch(self, batch_n: int) -> str:
+        return f"{self.per_worker_lock_key}/{batch_n}"
 
     @classmethod
     def fence_key_with_ids(cls, cc_pair_id: int, search_settings_id: int) -> str:
@@ -89,7 +100,7 @@ class RedisConnectorIndex:
         # we prefix the task id so it's easier to keep track of who created the task
         # aka "connectorindexing+generator_1_6dd32ded3-00aa-4884-8b21-42f8332e7fac"
 
-        return f"{self.GENERATOR_TASK_PREFIX}_{self.id}/{self.search_settings_id}_{uuid4()}"
+        return f"{self.GENERATOR_TASK_PREFIX}_{self.cc_pair_id}/{self.search_settings_id}_{uuid4()}"
 
     @property
     def fenced(self) -> bool:
@@ -172,9 +183,6 @@ class RedisConnectorIndex:
         ttl = cast(int, self.redis.ttl(self.connector_active_key))
         return ttl
 
-    def generator_locked(self) -> bool:
-        return bool(self.redis.exists(self.generator_lock_key))
-
     def set_generator_complete(self, payload: int | None) -> None:
         if not payload:
             self.redis.delete(self.generator_complete_key)
@@ -209,7 +217,7 @@ class RedisConnectorIndex:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
         self.redis.delete(self.connector_active_key)
         self.redis.delete(self.active_key)
-        self.redis.delete(self.generator_lock_key)
+        self.redis.delete(self.filestore_lock_key)
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
         self.redis.delete(self.fence_key)
@@ -223,7 +231,7 @@ class RedisConnectorIndex:
         for key in r.scan_iter(RedisConnectorIndex.ACTIVE_PREFIX + "*"):
             r.delete(key)
 
-        for key in r.scan_iter(RedisConnectorIndex.GENERATOR_LOCK_PREFIX + "*"):
+        for key in r.scan_iter(RedisConnectorIndex.FILESTORE_LOCK_PREFIX + "*"):
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorIndex.GENERATOR_COMPLETE_PREFIX + "*"):

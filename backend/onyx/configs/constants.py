@@ -337,6 +337,7 @@ class OnyxCeleryQueues:
 
     # Document processing pipeline queue
     DOCUMENT_INDEXING_PIPELINE = "document_indexing_pipeline"
+    CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -471,9 +472,9 @@ class OnyxCeleryTask:
     CONNECTOR_INDEXING_PROXY_TASK = "connector_indexing_proxy_task"
 
     # New split indexing tasks
-    CONNECTOR_DOCUMENT_EXTRACTION_TASK = "connector_document_extraction_task"
+    CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
     DOCUMENT_INDEXING_PIPELINE_TASK = "document_indexing_pipeline_task"
-    MONITOR_docfetching_COMPLETION = "monitor_docfetching_completion"
+    MONITOR_DOCFETCHING_COMPLETION = "monitor_docfetching_completion"
 
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"

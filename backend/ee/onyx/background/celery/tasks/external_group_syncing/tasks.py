@@ -383,7 +383,7 @@ def connector_external_group_sync_generator_task(
 
     lock: RedisLock = r.lock(
         OnyxRedisLocks.CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX
-        + f"_{redis_connector.id}",
+        + f"_{redis_connector.cc_pair_id}",
         timeout=CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT,
     )
 

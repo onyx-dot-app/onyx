@@ -123,10 +123,7 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         self.last_parent_check = time.monotonic()
 
     def should_stop(self) -> bool:
-        if self.redis_connector.stop.fenced:
-            return True
-
-        return False
+        return bool(self.redis_connector.stop.fenced)
 
     def progress(self, tag: str, amount: int) -> None:
         """Amount isn't used yet."""
@@ -592,16 +589,18 @@ def try_creating_indexing_task(
         custom_task_id = redis_connector_index.generate_generator_task_id()
 
         # Determine which queue to use based on whether this is a user file
+        # TODO: at the moment the second stage of the pipeline (indexing) is
+        # shared between user files and connectors
         queue = (
             OnyxCeleryQueues.USER_FILES_INDEXING
             if cc_pair.is_user_file
-            else OnyxCeleryQueues.CONNECTOR_INDEXING
+            else OnyxCeleryQueues.CONNECTOR_DOC_FETCHING
         )
 
         # when the task is sent, we have yet to finish setting up the fence
         # therefore, the task must contain code that blocks until the fence is ready
         result = celery_app.send_task(
-            OnyxCeleryTask.CONNECTOR_DOCUMENT_EXTRACTION_TASK,
+            OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
             kwargs=dict(
                 index_attempt_id=index_attempt_id,
                 cc_pair_id=cc_pair.id,
@@ -613,9 +612,7 @@ def try_creating_indexing_task(
             priority=OnyxCeleryPriority.MEDIUM,
         )
         if not result:
-            raise RuntimeError(
-                "send_task for connector_document_extraction_task failed."
-            )
+            raise RuntimeError("send_task for connector_doc_fetching_task failed.")
 
         # now fill out the fence with the rest of the data
         redis_connector_index.set_active()
