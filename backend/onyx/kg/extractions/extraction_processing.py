@@ -25,7 +25,6 @@ from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import upsert_staging_relationship
 from onyx.db.relationships import upsert_staging_relationship_type
 from onyx.kg.models import KGClassificationInstructions
-from onyx.kg.models import KGConfigSettings
 from onyx.kg.models import KGDocumentDeepExtractionResults
 from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.models import KGEntityTypeInstructions
@@ -421,14 +420,7 @@ def kg_extraction(
             documents_to_process = [x.id for x in unprocessed_document_batch]
             batch_implied_extraction: dict[str, KGImpliedExtractionResults] = {}
             batch_deep_extraction_args: list[
-                tuple[
-                    str,
-                    KGEnhancedDocumentMetadata,
-                    KGImpliedExtractionResults,
-                    str,
-                    str,
-                    KGConfigSettings,
-                ]
+                tuple[str, KGEnhancedDocumentMetadata, KGImpliedExtractionResults]
             ] = []
 
             for unprocessed_document in unprocessed_document_batch:
@@ -469,15 +461,21 @@ def kg_extraction(
                             unprocessed_document.id,
                             batch_metadata[unprocessed_document.id],
                             batch_implied_extraction[unprocessed_document.id],
-                            tenant_id,
-                            index_name,
-                            kg_config_settings,
                         )
                     )
 
             # 2. perform deep extraction and classification in parallel
             batch_deep_extraction_func_calls = [
-                (kg_deep_extraction, arg) for arg in batch_deep_extraction_args
+                (
+                    kg_deep_extraction,
+                    (
+                        *arg,
+                        tenant_id,
+                        index_name,
+                        kg_config_settings,
+                    ),
+                )
+                for arg in batch_deep_extraction_args
             ]
             batch_deep_extractions: dict[str, KGDocumentDeepExtractionResults] = {
                 document_id: result
