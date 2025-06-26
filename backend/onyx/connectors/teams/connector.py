@@ -408,7 +408,7 @@ def _collect_all_teams(
             )
 
         team_collection = query.execute_query()
-        filtered_teams = iter(
+        filtered_teams = (
             team
             for team in team_collection
             if _filter_team(team=team, requested=requested)
