@@ -100,17 +100,15 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             doc_sync_func=jira_doc_sync,
             initial_index_should_sync=True,
         ),
-        group_sync_config=None,
     ),
+    # Groups are not needed for Slack.
+    # All channel access is done at the individual user level.
     DocumentSource.SLACK: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=slack_doc_sync,
             initial_index_should_sync=True,
         ),
-        # groups are not needed for Slack. All channel access is done at the
-        # individual user level
-        group_sync_config=None,
     ),
     DocumentSource.GMAIL: SyncConfig(
         doc_sync_config=DocSyncConfig(
@@ -131,6 +129,8 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             initial_index_should_sync=True,
         ),
     ),
+    # Groups are not needed for Teams.
+    # All channel access is done at the individual user level.
     DocumentSource.TEAMS: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
