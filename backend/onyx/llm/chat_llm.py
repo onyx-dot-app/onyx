@@ -52,6 +52,7 @@ litellm.telemetry = False
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 VERTEX_CREDENTIALS_KWARG = "vertex_credentials"
+VERTEX_LOCATION_KWARG = "vertex_location"
 
 
 class LLMTimeoutError(Exception):
@@ -294,13 +295,12 @@ class DefaultMultiLLM(LLM):
             # Specifically pass in "vertex_credentials" / "vertex_location" as a
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
-            vertex_location_key = "vertex_location"
             for k, v in custom_config.items():
                 if model_provider == "vertex_ai":
                     if k == VERTEX_CREDENTIALS_KWARG:
                         model_kwargs[k] = v
                         continue
-                    elif k == vertex_location_key:
+                    elif k == VERTEX_LOCATION_KWARG:
                         model_kwargs[k] = v
                         continue
 
