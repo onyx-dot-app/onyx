@@ -8,6 +8,7 @@ import {
 } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
 import { fetchToolsSS } from "../tools/fetchTools";
+import { KnowledgeMapCreationRequest } from "@/app/admin/documents/knowledge_maps/lib";
 
 export async function fetchAssistantEditorInfoSS(
   personaId?: number | string
@@ -17,11 +18,12 @@ export async function fetchAssistantEditorInfoSS(
         ccPairs: CCPairBasicInfo[];
         documentSets: DocumentSet[];
         llmProviders: LLMProviderView[];
+        knowledgeMaps: KnowledgeMapCreationRequest[];
         user: User | null;
         existingPersona: FullPersona | null;
         tools: ToolSnapshot[];
       },
-      null,
+      null
     ]
   | [null, string]
 > {
@@ -29,6 +31,7 @@ export async function fetchAssistantEditorInfoSS(
     fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchSS("/llm/provider"),
+    fetchSS("/knowledge/get"),
     // duplicate fetch, but shouldn't be too big of a deal
     // this page is not a high traffic page
     getCurrentUserSS(),
@@ -45,6 +48,7 @@ export async function fetchAssistantEditorInfoSS(
     ccPairsInfoResponse,
     documentSetsResponse,
     llmProvidersResponse,
+    knowledgeMapsResponse,
     user,
     toolsResponse,
     personaResponse,
@@ -52,9 +56,10 @@ export async function fetchAssistantEditorInfoSS(
     Response,
     Response,
     Response,
+    Response,
     User | null,
     ToolSnapshot[] | null,
-    Response | null,
+    Response | null
   ];
 
   if (!ccPairsInfoResponse.ok) {
@@ -85,7 +90,15 @@ export async function fetchAssistantEditorInfoSS(
   }
 
   const llmProviders = (await llmProvidersResponse.json()) as LLMProviderView[];
+  if (!knowledgeMapsResponse.ok) {
+    return [
+      null,
+      `Не удалось получить данные - ${await knowledgeMapsResponse.text()}`,
+    ];
+  }
 
+  const knowledgeMaps =
+    (await knowledgeMapsResponse.json()) as KnowledgeMapCreationRequest[];
   if (personaId && personaResponse && !personaResponse.ok) {
     return [null, `Failed to fetch Persona - ${await personaResponse.text()}`];
   }
@@ -109,6 +122,7 @@ export async function fetchAssistantEditorInfoSS(
         ccPairs,
         documentSets,
         llmProviders,
+        knowledgeMaps,
         user,
         existingPersona,
         tools: toolsResponse,

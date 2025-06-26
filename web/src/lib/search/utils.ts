@@ -1,6 +1,6 @@
 import { Tag, ValidSources } from "../types";
 import { Filters, OnyxDocument, SourceMetadata } from "./interfaces";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@tremor/react";
 
 export const buildFilters = (
   sources: SourceMetadata[],

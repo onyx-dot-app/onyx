@@ -11,7 +11,7 @@ import {
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+
 import { Filters, SourceMetadata } from "./search/interfaces";
 import {
   destructureValue,
@@ -33,6 +33,7 @@ import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
+import { DateRangePickerValue } from "@tremor/react";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -209,7 +210,6 @@ export interface FilterManager {
   setTimeRange: React.Dispatch<
     React.SetStateAction<DateRangePickerValue | null>
   >;
-
   selectedSources: SourceMetadata[];
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
   selectedDocumentSets: string[];
@@ -236,11 +236,6 @@ export function useFilters(): FilterManager {
 
   const getFilterString = () => {
     const params = new URLSearchParams();
-
-    if (timeRange) {
-      params.set("from", timeRange.from.toISOString());
-      params.set("to", timeRange.to.toISOString());
-    }
 
     if (selectedSources.length > 0) {
       const sourcesParam = selectedSources

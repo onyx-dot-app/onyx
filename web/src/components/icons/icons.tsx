@@ -33,6 +33,7 @@ import {
   FiCpu,
   FiInfo,
   FiBarChart2,
+  FiBookOpen,
 } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import { StaticImageData } from "next/image";
@@ -1757,7 +1758,12 @@ export const BookmarkIcon = ({
     </svg>
   );
 };
-
+export const BookOpen = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <FiBookOpen size={size} className={className} />;
+};
 export const BookIcon = ({
   size = 16,
   className = defaultTailwindCSS,

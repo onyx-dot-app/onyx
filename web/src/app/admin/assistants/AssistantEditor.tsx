@@ -100,7 +100,7 @@ import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
-import {KnowledgeMapCreationRequest} from "@/app/admin/documents/knowledge_maps/lib";
+import { KnowledgeMapCreationRequest } from "@/app/admin/documents/knowledge_maps/lib";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -119,7 +119,7 @@ function findInternetSearchTool(tools: ToolSnapshot[]) {
 }
 
 function findKnowledgeMapTool(tools: ToolSnapshot[]) {
-    return tools.find((tool) => tool.in_code_tool_id === "KnowledgeMapTool");
+  return tools.find((tool) => tool.in_code_tool_id === "KnowledgeMapTool");
 }
 
 function SubLabel({ children }: { children: string | JSX.Element }) {
@@ -136,7 +136,8 @@ function SubLabel({ children }: { children: string | JSX.Element }) {
 export function AssistantEditor({
   existingPersona,
   ccPairs,
-  documentSets, knowledgeMaps,
+  documentSets,
+  knowledgeMaps,
   user,
   defaultPublic,
   llmProviders,
@@ -147,7 +148,7 @@ export function AssistantEditor({
   existingPersona?: FullPersona | null;
   ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSet[];
-    knowledgeMaps: KnowledgeMapCreationRequest[];
+  knowledgeMaps: KnowledgeMapCreationRequest[];
   user: User | null;
   defaultPublic: boolean;
   llmProviders: LLMProviderView[];
@@ -239,7 +240,7 @@ export function AssistantEditor({
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
       tool.in_code_tool_id !== langflowTool?.in_code_tool_id &&
       tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id &&
-        tool.in_code_tool_id !== knowledgeMapTool?.in_code_tool_id
+      tool.in_code_tool_id !== knowledgeMapTool?.in_code_tool_id
   );
 
   const availableTools = [
@@ -248,7 +249,7 @@ export function AssistantEditor({
     ...(langflowTool ? [langflowTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
-      ...(knowledgeMapTool ? [knowledgeMapTool] : []),
+    ...(knowledgeMapTool ? [knowledgeMapTool] : []),
   ];
   const enabledToolsMap: { [key: number]: boolean } = {};
   availableTools.forEach((tool) => {
@@ -568,8 +569,8 @@ export function AssistantEditor({
             ? enabledTools.includes(searchTool.id)
             : false;
           const knowledgeMapToolEnabled = knowledgeMapTool
-              ? enabledTools.includes(knowledgeMapTool.id)
-              : false;
+            ? enabledTools.includes(knowledgeMapTool.id)
+            : false;
 
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
@@ -685,11 +686,12 @@ export function AssistantEditor({
               : false;
           }
 
-            function knowledgeMapToolEnabled() {
-                return knowledgeMapTool && values.enabled_tools_map[knowledgeMapTool.id]
-                    ? true
-                    : false;
-            }
+          function knowledgeMapToolEnabled() {
+            return knowledgeMapTool &&
+              values.enabled_tools_map[knowledgeMapTool.id]
+              ? true
+              : false;
+          }
 
           // model must support image input for image generation
           // to work
@@ -1162,49 +1164,47 @@ export function AssistantEditor({
                       </>
                     )}
 
+                    {knowledgeMapTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${knowledgeMapTool.id}`}
+                          label="KnowledgeMapTool"
+                          subtext="Инструмент для поиска информации в карте знаний по запросу пользователя."
+                          onChange={() => {
+                            toggleToolInValues(knowledgeMapTool.id);
+                          }}
+                        />
 
+                        {knowledgeMapToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border">
+                            {ccPairs.length > 0 && (
+                              <>
+                                <Label>Карты знаний</Label>
 
-                      {knowledgeMapTool && (
-                          <>
-                              <BooleanFormField
-                                  name={`enabled_tools_map.${knowledgeMapTool.id}`}
-                                  label="KnowledgeMapTool"
-                                  subtext="Инструмент для поиска информации в карте знаний по запросу пользователя."
-                                  onChange={() => {
-                                      toggleToolInValues(knowledgeMapTool.id);
-                                  }}
-                              />
-
-                              {knowledgeMapToolEnabled() && (
-                                  <div className="pl-4 border-l-2 ml-4 border-border">
-                                      {ccPairs.length > 0 && (
-                                          <>
-                                              <Label>Карты знаний</Label>
-
-                                              <div>
-                                                  <SubLabel>
-                                                      Выберите Карты знаний, в которых цифровой
-                                                      помощник должен искать ответ. Должна быть
-                                                      выбрана хотя бы одна Карта знаний.
-                                                  </SubLabel>
-                                              </div>
-                                              {documentSets.length > 0 ? (
-                                                  <FieldArray
-                                                      name="knowledge_maps_ids"
-                                                      render={(arrayHelpers: ArrayHelpers) => (
-                                                          <div>
-                                                              <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                                                                  {knowledgeMaps.map((map) => {
-                                                                      const ind =
-                                                                          values.knowledge_maps_ids.indexOf(
-                                                                              map.id
-                                                                          );
-                                                                      let isSelected = ind !== -1;
-                                                                      return (
-                                                                          <div
-                                                                              key={map.id}
-                                                                              className={
-                                                                                  `
+                                <div>
+                                  <SubLabel>
+                                    Выберите Карты знаний, в которых цифровой
+                                    помощник должен искать ответ. Должна быть
+                                    выбрана хотя бы одна Карта знаний.
+                                  </SubLabel>
+                                </div>
+                                {documentSets.length > 0 ? (
+                                  <FieldArray
+                                    name="knowledge_maps_ids"
+                                    render={(arrayHelpers: ArrayHelpers) => (
+                                      <div>
+                                        <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                          {knowledgeMaps.map((map) => {
+                                            const ind =
+                                              values.knowledge_maps_ids.indexOf(
+                                                map.id
+                                              );
+                                            let isSelected = ind !== -1;
+                                            return (
+                                              <div
+                                                key={map.id}
+                                                className={
+                                                  `
                                                       w-72
                                                       px-3 
                                                       py-1
@@ -1213,61 +1213,61 @@ export function AssistantEditor({
                                                       border-border
                                                       flex 
                                                       cursor-pointer ` +
-                                                                                  (isSelected
-                                                                                      ? " bg-hover"
-                                                                                      : " bg-background hover:bg-hover-light")
-                                                                              }
-                                                                              onClick={() => {
-                                                                                  if (isSelected) {
-                                                                                      arrayHelpers.remove(ind);
-                                                                                  } else {
-                                                                                      arrayHelpers.push(map.id);
-                                                                                  }
-                                                                              }}
-                                                                          >
-                                                                              <div className="flex w-full">
-                                                                                  <div className="flex flex-col h-full">
-                                                                                      <div className="font-bold">
-                                                                                          {map.name}
-                                                                                      </div>
-                                                                                      <div className="text-xs">
-                                                                                          {map.description}
-                                                                                      </div>
-                                                                                      <div className="flex gap-x-2 pt-1 mt-auto mb-1"></div>
-                                                                                  </div>
-                                                                                  <div className="ml-auto my-auto">
-                                                                                      <div className="pl-1">
-                                                                                          <Checkbox
-                                                                                              checked={isSelected}
-                                                                                              onChange={() => null}
-                                                                                          />
-                                                                                      </div>
-                                                                                  </div>
-                                                                              </div>
-                                                                          </div>
-                                                                      );
-                                                                  })}
-                                                              </div>
-                                                          </div>
-                                                      )}
-                                                  />
-                                              ) : (
-                                                  <i className="text-sm">
-                                                      Нет доступных карт знаний
-                                                      {user?.role !== "admin" && (
-                                                          <>
-                                                              Если эта функция будет вам полезна,
-                                                              обратитесь за помощью к администраторам.
-                                                          </>
-                                                      )}
-                                                  </i>
-                                              )}
-                                          </>
-                                      )}
-                                  </div>
-                              )}
-                          </>
-                      )}
+                                                  (isSelected
+                                                    ? " bg-hover"
+                                                    : " bg-background hover:bg-hover-light")
+                                                }
+                                                onClick={() => {
+                                                  if (isSelected) {
+                                                    arrayHelpers.remove(ind);
+                                                  } else {
+                                                    arrayHelpers.push(map.id);
+                                                  }
+                                                }}
+                                              >
+                                                <div className="flex w-full">
+                                                  <div className="flex flex-col h-full">
+                                                    <div className="font-bold">
+                                                      {map.name}
+                                                    </div>
+                                                    <div className="text-xs">
+                                                      {map.description}
+                                                    </div>
+                                                    <div className="flex gap-x-2 pt-1 mt-auto mb-1"></div>
+                                                  </div>
+                                                  <div className="ml-auto my-auto">
+                                                    <div className="pl-1">
+                                                      <Checkbox
+                                                        checked={isSelected}
+                                                        onChange={() => null}
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  />
+                                ) : (
+                                  <i className="text-sm">
+                                    Нет доступных карт знаний
+                                    {user?.role !== "admin" && (
+                                      <>
+                                        Если эта функция будет вам полезна,
+                                        обратитесь за помощью к администраторам.
+                                      </>
+                                    )}
+                                  </i>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
 
                     {customTools.length > 0 &&
                       customTools.map((tool) => (

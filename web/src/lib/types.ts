@@ -1,6 +1,5 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Credential } from "./connectors/credentials";
-import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
 interface UserPreferences {
@@ -14,7 +13,23 @@ interface UserPreferences {
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
 }
-
+export interface ConnectorBase<T> {
+  name: string;
+  input_type: ValidInputTypes;
+  source: ValidSources;
+  connector_specific_config: T;
+  refresh_freq: number | null;
+  prune_freq: number | null;
+  indexing_start: Date | null;
+  access_type: string;
+  groups?: number[];
+}
+export interface Connector<T> extends ConnectorBase<T> {
+  id: number;
+  credential_ids: number[];
+  time_created: string;
+  time_updated: string;
+}
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",
