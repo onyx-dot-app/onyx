@@ -119,6 +119,9 @@ def fetch_expert_infos(channel: Channel) -> list[BasicExpertInfo]:
 
     expert_infos = []
     for member in members:
+        if not member.display_name:
+            continue
+
         if email := member.properties.get("email"):
             expert_infos.append(
                 BasicExpertInfo(
