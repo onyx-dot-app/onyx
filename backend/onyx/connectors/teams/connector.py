@@ -44,7 +44,6 @@ logger = setup_logger()
 
 _SLIM_DOC_BATCH_SIZE = 5000
 _PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
-_PRIVATE_MEMBERSHIP_TYPE = "private"  # private teams channel
 
 
 class TeamsCheckpoint(ConnectorCheckpoint):
