@@ -1,10 +1,7 @@
 from collections.abc import Generator
 from unittest.mock import Mock
 from unittest.mock import patch
-from uuid import uuid4
 
-import pytest
-from fastapi_users.password import PasswordHelper
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,123 +10,20 @@ from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
 )
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import PublicExternalUserGroup
-from onyx.db.models import User
 from onyx.db.models import User__ExternalUserGroupId
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.constants import TEST_TENANT_ID
 
 
-TEST_TENANT_ID = "public"
-
-
-@pytest.fixture(scope="function")
-def tenant_context() -> Generator[None, None, None]:
-    """Set up tenant context for testing"""
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(TEST_TENANT_ID)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
-@pytest.fixture(scope="function")
-def db_session(tenant_context: None) -> Generator[Session, None, None]:
-    """Create a database session for testing using the actual PostgreSQL database"""
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    with get_session_with_current_tenant() as session:
-        yield session
-        # Cleanup: Remove test data created during the test
-        # This helps prevent test contamination but doesn't guarantee complete isolation
-        try:
-            from sqlalchemy import delete
-
-            # Clean up user external groups for test connector credential pairs
-            test_cc_pairs = (
-                session.execute(
-                    select(ConnectorCredentialPair).where(
-                        ConnectorCredentialPair.name.like("Test%")
-                    )
-                )
-                .scalars()
-                .all()
-            )
-
-            for cc_pair in test_cc_pairs:
-                # Delete user external groups
-                session.execute(
-                    delete(User__ExternalUserGroupId).where(
-                        User__ExternalUserGroupId.cc_pair_id == cc_pair.id
-                    )
-                )
-                # Delete public external groups
-                session.execute(
-                    delete(PublicExternalUserGroup).where(
-                        PublicExternalUserGroup.cc_pair_id == cc_pair.id
-                    )
-                )
-
-            # Delete test connector credential pairs
-            session.execute(
-                delete(ConnectorCredentialPair).where(
-                    ConnectorCredentialPair.name.like("Test%")
-                )
-            )
-
-            # Delete test connectors
-            session.execute(delete(Connector).where(Connector.name.like("Test%")))
-
-            # Delete test credentials (empty credential_json)
-            from sqlalchemy import text
-
-            session.execute(delete(Credential).where(text("credential_json = '{}'")))
-
-            # Delete test users using raw SQL to avoid typing issues
-            session.execute(
-                text("DELETE FROM \"user\" WHERE email LIKE '%@example.com'")
-            )
-
-            session.commit()
-        except Exception as e:
-            # Don't fail the test if cleanup fails
-            session.rollback()
-            print(f"Warning: Test cleanup failed: {e}")
-
-
-def create_test_user(db_session: Session, email_prefix: str) -> User:
-    """Helper to create a test user with a unique email"""
-    # Use UUID to ensure unique email addresses
-    unique_email = f"{email_prefix}_{uuid4().hex[:8]}@example.com"
-
-    password_helper = PasswordHelper()
-    password = password_helper.generate()
-    hashed_password = password_helper.hash(password)
-
-    user = User(
-        id=uuid4(),
-        email=unique_email,
-        hashed_password=hashed_password,
-        is_active=True,
-        is_superuser=False,
-        is_verified=True,
-        role=UserRole.EXT_PERM_USER,
-    )
-    db_session.add(user)
-    db_session.commit()
-    db_session.refresh(user)
-    return user
-
-
-def create_test_connector_credential_pair(
+def _create_test_connector_credential_pair(
     db_session: Session, source: DocumentSource = DocumentSource.GOOGLE_DRIVE
 ) -> ConnectorCredentialPair:
     """Helper to create a test connector credential pair"""
@@ -174,7 +68,7 @@ def create_test_connector_credential_pair(
     return cc_pair
 
 
-def get_user_external_groups(
+def _get_user_external_groups(
     db_session: Session, cc_pair_id: int, include_stale: bool = False
 ) -> list[User__ExternalUserGroupId]:
     """Helper to get user external groups from database"""
@@ -187,7 +81,7 @@ def get_user_external_groups(
     return list(db_session.scalars(query).all())
 
 
-def get_public_external_groups(
+def _get_public_external_groups(
     db_session: Session, cc_pair_id: int, include_stale: bool = False
 ) -> list[PublicExternalUserGroup]:
     """Helper to get public external groups from database"""
@@ -208,7 +102,7 @@ class TestPerformExternalGroupSync:
         user1 = create_test_user(db_session, "user1")
         user2 = create_test_user(db_session, "user2")
         user3 = create_test_user(db_session, "user3")
-        cc_pair = create_test_connector_credential_pair(db_session)
+        cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Mock external groups data as a generator that yields the expected groups
         mock_groups = [
@@ -225,13 +119,9 @@ class TestPerformExternalGroupSync:
             for group in mock_groups:
                 yield group
 
-        # TODO: The mocking of ext_group_sync_func is not working as expected.
-        # The issue is that the real gdrive_group_sync function is still being called
-        # instead of our mock function. This needs to be resolved to fully test the sync logic.
-
         # Verify no groups exist initially
-        assert len(get_user_external_groups(db_session, cc_pair.id)) == 0
-        assert len(get_public_external_groups(db_session, cc_pair.id)) == 0
+        assert len(_get_user_external_groups(db_session, cc_pair.id)) == 0
+        assert len(_get_public_external_groups(db_session, cc_pair.id)) == 0
 
         with patch(
             "ee.onyx.background.celery.tasks.external_group_syncing.tasks.get_source_perm_sync_config"
@@ -249,7 +139,7 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify user groups were created
-            user_groups = get_user_external_groups(db_session, cc_pair.id)
+            user_groups = _get_user_external_groups(db_session, cc_pair.id)
             assert (
                 len(user_groups) == 5
             )  # user1+2 in group1, user2+3 in group2, user1 in public_group
@@ -271,7 +161,7 @@ class TestPerformExternalGroupSync:
             assert expected_public_group_id in group_ids
 
             # Verify public group was created
-            public_groups = get_public_external_groups(db_session, cc_pair.id)
+            public_groups = _get_public_external_groups(db_session, cc_pair.id)
             assert len(public_groups) == 1
             assert public_groups[0].external_user_group_id == expected_public_group_id
             assert public_groups[0].stale is False
@@ -286,7 +176,7 @@ class TestPerformExternalGroupSync:
         user1 = create_test_user(db_session, "user1")
         user2 = create_test_user(db_session, "user2")
         user3 = create_test_user(db_session, "user3")
-        cc_pair = create_test_connector_credential_pair(db_session)
+        cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Initial sync with original groups
         def initial_group_sync_func(
@@ -296,7 +186,7 @@ class TestPerformExternalGroupSync:
             yield ExternalUserGroup(id="group2", user_emails=[user2.email])
 
         # For now, verify test setup is working
-        assert len(get_user_external_groups(db_session, cc_pair.id)) == 0
+        assert len(_get_user_external_groups(db_session, cc_pair.id)) == 0
 
         with patch(
             "ee.onyx.background.celery.tasks.external_group_syncing.tasks.get_source_perm_sync_config"
@@ -314,7 +204,7 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify initial state
-            initial_user_groups = get_user_external_groups(db_session, cc_pair.id)
+            initial_user_groups = _get_user_external_groups(db_session, cc_pair.id)
             assert (
                 len(initial_user_groups) == 3
             )  # user1+user2 in group1, user2 in group2
@@ -339,7 +229,7 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify updated state
-            updated_user_groups = get_user_external_groups(db_session, cc_pair.id)
+            updated_user_groups = _get_user_external_groups(db_session, cc_pair.id)
             assert (
                 len(updated_user_groups) == 5
             )  # user1+user3 in group1, user1+user2+user3 in group2
@@ -380,7 +270,7 @@ class TestPerformExternalGroupSync:
         # Create test data
         user1 = create_test_user(db_session, "user1")
         user2 = create_test_user(db_session, "user2")
-        cc_pair = create_test_connector_credential_pair(db_session)
+        cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Initial sync with multiple groups
         def initial_group_sync_func(
@@ -393,8 +283,8 @@ class TestPerformExternalGroupSync:
             )
 
         # Mock not working - disable for now
-        assert len(get_user_external_groups(db_session, cc_pair.id)) == 0
-        assert len(get_public_external_groups(db_session, cc_pair.id)) == 0
+        assert len(_get_user_external_groups(db_session, cc_pair.id)) == 0
+        assert len(_get_public_external_groups(db_session, cc_pair.id)) == 0
 
         with patch(
             "ee.onyx.background.celery.tasks.external_group_syncing.tasks.get_source_perm_sync_config"
@@ -412,8 +302,8 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify initial state
-            initial_user_groups = get_user_external_groups(db_session, cc_pair.id)
-            initial_public_groups = get_public_external_groups(db_session, cc_pair.id)
+            initial_user_groups = _get_user_external_groups(db_session, cc_pair.id)
+            initial_public_groups = _get_public_external_groups(db_session, cc_pair.id)
             assert (
                 len(initial_user_groups) == 4
             )  # 2 in group1, 1 in group2, 1 in public_group
@@ -435,8 +325,8 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify updated state
-            updated_user_groups = get_user_external_groups(db_session, cc_pair.id)
-            updated_public_groups = get_public_external_groups(db_session, cc_pair.id)
+            updated_user_groups = _get_user_external_groups(db_session, cc_pair.id)
+            updated_public_groups = _get_public_external_groups(db_session, cc_pair.id)
 
             assert len(updated_user_groups) == 2  # Only group1 mappings remain
             assert len(updated_public_groups) == 0  # Public group was removed
@@ -449,10 +339,10 @@ class TestPerformExternalGroupSync:
             assert group_ids == {expected_group1_id}
 
             # Verify stale groups were actually deleted from database
-            all_user_groups_including_stale = get_user_external_groups(
+            all_user_groups_including_stale = _get_user_external_groups(
                 db_session, cc_pair.id, include_stale=True
             )
-            all_public_groups_including_stale = get_public_external_groups(
+            all_public_groups_including_stale = _get_public_external_groups(
                 db_session, cc_pair.id, include_stale=True
             )
 
@@ -463,7 +353,7 @@ class TestPerformExternalGroupSync:
         """Test syncing when no groups are returned (all groups removed)"""
         # Create test data
         user1 = create_test_user(db_session, "user1")
-        cc_pair = create_test_connector_credential_pair(db_session)
+        cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Initial sync with groups
         def initial_group_sync_func(
@@ -487,7 +377,7 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify initial state
-            initial_user_groups = get_user_external_groups(db_session, cc_pair.id)
+            initial_user_groups = _get_user_external_groups(db_session, cc_pair.id)
             assert len(initial_user_groups) == 1
 
             # Updated sync with no groups
@@ -505,8 +395,8 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify all groups were removed
-            updated_user_groups = get_user_external_groups(db_session, cc_pair.id)
-            updated_public_groups = get_public_external_groups(db_session, cc_pair.id)
+            updated_user_groups = _get_user_external_groups(db_session, cc_pair.id)
+            updated_public_groups = _get_public_external_groups(db_session, cc_pair.id)
 
             assert len(updated_user_groups) == 0
             assert len(updated_public_groups) == 0
@@ -518,7 +408,7 @@ class TestPerformExternalGroupSync:
         for i in range(150):  # More than the batch size of 100
             users.append(create_test_user(db_session, f"user{i}"))
 
-        cc_pair = create_test_connector_credential_pair(db_session)
+        cc_pair = _create_test_connector_credential_pair(db_session)
 
         # Create a large group with many users
         def large_group_sync_func(
@@ -544,7 +434,7 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify all users were added to the group
-            user_groups = get_user_external_groups(db_session, cc_pair.id)
+            user_groups = _get_user_external_groups(db_session, cc_pair.id)
             assert len(user_groups) == 150
 
             # Verify all groups are not stale
@@ -556,7 +446,7 @@ class TestPerformExternalGroupSync:
         # Create test data
         user1 = create_test_user(db_session, "user1")
         user2 = create_test_user(db_session, "user2")
-        cc_pair = create_test_connector_credential_pair(db_session)
+        cc_pair = _create_test_connector_credential_pair(db_session)
 
         def mixed_group_sync_func(
             tenant_id: str, cc_pair: ConnectorCredentialPair
@@ -589,7 +479,7 @@ class TestPerformExternalGroupSync:
             _perform_external_group_sync(cc_pair.id, TEST_TENANT_ID)
 
             # Verify user groups
-            user_groups = get_user_external_groups(db_session, cc_pair.id)
+            user_groups = _get_user_external_groups(db_session, cc_pair.id)
             expected_regular_group_id = build_ext_group_name_for_onyx(
                 "regular_group", DocumentSource.GOOGLE_DRIVE
             )
@@ -615,7 +505,7 @@ class TestPerformExternalGroupSync:
             assert len(public_group1_users) == 1
 
             # Verify public groups
-            public_groups = get_public_external_groups(db_session, cc_pair.id)
+            public_groups = _get_public_external_groups(db_session, cc_pair.id)
             assert len(public_groups) == 2  # public_group1 and public_group2
 
             public_group_ids = {pg.external_user_group_id for pg in public_groups}
