@@ -1,3 +1,5 @@
+from collections.abc import Generator
+
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from onyx.background.error_logging import emit_background_error
@@ -65,7 +67,7 @@ def _build_group_member_email_map(
 def confluence_group_sync(
     tenant_id: str,
     cc_pair: ConnectorCredentialPair,
-) -> list[ExternalUserGroup]:
+) -> Generator[ExternalUserGroup, None, None]:
     provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
     wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
@@ -89,10 +91,10 @@ def confluence_group_sync(
         confluence_client=confluence_client,
         cc_pair_id=cc_pair.id,
     )
-    onyx_groups: list[ExternalUserGroup] = []
+
     all_found_emails = set()
     for group_id, group_member_emails in group_member_email_map.items():
-        onyx_groups.append(
+        yield (
             ExternalUserGroup(
                 id=group_id,
                 user_emails=list(group_member_emails),
@@ -107,6 +109,4 @@ def confluence_group_sync(
             id=ALL_CONF_EMAILS_GROUP_NAME,
             user_emails=list(all_found_emails),
         )
-        onyx_groups.append(all_found_group)
-
-    return onyx_groups
+        yield all_found_group

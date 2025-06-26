@@ -3016,6 +3016,22 @@ class User__ExternalUserGroupId(Base):
         ForeignKey("connector_credential_pair.id"), primary_key=True
     )
 
+    # Signifies whether or not the group should be cleaned up at the end of a
+    # group sync run.
+    stale: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        Index(
+            "ix_user_external_group_cc_pair_stale",
+            "cc_pair_id",
+            "stale",
+        ),
+        Index(
+            "ix_user_external_group_stale",
+            "stale",
+        ),
+    )
+
 
 class PublicExternalUserGroup(Base):
     """Stores all public external user "groups".
