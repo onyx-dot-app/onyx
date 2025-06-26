@@ -102,3 +102,14 @@ def to_text_sections(iterator: Iterator[TextSection | ImageSection]) -> Iterator
     for section in iterator:
         if isinstance(section, TextSection):
             yield section.text
+
+
+def to_documents(
+    iterator: Iterator[Document | ConnectorFailure],
+) -> Iterator[Document]:
+    for doc in iterator:
+        if not isinstance(doc, Document):
+            failure = doc
+            raise RuntimeError(failure)
+
+        yield doc
