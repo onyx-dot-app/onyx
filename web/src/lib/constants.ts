@@ -57,7 +57,7 @@ export const EE_ENABLED = true;
 
 export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
   ? true
-  : false;
+  : true;
 
 export const GTM_ENABLED =
   process.env.NEXT_PUBLIC_GTM_ENABLED?.toLowerCase() === "true";
