@@ -1,5 +1,3 @@
-from typing import Any
-
 from langchain_core.messages import HumanMessage
 
 from onyx.configs.constants import DocumentSource
@@ -10,11 +8,9 @@ from onyx.db.entities import get_kg_entity_by_document
 from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Connector
 from onyx.db.models import Document
-from onyx.db.models import Document__Tag
-from onyx.db.tag import get_structured_tags_for_document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
-from onyx.db.models import Tag
+from onyx.db.tag import get_structured_tags_for_document
 from onyx.kg.models import KGAttributeEntityOption
 from onyx.kg.models import KGAttributeTrackInfo
 from onyx.kg.models import KGAttributeTrackType
@@ -271,6 +267,7 @@ def kg_deep_extraction(
             result.classification_result = kg_classify_document(
                 document_entity=implied_extraction.document_entity,
                 chunk_batch=chunk_batch,
+                implied_extraction=implied_extraction,
                 classification_instructions=metadata.classification_instructions,
                 kg_config_settings=kg_config_settings,
             )
@@ -283,16 +280,27 @@ def kg_deep_extraction(
 def kg_classify_document(
     document_entity: str,
     chunk_batch: list[KGChunkFormat],
+    implied_extraction: KGImpliedExtractionResults,
     classification_instructions: KGClassificationInstructions,
     kg_config_settings: KGConfigSettings,
 ) -> KGClassificationResult | None:
     # currently, classification is only done for calls
+    # TODO: add support (or use same prompt and format) for non-call documents
     entity_type = get_entity_type(document_entity)
     if entity_type not in (call_type.value for call_type in OnyxCallTypes):
         return None
 
     # prepare prompt
-    content = " ".join(chunk.content for chunk in chunk_batch)
+    company_participants = implied_extraction.company_participant_emails
+    account_participants = implied_extraction.account_participant_emails
+    content = (
+        f"Title: {chunk_batch[0].title}:\nVendor Participants:\n"
+        + "".join(f" - {participant}\n" for participant in company_participants)
+        + "Other Participants:\n"
+        + "".join(f" - {participant}\n" for participant in account_participants)
+        + "Call Content:\n"
+        + "\n".join(chunk.content for chunk in chunk_batch)
+    )
     prompt = CALL_DOCUMENT_CLASSIFICATION_PROMPT.format(
         beginning_of_call_content=content,
         category_list=classification_instructions.classification_class_definitions,
