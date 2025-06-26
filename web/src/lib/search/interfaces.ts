@@ -35,6 +35,21 @@ export interface AgentAnswerPiece {
   answer_type: "agent_sub_answer" | "agent_level_answer";
 }
 
+export interface DanswerDocument {
+  document_id: string;
+  link: string;
+  source_type: ValidSources;
+  blurb: string;
+  semantic_identifier: string | null;
+  boost: number;
+  hidden: boolean;
+  score: number;
+  match_highlights: string[];
+  metadata: { [key: string]: string };
+  updated_at: string | null;
+  db_doc_id?: number;
+}
+
 export interface SubQuestionPiece {
   sub_question: string;
   level: number;
@@ -139,6 +154,10 @@ export interface DocumentInfoPacket {
 export interface DocumentRelevance {
   relevant: boolean;
   content: string;
+}
+
+export interface LLMRelevanceFilterPacket {
+  relevant_chunk_indices: number[];
 }
 
 export interface Relevance {
