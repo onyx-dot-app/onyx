@@ -449,10 +449,13 @@ def _filter_team(
 
     props = team.properties
 
-    if props.get("expirationDateTime") or props.get("deletedDateTime"):
-        return False
+    expiration = props.get("expirationDateTime")
+    deleted = props.get("deletedDateTime")
 
-    return True
+    # We just check for the existence of those two fields, not their actual dates.
+    # This is because if these fields do exist, they have to have occurred in the past, thus making them already
+    # expired / deleted.
+    return not expiration and not deleted
 
 
 def _get_team_by_id(
