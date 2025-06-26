@@ -1,4 +1,4 @@
-"""add stale column to user__external_user_group_id
+"""add stale column to external user group tables
 
 Revision ID: 58c50ef19f08
 Revises: 7b9b952abdf6
@@ -18,7 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add the stale column with default value False
+    # Add the stale column with default value False to user__external_user_group_id
     op.add_column(
         "user__external_user_group_id",
         sa.Column("stale", sa.Boolean(), nullable=False, server_default="false"),
@@ -40,9 +40,43 @@ def upgrade() -> None:
         unique=False,
     )
 
+    # Add the stale column with default value False to public_external_user_group
+    op.add_column(
+        "public_external_user_group",
+        sa.Column("stale", sa.Boolean(), nullable=False, server_default="false"),
+    )
+
+    # Create index for efficient querying of stale rows by cc_pair_id
+    op.create_index(
+        "ix_public_external_group_cc_pair_stale",
+        "public_external_user_group",
+        ["cc_pair_id", "stale"],
+        unique=False,
+    )
+
+    # Create index for efficient querying of all stale rows
+    op.create_index(
+        "ix_public_external_group_stale",
+        "public_external_user_group",
+        ["stale"],
+        unique=False,
+    )
+
 
 def downgrade() -> None:
-    # Drop the indices first
+    # Drop the indices for public_external_user_group first
+    op.drop_index(
+        "ix_public_external_group_stale", table_name="public_external_user_group"
+    )
+    op.drop_index(
+        "ix_public_external_group_cc_pair_stale",
+        table_name="public_external_user_group",
+    )
+
+    # Drop the stale column from public_external_user_group
+    op.drop_column("public_external_user_group", "stale")
+
+    # Drop the indices for user__external_user_group_id
     op.drop_index(
         "ix_user_external_group_stale", table_name="user__external_user_group_id"
     )
@@ -51,5 +85,5 @@ def downgrade() -> None:
         table_name="user__external_user_group_id",
     )
 
-    # Drop the stale column
+    # Drop the stale column from user__external_user_group_id
     op.drop_column("user__external_user_group_id", "stale")
