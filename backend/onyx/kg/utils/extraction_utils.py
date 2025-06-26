@@ -1,3 +1,5 @@
+import json
+
 from langchain_core.messages import HumanMessage
 
 from onyx.configs.constants import DocumentSource
@@ -29,7 +31,10 @@ from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import message_to_string
+from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
+from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
+from onyx.prompts.kg_prompts import MASTER_EXTRACTION_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -272,7 +277,20 @@ def kg_deep_extraction(
                 kg_config_settings=kg_config_settings,
             )
 
-        # TODO: deep extract from this chunk batch
+        # deep extract from this chunk batch
+        chunk_batch_results = kg_deep_extract_chunks(
+            document_entity=implied_extraction.document_entity,
+            chunk_batch=chunk_batch,
+            implied_extraction=implied_extraction,
+            kg_config_settings=kg_config_settings,
+        )
+        if chunk_batch_results is not None:
+            result.deep_extracted_entities.update(
+                chunk_batch_results.deep_extracted_entities
+            )
+            result.deep_extracted_relationships.update(
+                chunk_batch_results.deep_extracted_relationships
+            )
 
     raise NotImplementedError("Deep extraction is not implemented")
 
@@ -319,7 +337,7 @@ def kg_classify_document(
             .replace("```", "")
             .strip()
         )
-
+        # no json parsing here because of reasoning output
         classification_class = classification_result.split("CATEGORY:")[1].strip()
 
         if (
@@ -332,6 +350,70 @@ def kg_classify_document(
             )
     except Exception as e:
         logger.error(f"Failed to classify document {document_entity}. Error: {str(e)}")
+    return None
+
+
+def kg_deep_extract_chunks(
+    document_entity: str,
+    chunk_batch: list[KGChunkFormat],
+    implied_extraction: KGImpliedExtractionResults,
+    kg_config_settings: KGConfigSettings,
+) -> KGDocumentDeepExtractionResults | None:
+    # currently, calls are treated differently
+    # TODO: either treat some other documents differently too, or ideally all the same way
+    entity_type = get_entity_type(document_entity)
+    is_call = entity_type in (call_type.value for call_type in OnyxCallTypes)
+
+    content = "\n".join(chunk.content for chunk in chunk_batch)
+
+    # prepare prompt
+    if is_call:
+        company_participants_str = "".join(
+            f" - {participant}\n"
+            for participant in implied_extraction.company_participant_emails
+        )
+        account_participants_str = "".join(
+            f" - {participant}\n"
+            for participant in implied_extraction.account_participant_emails
+        )
+        llm_context = CALL_CHUNK_PREPROCESSING_PROMPT.format(
+            participant_string=company_participants_str,
+            account_participant_string=account_participants_str,
+            vendor=kg_config_settings.KG_VENDOR,
+            content=content,
+        )
+    else:
+        llm_context = GENERAL_CHUNK_PREPROCESSING_PROMPT.format(
+            vendor=kg_config_settings.KG_VENDOR,
+            content=content,
+        )
+    prompt = MASTER_EXTRACTION_PROMPT.replace("---content---", llm_context)
+
+    # extract with LLM
+    _, fast_llm = get_default_llms()
+    msg = [HumanMessage(content=prompt)]
+    try:
+        raw_extraction_result = fast_llm.invoke(msg)
+        extraction_result = (
+            message_to_string(raw_extraction_result)
+            .replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
+        parsed_result = json.loads(extraction_result)
+        return KGDocumentDeepExtractionResults(
+            classification_result=None,
+            deep_extracted_entities=set(parsed_result.get("entities", [])),
+            deep_extracted_relationships={
+                rel.replace(" ", "_") for rel in parsed_result.get("relationships", [])
+            },
+        )
+    except Exception as e:
+        failed_chunks = [chunk.chunk_id for chunk in chunk_batch]
+        logger.error(
+            f"Failed to process chunks {failed_chunks} "
+            f"from document {document_entity}. Error: {str(e)}"
+        )
     return None
 
 
