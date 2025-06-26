@@ -1,8 +1,8 @@
 import os
 import time
-from dataclasses import dataclass
 
 import pytest
+from pydantic import BaseModel
 
 from onyx.connectors.models import Document
 from onyx.connectors.teams.connector import TeamsConnector
@@ -32,8 +32,7 @@ def teams_connector(
     return teams_connector
 
 
-@dataclass
-class TeamsThread:
+class TeamsThread(BaseModel):
     thread: str
     member_emails: set[str]
     is_public: bool
