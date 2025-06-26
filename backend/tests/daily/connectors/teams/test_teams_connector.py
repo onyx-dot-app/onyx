@@ -68,23 +68,17 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
             # Posted in "Public Channel"
             TeamsThread(
                 thread="This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
-                member_emails=set(
-                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-                ),
+                member_emails=set(),
                 is_public=True,
             ),
             TeamsThread(
                 thread="Testing body.",
-                member_emails=set(
-                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-                ),
+                member_emails=set(),
                 is_public=True,
             ),
             TeamsThread(
                 thread="Hello, world! Nice to meet you all.",
-                member_emails=set(
-                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-                ),
+                member_emails=set(),
                 is_public=True,
             ),
             # Posted in "Private Channel (Raunak is excluded)"

@@ -257,10 +257,14 @@ class TeamsConnector(
                 if not channel.id:
                     continue
 
-                expert_infos = fetch_expert_infos(
-                    graph_client=self.graph_client, channel=channel
-                )
                 is_public = _is_channel_public(channel=channel)
+                expert_infos = (
+                    set()
+                    if is_public
+                    else fetch_expert_infos(
+                        graph_client=self.graph_client, channel=channel
+                    )
+                )
 
                 messages = fetch_messages(
                     graph_client=self.graph_client,
