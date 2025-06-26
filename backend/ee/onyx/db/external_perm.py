@@ -109,7 +109,7 @@ def upsert_external_groups(
     )
 
     # map emails to ids
-    email_id_map = {user.email: user.id for user in all_group_members}
+    email_id_map = {user.email.lower(): user.id for user in all_group_members}
 
     # Process each external group
     for external_group in external_groups:

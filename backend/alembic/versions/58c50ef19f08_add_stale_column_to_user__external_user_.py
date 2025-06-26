@@ -26,7 +26,7 @@ def upgrade() -> None:
 
     # Create index for efficient querying of stale rows by cc_pair_id
     op.create_index(
-        "ix_user_external_group_cc_pair_stale",
+        "ix_user__external_user_group_id_cc_pair_id_stale",
         "user__external_user_group_id",
         ["cc_pair_id", "stale"],
         unique=False,
@@ -34,7 +34,7 @@ def upgrade() -> None:
 
     # Create index for efficient querying of all stale rows
     op.create_index(
-        "ix_user_external_group_stale",
+        "ix_user__external_user_group_id_stale",
         "user__external_user_group_id",
         ["stale"],
         unique=False,
@@ -48,7 +48,7 @@ def upgrade() -> None:
 
     # Create index for efficient querying of stale rows by cc_pair_id
     op.create_index(
-        "ix_public_external_group_cc_pair_stale",
+        "ix_public_external_user_group_cc_pair_id_stale",
         "public_external_user_group",
         ["cc_pair_id", "stale"],
         unique=False,
@@ -56,7 +56,7 @@ def upgrade() -> None:
 
     # Create index for efficient querying of all stale rows
     op.create_index(
-        "ix_public_external_group_stale",
+        "ix_public_external_user_group_stale",
         "public_external_user_group",
         ["stale"],
         unique=False,
@@ -66,10 +66,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop the indices for public_external_user_group first
     op.drop_index(
-        "ix_public_external_group_stale", table_name="public_external_user_group"
+        "ix_public_external_user_group_stale", table_name="public_external_user_group"
     )
     op.drop_index(
-        "ix_public_external_group_cc_pair_stale",
+        "ix_public_external_user_group_cc_pair_id_stale",
         table_name="public_external_user_group",
     )
 
@@ -78,10 +78,11 @@ def downgrade() -> None:
 
     # Drop the indices for user__external_user_group_id
     op.drop_index(
-        "ix_user_external_group_stale", table_name="user__external_user_group_id"
+        "ix_user__external_user_group_id_stale",
+        table_name="user__external_user_group_id",
     )
     op.drop_index(
-        "ix_user_external_group_cc_pair_stale",
+        "ix_user__external_user_group_id_cc_pair_id_stale",
         table_name="user__external_user_group_id",
     )
 

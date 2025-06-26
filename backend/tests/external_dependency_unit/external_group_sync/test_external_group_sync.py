@@ -282,7 +282,6 @@ class TestPerformExternalGroupSync:
                 id="public_group", user_emails=[user1.email], gives_anyone_access=True
             )
 
-        # Mock not working - disable for now
         assert len(_get_user_external_groups(db_session, cc_pair.id)) == 0
         assert len(_get_public_external_groups(db_session, cc_pair.id)) == 0
 
