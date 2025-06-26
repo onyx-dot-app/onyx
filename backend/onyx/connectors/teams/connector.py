@@ -246,6 +246,7 @@ class TeamsConnector(
 
         for team in teams:
             if not team.id:
+                logger.warn(f"Expected a team with an id, instead got no id: {team=}")
                 continue
 
             channels = _collect_all_channels_from_team(
@@ -254,6 +255,9 @@ class TeamsConnector(
 
             for channel in channels:
                 if not channel.id:
+                    logger.warn(
+                        f"Expected a channel with an id, instead got no id: {channel=}"
+                    )
                     continue
 
                 is_public = _is_channel_public(channel=channel)
