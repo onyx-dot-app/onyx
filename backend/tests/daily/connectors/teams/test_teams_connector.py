@@ -54,7 +54,7 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
     map: dict[str, TeamsThread] = {}
 
     for thread in threads:
-        assert thread.thread not in map, ""
+        assert thread.thread not in map, f"Duplicate thread found in map; {thread=}"
         map[thread.thread] = thread
 
     return map
