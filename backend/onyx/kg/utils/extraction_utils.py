@@ -1,28 +1,125 @@
+import json
+
+from langchain_core.messages import HumanMessage
+
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
+from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import KGConfigSettings
+from onyx.db.models import Connector
 from onyx.db.models import Document
+from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
+from onyx.db.models import KGRelationshipType
+from onyx.db.tag import get_structured_tags_for_document
 from onyx.kg.models import KGAttributeEntityOption
 from onyx.kg.models import KGAttributeTrackInfo
 from onyx.kg.models import KGAttributeTrackType
 from onyx.kg.models import KGChunkFormat
-from onyx.kg.models import KGClassificationContent
-from onyx.kg.models import (
-    KGDocumentClassificationPrompt,
-)
-from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
+from onyx.kg.models import KGClassificationInstructions
+from onyx.kg.models import KGClassificationResult
+from onyx.kg.models import KGDocumentDeepExtractionResults
 from onyx.kg.models import KGEnhancedDocumentMetadata
-from onyx.kg.models import KGEntityTypeClassificationInfo
+from onyx.kg.models import KGImpliedExtractionResults
+from onyx.kg.models import KGMetadataContent
 from onyx.kg.utils.formatting_utils import extract_email
+from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import make_relationship_type_id
+from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
+from onyx.llm.factory import get_default_llms
+from onyx.llm.utils import message_to_string
 from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
 from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
 from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
+from onyx.prompts.kg_prompts import MASTER_EXTRACTION_PROMPT
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def get_entity_types_str(active: bool | None = None) -> str:
+    """
+    Format the entity types into a string for the LLM.
+    """
+    with get_session_with_current_tenant() as db_session:
+        entity_types = get_entity_types(db_session, active)
+
+        entity_types_list: list[str] = []
+        for entity_type in entity_types:
+            if entity_type.description:
+                entity_description = "\n  - Description: " + entity_type.description
+            else:
+                entity_description = ""
+
+            if entity_type.entity_values:
+                allowed_values = "\n  - Allowed Values: " + ", ".join(
+                    entity_type.entity_values
+                )
+            else:
+                allowed_values = ""
+
+            attributes = entity_type.parsed_attributes
+
+            entity_type_attribute_list: list[str] = []
+            for attribute, values in attributes.attribute_values.items():
+                entity_type_attribute_list.append(
+                    f"{attribute}: {trackinfo_to_str(values)}"
+                )
+
+            if attributes.classification_attributes:
+                entity_type_attribute_list.append(
+                    # TODO: restructure classification attribute to be a dict of attribute name to classification info
+                    # e.g., {scope: {internal: prompt, external: prompt}, sentiment: {positive: prompt, negative: prompt}}
+                    "classification: one of: "
+                    + ", ".join(attributes.classification_attributes.keys())
+                )
+            if entity_type_attribute_list:
+                entity_attributes = "\n  - Attributes:\n    - " + "\n    - ".join(
+                    entity_type_attribute_list
+                )
+            else:
+                entity_attributes = ""
+
+            entity_types_list.append(
+                entity_type.id_name
+                + entity_description
+                + allowed_values
+                + entity_attributes
+            )
+
+    return "\n".join(entity_types_list)
+
+
+def get_relationship_types_str(active: bool | None = None) -> str:
+    """
+    Format the relationship types into a string for the LLM.
+    """
+    with get_session_with_current_tenant() as db_session:
+        active_filters = []
+        if active is not None:
+            active_filters.append(KGRelationshipType.active == active)
+
+        relationship_types = (
+            db_session.query(KGRelationshipType).filter(*active_filters).all()
+        )
+
+        relationship_types_list = []
+        for rel_type in relationship_types:
+            # Format as "source_type__relationship_type__target_type"
+            formatted_type = make_relationship_type_id(
+                rel_type.source_entity_type_id_name,
+                rel_type.type,
+                rel_type.target_entity_type_id_name,
+            )
+            relationship_types_list.append(formatted_type)
+
+    return "\n".join(relationship_types_list)
 
 
 def kg_process_owners(
@@ -73,12 +170,12 @@ def kg_process_owners(
     )
 
 
-def kg_document_entities_relationships_attribute_generation(
+def kg_implied_extraction(
     document: Document,
     doc_metadata: KGEnhancedDocumentMetadata,
     active_entity_types: set[str],
     kg_config_settings: KGConfigSettings,
-) -> KGDocumentEntitiesRelationshipsAttributes:
+) -> KGImpliedExtractionResults:
     """
     Generate entities, relationships, and attributes for a document.
     """
@@ -219,8 +316,8 @@ def kg_document_entities_relationships_attribute_generation(
                     )
                 )
 
-    return KGDocumentEntitiesRelationshipsAttributes(
-        kg_core_document_id_name=document_entity_id,
+    return KGImpliedExtractionResults(
+        document_entity=document_entity_id,
         implied_entities=implied_entities,
         implied_relationships=implied_relationships,
         company_participant_emails=company_participant_emails,
@@ -228,26 +325,198 @@ def kg_document_entities_relationships_attribute_generation(
     )
 
 
-def _prepare_llm_document_content_call(
-    document_classification_content: KGClassificationContent,
-    category_list: str,
-    category_definition_string: str,
+def kg_deep_extraction(
+    document_id: str,
+    metadata: KGEnhancedDocumentMetadata,
+    implied_extraction: KGImpliedExtractionResults,
+    tenant_id: str,
+    index_name: str,
     kg_config_settings: KGConfigSettings,
-) -> KGDocumentClassificationPrompt:
+) -> KGDocumentDeepExtractionResults:
     """
-    Calls - prepare prompt for the LLM classification.
+    Perform deep extraction and classification on the document.
     """
+    result = KGDocumentDeepExtractionResults(
+        classification_result=None,
+        deep_extracted_entities=set(),
+        deep_extracted_relationships=set(),
+    )
 
+    entity_types_str = get_entity_types_str(active=True)
+    relationship_types_str = get_relationship_types_str(active=True)
+
+    for i, chunk_batch in enumerate(
+        get_document_vespa_contents(document_id, index_name, tenant_id)
+    ):
+        # use first batch for classification
+        if i == 0 and metadata.classification_enabled:
+            if not metadata.classification_instructions:
+                raise ValueError(
+                    "Classification is enabled but no instructions are provided"
+                )
+            result.classification_result = kg_classify_document(
+                document_entity=implied_extraction.document_entity,
+                chunk_batch=chunk_batch,
+                implied_extraction=implied_extraction,
+                classification_instructions=metadata.classification_instructions,
+                kg_config_settings=kg_config_settings,
+            )
+
+        # deep extract from this chunk batch
+        chunk_batch_results = kg_deep_extract_chunks(
+            document_entity=implied_extraction.document_entity,
+            chunk_batch=chunk_batch,
+            implied_extraction=implied_extraction,
+            kg_config_settings=kg_config_settings,
+            entity_types_str=entity_types_str,
+            relationship_types_str=relationship_types_str,
+        )
+        if chunk_batch_results is not None:
+            result.deep_extracted_entities.update(
+                chunk_batch_results.deep_extracted_entities
+            )
+            result.deep_extracted_relationships.update(
+                chunk_batch_results.deep_extracted_relationships
+            )
+
+    return result
+
+
+def kg_classify_document(
+    document_entity: str,
+    chunk_batch: list[KGChunkFormat],
+    implied_extraction: KGImpliedExtractionResults,
+    classification_instructions: KGClassificationInstructions,
+    kg_config_settings: KGConfigSettings,
+) -> KGClassificationResult | None:
+    # currently, classification is only done for calls
+    # TODO: add support (or use same prompt and format) for non-call documents
+    entity_type = get_entity_type(document_entity)
+    if entity_type not in (call_type.value for call_type in OnyxCallTypes):
+        return None
+
+    # prepare prompt
+    implied_extraction.document_entity
+    company_participants = implied_extraction.company_participant_emails
+    account_participants = implied_extraction.account_participant_emails
+    content = (
+        f"Title: {chunk_batch[0].title}:\nVendor Participants:\n"
+        + "".join(f" - {participant}\n" for participant in company_participants)
+        + "Other Participants:\n"
+        + "".join(f" - {participant}\n" for participant in account_participants)
+        + "Call Content:\n"
+        + "\n".join(chunk.content for chunk in chunk_batch)
+    )
+    category_list = {
+        cls: definition.description
+        for cls, definition in classification_instructions.classification_class_definitions.items()
+    }
     prompt = CALL_DOCUMENT_CLASSIFICATION_PROMPT.format(
-        beginning_of_call_content=document_classification_content.classification_content,
+        beginning_of_call_content=content,
         category_list=category_list,
-        category_options=category_definition_string,
+        category_options=classification_instructions.classification_options,
         vendor=kg_config_settings.KG_VENDOR,
     )
 
-    return KGDocumentClassificationPrompt(
-        llm_prompt=prompt,
-    )
+    # classify with LLM
+    primary_llm, _ = get_default_llms()
+    msg = [HumanMessage(content=prompt)]
+    try:
+        raw_classification_result = primary_llm.invoke(msg)
+        classification_result = (
+            message_to_string(raw_classification_result)
+            .replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
+        # no json parsing here because of reasoning output
+        classification_class = classification_result.split("CATEGORY:")[1].strip()
+
+        if (
+            classification_class
+            in classification_instructions.classification_class_definitions
+        ):
+            return KGClassificationResult(
+                document_entity=document_entity,
+                classification_class=classification_class,
+            )
+    except Exception as e:
+        logger.error(f"Failed to classify document {document_entity}. Error: {str(e)}")
+    return None
+
+
+def kg_deep_extract_chunks(
+    document_entity: str,
+    chunk_batch: list[KGChunkFormat],
+    implied_extraction: KGImpliedExtractionResults,
+    kg_config_settings: KGConfigSettings,
+    entity_types_str: str,
+    relationship_types_str: str,
+) -> KGDocumentDeepExtractionResults | None:
+    # currently, calls are treated differently
+    # TODO: either treat some other documents differently too, or ideally all the same way
+    entity_type = get_entity_type(document_entity)
+    is_call = entity_type in (call_type.value for call_type in OnyxCallTypes)
+
+    content = "\n".join(chunk.content for chunk in chunk_batch)
+
+    # prepare prompt
+    if is_call:
+        company_participants_str = "".join(
+            f" - {participant}\n"
+            for participant in implied_extraction.company_participant_emails
+        )
+        account_participants_str = "".join(
+            f" - {participant}\n"
+            for participant in implied_extraction.account_participant_emails
+        )
+        llm_context = CALL_CHUNK_PREPROCESSING_PROMPT.format(
+            participant_string=company_participants_str,
+            account_participant_string=account_participants_str,
+            vendor=kg_config_settings.KG_VENDOR,
+            content=content,
+        )
+    else:
+        llm_context = GENERAL_CHUNK_PREPROCESSING_PROMPT.format(
+            vendor=kg_config_settings.KG_VENDOR,
+            content=content,
+        )
+    prompt = MASTER_EXTRACTION_PROMPT.format(
+        entity_types=entity_types_str,
+        relationship_types=relationship_types_str,
+    ).replace("---content---", llm_context)
+
+    # extract with LLM
+    _, fast_llm = get_default_llms()
+    msg = [HumanMessage(content=prompt)]
+    try:
+        raw_extraction_result = fast_llm.invoke(msg)
+        cleaned_response = (
+            message_to_string(raw_extraction_result)
+            .replace("{{", "{")
+            .replace("}}", "}")
+            .replace("```json\n", "")
+            .replace("\n```", "")
+            .replace("\n", "")
+        )
+        first_bracket = cleaned_response.find("{")
+        last_bracket = cleaned_response.rfind("}")
+        cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
+        parsed_result = json.loads(cleaned_response)
+        return KGDocumentDeepExtractionResults(
+            classification_result=None,
+            deep_extracted_entities=set(parsed_result.get("entities", [])),
+            deep_extracted_relationships={
+                rel.replace(" ", "_") for rel in parsed_result.get("relationships", [])
+            },
+        )
+    except Exception as e:
+        failed_chunks = [chunk.chunk_id for chunk in chunk_batch]
+        logger.error(
+            f"Failed to process chunks {failed_chunks} "
+            f"from document {document_entity}. Error: {str(e)}"
+        )
+    return None
 
 
 def kg_process_person(
@@ -292,62 +561,40 @@ def kg_process_person(
     return None
 
 
-def prepare_llm_content_extraction(
-    chunk: KGChunkFormat,
-    company_participant_emails: set[str],
-    account_participant_emails: set[str],
-    kg_config_settings: KGConfigSettings,
-) -> str:
-
-    chunk_is_from_call = chunk.source_type.lower() in [
-        call_type.value.lower() for call_type in OnyxCallTypes
-    ]
-
-    if chunk_is_from_call:
-
-        llm_context = CALL_CHUNK_PREPROCESSING_PROMPT.format(
-            participant_string=company_participant_emails,
-            account_participant_string=account_participant_emails,
-            vendor=kg_config_settings.KG_VENDOR,
-            content=chunk.content,
-        )
-    else:
-        llm_context = GENERAL_CHUNK_PREPROCESSING_PROMPT.format(
-            content=chunk.content,
-            vendor=kg_config_settings.KG_VENDOR,
-        )
-
-    return llm_context
-
-
-def prepare_llm_document_content(
-    document_classification_content: KGClassificationContent,
-    category_list: str,
-    category_definitions: dict[str, KGEntityTypeClassificationInfo],
-    kg_config_settings: KGConfigSettings,
-) -> KGDocumentClassificationPrompt:
+def get_batch_documents_metadata(document_ids: list[str]) -> list[KGMetadataContent]:
     """
-    Prepare the content for the extraction classification.
+    Gets the metadata for a batch of documents.
     """
+    batch_metadata: list[KGMetadataContent] = []
 
-    category_definition_string = ""
-    for category, category_data in category_definitions.items():
-        category_definition_string += f"{category}: {category_data.description}\n"
+    with get_session_with_current_tenant() as db_session:
+        for document_id in document_ids:
+            # get document metadata
+            metadata = get_structured_tags_for_document(document_id, db_session)
 
-    if document_classification_content.source_type.lower() in [
-        call_type.value.lower() for call_type in OnyxCallTypes
-    ]:
-        return _prepare_llm_document_content_call(
-            document_classification_content,
-            category_list,
-            category_definition_string,
-            kg_config_settings,
-        )
+            # get document source type
+            source_type = DocumentSource(
+                db_session.query(Connector.source)
+                .join(
+                    DocumentByConnectorCredentialPair,
+                    DocumentByConnectorCredentialPair.connector_id == Connector.id,
+                )
+                .join(
+                    Document,
+                    DocumentByConnectorCredentialPair.id == Document.id,
+                )
+                .filter(Document.id == document_id)
+                .scalar()
+            ).value
 
-    else:
-        return KGDocumentClassificationPrompt(
-            llm_prompt=None,
-        )
+            batch_metadata.append(
+                KGMetadataContent(
+                    document_id=document_id,
+                    source_type=source_type,
+                    source_metadata=metadata,
+                )
+            )
+    return batch_metadata
 
 
 def trackinfo_to_str(trackinfo: KGAttributeTrackInfo | None) -> str:

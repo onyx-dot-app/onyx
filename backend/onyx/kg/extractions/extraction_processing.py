@@ -1,11 +1,6 @@
-import json
 import time
-from collections import defaultdict
-from collections.abc import Callable
 from typing import Any
-from typing import cast
 
-from langchain_core.messages import HumanMessage
 from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.tasks.kg_processing.utils import extend_lock
@@ -21,47 +16,30 @@ from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entities import upsert_staging_entity
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
-from onyx.db.kg_config import KGConfigSettings
 from onyx.db.kg_config import validate_kg_settings
 from onyx.db.models import Document
-from onyx.db.models import KGRelationshipType
-from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import upsert_staging_relationship
 from onyx.db.relationships import upsert_staging_relationship_type
-from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.kg.models import KGAggregatedExtractions
-from onyx.kg.models import KGBatchExtractionStats
-from onyx.kg.models import KGChunkFormat
-from onyx.kg.models import KGChunkId
-from onyx.kg.models import KGClassificationContent
-from onyx.kg.models import KGClassificationDecisions
 from onyx.kg.models import KGClassificationInstructions
-from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
+from onyx.kg.models import KGDocumentDeepExtractionResults
 from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
+from onyx.kg.models import KGImpliedExtractionResults
 from onyx.kg.utils.extraction_utils import EntityTypeMetadataTracker
 from onyx.kg.utils.extraction_utils import (
-    kg_document_entities_relationships_attribute_generation,
+    get_batch_documents_metadata,
 )
-from onyx.kg.utils.extraction_utils import prepare_llm_content_extraction
-from onyx.kg.utils.extraction_utils import prepare_llm_document_content
-from onyx.kg.utils.extraction_utils import trackinfo_to_str
+from onyx.kg.utils.extraction_utils import kg_deep_extraction
+from onyx.kg.utils.extraction_utils import (
+    kg_implied_extraction,
+)
 from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import get_entity_type
-from onyx.kg.utils.formatting_utils import make_entity_id
-from onyx.kg.utils.formatting_utils import make_relationship_id
-from onyx.kg.utils.formatting_utils import make_relationship_type_id
 from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_relationship_id
-from onyx.kg.vespa.vespa_interactions import (
-    get_document_classification_content_for_kg_processing,
-)
-from onyx.llm.factory import get_default_llms
-from onyx.llm.utils import message_to_string
-from onyx.prompts.kg_prompts import MASTER_EXTRACTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -92,7 +70,11 @@ def _get_classification_extraction_instructions() -> (
             continue
 
         attributes = entity_type.parsed_attributes
-        classification_attributes = attributes.classification_attributes
+        classification_attributes = {
+            option: info
+            for option, info in attributes.classification_attributes.items()
+            if info.extraction
+        }
         classification_options = ", ".join(classification_attributes.keys())
         classification_enabled = (
             len(classification_options) > 0 and len(classification_attributes) > 0
@@ -110,112 +92,18 @@ def _get_classification_extraction_instructions() -> (
                     deep_extraction=entity_type.deep_extraction,
                     active=entity_type.active,
                 ),
-                filter_instructions=attributes.entity_filter_attributes,
+                entity_filter_attributes=attributes.entity_filter_attributes,
             )
         )
 
     return classification_instructions_dict
 
 
-def get_entity_types_str(active: bool | None = None) -> str:
-    """
-    Get the entity types from the KGChunkExtraction model.
-    """
-
-    with get_session_with_current_tenant() as db_session:
-        active_entity_types = get_entity_types(db_session, active)
-
-        entity_types_list: list[str] = []
-        for entity_type in active_entity_types:
-            if entity_type.description:
-                entity_description = "\n  - Description: " + entity_type.description
-            else:
-                entity_description = ""
-
-            if entity_type.entity_values:
-                allowed_values = "\n  - Allowed Values: " + ", ".join(
-                    entity_type.entity_values
-                )
-            else:
-                allowed_values = ""
-
-            attributes = entity_type.parsed_attributes
-
-            entity_type_attribute_list: list[str] = []
-            for attribute, values in attributes.attribute_values.items():
-                entity_type_attribute_list.append(
-                    f"{attribute}: {trackinfo_to_str(values)}"
-                )
-
-            if attributes.classification_attributes:
-                entity_type_attribute_list.append(
-                    # TODO: restructure classification attribute to be a dict of attribute name to classification info
-                    # e.g., {scope: {internal: prompt, external: prompt}, sentiment: {positive: prompt, negative: prompt}}
-                    "classification: one of: "
-                    + ", ".join(attributes.classification_attributes.keys())
-                )
-            if entity_type_attribute_list:
-                entity_attributes = "\n  - Attributes:\n    - " + "\n    - ".join(
-                    entity_type_attribute_list
-                )
-            else:
-                entity_attributes = ""
-
-            entity_types_list.append(
-                entity_type.id_name
-                + entity_description
-                + allowed_values
-                + entity_attributes
-            )
-
-    return "\n".join(entity_types_list)
-
-
-def get_relationship_types_str(active: bool | None = None) -> str:
-    """
-    Get the relationship types from the database.
-
-    Args:
-        active: Filter by active status (True, False, or None for all)
-
-    Returns:
-        A string with all relationship types formatted as "source_type__relationship_type__target_type"
-    """
-    with get_session_with_current_tenant() as db_session:
-        relationship_types = db_session.query(KGRelationshipType).all()
-
-        # Filter by active status if specified
-
-        if active is not None:
-            active_relationship_types = cast(
-                list[KGRelationshipType] | list[KGRelationshipTypeExtractionStaging],
-                [rt for rt in relationship_types if rt.active == active],
-            )
-        else:
-            active_relationship_types = cast(
-                list[KGRelationshipType] | list[KGRelationshipTypeExtractionStaging],
-                relationship_types,
-            )
-
-        relationship_types_list = []
-        for rel_type in active_relationship_types:
-            # Format as "source_type__relationship_type__target_type"
-            formatted_type = make_relationship_type_id(
-                rel_type.source_entity_type_id_name,
-                rel_type.type,
-                rel_type.target_entity_type_id_name,
-            )
-            relationship_types_list.append(formatted_type)
-
-    return "\n".join(relationship_types_list)
-
-
-def _get_batch_metadata(
+def _get_batch_documents_enhanced_metadata(
     unprocessed_document_batch: list[Document],
     source_type_classification_extraction_instructions: dict[
         str, KGEntityTypeInstructions
     ],
-    processing_chunk_batch_size: int,
 ) -> dict[str, KGEnhancedDocumentMetadata]:
     """
     Get the entity types for the given unprocessed documents.
@@ -234,90 +122,75 @@ def _get_batch_metadata(
         for document in unprocessed_document_batch
     }
 
+    batch_entity = None
     if len(source_type_classification_extraction_instructions) == 1:
+        # if source only has one entity type, the document must be of that type
         batch_entity = list(source_type_classification_extraction_instructions.keys())[
             0
-        ]  # does source only have one entity type?
-    else:
-        batch_entity = None
+        ]
 
     # the documents can be of multiple entity types. We need to identify the entity type for each document
-
-    first_chunk_generator = get_document_classification_content_for_kg_processing(
-        [
-            unprocessed_document.id
-            for unprocessed_document in unprocessed_document_batch
-        ],
-        batch_size=processing_chunk_batch_size,
+    batch_metadata = get_batch_documents_metadata(
+        [unprocessed_document.id for unprocessed_document in unprocessed_document_batch]
     )
 
-    for first_chunk_list in first_chunk_generator:
-        for first_chunk in first_chunk_list:
+    for metadata in batch_metadata:
+        document_id = metadata.document_id
+        doc_entity = None
 
-            document_id = first_chunk.document_id
-            doc_entity = None
-            found_current_entity_type = False
+        if not isinstance(document_id, str):
+            continue
 
-            if not isinstance(document_id, str):
+        chunk_metadata = metadata.source_metadata
+
+        if batch_entity:
+            doc_entity = batch_entity
+        else:
+            # TODO: make this a helper function
+            if not chunk_metadata:
                 continue
 
-            chunk_metadata = first_chunk.source_metadata
+            for (
+                potential_entity_type
+            ) in source_type_classification_extraction_instructions.keys():
+                potential_entity_type_attribute_filters = (
+                    source_type_classification_extraction_instructions[
+                        potential_entity_type
+                    ].entity_filter_attributes
+                    or {}
+                )
 
-            if batch_entity:
-                doc_entity = batch_entity
-                found_current_entity_type = True
-            else:
-
-                if not chunk_metadata:
+                if not potential_entity_type_attribute_filters:
                     continue
 
-                for (
-                    potential_entity_type
-                ) in source_type_classification_extraction_instructions.keys():
-                    potential_entity_type_attribute_filters = (
-                        source_type_classification_extraction_instructions[
-                            potential_entity_type
-                        ].filter_instructions
-                        or {}
-                    )
+                if all(
+                    chunk_metadata.get(attribute)
+                    == potential_entity_type_attribute_filters.get(attribute)
+                    for attribute in potential_entity_type_attribute_filters
+                ):
+                    doc_entity = potential_entity_type
+                    break
 
-                    if not potential_entity_type_attribute_filters:
-                        continue
+        if doc_entity is None:
+            continue
 
-                    if all(
-                        chunk_metadata.get(attribute)
-                        == potential_entity_type_attribute_filters.get(attribute)
-                        for attribute in potential_entity_type_attribute_filters
-                    ):
-                        doc_entity = potential_entity_type
-                        found_current_entity_type = True
-                        break
+        entity_instructions = source_type_classification_extraction_instructions[
+            doc_entity
+        ]
 
-            if found_current_entity_type:
-                assert isinstance(doc_entity, str)
-                kg_document_meta_data_dict[document_id].entity_type = doc_entity
-                kg_document_meta_data_dict[
-                    document_id
-                ].metadata_attribute_conversion = source_type_classification_extraction_instructions[
+        kg_document_meta_data_dict[document_id] = KGEnhancedDocumentMetadata(
+            entity_type=doc_entity,
+            metadata_attribute_conversion=(
+                source_type_classification_extraction_instructions[
                     doc_entity
                 ].metadata_attribute_conversion
-                entity_instructions = (
-                    source_type_classification_extraction_instructions[doc_entity]
-                )
-
-                kg_document_meta_data_dict[document_id].document_metadata = (
-                    chunk_metadata
-                )
-                kg_document_meta_data_dict[document_id].classification_enabled = (
-                    entity_instructions.classification_instructions.classification_enabled
-                )
-                kg_document_meta_data_dict[document_id].classification_instructions = (
-                    entity_instructions.classification_instructions
-                )
-                kg_document_meta_data_dict[document_id].deep_extraction = (
-                    entity_instructions.extraction_instructions.deep_extraction
-                )
-                kg_document_meta_data_dict[document_id].skip = False
+            ),
+            document_metadata=chunk_metadata,
+            deep_extraction=entity_instructions.extraction_instructions.deep_extraction,
+            classification_enabled=entity_instructions.classification_instructions.classification_enabled,
+            classification_instructions=entity_instructions.classification_instructions,
+            skip=False,
+        )
 
     return kg_document_meta_data_dict
 
@@ -395,7 +268,7 @@ def kg_extraction(
                         kg_coverage_start=kg_config_settings.KG_COVERAGE_START_DATE,
                         kg_max_coverage_days=connector_coverage_days
                         or kg_config_settings.KG_MAX_COVERAGE_DAYS,
-                        batch_size=8,
+                        batch_size=processing_chunk_batch_size,
                     )
                 )
 
@@ -410,16 +283,14 @@ def kg_extraction(
             last_lock_time = extend_lock(
                 lock, CELERY_GENERIC_BEAT_LOCK_TIMEOUT, last_lock_time
             )
-
             logger.info(f"Processing document batch {document_batch_counter}")
 
             # Get the document attributes and entity types
-            batch_metadata: dict[str, KGEnhancedDocumentMetadata] = _get_batch_metadata(
+            batch_metadata = _get_batch_documents_enhanced_metadata(
                 unprocessed_document_batch,
                 document_classification_extraction_instructions.get(
                     connector_source, {}
                 ),
-                processing_chunk_batch_size,
             )
 
             # mark docs in unprocessed_document_batch as EXTRACTING
@@ -453,20 +324,20 @@ def kg_extraction(
                         )
                     db_session.commit()
 
-            # Iterate over batches of unprocessed files
-            # For each batch:
-            #   - Classify documents
-            #   - Get and analyze batches of chunks
-            #   - Store results in postgres:
-            #      - entities and relationships in temp kg extraction tables
-            #      - document classification in temp kg entity extraction table
-            #      - set kg_stage = extracted in document table
+            # Iterate over batches of unprocessed documents
+            # For each document:
+            #   - extract implied entities and relationships
+            #   - if deep extraction is enabled, extract entities and relationships with LLM
+            #   - if deep extraction and classification are enabled, classify document
+            #   - update postgres with
+            #     - extracted entities (with classification) and relationships
+            #     - kg_stage of the processed document
 
             documents_to_process = [x.id for x in unprocessed_document_batch]
-
-            batch_implied_metadata: dict[
-                str, KGDocumentEntitiesRelationshipsAttributes
-            ] = {}
+            batch_implied_extraction: dict[str, KGImpliedExtractionResults] = {}
+            batch_deep_extraction_args: list[
+                tuple[str, KGEnhancedDocumentMetadata, KGImpliedExtractionResults]
+            ] = []
 
             for unprocessed_document in unprocessed_document_batch:
                 if (
@@ -490,9 +361,8 @@ def kg_extraction(
                 #    - external account emails to Account-type entities + relationship to current primary grounded entity
                 #    - non-email owners to KG current entity's attributes, no relationships
                 # We also collect email addresses of vendors and external accounts to inform chunk processing
-
-                batch_implied_metadata[unprocessed_document.id] = (
-                    kg_document_entities_relationships_attribute_generation(
+                batch_implied_extraction[unprocessed_document.id] = (
+                    kg_implied_extraction(
                         unprocessed_document,
                         batch_metadata[unprocessed_document.id],
                         active_entity_types,
@@ -500,25 +370,75 @@ def kg_extraction(
                     )
                 )
 
-                # TODO 2. perform deep extraction and classification
+                # 2. prepare inputs for deep extraction and classification
+                if batch_metadata[unprocessed_document.id].deep_extraction:
+                    batch_deep_extraction_args.append(
+                        (
+                            unprocessed_document.id,
+                            batch_metadata[unprocessed_document.id],
+                            batch_implied_extraction[unprocessed_document.id],
+                        )
+                    )
 
-            # Populate the KG database with the extracted entities, relationships, and terms
+            # 2. perform deep extraction and classification in parallel
+            batch_deep_extraction_func_calls = [
+                (
+                    kg_deep_extraction,
+                    (
+                        *arg,
+                        tenant_id,
+                        index_name,
+                        kg_config_settings,
+                    ),
+                )
+                for arg in batch_deep_extraction_args
+            ]
+            batch_deep_extractions: dict[str, KGDocumentDeepExtractionResults] = {
+                document_id: result
+                for document_id, result in zip(
+                    documents_to_process,
+                    run_functions_tuples_in_parallel(batch_deep_extraction_func_calls),
+                )
+            }
+
+            # Collect entities and relationships to upsert
             batch_entities: list[tuple[str | None, str]] = []
             batch_relationships: list[tuple[str, str]] = []
+            entity_classification: dict[str, str] = {}
 
-            for document_id, implied_metadata in batch_implied_metadata.items():
+            for document_id, implied_metadata in batch_implied_extraction.items():
                 batch_entities += [
-                    (None, implied_entity)
-                    for implied_entity in implied_metadata.implied_entities
+                    (None, entity) for entity in implied_metadata.implied_entities
                 ]
-                batch_entities.append(
-                    (document_id, implied_metadata.kg_core_document_id_name)
-                )
+                batch_entities.append((document_id, implied_metadata.document_entity))
                 batch_relationships += [
-                    (document_id, implied_relationship)
-                    for implied_relationship in implied_metadata.implied_relationships
+                    (document_id, relationship)
+                    for relationship in implied_metadata.implied_relationships
                 ]
 
+            for document_id, deep_extraction_result in batch_deep_extractions.items():
+                batch_entities += [
+                    (None, entity)
+                    for entity in deep_extraction_result.deep_extracted_entities
+                ]
+                for relationship in deep_extraction_result.deep_extracted_relationships:
+                    source_entity, _, target_entity = split_relationship_id(
+                        relationship
+                    )
+                    if (
+                        source_entity in active_entity_types
+                        and target_entity in active_entity_types
+                    ):
+                        batch_relationships += [(document_id, relationship)]
+
+                classification_result = deep_extraction_result.classification_result
+                if not classification_result:
+                    continue
+                entity_classification[classification_result.document_entity] = (
+                    classification_result.classification_class
+                )
+
+            # Populate the KG database with the extracted entities, relationships, and terms
             for potential_document_id, entity in batch_entities:
                 # verify the entity is valid
                 parts = split_entity_id(entity)
@@ -537,7 +457,6 @@ def kg_extraction(
 
                 try:
                     with get_session_with_current_tenant() as db_session:
-
                         entity_attributes: dict[str, Any] = {}
 
                         if potential_document_id:
@@ -546,13 +465,10 @@ def kg_extraction(
                                 or {}
                             )
 
-                        # For now, do document classifications
-
                         # only keep selected attributes (and translate the attribute names)
                         metadata_attributes = entity_metadata_conversion_instructions[
                             entity_type
                         ]
-
                         keep_attributes = {
                             metadata_attributes[attr_name].name: attr_val
                             for attr_name, attr_val in entity_attributes.items()
@@ -561,6 +477,12 @@ def kg_extraction(
                                 and metadata_attributes[attr_name].keep
                             )
                         }
+
+                        # add the classification result to the attributes
+                        if entity in entity_classification:
+                            keep_attributes["classification"] = entity_classification[
+                                entity
+                            ]
 
                         event_time = None
                         if potential_document_id:
@@ -660,325 +582,3 @@ def kg_extraction(
                 db_session.commit()
 
     metadata_tracker.export_typeinfo()
-
-
-# TODO: this only needs to run if deep extraction is true with some refactoring in
-# kg_extraction to use the KGDocumentEntitiesRelationshipsAttributes to create the
-# staging objects
-# this will also allow us to move the KGChunkFormat extraction inside this function,
-# removing the need for slow vespa querying for non-deep extraction chunks
-def _kg_chunk_batch_extraction(
-    chunk_doc_extractions: list[
-        tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
-    ],
-    kg_config_settings: KGConfigSettings,
-) -> KGBatchExtractionStats:
-    _, fast_llm = get_default_llms()
-
-    succeeded_chunk_id: list[KGChunkId] = []
-    failed_chunk_id: list[KGChunkId] = []
-    succeeded_chunk_extraction: list[KGUChunkUpdateRequest] = []
-
-    def process_single_chunk(
-        chunk_doc_extraction: tuple[
-            KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes
-        ],
-        preformatted_prompt: str,
-        kg_config_settings: KGConfigSettings,
-    ) -> tuple[bool, KGUChunkUpdateRequest]:
-        """Process a single chunk and return update request and other important KG processing information"""
-
-        # Chunk treatment variables
-
-        chunk, kg_document_extractions = chunk_doc_extraction
-        chunk_needs_deep_extraction = chunk.deep_extraction
-
-        company_participant_emails = kg_document_extractions.company_participant_emails
-        account_participant_emails = kg_document_extractions.account_participant_emails
-
-        # Initialize common variables
-        deep_extracted_entities: list[str] = []
-        deep_extracted_relationships: list[str] = []
-        deep_implied_extracted_relationships: list[str] = []
-        deep_extracted_terms: list[str] = []
-
-        if chunk_needs_deep_extraction:
-            llm_context = prepare_llm_content_extraction(
-                chunk,
-                company_participant_emails,
-                account_participant_emails,
-                kg_config_settings,
-            )
-
-            formatted_prompt = MASTER_EXTRACTION_PROMPT.replace(
-                "---content---", llm_context
-            )
-
-            msg = [
-                HumanMessage(
-                    content=formatted_prompt,
-                )
-            ]
-
-            logger.info(
-                f"LLM Extraction from chunk {chunk.chunk_id} from doc {chunk.document_id}"
-            )
-
-            try:
-                raw_extraction_result = fast_llm.invoke(msg)
-                extraction_result = message_to_string(raw_extraction_result)
-                cleaned_result = (
-                    extraction_result.replace("```json", "").replace("```", "").strip()
-                )
-                parsed_result = json.loads(cleaned_result)
-
-                deep_extracted_entities = parsed_result.get("entities", [])
-                deep_extracted_relationships = [
-                    relationship.replace(" ", "_")
-                    for relationship in parsed_result.get("relationships", [])
-                ]
-                deep_extracted_terms = parsed_result.get("terms", [])
-            except Exception as e:
-                logger.error(
-                    f"Failed to process chunk {chunk.chunk_id} from doc {chunk.document_id}: {str(e)}"
-                )
-                return False, KGUChunkUpdateRequest(
-                    document_id=chunk.document_id,
-                    chunk_id=chunk.chunk_id,
-                    core_entity=kg_document_extractions.kg_core_document_id_name,
-                    entities=set(),
-                    relationships=set(),
-                    terms=set(),
-                )
-
-        deep_implied_extracted_relationships = [
-            make_relationship_id(
-                kg_document_extractions.kg_core_document_id_name,
-                "mentions",
-                extracted_entity,
-            )
-            for extracted_entity in deep_extracted_entities
-        ]
-
-        all_entities = set(
-            list(deep_extracted_entities)
-            + list(kg_document_extractions.implied_entities)
-        )
-
-        all_relationships = (
-            list(deep_extracted_relationships)
-            + list(kg_document_extractions.implied_relationships)
-            + deep_implied_extracted_relationships
-        )
-        all_relationships = list(set(all_relationships))
-
-        # Add vendor relationship if no relationship established yet
-
-        if not all_relationships:
-            all_relationships.append(
-                make_relationship_id(
-                    make_entity_id("VENDOR", cast(str, kg_config_settings.KG_VENDOR)),
-                    "relates_to",
-                    kg_document_extractions.kg_core_document_id_name,
-                )
-            )
-
-        logger.info(f"KG extracted: doc {chunk.document_id} chunk {chunk.chunk_id}")
-        return True, KGUChunkUpdateRequest(
-            document_id=chunk.document_id,
-            chunk_id=chunk.chunk_id,
-            core_entity=kg_document_extractions.kg_core_document_id_name,
-            entities=all_entities,
-            relationships=set(all_relationships),
-            terms=set(deep_extracted_terms),
-        )
-
-    # Assume for prototype: use_threads = True. TODO: Make thread safe!
-
-    functions_with_args: list[tuple[Callable, tuple]] = [
-        (process_single_chunk, (chunk_doc_extraction, "", kg_config_settings))
-        for chunk_doc_extraction in chunk_doc_extractions
-    ]
-
-    logger.debug("Running KG extraction on chunks in parallel")
-    results = run_functions_tuples_in_parallel(functions_with_args, allow_failures=True)
-
-    # Sort results into succeeded and failed
-    for success, chunk_results in results:
-
-        chunk_structure = KGChunkId(
-            document_id=chunk_results.document_id,
-            chunk_id=chunk_results.chunk_id,
-        )
-
-        if success:
-            succeeded_chunk_id.append(chunk_structure)
-            succeeded_chunk_extraction.append(chunk_results)
-        else:
-            failed_chunk_id.append(chunk_structure)
-
-    # Collect data for postgres later on
-
-    aggregated_kg_extractions = KGAggregatedExtractions(
-        grounded_entities_document_ids=defaultdict(str),
-        entities=defaultdict(int),
-        relationships=defaultdict(
-            lambda: defaultdict(int)
-        ),  # relationship + source document_id
-        terms=defaultdict(int),
-    )
-
-    for chunk_result in succeeded_chunk_extraction:
-        aggregated_kg_extractions.grounded_entities_document_ids[
-            chunk_result.core_entity
-        ] = chunk_result.document_id
-
-        mentioned_chunk_entities: set[str] = set()
-        for relationship in chunk_result.relationships or set():
-            relationship_split = split_relationship_id(relationship)
-            if len(relationship_split) == 3:
-                source_entity = relationship_split[0]
-                target_entity = relationship_split[2]
-                if source_entity not in mentioned_chunk_entities:
-                    aggregated_kg_extractions.entities[source_entity] = 1
-                    mentioned_chunk_entities.add(source_entity)
-                else:
-                    aggregated_kg_extractions.entities[source_entity] += 1
-                if target_entity not in mentioned_chunk_entities:
-                    aggregated_kg_extractions.entities[target_entity] = 1
-                    mentioned_chunk_entities.add(target_entity)
-                else:
-                    aggregated_kg_extractions.entities[target_entity] += 1
-            if relationship not in aggregated_kg_extractions.relationships:
-                aggregated_kg_extractions.relationships[relationship] = defaultdict(int)
-            aggregated_kg_extractions.relationships[relationship][
-                chunk_result.document_id
-            ] += 1
-
-        for kg_entity in chunk_result.entities or set():
-            if kg_entity not in mentioned_chunk_entities:
-                aggregated_kg_extractions.entities[kg_entity] = 1
-                mentioned_chunk_entities.add(kg_entity)
-            else:
-                aggregated_kg_extractions.entities[kg_entity] += 1
-
-        for kg_term in chunk_result.terms or set():
-            if kg_term not in aggregated_kg_extractions.terms:
-                aggregated_kg_extractions.terms[kg_term] = 1
-            else:
-                aggregated_kg_extractions.terms[kg_term] += 1
-
-    return KGBatchExtractionStats(
-        connector_id=(
-            chunk_doc_extractions[0][0].connector_id if chunk_doc_extractions else None
-        ),  # All have same connector_id
-        succeeded=succeeded_chunk_id,
-        failed=failed_chunk_id,
-        aggregated_kg_extractions=aggregated_kg_extractions,
-    )
-
-
-def _kg_document_classification(
-    document_classification_content_list: list[KGClassificationContent],
-    classification_extraction_instructions: dict[
-        str, KGClassificationInstructions | None
-    ],
-    kg_config_settings: KGConfigSettings,
-) -> list[tuple[bool, KGClassificationDecisions]]:
-    primary_llm, fast_llm = get_default_llms()
-
-    def classify_single_document(
-        document_classification_content: KGClassificationContent,
-        document_classification_extraction_instructions: KGClassificationInstructions,
-        kg_config_settings: KGConfigSettings,
-    ) -> tuple[bool, KGClassificationDecisions]:
-        """Classify a single document whether it should be kg-processed or not"""
-
-        source = document_classification_content.source_type
-        document_id = document_classification_content.document_id
-
-        classification_prompt = prepare_llm_document_content(
-            document_classification_content,
-            category_list=document_classification_extraction_instructions.classification_options,
-            category_definitions=document_classification_extraction_instructions.classification_class_definitions,
-            kg_config_settings=kg_config_settings,
-        )
-
-        if classification_prompt.llm_prompt is None:
-            logger.info(
-                f"Source {source} did not have kg document classification instructions. No content analysis."
-            )
-            return False, KGClassificationDecisions(
-                document_id=document_id,
-                classification_decision=False,
-                classification_class=None,
-                source_metadata=document_classification_content.source_metadata,
-            )
-
-        msg = [
-            HumanMessage(
-                content=classification_prompt.llm_prompt,
-            )
-        ]
-
-        try:
-            logger.info(
-                f"LLM Classification from document {document_classification_content.document_id}"
-            )
-            raw_classification_result = primary_llm.invoke(msg)
-            classification_result = (
-                message_to_string(raw_classification_result)
-                .replace("```json", "")
-                .replace("```", "")
-                .strip()
-            )
-
-            classification_class = classification_result.split("CATEGORY:")[1].strip()
-
-            if (
-                classification_class
-                in document_classification_extraction_instructions.classification_class_definitions
-            ):
-                extraction_decision = document_classification_extraction_instructions.classification_class_definitions[
-                    classification_class
-                ].extraction
-            else:
-                extraction_decision = False
-
-            return True, KGClassificationDecisions(
-                document_id=document_id,
-                classification_decision=extraction_decision,
-                classification_class=classification_class,
-                source_metadata=document_classification_content.source_metadata,
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to classify document {document_classification_content.document_id}: {str(e)}"
-            )
-            return False, KGClassificationDecisions(
-                document_id=document_id,
-                classification_decision=False,
-                classification_class=None,
-                source_metadata=document_classification_content.source_metadata,
-            )
-
-    # Assume for prototype: use_threads = True. TODO: Make thread safe!
-
-    functions_with_args: list[tuple[Callable, tuple]] = [
-        (
-            classify_single_document,
-            (
-                document_classification_content,
-                classification_extraction_instructions[
-                    document_classification_content.document_id
-                ],
-                kg_config_settings,
-            ),
-        )
-        for document_classification_content in document_classification_content_list
-    ]
-
-    logger.debug("Running KG classification on documents in parallel")
-    results = run_functions_tuples_in_parallel(functions_with_args, allow_failures=True)
-
-    return results

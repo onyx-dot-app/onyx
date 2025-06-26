@@ -25,10 +25,6 @@ class KGConfigSettings(BaseModel):
         return datetime.strptime(self.KG_COVERAGE_START, "%Y-%m-%d")
 
 
-class KGProcessingStatus(BaseModel):
-    in_progress: bool = False
-
-
 class KGGroundingType(str, Enum):
     UNGROUNDED = "ungrounded"
     GROUNDED = "grounded"
@@ -92,12 +88,6 @@ class KGEntityTypeDefinition(BaseModel):
     entity_values: list[str] = []
 
 
-class KGChunkRelationship(BaseModel):
-    source: str
-    rel_type: str
-    target: str
-
-
 class KGChunkFormat(BaseModel):
     connector_id: int | None = None
     document_id: str
@@ -108,53 +98,6 @@ class KGChunkFormat(BaseModel):
     secondary_owners: list[str]
     source_type: str
     metadata: dict[str, str | list[str]] | None = None
-    entities: list[str] = []
-    relationships: list[KGChunkRelationship] = []
-    terms: list[str] = []
-    deep_extraction: bool = False
-
-
-class KGChunkExtraction(BaseModel):
-    connector_id: int
-    document_id: str
-    chunk_id: int
-    core_entity: str
-    entities: list[str]
-    relationships: list[str]
-    terms: list[str]
-    attributes: dict[str, str | list[str]]
-
-
-class KGChunkId(BaseModel):
-    connector_id: int | None = None
-    document_id: str
-    chunk_id: int
-
-
-class KGRelationshipExtraction(BaseModel):
-    relationship_str: str
-    source_document_id: str
-
-
-class KGAggregatedExtractions(BaseModel):
-    grounded_entities_document_ids: dict[str, str]
-    entities: dict[str, int]
-    relationships: dict[str, dict[str, int]]
-    terms: dict[str, int]
-
-
-class KGBatchExtractionStats(BaseModel):
-    connector_id: int | None = None
-    succeeded: list[KGChunkId]
-    failed: list[KGChunkId]
-    aggregated_kg_extractions: KGAggregatedExtractions
-
-
-class ConnectorExtractionStats(BaseModel):
-    connector_id: int
-    num_succeeded: int
-    num_failed: int
-    num_processed: int
 
 
 class KGPerson(BaseModel):
@@ -174,30 +117,9 @@ class NormalizedRelationships(BaseModel):
     relationship_normalization_map: dict[str, str]
 
 
-class NormalizedTerms(BaseModel):
-    terms: list[str]
-    term_normalization_map: dict[str, str | None]
-
-
-class KGClassificationContent(BaseModel):
+class KGMetadataContent(BaseModel):
     document_id: str
-    classification_content: str
     source_type: str
-    source_metadata: dict[str, Any] | None = None
-    entity_type: str | None = None
-    metadata: dict[str, Any] | None = None
-
-
-class KGEnrichedClassificationContent(KGClassificationContent):
-    classification_enabled: bool
-    classification_instructions: dict[str, Any]
-    deep_extraction: bool
-
-
-class KGClassificationDecisions(BaseModel):
-    document_id: str
-    classification_decision: bool
-    classification_class: str | None
     source_metadata: dict[str, Any] | None = None
 
 
@@ -216,7 +138,7 @@ class KGEntityTypeInstructions(BaseModel):
     metadata_attribute_conversion: dict[str, KGAttributeProperty]
     classification_instructions: KGClassificationInstructions
     extraction_instructions: KGExtractionInstructions
-    filter_instructions: dict[str, Any] | None = None
+    entity_filter_attributes: dict[str, Any] | None = None
 
 
 class KGEnhancedDocumentMetadata(BaseModel):
@@ -227,26 +149,6 @@ class KGEnhancedDocumentMetadata(BaseModel):
     classification_enabled: bool
     classification_instructions: KGClassificationInstructions | None
     skip: bool
-
-
-class ContextPreparation(BaseModel):
-    """
-    Context preparation format for the LLM KG extraction.
-    """
-
-    llm_context: str
-    core_entity: str
-    implied_entities: list[str]
-    implied_relationships: list[str]
-    implied_terms: list[str]
-
-
-class KGDocumentClassificationPrompt(BaseModel):
-    """
-    Document classification prompt format for the LLM KG extraction.
-    """
-
-    llm_prompt: str | None
 
 
 class KGConnectorData(BaseModel):
@@ -265,12 +167,23 @@ class KGStage(str, Enum):
     DO_NOT_EXTRACT = "do_not_extract"
 
 
-class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
-    kg_core_document_id_name: str
+class KGClassificationResult(BaseModel):
+    document_entity: str
+    classification_class: str
+
+
+class KGImpliedExtractionResults(BaseModel):
+    document_entity: str
     implied_entities: set[str]
     implied_relationships: set[str]
     company_participant_emails: set[str]
     account_participant_emails: set[str]
+
+
+class KGDocumentDeepExtractionResults(BaseModel):
+    classification_result: KGClassificationResult | None
+    deep_extracted_entities: set[str]
+    deep_extracted_relationships: set[str]
 
 
 class KGException(Exception):

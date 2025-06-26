@@ -1,8 +1,6 @@
 import re
-from collections import defaultdict
 
 from onyx.db.kg_config import KGConfigSettings
-from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGPerson
 
 
@@ -111,50 +109,6 @@ def extract_relationship_type_id(relationship_id_name: str) -> str:
     return make_relationship_type_id(
         get_entity_type(source_node), relationship_type, get_entity_type(target_node)
     )
-
-
-def aggregate_kg_extractions(
-    connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions],
-) -> KGAggregatedExtractions:
-    aggregated_kg_extractions = KGAggregatedExtractions(
-        grounded_entities_document_ids=defaultdict(str),
-        entities=defaultdict(int),
-        relationships=defaultdict(lambda: defaultdict(int)),
-        terms=defaultdict(int),
-    )
-    for connector_aggregated_kg_extractions in connector_aggregated_kg_extractions_list:
-        for (
-            grounded_entity,
-            document_id,
-        ) in connector_aggregated_kg_extractions.grounded_entities_document_ids.items():
-            aggregated_kg_extractions.grounded_entities_document_ids[
-                grounded_entity
-            ] = document_id
-
-        for entity, count in connector_aggregated_kg_extractions.entities.items():
-            if entity not in aggregated_kg_extractions.entities:
-                aggregated_kg_extractions.entities[entity] = count
-            else:
-                aggregated_kg_extractions.entities[entity] += count
-        for (
-            relationship,
-            relationship_data,
-        ) in connector_aggregated_kg_extractions.relationships.items():
-            for source_document_id, count in relationship_data.items():
-                if relationship not in aggregated_kg_extractions.relationships:
-                    aggregated_kg_extractions.relationships[relationship] = defaultdict(
-                        int
-                    )
-                aggregated_kg_extractions.relationships[relationship][
-                    source_document_id
-                ] += count
-        for term, count in connector_aggregated_kg_extractions.terms.items():
-            if term not in aggregated_kg_extractions.terms:
-                aggregated_kg_extractions.terms[term] = count
-            else:
-                aggregated_kg_extractions.terms[term] += count
-
-    return aggregated_kg_extractions
 
 
 def extract_email(email: str) -> str | None:

@@ -489,5 +489,5 @@ else:
 
 
 class OnyxCallTypes(str, Enum):
-    FIREFLIES = "fireflies"
-    GONG = "gong"
+    FIREFLIES = "FIREFLIES"
+    GONG = "GONG"
