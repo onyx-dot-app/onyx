@@ -43,6 +43,11 @@ def generic_doc_sync(
     for doc_batch in slim_connector.retrieve_all_slim_documents(callback=callback):
         logger.info(f"Got {len(doc_batch)} slim documents from {doc_source}")
 
+        if callback:
+            if callback.should_stop():
+                raise RuntimeError(f"{label}: Stop signal detected")
+            callback.progress(label, 1)
+
         for doc in doc_batch:
             if not doc.external_access:
                 raise RuntimeError(
@@ -55,11 +60,6 @@ def generic_doc_sync(
                 doc_id=doc.id,
                 external_access=doc.external_access,
             )
-
-        if callback:
-            if callback.should_stop():
-                raise RuntimeError(f"{label}: Stop signal detected")
-            callback.progress(label, 1)
 
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id}")
     existing_doc_ids = set(fetch_all_existing_docs_fn())
