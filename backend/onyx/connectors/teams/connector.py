@@ -265,6 +265,11 @@ class TeamsConnector(
                         graph_client=self.graph_client, channel=channel
                     )
                 )
+                external_user_emails = set(
+                    expert_info.email
+                    for expert_info in expert_infos
+                    if expert_info.email
+                )
 
                 messages = fetch_messages(
                     graph_client=self.graph_client,
@@ -280,11 +285,7 @@ class TeamsConnector(
                         SlimDocument(
                             id=message.id,
                             external_access=ExternalAccess(
-                                external_user_emails=set(
-                                    expert_info.email
-                                    for expert_info in expert_infos
-                                    if expert_info.email
-                                ),
+                                external_user_emails=external_user_emails,
                                 external_user_group_ids=set(),
                                 is_public=is_public,
                             ),
