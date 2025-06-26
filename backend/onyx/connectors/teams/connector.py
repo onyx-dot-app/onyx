@@ -556,16 +556,9 @@ def _collect_documents_for_channel(
 
 
 def _is_channel_public(channel: Channel) -> bool:
-    if not channel.membership_type:
-        return False
-
-    if channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE:
-        return True
-
-    if channel.membership_type == _PRIVATE_MEMBERSHIP_TYPE:
-        return False
-
-    return False
+    return (
+        channel.membership_type and channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE
+    )
 
 
 if __name__ == "__main__":
