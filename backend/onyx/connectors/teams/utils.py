@@ -111,7 +111,9 @@ def fetch_replies(
         )
 
 
-def fetch_expert_infos(channel: Channel) -> list[BasicExpertInfo]:
+def fetch_expert_infos(
+    graph_client: GraphClient, channel: Channel
+) -> list[BasicExpertInfo]:
     members = channel.members.get_all(
         # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
@@ -119,15 +121,21 @@ def fetch_expert_infos(channel: Channel) -> list[BasicExpertInfo]:
 
     expert_infos = []
     for member in members:
-        if not member.display_name:
+        user_id = member.properties.get("userId")
+        if not user_id:
             continue
 
-        if email := member.properties.get("email"):
-            expert_infos.append(
-                BasicExpertInfo(
-                    display_name=member.display_name,
-                    email=email,
-                )
+        json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
+
+        email = json_data.get("userPrincipalName")
+        if not email or not member.display_name:
+            continue
+
+        expert_infos.append(
+            BasicExpertInfo(
+                display_name=member.display_name,
+                email=email,
             )
+        )
 
     return expert_infos

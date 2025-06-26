@@ -257,7 +257,9 @@ class TeamsConnector(
                 if not channel.id:
                     continue
 
-                expert_infos = fetch_expert_infos(channel=channel)
+                expert_infos = fetch_expert_infos(
+                    graph_client=self.graph_client, channel=channel
+                )
                 is_public = _is_channel_public(channel=channel)
 
                 messages = fetch_messages(
@@ -319,13 +321,14 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
 
 
 def _convert_thread_to_document(
+    graph_client: GraphClient,
     channel: Channel,
     thread: list[Message],
 ) -> Document | None:
     if len(thread) == 0:
         return None
 
-    expert_infos = fetch_expert_infos(channel=channel)
+    expert_infos = fetch_expert_infos(graph_client=graph_client, channel=channel)
     emails = set(expert_info.email for expert_info in expert_infos if expert_info.email)
 
     most_recent_message_datetime: datetime | None = None
@@ -528,6 +531,7 @@ def _collect_documents_for_channel(
             # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
             # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
             if doc := _convert_thread_to_document(
+                graph_client=graph_client,
                 channel=channel,
                 thread=thread,
             ):
