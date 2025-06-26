@@ -119,7 +119,7 @@ def _get_batch_entities_with_parent(
 
 def _get_batch_kg_processed_documents(
     batch_size: int,
-) -> Generator[list[KGEntityExtractionStaging], None, None]:
+) -> Generator[list[Document], None, None]:
     offset = 0
 
     while True:
@@ -267,16 +267,22 @@ def _transfer_one_relationship(
 ) -> None:
     with get_session_with_current_tenant() as db_session:
         # get the translations
-        staging_entity_id_names = [
+        staging_entity_id_names = {
             relationship.source_node,
             relationship.target_node,
-        ]
+        }
         entity_translations: dict[str, str] = {
             entity.id_name: entity.transferred_id_name
             for entity in db_session.query(KGEntityExtractionStaging)
             .filter(KGEntityExtractionStaging.id_name.in_(staging_entity_id_names))
             .all()
+            if entity.transferred_id_name is not None
         }
+        if len(entity_translations) != len(staging_entity_id_names):
+            logger.error(
+                f"Missing entity translations for {staging_entity_id_names - entity_translations.keys()}"
+            )
+            return
 
         # transfer the relationship
         transfer_relationship(
