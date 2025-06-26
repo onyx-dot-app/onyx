@@ -61,6 +61,9 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
     return map
 
 
+@pytest.mark.xfail(
+    reason="MS Teams API doesn't fetch Raunak's emails, even though he's an owner + member of some of the below groups"
+)
 @pytest.mark.parametrize(
     "expected_docs",
     [
