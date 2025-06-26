@@ -388,7 +388,7 @@ def _collect_all_teams(
     graph_client: GraphClient,
     requested: list[str] | None = None,
 ) -> list[Team]:
-    teams: list[str] = []
+    teams: list[Team] = []
     next_url: str | None = None
 
     filter = None

@@ -147,8 +147,12 @@ def fetch_expert_infos(
 
     expert_infos = []
     for member in members:
+        if not member.display_name:
+            logger.warn(f"Failed to grab the display-name of {member=}; skipping")
+            continue
+
         email = _get_or_fetch_email(graph_client=graph_client, member=member)
-        if not email or not member.display_name:
+        if not email:
             logger.warn(f"Failed to grab the email of {member=}; skipping")
             continue
 
