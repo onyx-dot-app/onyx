@@ -133,6 +133,7 @@ def _get_batch_kg_processed_documents(
                 .filter(
                     KGEntityExtractionStaging.transferred_id_name.is_not(None),
                 )
+                .order_by(Document.id)
                 .offset(offset)
                 .limit(batch_size)
                 .all()
