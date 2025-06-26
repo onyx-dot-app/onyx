@@ -1,6 +1,5 @@
 import time
 from typing import Any
-from typing import cast
 
 from redis.lock import Lock as RedisLock
 
@@ -138,7 +137,6 @@ def _get_batch_documents_enhanced_metadata(
     for metadata in batch_metadata:
         document_id = metadata.document_id
         doc_entity = None
-        found_current_entity_type = False
 
         if not isinstance(document_id, str):
             continue
@@ -147,8 +145,8 @@ def _get_batch_documents_enhanced_metadata(
 
         if batch_entity:
             doc_entity = batch_entity
-            found_current_entity_type = True
         else:
+            # TODO: make this a helper function
             if not chunk_metadata:
                 continue
 
@@ -171,28 +169,28 @@ def _get_batch_documents_enhanced_metadata(
                     for attribute in potential_entity_type_attribute_filters
                 ):
                     doc_entity = potential_entity_type
-                    found_current_entity_type = True
                     break
 
-        if found_current_entity_type:
-            doc_entity = cast(str, doc_entity)
-            entity_instructions = source_type_classification_extraction_instructions[
-                doc_entity
-            ]
+        if doc_entity is None:
+            continue
 
-            kg_document_meta_data_dict[document_id] = KGEnhancedDocumentMetadata(
-                entity_type=doc_entity,
-                metadata_attribute_conversion=(
-                    source_type_classification_extraction_instructions[
-                        doc_entity
-                    ].metadata_attribute_conversion
-                ),
-                document_metadata=chunk_metadata,
-                deep_extraction=entity_instructions.extraction_instructions.deep_extraction,
-                classification_enabled=entity_instructions.classification_instructions.classification_enabled,
-                classification_instructions=entity_instructions.classification_instructions,
-                skip=False,
-            )
+        entity_instructions = source_type_classification_extraction_instructions[
+            doc_entity
+        ]
+
+        kg_document_meta_data_dict[document_id] = KGEnhancedDocumentMetadata(
+            entity_type=doc_entity,
+            metadata_attribute_conversion=(
+                source_type_classification_extraction_instructions[
+                    doc_entity
+                ].metadata_attribute_conversion
+            ),
+            document_metadata=chunk_metadata,
+            deep_extraction=entity_instructions.extraction_instructions.deep_extraction,
+            classification_enabled=entity_instructions.classification_instructions.classification_enabled,
+            classification_instructions=entity_instructions.classification_instructions,
+            skip=False,
+        )
 
     return kg_document_meta_data_dict
 
