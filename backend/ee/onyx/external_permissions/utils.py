@@ -49,8 +49,20 @@ def generic_doc_sync(
     label: str,
 ) -> Generator[DocExternalAccess, None, None]:
     """
-    TODO
+    A convenience function for performing a generic document synchronization.
+
+    Notes:
+    A generic doc sync includes:
+        - fetching existing docs
+        - fetching *all* new (slim) docs
+        - yielding external-access permissions for existing docs which do not exist in the newly fetched slim-docs set (with their
+        `external_access` set to "private")
+        - yielding external-access permissions for newly fetched docs
+
+    Returns:
+        A `Generator` which yields existing and newly fetched external-access permissions.
     """
+
     logger.info(f"Starting {doc_source} doc sync for CC Pair ID: {cc_pair.id}")
 
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id}")
