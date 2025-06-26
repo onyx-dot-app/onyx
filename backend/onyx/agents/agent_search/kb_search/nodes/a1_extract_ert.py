@@ -29,8 +29,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import get_user_view_names
 from onyx.db.relationships import get_allowed_relationship_type_pairs
-from onyx.kg.extractions.extraction_processing import get_entity_types_str
-from onyx.kg.extractions.extraction_processing import get_relationship_types_str
+from onyx.kg.utils.extraction_utils import get_entity_types_str
+from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.kg_prompts import QUERY_ENTITY_EXTRACTION_PROMPT
 from onyx.prompts.kg_prompts import QUERY_RELATIONSHIP_EXTRACTION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -136,15 +136,14 @@ def extract_ert(
         last_bracket = cleaned_response.rfind("}")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
 
-        try:
-            entity_extraction_result = (
-                KGQuestionEntityExtractionResult.model_validate_json(cleaned_response)
-            )
-        except ValidationError:
-            logger.error("Failed to parse LLM response as JSON in Entity Extraction")
-            entity_extraction_result = KGQuestionEntityExtractionResult(
-                entities=[], time_filter=""
-            )
+        entity_extraction_result = KGQuestionEntityExtractionResult.model_validate_json(
+            cleaned_response
+        )
+    except ValidationError:
+        logger.error("Failed to parse LLM response as JSON in Entity Extraction")
+        entity_extraction_result = KGQuestionEntityExtractionResult(
+            entities=[], time_filter=""
+        )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
         entity_extraction_result = KGQuestionEntityExtractionResult(

@@ -19,7 +19,6 @@ from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import validate_kg_settings
 from onyx.db.models import Document
-from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGStage
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.db.relationships import upsert_staging_relationship
@@ -38,10 +37,8 @@ from onyx.kg.utils.extraction_utils import kg_deep_extraction
 from onyx.kg.utils.extraction_utils import (
     kg_implied_extraction,
 )
-from onyx.kg.utils.extraction_utils import trackinfo_to_str
 from onyx.kg.utils.formatting_utils import extract_relationship_type_id
 from onyx.kg.utils.formatting_utils import get_entity_type
-from onyx.kg.utils.formatting_utils import make_relationship_type_id
 from onyx.kg.utils.formatting_utils import split_entity_id
 from onyx.kg.utils.formatting_utils import split_relationship_id
 from onyx.utils.logger import setup_logger
@@ -101,85 +98,6 @@ def _get_classification_extraction_instructions() -> (
         )
 
     return classification_instructions_dict
-
-
-def get_entity_types_str(active: bool | None = None) -> str:
-    """
-    Format the entity types into a string for the LLM.
-    """
-    with get_session_with_current_tenant() as db_session:
-        entity_types = get_entity_types(db_session, active)
-
-        entity_types_list: list[str] = []
-        for entity_type in entity_types:
-            if entity_type.description:
-                entity_description = "\n  - Description: " + entity_type.description
-            else:
-                entity_description = ""
-
-            if entity_type.entity_values:
-                allowed_values = "\n  - Allowed Values: " + ", ".join(
-                    entity_type.entity_values
-                )
-            else:
-                allowed_values = ""
-
-            attributes = entity_type.parsed_attributes
-
-            entity_type_attribute_list: list[str] = []
-            for attribute, values in attributes.attribute_values.items():
-                entity_type_attribute_list.append(
-                    f"{attribute}: {trackinfo_to_str(values)}"
-                )
-
-            if attributes.classification_attributes:
-                entity_type_attribute_list.append(
-                    # TODO: restructure classification attribute to be a dict of attribute name to classification info
-                    # e.g., {scope: {internal: prompt, external: prompt}, sentiment: {positive: prompt, negative: prompt}}
-                    "classification: one of: "
-                    + ", ".join(attributes.classification_attributes.keys())
-                )
-            if entity_type_attribute_list:
-                entity_attributes = "\n  - Attributes:\n    - " + "\n    - ".join(
-                    entity_type_attribute_list
-                )
-            else:
-                entity_attributes = ""
-
-            entity_types_list.append(
-                entity_type.id_name
-                + entity_description
-                + allowed_values
-                + entity_attributes
-            )
-
-    return "\n".join(entity_types_list)
-
-
-def get_relationship_types_str(active: bool | None = None) -> str:
-    """
-    Format the relationship types into a string for the LLM.
-    """
-    with get_session_with_current_tenant() as db_session:
-        active_filters = []
-        if active is not None:
-            active_filters.append(KGRelationshipType.active == active)
-
-        relationship_types = (
-            db_session.query(KGRelationshipType).filter(*active_filters).all()
-        )
-
-        relationship_types_list = []
-        for rel_type in relationship_types:
-            # Format as "source_type__relationship_type__target_type"
-            formatted_type = make_relationship_type_id(
-                rel_type.source_entity_type_id_name,
-                rel_type.type,
-                rel_type.target_entity_type_id_name,
-            )
-            relationship_types_list.append(formatted_type)
-
-    return "\n".join(relationship_types_list)
 
 
 def _get_batch_documents_enhanced_metadata(
@@ -502,13 +420,18 @@ def kg_extraction(
 
             for document_id, deep_extraction_result in batch_deep_extractions.items():
                 batch_entities += [
-                    (document_id, entity)
+                    (None, entity)
                     for entity in deep_extraction_result.deep_extracted_entities
                 ]
-                batch_relationships += [
-                    (document_id, relationship)
-                    for relationship in deep_extraction_result.deep_extracted_relationships
-                ]
+                for relationship in deep_extraction_result.deep_extracted_relationships:
+                    source_entity, _, target_entity = split_relationship_id(
+                        relationship
+                    )
+                    if (
+                        source_entity in active_entity_types
+                        and target_entity in active_entity_types
+                    ):
+                        batch_relationships += [(document_id, relationship)]
 
                 classification_result = deep_extraction_result.classification_result
                 if not classification_result:

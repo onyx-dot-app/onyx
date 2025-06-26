@@ -7,11 +7,13 @@ from onyx.configs.constants import OnyxCallTypes
 from onyx.configs.kg_configs import KG_METADATA_TRACKING_THRESHOLD
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
+from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Connector
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
+from onyx.db.models import KGRelationshipType
 from onyx.db.tag import get_structured_tags_for_document
 from onyx.kg.models import KGAttributeEntityOption
 from onyx.kg.models import KGAttributeTrackInfo
@@ -28,6 +30,7 @@ from onyx.kg.utils.formatting_utils import get_entity_type
 from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.kg.utils.formatting_utils import make_entity_id
 from onyx.kg.utils.formatting_utils import make_relationship_id
+from onyx.kg.utils.formatting_utils import make_relationship_type_id
 from onyx.kg.vespa.vespa_interactions import get_document_vespa_contents
 from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import message_to_string
@@ -38,6 +41,85 @@ from onyx.prompts.kg_prompts import MASTER_EXTRACTION_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def get_entity_types_str(active: bool | None = None) -> str:
+    """
+    Format the entity types into a string for the LLM.
+    """
+    with get_session_with_current_tenant() as db_session:
+        entity_types = get_entity_types(db_session, active)
+
+        entity_types_list: list[str] = []
+        for entity_type in entity_types:
+            if entity_type.description:
+                entity_description = "\n  - Description: " + entity_type.description
+            else:
+                entity_description = ""
+
+            if entity_type.entity_values:
+                allowed_values = "\n  - Allowed Values: " + ", ".join(
+                    entity_type.entity_values
+                )
+            else:
+                allowed_values = ""
+
+            attributes = entity_type.parsed_attributes
+
+            entity_type_attribute_list: list[str] = []
+            for attribute, values in attributes.attribute_values.items():
+                entity_type_attribute_list.append(
+                    f"{attribute}: {trackinfo_to_str(values)}"
+                )
+
+            if attributes.classification_attributes:
+                entity_type_attribute_list.append(
+                    # TODO: restructure classification attribute to be a dict of attribute name to classification info
+                    # e.g., {scope: {internal: prompt, external: prompt}, sentiment: {positive: prompt, negative: prompt}}
+                    "classification: one of: "
+                    + ", ".join(attributes.classification_attributes.keys())
+                )
+            if entity_type_attribute_list:
+                entity_attributes = "\n  - Attributes:\n    - " + "\n    - ".join(
+                    entity_type_attribute_list
+                )
+            else:
+                entity_attributes = ""
+
+            entity_types_list.append(
+                entity_type.id_name
+                + entity_description
+                + allowed_values
+                + entity_attributes
+            )
+
+    return "\n".join(entity_types_list)
+
+
+def get_relationship_types_str(active: bool | None = None) -> str:
+    """
+    Format the relationship types into a string for the LLM.
+    """
+    with get_session_with_current_tenant() as db_session:
+        active_filters = []
+        if active is not None:
+            active_filters.append(KGRelationshipType.active == active)
+
+        relationship_types = (
+            db_session.query(KGRelationshipType).filter(*active_filters).all()
+        )
+
+        relationship_types_list = []
+        for rel_type in relationship_types:
+            # Format as "source_type__relationship_type__target_type"
+            formatted_type = make_relationship_type_id(
+                rel_type.source_entity_type_id_name,
+                rel_type.type,
+                rel_type.target_entity_type_id_name,
+            )
+            relationship_types_list.append(formatted_type)
+
+    return "\n".join(relationship_types_list)
 
 
 def kg_process_owners(
@@ -260,6 +342,9 @@ def kg_deep_extraction(
         deep_extracted_relationships=set(),
     )
 
+    entity_types_str = get_entity_types_str(active=True)
+    relationship_types_str = get_relationship_types_str(active=True)
+
     for i, chunk_batch in enumerate(
         get_document_vespa_contents(document_id, index_name, tenant_id)
     ):
@@ -283,6 +368,8 @@ def kg_deep_extraction(
             chunk_batch=chunk_batch,
             implied_extraction=implied_extraction,
             kg_config_settings=kg_config_settings,
+            entity_types_str=entity_types_str,
+            relationship_types_str=relationship_types_str,
         )
         if chunk_batch_results is not None:
             result.deep_extracted_entities.update(
@@ -292,7 +379,7 @@ def kg_deep_extraction(
                 chunk_batch_results.deep_extracted_relationships
             )
 
-    raise NotImplementedError("Deep extraction is not implemented")
+    return result
 
 
 def kg_classify_document(
@@ -309,6 +396,7 @@ def kg_classify_document(
         return None
 
     # prepare prompt
+    implied_extraction.document_entity
     company_participants = implied_extraction.company_participant_emails
     account_participants = implied_extraction.account_participant_emails
     content = (
@@ -319,9 +407,13 @@ def kg_classify_document(
         + "Call Content:\n"
         + "\n".join(chunk.content for chunk in chunk_batch)
     )
+    category_list = {
+        cls: definition.description
+        for cls, definition in classification_instructions.classification_class_definitions.items()
+    }
     prompt = CALL_DOCUMENT_CLASSIFICATION_PROMPT.format(
         beginning_of_call_content=content,
-        category_list=classification_instructions.classification_class_definitions,
+        category_list=category_list,
         category_options=classification_instructions.classification_options,
         vendor=kg_config_settings.KG_VENDOR,
     )
@@ -358,6 +450,8 @@ def kg_deep_extract_chunks(
     chunk_batch: list[KGChunkFormat],
     implied_extraction: KGImpliedExtractionResults,
     kg_config_settings: KGConfigSettings,
+    entity_types_str: str,
+    relationship_types_str: str,
 ) -> KGDocumentDeepExtractionResults | None:
     # currently, calls are treated differently
     # TODO: either treat some other documents differently too, or ideally all the same way
@@ -387,20 +481,28 @@ def kg_deep_extract_chunks(
             vendor=kg_config_settings.KG_VENDOR,
             content=content,
         )
-    prompt = MASTER_EXTRACTION_PROMPT.replace("---content---", llm_context)
+    prompt = MASTER_EXTRACTION_PROMPT.format(
+        entity_types=entity_types_str,
+        relationship_types=relationship_types_str,
+    ).replace("---content---", llm_context)
 
     # extract with LLM
     _, fast_llm = get_default_llms()
     msg = [HumanMessage(content=prompt)]
     try:
         raw_extraction_result = fast_llm.invoke(msg)
-        extraction_result = (
+        cleaned_response = (
             message_to_string(raw_extraction_result)
-            .replace("```json", "")
-            .replace("```", "")
-            .strip()
+            .replace("{{", "{")
+            .replace("}}", "}")
+            .replace("```json\n", "")
+            .replace("\n```", "")
+            .replace("\n", "")
         )
-        parsed_result = json.loads(extraction_result)
+        first_bracket = cleaned_response.find("{")
+        last_bracket = cleaned_response.rfind("}")
+        cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
+        parsed_result = json.loads(cleaned_response)
         return KGDocumentDeepExtractionResults(
             classification_result=None,
             deep_extracted_entities=set(parsed_result.get("entities", [])),
