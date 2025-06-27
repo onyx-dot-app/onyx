@@ -2,12 +2,74 @@ import os
 import time
 
 import pytest
-from pydantic import BaseModel
 
-from onyx.connectors.models import Document
+from onyx.access.models import ExternalAccess
 from onyx.connectors.teams.connector import TeamsConnector
+from tests.daily.connectors.teams.models import TeamsThread
 from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 from tests.daily.connectors.utils import to_documents
+
+
+TEAMS_THREAD = [
+    # Posted in "Public Channel"
+    TeamsThread(
+        thread="This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
+        external_access=ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        ),
+    ),
+    TeamsThread(
+        thread="Testing body.",
+        external_access=ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        ),
+    ),
+    TeamsThread(
+        thread="Hello, world! Nice to meet you all.",
+        external_access=ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        ),
+    ),
+    # Posted in "Private Channel (Raunak is excluded)"
+    TeamsThread(
+        thread="This is a test post. Raunak should not be able to see this!",
+        external_access=ExternalAccess(
+            external_user_emails=set(["test@danswerai.onmicrosoft.com"]),
+            external_user_group_ids=set(),
+            is_public=False,
+        ),
+    ),
+    # Posted in "Private Channel (Raunak is a member)"
+    TeamsThread(
+        thread="This is a test post in a private channel that Raunak does have access to! Hello, Raunak!"
+        "Hello, world! I am just a member in this chat, but not an owner.",
+        external_access=ExternalAccess(
+            external_user_emails=set(
+                ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
+            ),
+            external_user_group_ids=set(),
+            is_public=False,
+        ),
+    ),
+    # Posted in "Private Channel (Raunak owns)"
+    TeamsThread(
+        thread="This is a test post in a private channel that Raunak is an owner of! Whoa!"
+        "Hello, world! I am an owner of this chat. The power!",
+        external_access=ExternalAccess(
+            external_user_emails=set(
+                ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
+            ),
+            external_user_group_ids=set(),
+            is_public=False,
+        ),
+    ),
+]
 
 
 @pytest.fixture
@@ -32,24 +94,6 @@ def teams_connector(
     return teams_connector
 
 
-class TeamsThread(BaseModel):
-    thread: str
-    member_emails: set[str]
-    is_public: bool
-
-
-def _doc_to_teams_thread(doc: Document) -> TeamsThread:
-    assert (
-        doc.external_access
-    ), f"ExternalAccess should always be available, instead got {doc=}"
-
-    return TeamsThread(
-        thread=doc.get_text_content(),
-        member_emails=doc.external_access.external_user_emails,
-        is_public=doc.external_access.is_public,
-    )
-
-
 def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
     map: dict[str, TeamsThread] = {}
 
@@ -60,68 +104,65 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
     return map
 
 
-@pytest.mark.parametrize(
-    "expected_docs",
-    [
-        [
-            # Posted in "Public Channel"
-            TeamsThread(
-                thread="This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
-                member_emails=set(),
-                is_public=True,
-            ),
-            TeamsThread(
-                thread="Testing body.",
-                member_emails=set(),
-                is_public=True,
-            ),
-            TeamsThread(
-                thread="Hello, world! Nice to meet you all.",
-                member_emails=set(),
-                is_public=True,
-            ),
-            # Posted in "Private Channel (Raunak is excluded)"
-            TeamsThread(
-                thread="This is a test post. Raunak should not be able to see this!",
-                member_emails=set(["test@danswerai.onmicrosoft.com"]),
-                is_public=False,
-            ),
-            # Posted in "Private Channel (Raunak is a member)"
-            TeamsThread(
-                thread="This is a test post in a private channel that Raunak does have access to! Hello, Raunak!"
-                "Hello, world! I am just a member in this chat, but not an owner.",
-                member_emails=set(
-                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-                ),
-                is_public=False,
-            ),
-            # Posted in "Private Channel (Raunak owns)"
-            TeamsThread(
-                thread="This is a test post in a private channel that Raunak is an owner of! Whoa!"
-                "Hello, world! I am an owner of this chat. The power!",
-                member_emails=set(
-                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
-                ),
-                is_public=False,
-            ),
-        ],
-    ],
-)
-def test_teams_connector(
-    teams_connector: TeamsConnector,
-    expected_docs: list[TeamsThread],
+def _assert_is_valid_external_access(
+    external_access: ExternalAccess,
 ) -> None:
-    docs_iter = load_everything_from_checkpoint_connector(
-        connector=teams_connector,
-        start=0.0,
-        end=time.time(),
-    )
+    assert (
+        not external_access.external_user_group_ids
+    ), f"{external_access.external_user_group_ids=} should be empty for MS Teams"
 
-    actual_docs = [
-        _doc_to_teams_thread(doc=doc) for doc in to_documents(iterator=iter(docs_iter))
+    if external_access.is_public:
+        assert (
+            not external_access.external_user_emails
+        ), f"{external_access.external_user_emails=} should be empty for public channels"
+    else:
+        assert (
+            external_access.external_user_emails
+        ), f"{external_access.external_user_emails=} should contains at least one user for private channels"
+
+
+@pytest.mark.parametrize(
+    "expected_teams_threads",
+    [TEAMS_THREAD],
+)
+def test_loading_all_docs_from_teams_connector(
+    teams_connector: TeamsConnector,
+    expected_teams_threads: list[TeamsThread],
+) -> None:
+    docs = list(
+        to_documents(
+            iterator=iter(
+                load_everything_from_checkpoint_connector(
+                    connector=teams_connector,
+                    start=0.0,
+                    end=time.time(),
+                )
+            )
+        )
+    )
+    actual_teams_threads = [TeamsThread.from_doc(doc) for doc in docs]
+    actual_teams_threads_map = _build_map(threads=actual_teams_threads)
+    expected_teams_threads_map = _build_map(threads=expected_teams_threads)
+
+    # Assert that each thread document matches what we expect.
+    assert actual_teams_threads_map == expected_teams_threads_map
+
+    # Assert that all the `ExternalAccess` instances are well-formed.
+    for thread in actual_teams_threads:
+        _assert_is_valid_external_access(external_access=thread.external_access)
+
+
+def test_slim_docs_retrieval_from_teams_connector(
+    teams_connector: TeamsConnector,
+) -> None:
+    slim_docs = [
+        slim_doc
+        for slim_doc_batch in teams_connector.retrieve_all_slim_documents()
+        for slim_doc in slim_doc_batch
     ]
 
-    actual_docs_map = _build_map(threads=actual_docs)
-    expected_docs_map = _build_map(threads=expected_docs)
-
-    assert actual_docs_map == expected_docs_map
+    for slim_doc in slim_docs:
+        assert (
+            slim_doc.external_access
+        ), f"ExternalAccess should always be available, instead got {slim_doc=}"
+        _assert_is_valid_external_access(external_access=slim_doc.external_access)
