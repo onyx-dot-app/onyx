@@ -30,8 +30,20 @@ def is_kg_processing_requirements_met() -> bool:
         return False
 
     with get_session_with_current_tenant() as db_session:
-        return check_for_documents_needing_kg_processing(
-            db_session, kg_config.KG_COVERAGE_START_DATE, kg_config.KG_MAX_COVERAGE_DAYS
+        has_staging_entities = (
+            db_session.query(KGEntityExtractionStaging).first() is not None
+        )
+        has_staging_relationships = (
+            db_session.query(KGRelationshipExtractionStaging).first() is not None
+        )
+        return (
+            check_for_documents_needing_kg_processing(
+                db_session,
+                kg_config.KG_COVERAGE_START_DATE,
+                kg_config.KG_MAX_COVERAGE_DAYS,
+            )
+            or has_staging_entities
+            or has_staging_relationships
         )
 
 
