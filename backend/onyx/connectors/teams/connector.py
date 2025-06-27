@@ -13,7 +13,6 @@ from office365.runtime.http.request_options import RequestOptions  # type: ignor
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.team import Team  # type: ignore
 
-from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -33,6 +32,7 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
 from onyx.connectors.teams.utils import fetch_expert_infos
+from onyx.connectors.teams.utils import fetch_external_access
 from onyx.connectors.teams.utils import fetch_messages
 from onyx.connectors.teams.utils import fetch_replies
 from onyx.file_processing.html_utils import parse_html_page_basic
@@ -43,7 +43,6 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 _SLIM_DOC_BATCH_SIZE = 5000
-_PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 
 
 class TeamsCheckpoint(ConnectorCheckpoint):
@@ -260,18 +259,8 @@ class TeamsConnector(
                     )
                     continue
 
-                is_public = _is_channel_public(channel=channel)
-                expert_infos = (
-                    set()
-                    if is_public
-                    else fetch_expert_infos(
-                        graph_client=self.graph_client, channel=channel
-                    )
-                )
-                external_user_emails = set(
-                    expert_info.email
-                    for expert_info in expert_infos
-                    if expert_info.email
+                external_access = fetch_external_access(
+                    graph_client=self.graph_client, channel=channel
                 )
 
                 messages = fetch_messages(
@@ -287,11 +276,7 @@ class TeamsConnector(
                     slim_doc_buffer.append(
                         SlimDocument(
                             id=message.id,
-                            external_access=ExternalAccess(
-                                external_user_emails=external_user_emails,
-                                external_user_group_ids=set(),
-                                is_public=is_public,
-                            ),
+                            external_access=external_access,
                         )
                     )
 
@@ -336,9 +321,6 @@ def _convert_thread_to_document(
     if len(thread) == 0:
         return None
 
-    expert_infos = fetch_expert_infos(graph_client=graph_client, channel=channel)
-    emails = set(expert_info.email for expert_info in expert_infos if expert_info.email)
-
     most_recent_message_datetime: datetime | None = None
     top_message = thread[0]
     thread_text = ""
@@ -361,7 +343,10 @@ def _convert_thread_to_document(
         return None
 
     semantic_string = _construct_semantic_identifier(channel, top_message)
-    is_public = _is_channel_public(channel=channel)
+    expert_infos = fetch_expert_infos(graph_client=graph_client, channel=channel)
+    external_access = fetch_external_access(
+        graph_client=graph_client, channel=channel, expert_infos=expert_infos
+    )
 
     return Document(
         id=top_message.id,
@@ -372,11 +357,7 @@ def _convert_thread_to_document(
         doc_updated_at=most_recent_message_datetime,
         primary_owners=expert_infos,
         metadata={},
-        external_access=ExternalAccess(
-            external_user_emails=emails,
-            external_user_group_ids=set(),
-            is_public=is_public,
-        ),
+        external_access=external_access,
     )
 
 
@@ -556,12 +537,6 @@ def _collect_documents_for_channel(
                 failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
                 exception=e,
             )
-
-
-def _is_channel_public(channel: Channel) -> bool:
-    return (
-        channel.membership_type and channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE
-    )
 
 
 if __name__ == "__main__":
