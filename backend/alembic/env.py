@@ -23,6 +23,7 @@ from sqlalchemy.sql.schema import SchemaItem
 from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import (
     MULTI_TENANT,
+    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
     TENANT_ID_PREFIX,
 )
 from onyx.db.models import Base
@@ -268,6 +269,9 @@ async def run_async_migrations() -> None:
         tenant_range_end,
         schemas,
     ) = get_schema_options()
+
+    if not schemas and not MULTI_TENANT:
+        schemas = [POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE]
 
     # without init_engine, subsequent engine calls fail hard intentionally
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
