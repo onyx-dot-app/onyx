@@ -5,12 +5,14 @@ from datetime import timezone
 from http import HTTPStatus
 
 from office365.graph_client import GraphClient  # type: ignore
+from office365.teams.channels.channel import Channel  # type: ignore
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
 
 
-def retry(
+def _retry(
     graph_client: GraphClient,
     request_url: str,
 ) -> dict:
@@ -41,7 +43,7 @@ def retry(
     )
 
 
-def get_next_url(
+def _get_next_url(
     graph_client: GraphClient,
     json_response: dict,
 ) -> str | None:
@@ -76,12 +78,12 @@ def fetch_messages(
     request_url: str | None = initial_request_url
 
     while request_url:
-        json_response = retry(graph_client=graph_client, request_url=request_url)
+        json_response = _retry(graph_client=graph_client, request_url=request_url)
 
         for value in json_response.get("value", []):
             yield Message(**value)
 
-        request_url = get_next_url(
+        request_url = _get_next_url(
             graph_client=graph_client, json_response=json_response
         )
 
@@ -99,11 +101,41 @@ def fetch_replies(
     request_url: str | None = initial_request_url
 
     while request_url:
-        json_response = retry(graph_client=graph_client, request_url=request_url)
+        json_response = _retry(graph_client=graph_client, request_url=request_url)
 
         for value in json_response.get("value", []):
             yield Message(**value)
 
-        request_url = get_next_url(
+        request_url = _get_next_url(
             graph_client=graph_client, json_response=json_response
         )
+
+
+def fetch_expert_infos(
+    graph_client: GraphClient, channel: Channel
+) -> list[BasicExpertInfo]:
+    members = channel.members.get_all(
+        # explicitly needed because of incorrect type definitions provided by the `office365` library
+        page_loaded=lambda _: None
+    ).execute_query_retry()
+
+    expert_infos = []
+    for member in members:
+        user_id = member.properties.get("userId")
+        if not user_id:
+            continue
+
+        json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
+
+        email = json_data.get("userPrincipalName")
+        if not email or not member.display_name:
+            continue
+
+        expert_infos.append(
+            BasicExpertInfo(
+                display_name=member.display_name,
+                email=email,
+            )
+        )
+
+    return expert_infos

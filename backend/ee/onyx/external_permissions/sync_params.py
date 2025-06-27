@@ -10,6 +10,7 @@ from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import JIRA_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
@@ -24,6 +25,7 @@ from ee.onyx.external_permissions.salesforce.postprocessing import (
     censor_salesforce_chunks,
 )
 from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
+from ee.onyx.external_permissions.teams.doc_sync import teams_doc_sync
 from onyx.configs.constants import DocumentSource
 
 if TYPE_CHECKING:
@@ -98,17 +100,15 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             doc_sync_func=jira_doc_sync,
             initial_index_should_sync=True,
         ),
-        group_sync_config=None,
     ),
+    # Groups are not needed for Slack.
+    # All channel access is done at the individual user level.
     DocumentSource.SLACK: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=slack_doc_sync,
             initial_index_should_sync=True,
         ),
-        # groups are not needed for Slack. All channel access is done at the
-        # individual user level
-        group_sync_config=None,
     ),
     DocumentSource.GMAIL: SyncConfig(
         doc_sync_config=DocSyncConfig(
@@ -126,6 +126,15 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=mock_doc_sync,
+            initial_index_should_sync=True,
+        ),
+    ),
+    # Groups are not needed for Teams.
+    # All channel access is done at the individual user level.
+    DocumentSource.TEAMS: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=teams_doc_sync,
             initial_index_should_sync=True,
         ),
     ),

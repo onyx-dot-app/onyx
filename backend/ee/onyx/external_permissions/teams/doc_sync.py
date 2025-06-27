@@ -4,31 +4,32 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFuncti
 from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.teams.connector import TeamsConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-JIRA_DOC_SYNC_TAG = "jira_doc_sync"
+
+TEAMS_DOC_SYNC_LABEL = "teams_doc_sync"
 
 
-def jira_doc_sync(
+def teams_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
-    callback: IndexingHeartbeatInterface | None = None,
+    callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
-    jira_connector = JiraConnector(
+    teams_connector = TeamsConnector(
         **cc_pair.connector.connector_specific_config,
     )
-    jira_connector.load_credentials(cc_pair.credential.credential_json)
+    teams_connector.load_credentials(cc_pair.credential.credential_json)
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,
         fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
         callback=callback,
-        doc_source=DocumentSource.JIRA,
-        slim_connector=jira_connector,
-        label=JIRA_DOC_SYNC_TAG,
+        doc_source=DocumentSource.TEAMS,
+        slim_connector=teams_connector,
+        label=TEAMS_DOC_SYNC_LABEL,
     )

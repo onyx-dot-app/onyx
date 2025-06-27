@@ -13,6 +13,7 @@ from office365.runtime.http.request_options import RequestOptions  # type: ignor
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.team import Team  # type: ignore
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -20,22 +21,29 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.teams.models import Message
+from onyx.connectors.teams.utils import fetch_expert_infos
 from onyx.connectors.teams.utils import fetch_messages
 from onyx.connectors.teams.utils import fetch_replies
 from onyx.file_processing.html_utils import parse_html_page_basic
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
+
+_SLIM_DOC_BATCH_SIZE = 5000
+_PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 
 
 class TeamsCheckpoint(ConnectorCheckpoint):
@@ -44,6 +52,7 @@ class TeamsCheckpoint(ConnectorCheckpoint):
 
 class TeamsConnector(
     CheckpointedConnector[TeamsCheckpoint],
+    SlimConnector,
 ):
     MAX_WORKERS = 10
     AUTHORITY_URL_PREFIX = "https://login.microsoftonline.com/"
@@ -102,7 +111,7 @@ class TeamsConnector(
             # make sure it doesn't take forever, since this is a syncronous call
             found_teams = run_with_timeout(
                 timeout=10,
-                func=_collect_all_team_ids,
+                func=_collect_all_teams,
                 graph_client=self.graph_client,
                 requested=self.requested_team_list,
             )
@@ -169,13 +178,14 @@ class TeamsConnector(
         todos = checkpoint.todo_team_ids
 
         if todos is None:
-            root_todos = _collect_all_team_ids(
+            teams = _collect_all_teams(
                 graph_client=self.graph_client,
                 requested=self.requested_team_list,
             )
+            todo_team_ids = [team.id for team in teams if team.id]
             return TeamsCheckpoint(
-                todo_team_ids=root_todos,
-                has_more=bool(root_todos),
+                todo_team_ids=todo_team_ids,
+                has_more=bool(todo_team_ids),
             )
 
         # `todos.pop()` should always return an element. This is because if
@@ -219,14 +229,75 @@ class TeamsConnector(
             has_more=bool(todos),
         )
 
+    # impls for SlimConnector
 
-def _extract_channel_members(channel: Channel) -> set[str]:
-    members = channel.members.get_all(
-        # explicitly needed because of incorrect type definitions provided by the `office365` library
-        page_loaded=lambda _: None
-    ).execute_query_retry()
+    def retrieve_all_slim_documents(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        start = start or 0
 
-    return {member.display_name for member in members}
+        teams = _collect_all_teams(
+            graph_client=self.graph_client,
+            requested=self.requested_team_list,
+        )
+
+        for team in teams:
+            if not team.id:
+                logger.warn(f"Expected a team with an id, instead got no id: {team=}")
+                continue
+
+            channels = _collect_all_channels_from_team(
+                team=team,
+            )
+
+            for channel in channels:
+                if not channel.id:
+                    logger.warn(
+                        f"Expected a channel with an id, instead got no id: {channel=}"
+                    )
+                    continue
+
+                is_public = _is_channel_public(channel=channel)
+                expert_infos = (
+                    set()
+                    if is_public
+                    else fetch_expert_infos(
+                        graph_client=self.graph_client, channel=channel
+                    )
+                )
+                external_user_emails = set(
+                    expert_info.email
+                    for expert_info in expert_infos
+                    if expert_info.email
+                )
+
+                messages = fetch_messages(
+                    graph_client=self.graph_client,
+                    team_id=team.id,
+                    channel_id=channel.id,
+                    start=start,
+                )
+
+                slim_doc_buffer = []
+
+                for message in messages:
+                    slim_doc_buffer.append(
+                        SlimDocument(
+                            id=message.id,
+                            external_access=ExternalAccess(
+                                external_user_emails=external_user_emails,
+                                external_user_group_ids=set(),
+                                is_public=is_public,
+                            ),
+                        )
+                    )
+
+                    if len(slim_doc_buffer) >= _SLIM_DOC_BATCH_SIZE:
+                        yield slim_doc_buffer
+                        slim_doc_buffer = []
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
@@ -258,15 +329,18 @@ def _construct_semantic_identifier(channel: Channel, top_message: Message) -> st
 
 
 def _convert_thread_to_document(
+    graph_client: GraphClient,
     channel: Channel,
     thread: list[Message],
 ) -> Document | None:
     if len(thread) == 0:
         return None
 
+    expert_infos = fetch_expert_infos(graph_client=graph_client, channel=channel)
+    emails = set(expert_info.email for expert_info in expert_infos if expert_info.email)
+
     most_recent_message_datetime: datetime | None = None
     top_message = thread[0]
-    posters: dict[str, BasicExpertInfo] = {}
     thread_text = ""
 
     sorted_thread = sorted(thread, key=lambda m: m.created_date_time, reverse=True)
@@ -275,58 +349,46 @@ def _convert_thread_to_document(
         most_recent_message_datetime = sorted_thread[0].created_date_time
 
     for message in thread:
-        # add text and a newline
+        # Add text and a newline
         if message.body.content:
-            message_text = parse_html_page_basic(message.body.content)
-            thread_text += message_text
+            thread_text += parse_html_page_basic(message.body.content)
 
-        # if it has a subject, that means its the top level post message, so grab its id, url, and subject
+        # If it has a subject, that means its the top level post message, so grab its id, url, and subject
         if message.subject:
             top_message = message
-
-        if not message.from_:
-            continue
-
-        if message.from_.user.display_name not in posters:
-            posters[message.from_.user.display_name] = BasicExpertInfo(
-                display_name=message.from_.user.display_name
-            )
 
     if not thread_text:
         return None
 
-    # if there are no found post members, grab the members from the parent channel
-    if not posters:
-        channel_members = _extract_channel_members(channel)
-        posters = {
-            display_name: BasicExpertInfo(display_name=display_name)
-            for display_name in channel_members
-        }
-
     semantic_string = _construct_semantic_identifier(channel, top_message)
+    is_public = _is_channel_public(channel=channel)
 
-    doc = Document(
+    return Document(
         id=top_message.id,
         sections=[TextSection(link=top_message.web_url, text=thread_text)],
         source=DocumentSource.TEAMS,
         semantic_identifier=semantic_string,
         title="",  # teams threads don't really have a "title"
         doc_updated_at=most_recent_message_datetime,
-        primary_owners=list(posters.values()),
+        primary_owners=expert_infos,
         metadata={},
+        external_access=ExternalAccess(
+            external_user_emails=emails,
+            external_user_group_ids=set(),
+            is_public=is_public,
+        ),
     )
-    return doc
 
 
 def _update_request_url(request: RequestOptions, next_url: str) -> None:
     request.url = next_url
 
 
-def _collect_all_team_ids(
+def _collect_all_teams(
     graph_client: GraphClient,
     requested: list[str] | None = None,
-) -> list[str]:
-    team_ids: list[str] = []
+) -> list[Team]:
+    teams: list[str] = []
     next_url: str | None = None
 
     filter = None
@@ -349,55 +411,54 @@ def _collect_all_team_ids(
             )
 
         team_collection = query.execute_query()
+        filtered_teams = (
+            team
+            for team in team_collection
+            if _filter_team(team=team, requested=requested)
+        )
+        teams.extend(filtered_teams)
 
-        filtered_team_ids = [
-            team_id
-            for team_id in [
-                _filter_team_id(team=team, requested=requested)
-                for team in team_collection
-            ]
-            if team_id
-        ]
-
-        team_ids.extend(filtered_team_ids)
-
-        if team_collection.has_next:
-            if not isinstance(team_collection._next_request_url, str):
-                raise ValueError(
-                    f"The next request url field should be a string, instead got {type(team_collection._next_request_url)}"
-                )
-            next_url = team_collection._next_request_url
-        else:
+        if not team_collection.has_next:
             break
 
-    return team_ids
+        if not isinstance(team_collection._next_request_url, str):
+            raise ValueError(
+                f"The next request url field should be a string, instead got {type(team_collection._next_request_url)}"
+            )
+
+        next_url = team_collection._next_request_url
+
+    return teams
 
 
-def _filter_team_id(
+def _filter_team(
     team: Team,
     requested: list[str] | None = None,
-) -> str | None:
+) -> bool:
     """
-    Returns the Team ID if:
+    Returns the true if:
         - Team is not expired / deleted
         - Team has a display-name and ID
         - Team display-name is in the requested teams list
 
-    Otherwise, returns `None`.
+    Otherwise, returns false.
     """
 
     if not team.id or not team.display_name:
-        return None
+        return False
 
     if requested and team.display_name not in requested:
-        return None
+        return False
 
     props = team.properties
 
-    if props.get("expirationDateTime") or props.get("deletedDateTime"):
-        return None
+    expiration = props.get("expirationDateTime")
+    deleted = props.get("deletedDateTime")
 
-    return team.id
+    # We just check for the existence of those two fields, not their actual dates.
+    # This is because if these fields do exist, they have to have occurred in the past, thus making them already
+    # expired / deleted.
+    return not expiration and not deleted
 
 
 def _get_team_by_id(
@@ -481,6 +542,7 @@ def _collect_documents_for_channel(
             # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
             # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
             if doc := _convert_thread_to_document(
+                graph_client=graph_client,
                 channel=channel,
                 thread=thread,
             ):
@@ -496,6 +558,12 @@ def _collect_documents_for_channel(
             )
 
 
+def _is_channel_public(channel: Channel) -> bool:
+    return (
+        channel.membership_type and channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE
+    )
+
+
 if __name__ == "__main__":
     from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -505,20 +573,22 @@ if __name__ == "__main__":
 
     teams_env_var = os.environ.get("TEAMS", None)
     teams = teams_env_var.split(",") if teams_env_var else []
-    connector = TeamsConnector(teams=teams)
 
-    connector.load_credentials(
+    teams_connector = TeamsConnector(teams=teams)
+    teams_connector.load_credentials(
         {
             "teams_client_id": app_id,
             "teams_directory_id": dir_id,
             "teams_client_secret": secret,
         }
     )
+    teams_connector.validate_connector_settings()
 
-    connector.validate_connector_settings()
+    for slim_doc in teams_connector.retrieve_all_slim_documents():
+        ...
 
     for doc in load_everything_from_checkpoint_connector(
-        connector=connector,
+        connector=teams_connector,
         start=0.0,
         end=datetime.now(tz=timezone.utc).timestamp(),
     ):

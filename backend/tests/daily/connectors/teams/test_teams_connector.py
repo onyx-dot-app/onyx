@@ -2,11 +2,12 @@ import os
 import time
 
 import pytest
+from pydantic import BaseModel
 
+from onyx.connectors.models import Document
 from onyx.connectors.teams.connector import TeamsConnector
 from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
-from tests.daily.connectors.utils import to_sections
-from tests.daily.connectors.utils import to_text_sections
+from tests.daily.connectors.utils import to_documents
 
 
 @pytest.fixture
@@ -24,62 +25,103 @@ def teams_credentials() -> dict[str, str]:
 
 @pytest.fixture
 def teams_connector(
-    request: pytest.FixtureRequest,
     teams_credentials: dict[str, str],
 ) -> TeamsConnector:
-    teams: list[str] | None = None
-    if hasattr(request, "param"):
-        teams = request.param
-        if teams is None:
-            ...
-        elif isinstance(teams, list):
-            for name in teams:
-                assert isinstance(name, str)
-        else:
-            raise ValueError(
-                f"`request.param` must either be `None` or of type `list[str]`; instead got {type(teams)}"
-            )
-
-    teams_connector = TeamsConnector(teams=teams or [])
+    teams_connector = TeamsConnector(teams=["Onyx-Testing"])
     teams_connector.load_credentials(teams_credentials)
     return teams_connector
 
 
+class TeamsThread(BaseModel):
+    thread: str
+    member_emails: set[str]
+    is_public: bool
+
+
+def _doc_to_teams_thread(doc: Document) -> TeamsThread:
+    assert (
+        doc.external_access
+    ), f"ExternalAccess should always be available, instead got {doc=}"
+
+    return TeamsThread(
+        thread=doc.get_text_content(),
+        member_emails=doc.external_access.external_user_emails,
+        is_public=doc.external_access.is_public,
+    )
+
+
+def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
+    map: dict[str, TeamsThread] = {}
+
+    for thread in threads:
+        assert thread.thread not in map, ""
+        map[thread.thread] = thread
+
+    return map
+
+
 @pytest.mark.parametrize(
-    "teams_connector,expected_messages",
+    "expected_docs",
     [
         [
-            ["Onyx-Testing"],
-            set(
-                [
-                    "This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
-                    "Testing body.",
-                ]
+            # Posted in "Public Channel"
+            TeamsThread(
+                thread="This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
+                member_emails=set(),
+                is_public=True,
             ),
-        ],
-        [
-            ["Onyx"],
-            set(
-                [
-                    "yeah!",
-                    "but not least",
-                    "Hello, world!",
-                    "My favorite color is red.\n\xa0\nPablos favorite color is bluePika's favorite color is greenbut"
-                    " it might also be yellow",
-                ]
+            TeamsThread(
+                thread="Testing body.",
+                member_emails=set(),
+                is_public=True,
+            ),
+            TeamsThread(
+                thread="Hello, world! Nice to meet you all.",
+                member_emails=set(),
+                is_public=True,
+            ),
+            # Posted in "Private Channel (Raunak is excluded)"
+            TeamsThread(
+                thread="This is a test post. Raunak should not be able to see this!",
+                member_emails=set(["test@danswerai.onmicrosoft.com"]),
+                is_public=False,
+            ),
+            # Posted in "Private Channel (Raunak is a member)"
+            TeamsThread(
+                thread="This is a test post in a private channel that Raunak does have access to! Hello, Raunak!"
+                "Hello, world! I am just a member in this chat, but not an owner.",
+                member_emails=set(
+                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
+                ),
+                is_public=False,
+            ),
+            # Posted in "Private Channel (Raunak owns)"
+            TeamsThread(
+                thread="This is a test post in a private channel that Raunak is an owner of! Whoa!"
+                "Hello, world! I am an owner of this chat. The power!",
+                member_emails=set(
+                    ["test@danswerai.onmicrosoft.com", "raunak@onyx.app"]
+                ),
+                is_public=False,
             ),
         ],
     ],
-    indirect=["teams_connector"],
 )
 def test_teams_connector(
     teams_connector: TeamsConnector,
-    expected_messages: set[str],
+    expected_docs: list[TeamsThread],
 ) -> None:
-    docs = load_everything_from_checkpoint_connector(
+    docs_iter = load_everything_from_checkpoint_connector(
         connector=teams_connector,
         start=0.0,
         end=time.time(),
     )
-    actual_messages = set(to_text_sections(to_sections(iter(docs))))
-    assert actual_messages == expected_messages
+
+    actual_docs = [
+        _doc_to_teams_thread(doc=doc) for doc in to_documents(iterator=iter(docs_iter))
+    ]
+
+    actual_docs_map = _build_map(threads=actual_docs)
+    expected_docs_map = _build_map(threads=expected_docs)
+
+    assert actual_docs_map == expected_docs_map
