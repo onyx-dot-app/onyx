@@ -98,5 +98,6 @@ for bootstep in base_bootsteps:
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.docfetching",
+        "onyx.background.celery.tasks.indexing",  # TODO: remove this and move the task to docfetching
     ]
 )

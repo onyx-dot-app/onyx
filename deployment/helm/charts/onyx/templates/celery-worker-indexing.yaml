@@ -48,7 +48,7 @@ spec:
               "--loglevel=INFO",
               "--hostname=indexing@%n",
               "-Q",
-              "connector_indexing",
+              "connector_indexing,document_indexing_pipeline",
             ]
           resources:
             {{- toYaml .Values.celery_worker_indexing.resources | nindent 12 }}

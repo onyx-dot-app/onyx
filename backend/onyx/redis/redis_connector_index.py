@@ -31,6 +31,7 @@ class RedisConnectorIndex:
         PREFIX + "_generator_complete"
     )  # connectorindexing_generator_complete
 
+    GENERATOR_LOCK_PREFIX = "da_lock:indexing:docfetching"
     FILESTORE_LOCK_PREFIX = "da_lock:indexing:filestore"
     DB_LOCK_PREFIX = "da_lock:indexing:db"
     PER_WORKER_LOCK_PREFIX = "da_lock:indexing:per_worker"
@@ -73,6 +74,9 @@ class RedisConnectorIndex:
         )
         self.filestore_lock_key = (
             f"{self.FILESTORE_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
+        )
+        self.generator_lock_key = (
+            f"{self.GENERATOR_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
         self.per_worker_lock_key = (
             f"{self.PER_WORKER_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
@@ -218,6 +222,8 @@ class RedisConnectorIndex:
         self.redis.delete(self.connector_active_key)
         self.redis.delete(self.active_key)
         self.redis.delete(self.filestore_lock_key)
+        self.redis.delete(self.db_lock_key)
+        self.redis.delete(self.generator_lock_key)
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
         self.redis.delete(self.fence_key)

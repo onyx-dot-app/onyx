@@ -474,7 +474,6 @@ class OnyxCeleryTask:
     # New split indexing tasks
     CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
     DOCUMENT_INDEXING_PIPELINE_TASK = "document_indexing_pipeline_task"
-    MONITOR_DOCFETCHING_COMPLETION = "monitor_docfetching_completion"
 
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"

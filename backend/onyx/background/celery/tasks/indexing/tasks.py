@@ -12,6 +12,7 @@ from typing import Any
 from typing import cast
 
 import sentry_sdk
+from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
@@ -39,8 +40,6 @@ from onyx.background.indexing.checkpointing_utils import (
 from onyx.background.indexing.job_client import SimpleJob
 from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.job_client import SimpleJobException
-from onyx.background.indexing.run_indexing import DocExtractionContext
-from onyx.background.indexing.run_indexing import DocIndexingContext
 from onyx.background.indexing.run_indexing import run_indexing_entrypoint
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
@@ -57,6 +56,8 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import DocExtractionContext
+from onyx.connectors.models import DocIndexingContext
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
@@ -720,14 +721,17 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     return tasks_created
 
 
-def connector_indexing_task(
+def docfetching_task(
+    app: Celery,
     index_attempt_id: int,
     cc_pair_id: int,
     search_settings_id: int,
     is_ee: bool,
     tenant_id: str,
 ) -> int | None:
-    """Indexing task. For a cc pair, this task pulls all document IDs from the source
+    """
+    TODO: update docstring to reflect docfetching
+    Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
     from the most recently pulled document ID list
 
@@ -844,7 +848,7 @@ def connector_indexing_task(
     # set thread_local=False since we don't control what thread the indexing/pruning
     # might run our callback with
     lock: RedisLock = r.lock(
-        redis_connector_index.filestore_lock_key,
+        redis_connector_index.generator_lock_key,
         timeout=CELERY_INDEXING_LOCK_TIMEOUT,
         thread_local=False,
     )
@@ -919,6 +923,7 @@ def connector_indexing_task(
 
         # This is where the heavy/real work happens
         run_indexing_entrypoint(
+            app,
             index_attempt_id,
             tenant_id,
             cc_pair_id,
@@ -1016,7 +1021,7 @@ def process_job_result(
 
 
 @shared_task(
-    name=OnyxCeleryTask.CONNECTOR_INDEXING_PROXY_TASK,
+    name=OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
     bind=True,
     acks_late=False,
     track_started=True,
@@ -1066,7 +1071,8 @@ def connector_indexing_proxy_task(
     task_logger.info(f"submitting connector_indexing_task with tenant_id={tenant_id}")
 
     job = client.submit(
-        connector_indexing_task,
+        docfetching_task,
+        self.app,
         index_attempt_id,
         cc_pair_id,
         search_settings_id,
@@ -1351,7 +1357,6 @@ def connector_indexing_proxy_task(
     )
 
     redis_connector_index.set_watchdog(False)
-    return
 
 
 # primary
@@ -1602,6 +1607,8 @@ def document_indexing_pipeline_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)
 
+    # dummy lock to satisfy linter
+    per_batch_lock: RedisLock | None = None
     try:
         # Retrieve documents from storage
         documents = storage.get_batch(batch_id)
@@ -1633,16 +1640,19 @@ def document_indexing_pipeline_task(
                 thread_local=False,
             )
             cross_batch_db_lock: RedisLock = r.lock(
-                redis_connector_index.filestore_lock_key,
+                redis_connector_index.db_lock_key,
                 timeout=CELERY_INDEXING_LOCK_TIMEOUT,
                 thread_local=False,
             )
             # set thread_local=False since we don't control what thread the indexing/pruning
             # might run our callback with
-            per_batch_lock: RedisLock = r.lock(
-                redis_connector_index.lock_key_by_batch(batch_num),
-                timeout=CELERY_INDEXING_LOCK_TIMEOUT,
-                thread_local=False,
+            per_batch_lock = cast(
+                RedisLock,
+                r.lock(
+                    redis_connector_index.lock_key_by_batch(batch_num),
+                    timeout=CELERY_INDEXING_LOCK_TIMEOUT,
+                    thread_local=False,
+                ),
             )
 
             acquired = per_batch_lock.acquire(blocking=False)
@@ -1774,17 +1784,9 @@ def document_indexing_pipeline_task(
             # Use the same Redis lock for consistency
             with cross_batch_state_lock:
                 current_extraction_state = _ensure_extraction_state(storage)
+                check_indexing_completion(index_attempt_id, tenant_id)
 
-                # if all batches are complete, then we can mark the overall process as complete
-                if (
-                    current_extraction_state
-                    and current_extraction_state.doc_extraction_complete_batch_num
-                    == batch_num
-                ):
-                    task_logger.info(
-                        f"All batches for index attempt {index_attempt_id} have been processed."
-                    )
-                    redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
+                # redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
         # Add telemetry for indexing progress
         optional_telemetry(
             record_type=RecordType.INDEXING_PROGRESS,
@@ -1830,27 +1832,20 @@ def document_indexing_pipeline_task(
                 )
 
         raise
+    finally:
+        if per_batch_lock and per_batch_lock.owned():
+            per_batch_lock.release()
 
 
-@shared_task(
-    name=OnyxCeleryTask.MONITOR_DOCFETCHING_COMPLETION,
-    bind=True,
-)
-def monitor_docfetching_completion(
-    self: Task,
+def check_indexing_completion(
     index_attempt_id: int,
     tenant_id: str,
 ) -> None:
-    """Monitor the completion of document processing and finalize the index attempt.
-
-    This task checks if all document batches have been processed and marks
-    the index attempt as succeeded or failed accordingly.
-    """
-    if tenant_id:
-        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
     task_logger.info(
-        f"Monitoring document processing completion: " f"attempt={index_attempt_id}"
+        f"Checking for document processing completion: "
+        f"attempt={index_attempt_id} "
+        f"tenant={tenant_id}"
     )
 
     with get_session_with_current_tenant() as db_session:
@@ -1864,54 +1859,70 @@ def monitor_docfetching_completion(
         # Check if extraction is complete and all batches are processed
         batches_total = extraction_state.doc_extraction_complete_batch_num
         batches_processed = indexing_state.batches_done
-        extraction_completed = batches_processed >= batches_total
+        extraction_completed = batches_total is not None and (
+            batches_processed >= batches_total
+        )
 
         task_logger.info(
             f"Processing status: "
             f"extraction_completed={extraction_completed} "
-            f"batches_processed={batches_processed}/{batches_total}"
+            f"batches_processed={batches_processed}/{batches_total or '?'}"  # probably off by 1
         )
 
-        if extraction_completed and batches_processed >= batches_total:
-            # All processing is complete
-            total_failures = indexing_state.total_failures
+        if not extraction_completed:
+            return
 
-            with get_session_with_current_tenant() as db_session:
-                if total_failures == 0:
-                    mark_attempt_succeeded(index_attempt_id, db_session)
-                    task_logger.info(
-                        f"Index attempt {index_attempt_id} completed successfully"
-                    )
-                else:
-                    mark_attempt_partially_succeeded(index_attempt_id, db_session)
-                    task_logger.info(
-                        f"Index attempt {index_attempt_id} completed with {total_failures} failures"
-                    )
+        task_logger.info(
+            f"All batches for index attempt {index_attempt_id} have been processed."
+        )
 
-            # Clean up all remaining storage
-            storage.cleanup_all_batches()
+        # All processing is complete
+        total_failures = indexing_state.total_failures
 
-        else:
-            # Processing not yet complete, schedule another check
-            if not extraction_completed:
-                # If extraction isn't complete, check again sooner
-                countdown = 30
+        with get_session_with_current_tenant() as db_session:
+            if total_failures == 0:
+                mark_attempt_succeeded(index_attempt_id, db_session)
+                task_logger.info(
+                    f"Index attempt {index_attempt_id} completed successfully"
+                )
             else:
-                # If extraction is complete but processing isn't, check more frequently
-                countdown = 10
+                mark_attempt_partially_succeeded(index_attempt_id, db_session)
+                task_logger.info(
+                    f"Index attempt {index_attempt_id} completed with {total_failures} failures"
+                )
 
-            task_logger.info(
-                f"Processing not yet complete, rescheduling check in {countdown}s"
-            )
+            # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
+            index_attempt = get_index_attempt(db_session, index_attempt_id)
+            if (
+                index_attempt
+                and index_attempt.connector_credential_pair.indexing_trigger is not None
+            ):
+                task_logger.info(
+                    "Clearing indexing trigger after completion: "
+                    f"cc_pair={index_attempt.connector_credential_pair.id} "
+                    f"trigger={index_attempt.connector_credential_pair.indexing_trigger}"
+                )
+                mark_ccpair_with_indexing_trigger(
+                    index_attempt.connector_credential_pair.id, None, db_session
+                )
 
-            self.app.send_task(
-                OnyxCeleryTask.MONITOR_DOCFETCHING_COMPLETION,
-                kwargs={
-                    "index_attempt_id": index_attempt_id,
-                    "tenant_id": tenant_id,
-                },
-                countdown=countdown,
-            )
+        # Clean up all remaining storage
+        storage.cleanup_all_batches()
+
+        # Clean up the fence to allow the next run to start
+        with get_session_with_current_tenant() as db_session:
+            index_attempt = get_index_attempt(db_session, index_attempt_id)
+            if index_attempt and index_attempt.search_settings:
+                redis_connector = RedisConnector(
+                    tenant_id, index_attempt.connector_credential_pair_id
+                )
+                redis_connector_index = redis_connector.new_index(
+                    index_attempt.search_settings.id
+                )
+                redis_connector_index.reset()
+                task_logger.info(
+                    f"Resetting indexing fence for attempt {index_attempt_id}"
+                )
 
     except Exception as e:
         task_logger.exception(

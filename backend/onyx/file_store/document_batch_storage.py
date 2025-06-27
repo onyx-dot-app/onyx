@@ -10,9 +10,9 @@ from typing import TypeAlias
 
 from sqlalchemy.orm import Session
 
-from onyx.background.indexing.run_indexing import DocExtractionContext
-from onyx.background.indexing.run_indexing import DocIndexingContext
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.models import DocExtractionContext
+from onyx.connectors.models import DocIndexingContext
 from onyx.connectors.models import Document
 from onyx.file_store.file_store import FileStore
 from onyx.file_store.file_store import get_default_file_store
