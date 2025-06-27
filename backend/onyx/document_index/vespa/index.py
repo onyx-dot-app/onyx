@@ -571,9 +571,6 @@ class VespaIndex(DocumentIndex):
         def _kg_update_chunk(
             update: KGVespaChunkUpdateRequest, http_client: httpx.Client
         ) -> httpx.Response:
-            # logger.debug(
-            #     f"Updating KG with request to {update.url} with body {update.update_request}"
-            # )
             return http_client.put(
                 update.url,
                 headers={"Content-Type": "application/json"},
@@ -598,7 +595,10 @@ class VespaIndex(DocumentIndex):
                     try:
                         res.raise_for_status()
                     except requests.HTTPError as e:
-                        failure_msg = f"Failed to update document: {future_to_document_id[future]}"
+                        failure_msg = (
+                            f"Failed to update document {future_to_document_id[future]}\n"
+                            f"Response: {res.text}"
+                        )
                         raise requests.HTTPError(failure_msg) from e
 
     def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
