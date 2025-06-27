@@ -77,3 +77,8 @@ DANSWER_BOT_FEEDBACK_REMINDER = int(
 DANSWER_BOT_REPHRASE_MESSAGE = (
     os.environ.get("DANSWER_BOT_REPHRASE_MESSAGE", "").lower() == "true"
 )
+
+# JIRA Configuration
+JIRA_SERVER_URL = os.getenv("JIRA_SERVER_URL", "")
+JIRA_EMAIL = os.getenv("JIRA_EMAIL", "")
+JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN", "")

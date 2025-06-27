@@ -111,6 +111,15 @@ export const SlackBotCreationForm = ({
             response_type: existingSlackBotConfig?.response_type || "citations",
             prioritized_sources:
               existingSlackBotConfig?.channel_config?.prioritized_sources || [],
+            jira_config: existingSlackBotConfig?.channel_config
+              ?.jira_config || {
+              enable_jira_integration: false,
+              project_key: "",
+              issue_type: "",
+              component: "",
+            },
+            jira_title_filter:
+              existingSlackBotConfig?.channel_config?.jira_title_filter || [],
           }}
           validationSchema={Yup.object().shape({
             channel_names: Yup.array().of(Yup.string()),
@@ -128,6 +137,51 @@ export const SlackBotCreationForm = ({
             document_sets: Yup.array().of(Yup.number()),
             persona_id: Yup.number().nullable(),
             prioritized_sources: Yup.array().of(Yup.string()),
+            jira_config: Yup.object().shape({
+              enable_jira_integration: Yup.boolean().required(),
+              project_key: Yup.string().when("enable_jira_integration", {
+                is: true,
+                then: (schema) =>
+                  schema.required(
+                    "Project key is required when JIRA integration is enabled"
+                  ),
+                otherwise: (schema) => schema.notRequired(),
+              }),
+              issue_type: Yup.string().when("enable_jira_integration", {
+                is: true,
+                then: (schema) =>
+                  schema.required(
+                    "Issue type is required when JIRA integration is enabled"
+                  ),
+                otherwise: (schema) => schema.notRequired(),
+              }),
+              component: Yup.string().notRequired(),
+            }),
+            jira_title_filter: Yup.array()
+              .of(Yup.string().required("Title filter cannot be empty"))
+              .when(["jira_config.enable_jira_integration"], {
+                is: (enableJira: boolean) => enableJira,
+                then: (schema) =>
+                  schema
+                    .min(
+                      1,
+                      "At least one title filter is required when JIRA integration is enabled"
+                    )
+                    .test(
+                      "non-empty-strings",
+                      "Title filters cannot be empty",
+                      (value) => {
+                        if (!value || !Array.isArray(value)) return false;
+                        return value.every(
+                          (title) =>
+                            title &&
+                            typeof title === "string" &&
+                            title.trim().length > 0
+                        );
+                      }
+                    ),
+                otherwise: (schema) => schema.notRequired(),
+              }),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -148,6 +202,14 @@ export const SlackBotCreationForm = ({
               ),
               usePersona: usingPersonas,
               opsgenie_schedule: values.opsgenie_schedule || undefined,
+              jira_config: {
+                enable_jira_integration:
+                  values.jira_config.enable_jira_integration ?? false,
+                project_key: values.jira_config.project_key ?? "",
+                issue_type: values.jira_config.issue_type ?? "",
+                component: values.jira_config.component?.trim() || undefined,
+              },
+              jira_title_filter: values.jira_title_filter ?? [],
             };
             if (!cleanedValues.still_need_help_enabled) {
               cleanedValues.follow_up_tags = undefined;
@@ -413,6 +475,56 @@ export const SlackBotCreationForm = ({
                     </TabPanel>
                   </TabPanels>
                 </TabGroup>
+
+                <Divider />
+
+                <SectionHeader>JIRA Integration</SectionHeader>
+
+                <BooleanFormField
+                  name="jira_config.enable_jira_integration"
+                  label="Enable JIRA Integration"
+                  subtext="If enabled, creates JIRA tickets for messages from users with specific titles"
+                />
+
+                {values.jira_config.enable_jira_integration && (
+                  <>
+                    <TextArrayField
+                      name="jira_title_filter"
+                      label="User Titles to Create JIRA Tickets For"
+                      values={values}
+                      subtext={
+                        <div>
+                          List of user titles that should trigger JIRA ticket
+                          creation. For example, &apos;Senior Software
+                          Engineer&apos;, &apos;Software Engineer II&apos;, etc.
+                          <br />
+                          <br />
+                          When a user with any of these titles sends a message,
+                          a JIRA ticket will be created with the message content
+                          and a link to the Slack message.
+                        </div>
+                      }
+                    />
+
+                    <TextFormField
+                      name="jira_config.project_key"
+                      label="JIRA Project Key"
+                      subtext="The key of the JIRA project where tickets will be created"
+                    />
+
+                    <TextFormField
+                      name="jira_config.issue_type"
+                      label="JIRA Issue Type"
+                      subtext="The type of issue to create (e.g. Bug, Task, Story)"
+                    />
+
+                    <TextFormField
+                      name="jira_config.component"
+                      label="JIRA Component"
+                      subtext="The component to assign the issue to"
+                    />
+                  </>
+                )}
 
                 <Divider />
 

@@ -35,10 +35,12 @@ from danswer.danswerbot.slack.blocks import get_feedback_reminder_blocks
 from danswer.danswerbot.slack.blocks import get_restate_blocks
 from danswer.danswerbot.slack.constants import SLACK_CHANNEL_ID
 from danswer.danswerbot.slack.models import SlackMessageInfo
+from danswer.danswerbot.slack.tools.jira_tools import create_jira_ticket
 from danswer.danswerbot.slack.tools.opsgenie import get_dri_on_call
 from danswer.danswerbot.slack.utils import ChannelIdAdapter
 from danswer.danswerbot.slack.utils import fetch_userids_from_emails
 from danswer.danswerbot.slack.utils import fetch_userids_from_groups
+from danswer.danswerbot.slack.utils import get_slack_message_link
 from danswer.danswerbot.slack.utils import respond_in_thread
 from danswer.danswerbot.slack.utils import slack_usage_report
 from danswer.danswerbot.slack.utils import SlackRateLimiter
@@ -226,6 +228,55 @@ def handle_message(
     is_bot_msg = message_info.is_bot_msg
     is_bot_dm = message_info.is_bot_dm
     persona_name = None
+
+    # Check if channel config has JIRA integration enabled and title filter
+    if channel_config and channel_config.channel_config:
+        channel_conf = channel_config.channel_config
+        jira_config = channel_conf.get("jira_config", {})
+        jira_enabled = jira_config.get("enable_jira_integration", False)
+        jira_title_filter = channel_conf.get("jira_title_filter", [])
+
+        if jira_enabled and jira_title_filter and sender_id:
+            # Get user info to check title
+            try:
+                user_info = client.users_info(user=sender_id)
+                user_title = (
+                    user_info["user"].get("profile", {}).get("title", "").lower()
+                )
+
+                if user_title in [title.lower() for title in jira_title_filter]:
+                    # Create JIRA ticket
+                    slack_message_link = get_slack_message_link(
+                        channel=channel,
+                        message_ts=message_ts_to_respond_to,
+                        client=client,
+                    )
+
+                    # Get JIRA configuration from channel config
+                    project_key = jira_config.get("project_key")
+                    issue_type = jira_config.get("issue_type", "Task")
+                    component = jira_config.get("component")
+
+                    jira_ticket_url = create_jira_ticket(
+                        title=f"Slack Query from {user_info['user']['real_name']}",
+                        description=f"Original message: {messages[-1].message}",
+                        slack_message_link=slack_message_link,
+                        project_key=project_key,
+                        issue_type=issue_type,
+                        component=component,
+                    )
+
+                    if jira_ticket_url:
+                        logger.info(f"Created JIRA ticket: {jira_ticket_url}")
+                        # Send acknowledgement with JIRA ticket link
+                        respond_in_thread(
+                            client=client,
+                            channel=channel,
+                            text=f"Tracking Jira ticket: {jira_ticket_url}",
+                            thread_ts=message_ts_to_respond_to,
+                        )
+            except Exception as e:
+                logger.error(f"Failed to process JIRA integration: {str(e)}")
 
     if channel_name is None:
         with Session(get_sqlalchemy_engine()) as db_session:

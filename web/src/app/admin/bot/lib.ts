@@ -18,6 +18,13 @@ interface SlackBotConfigCreationRequest {
   follow_up_tags?: string[];
   prioritized_sources?: string[];
   opsgenie_schedule?: string;
+  jira_config?: {
+    enable_jira_integration: boolean;
+    project_key: string;
+    issue_type: string;
+    component?: string;
+  };
+  jira_title_filter?: string[];
   usePersona: boolean;
   response_type: SlackBotResponseType;
 }
@@ -48,6 +55,8 @@ const buildRequestBodyFromCreationRequest = (
     follow_up_tags: creationRequest.follow_up_tags?.filter((tag) => tag !== ""),
     prioritized_sources: creationRequest.prioritized_sources,
     opsgenie_schedule: creationRequest.opsgenie_schedule,
+    jira_config: creationRequest.jira_config,
+    jira_title_filter: creationRequest.jira_title_filter,
     ...(creationRequest.usePersona
       ? { persona_id: creationRequest.persona_id }
       : { document_sets: creationRequest.document_sets }),

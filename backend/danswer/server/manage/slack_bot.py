@@ -45,6 +45,8 @@ def _form_channel_config(
     follow_up_tags = slack_bot_config_creation_request.follow_up_tags
     prioritized_sources = slack_bot_config_creation_request.prioritized_sources
     opsgenie_schedule = slack_bot_config_creation_request.opsgenie_schedule
+    jira_config = slack_bot_config_creation_request.jira_config
+    jira_title_filter = slack_bot_config_creation_request.jira_title_filter
 
     if not raw_channel_names:
         raise HTTPException(
@@ -89,6 +91,10 @@ def _form_channel_config(
         channel_config["prioritized_sources"] = prioritized_sources
     if opsgenie_schedule:
         channel_config["opsgenie_schedule"] = opsgenie_schedule
+    if jira_config:
+        channel_config["jira_config"] = jira_config
+    if jira_title_filter:
+        channel_config["jira_title_filter"] = jira_title_filter
 
     channel_config[
         "respond_to_bots"

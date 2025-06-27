@@ -111,6 +111,8 @@ class SlackBotConfigCreationRequest(BaseModel):
     # List of source types to prioritize in search results
     prioritized_sources: list[str] | None = None
     opsgenie_schedule: str | None = None
+    jira_config: dict[str, Any] | None = None
+    jira_title_filter: list[str] | None = None
     response_type: SlackBotResponseType
 
     @validator("answer_filters", pre=True)

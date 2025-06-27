@@ -1087,6 +1087,10 @@ class ChannelConfig(TypedDict):
     prioritized_sources: NotRequired[list[str]]
     # OpsGenie schedule name for DRI on-call
     opsgenie_schedule: NotRequired[str]
+    # JIRA title filter for creating tickets
+    jira_title_filter: NotRequired[list[str]]
+    # JIRA integration settings
+    jira_config: NotRequired[dict[str, Any]]  # Contains all JIRA related settings
 
 
 class SlackBotResponseType(str, PyEnum):

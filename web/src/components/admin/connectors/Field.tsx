@@ -302,6 +302,12 @@ export function TextArrayField<T extends Yup.AnyObject>({
             >
               Add New
             </Button>
+
+            <ErrorMessage
+              name={name}
+              component="div"
+              className="text-error text-sm mt-1"
+            />
           </div>
         )}
       />

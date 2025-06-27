@@ -545,6 +545,13 @@ export interface ChannelConfig {
   follow_up_tags?: string[];
   prioritized_sources?: string[];
   opsgenie_schedule?: string;
+  jira_title_filter?: string[];
+  jira_config?: {
+    enable_jira_integration?: boolean;
+    project_key?: string;
+    issue_type?: string;
+    component?: string;
+  };
 }
 
 export type SlackBotResponseType = "quotes" | "citations";

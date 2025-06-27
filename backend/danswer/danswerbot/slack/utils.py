@@ -539,3 +539,27 @@ def format_messages_for_summary(
         formatted_msg = f"[{timestamp}] {user_name}: {text}"
         formatted_messages.append(formatted_msg)
     return "\n\n".join(formatted_messages)
+
+
+def get_slack_message_link(channel: str, message_ts: str, client: WebClient) -> str:
+    """
+    Get a direct link to a Slack message
+
+    Args:
+        channel: Channel ID where the message is located
+        message_ts: Timestamp of the message
+        client: Slack WebClient instance
+
+    Returns:
+        str: URL to the Slack message
+    """
+    try:
+        response = client.chat_getPermalink(channel=channel, message_ts=message_ts)
+        if response["ok"]:
+            return response["permalink"]
+        else:
+            logger.error(f"Failed to get permalink: {response.get('error')}")
+            return ""
+    except Exception as e:
+        logger.error(f"Failed to get Slack message link: {str(e)}")
+        return ""
