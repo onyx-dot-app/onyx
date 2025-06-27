@@ -74,16 +74,17 @@ def test_gdrive_perm_sync_with_real_data(
         doc_access_generator = gdrive_doc_sync(mock_cc_pair, lambda: [], mock_heartbeat)
         doc_access_list = list(doc_access_generator)
 
+    # Verify we got some results
+    assert len(doc_access_list) > 0
+    print(f"Found {len(doc_access_list)} documents with permissions")
+
     # create new connector
     with patch(
         "ee.onyx.external_permissions.google_drive.group_sync.GoogleDriveConnector",
         return_value=_build_connector(google_drive_service_acct_connector_factory),
     ):
-        external_user_groups = gdrive_group_sync("test_tenant", mock_cc_pair)
-
-    # Verify we got some results
-    assert len(doc_access_list) > 0
-    print(f"Found {len(doc_access_list)} documents with permissions")
+        external_user_group_generator = gdrive_group_sync("test_tenant", mock_cc_pair)
+        external_user_groups = list(external_user_group_generator)
 
     # map group ids to emails
     group_id_to_email_mapping: dict[str, set[str]] = defaultdict(set)
