@@ -523,7 +523,7 @@ export default function AddConnector({
                   <>
                     <ModifyCredential
                       showIfEmpty
-                      source={connector}
+                      accessType={formikProps.values.access_type}
                       defaultedCredential={currentCredential!}
                       credentials={credentials}
                       editableCredentials={editableCredentials}
@@ -614,6 +614,7 @@ export default function AddConnector({
                                 close
                                 refresh={refresh}
                                 sourceType={connector}
+                                accessType={formikProps.values.access_type}
                                 setPopup={setPopup}
                                 onSwitch={onSwap}
                                 onClose={() =>

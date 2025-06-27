@@ -237,4 +237,6 @@ def validate_ccpair_for_user(
             return False
 
     runnable_connector.validate_connector_settings()
+    if access_type == AccessType.SYNC:
+        runnable_connector.validate_perm_sync()
     return True
