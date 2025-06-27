@@ -26,6 +26,7 @@ class CustomConfigKey(BaseModel):
     is_required: bool = True
     is_secret: bool = False
     key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
+    default_value: str | None = None
 
 
 class WellKnownLLMProviderDescriptor(BaseModel):
@@ -253,6 +254,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
+                    default_value="us-east1",
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
