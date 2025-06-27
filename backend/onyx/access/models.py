@@ -41,6 +41,14 @@ class ExternalAccess:
         return len(self.external_user_emails) + len(self.external_user_group_ids)
 
     @classmethod
+    def public(cls) -> "ExternalAccess":
+        return cls(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        )
+
+    @classmethod
     def empty(cls) -> "ExternalAccess":
         """
         A helper function that returns an *empty* set of external user-emails and group-ids, and sets `is_public` to `False`.
