@@ -6,10 +6,14 @@ from http import HTTPStatus
 
 from office365.graph_client import GraphClient  # type: ignore
 from office365.teams.channels.channel import Channel  # type: ignore
+from office365.teams.channels.channel import ConversationMember  # type: ignore
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def _retry(
@@ -111,6 +115,28 @@ def fetch_replies(
         )
 
 
+def _get_or_fetch_email(
+    graph_client: GraphClient,
+    member: ConversationMember,
+) -> str | None:
+    if email := member.properties.get("email"):
+        return email
+
+    user_id = member.properties.get("userId")
+    if not user_id:
+        logger.warn(f"No user-id found for this member; {member=}")
+        return None
+
+    json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
+    email = json_data.get("userPrincipalName")
+
+    if not isinstance(email, str):
+        logger.warn(f"Expected email to be of type str, instead got {email=}")
+        return None
+
+    return email
+
+
 def fetch_expert_infos(
     graph_client: GraphClient, channel: Channel
 ) -> list[BasicExpertInfo]:
@@ -121,14 +147,13 @@ def fetch_expert_infos(
 
     expert_infos = []
     for member in members:
-        user_id = member.properties.get("userId")
-        if not user_id:
+        if not member.display_name:
+            logger.warn(f"Failed to grab the display-name of {member=}; skipping")
             continue
 
-        json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
-
-        email = json_data.get("userPrincipalName")
-        if not email or not member.display_name:
+        email = _get_or_fetch_email(graph_client=graph_client, member=member)
+        if not email:
+            logger.warn(f"Failed to grab the email of {member=}; skipping")
             continue
 
         expert_infos.append(

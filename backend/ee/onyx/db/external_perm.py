@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
@@ -62,20 +63,41 @@ def delete_public_external_group_for_cc_pair__no_commit(
     )
 
 
-def replace_user__ext_group_for_cc_pair(
+def mark_old_external_groups_as_stale(
     db_session: Session,
     cc_pair_id: int,
-    group_defs: list[ExternalUserGroup],
+) -> None:
+    db_session.execute(
+        update(User__ExternalUserGroupId)
+        .where(User__ExternalUserGroupId.cc_pair_id == cc_pair_id)
+        .values(stale=True)
+    )
+    db_session.execute(
+        update(PublicExternalUserGroup)
+        .where(PublicExternalUserGroup.cc_pair_id == cc_pair_id)
+        .values(stale=True)
+    )
+
+
+def upsert_external_groups(
+    db_session: Session,
+    cc_pair_id: int,
+    external_groups: list[ExternalUserGroup],
     source: DocumentSource,
 ) -> None:
     """
-    This function clears all existing external user group relations for a given cc_pair_id
-    and replaces them with the new group definitions and commits the changes.
+    Performs a true upsert operation for external user groups:
+    - For existing groups (same user_id, external_user_group_id, cc_pair_id), updates the stale flag to False
+    - For new groups, inserts them with stale=False
+    - For public groups, uses upsert logic as well
     """
+    # If there are no groups to add, return early
+    if not external_groups:
+        return
 
     # collect all emails from all groups to batch add all users at once for efficiency
     all_group_member_emails = set()
-    for external_group in group_defs:
+    for external_group in external_groups:
         for user_email in external_group.user_emails:
             all_group_member_emails.add(user_email)
 
@@ -86,26 +108,17 @@ def replace_user__ext_group_for_cc_pair(
         emails=list(all_group_member_emails),
     )
 
-    delete_user__ext_group_for_cc_pair__no_commit(
-        db_session=db_session,
-        cc_pair_id=cc_pair_id,
-    )
-    delete_public_external_group_for_cc_pair__no_commit(
-        db_session=db_session,
-        cc_pair_id=cc_pair_id,
-    )
-
     # map emails to ids
-    email_id_map = {user.email: user.id for user in all_group_members}
+    email_id_map = {user.email.lower(): user.id for user in all_group_members}
 
-    # use these ids to create new external user group relations relating group_id to user_ids
-    new_external_permissions: list[User__ExternalUserGroupId] = []
-    new_public_external_groups: list[PublicExternalUserGroup] = []
-    for external_group in group_defs:
+    # Process each external group
+    for external_group in external_groups:
         external_group_id = build_ext_group_name_for_onyx(
             ext_group_name=external_group.id,
             source=source,
         )
+
+        # Handle user-group mappings
         for user_email in external_group.user_emails:
             user_id = email_id_map.get(user_email.lower())
             if user_id is None:
@@ -114,24 +127,71 @@ def replace_user__ext_group_for_cc_pair(
                     f" with email {user_email} not found"
                 )
                 continue
-            new_external_permissions.append(
-                User__ExternalUserGroupId(
+
+            # Check if the user-group mapping already exists
+            existing_user_group = db_session.scalar(
+                select(User__ExternalUserGroupId).where(
+                    User__ExternalUserGroupId.user_id == user_id,
+                    User__ExternalUserGroupId.external_user_group_id
+                    == external_group_id,
+                    User__ExternalUserGroupId.cc_pair_id == cc_pair_id,
+                )
+            )
+
+            if existing_user_group:
+                # Update existing record
+                existing_user_group.stale = False
+            else:
+                # Insert new record
+                new_user_group = User__ExternalUserGroupId(
                     user_id=user_id,
                     external_user_group_id=external_group_id,
                     cc_pair_id=cc_pair_id,
+                    stale=False,
+                )
+                db_session.add(new_user_group)
+
+        # Handle public group if needed
+        if external_group.gives_anyone_access:
+            # Check if the public group already exists
+            existing_public_group = db_session.scalar(
+                select(PublicExternalUserGroup).where(
+                    PublicExternalUserGroup.external_user_group_id == external_group_id,
+                    PublicExternalUserGroup.cc_pair_id == cc_pair_id,
                 )
             )
 
-        if external_group.gives_anyone_access:
-            new_public_external_groups.append(
-                PublicExternalUserGroup(
+            if existing_public_group:
+                # Update existing record
+                existing_public_group.stale = False
+            else:
+                # Insert new record
+                new_public_group = PublicExternalUserGroup(
                     external_user_group_id=external_group_id,
                     cc_pair_id=cc_pair_id,
+                    stale=False,
                 )
-            )
+                db_session.add(new_public_group)
 
-    db_session.add_all(new_external_permissions)
-    db_session.add_all(new_public_external_groups)
+    db_session.commit()
+
+
+def remove_stale_external_groups(
+    db_session: Session,
+    cc_pair_id: int,
+) -> None:
+    db_session.execute(
+        delete(User__ExternalUserGroupId).where(
+            User__ExternalUserGroupId.cc_pair_id == cc_pair_id,
+            User__ExternalUserGroupId.stale.is_(True),
+        )
+    )
+    db_session.execute(
+        delete(PublicExternalUserGroup).where(
+            PublicExternalUserGroup.cc_pair_id == cc_pair_id,
+            PublicExternalUserGroup.stale.is_(True),
+        )
+    )
     db_session.commit()
 
 

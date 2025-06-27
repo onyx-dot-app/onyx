@@ -39,10 +39,10 @@ DocSyncFuncType = Callable[
 
 GroupSyncFuncType = Callable[
     [
-        str,
-        "ConnectorCredentialPair",
+        str,  # tenant_id
+        "ConnectorCredentialPair",  # cc_pair
     ],
-    list["ExternalUserGroup"],
+    Generator["ExternalUserGroup", None, None],
 ]
 
 # list of chunks to be censored and the user email. returns censored chunks

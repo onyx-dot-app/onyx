@@ -51,7 +51,7 @@ def generic_doc_sync(
         for doc in doc_batch:
             if not doc.external_access:
                 raise RuntimeError(
-                    f"No external access found for document ID: {doc.id}"
+                    f"No external access found for document ID; {cc_pair.id=} {doc_source=} {doc.id=}"
                 )
 
             newly_fetched_doc_ids.add(doc.id)
@@ -61,7 +61,7 @@ def generic_doc_sync(
                 external_access=doc.external_access,
             )
 
-    logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id}")
+    logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id=}")
     existing_doc_ids = set(fetch_all_existing_docs_fn())
 
     missing_doc_ids = existing_doc_ids - newly_fetched_doc_ids

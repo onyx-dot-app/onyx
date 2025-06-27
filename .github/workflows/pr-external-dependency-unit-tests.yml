@@ -1,4 +1,4 @@
-name: File Store Tests
+name: External Dependency Unit Tests
 
 on:
   merge_group:
@@ -14,9 +14,30 @@ env:
   S3_ENDPOINT_URL: "http://localhost:9004"
 
 jobs:
-  file-store-tests:
+  discover-test-dirs:
+    runs-on: ubuntu-latest
+    outputs:
+      test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Discover test directories
+        id: set-matrix
+        run: |
+          # Find all subdirectories in backend/tests/external_dependency_unit
+          dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
+          echo "test-dirs=$dirs" >> $GITHUB_OUTPUT
+
+  external-dependency-unit-tests:
+    needs: discover-test-dirs
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
 
     env:
       PYTHONPATH: ./backend
@@ -42,17 +63,17 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Set up MinIO and Postgres
+      - name: Set up Standard Dependencies
         run: |
           cd deployment/docker_compose
-          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index
 
       - name: Run migrations
         run: |
           cd backend
           alembic upgrade head
 
-      - name: Run Tests
+      - name: Run Tests for ${{ matrix.test-dir }}
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           py.test \
@@ -62,4 +83,4 @@ jobs:
             -o junit_family=xunit2 \
             -xv \
             --ff \
-            backend/tests/daily/file_store
+            backend/tests/external_dependency_unit/${{ matrix.test-dir }}
