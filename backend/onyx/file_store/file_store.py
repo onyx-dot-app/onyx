@@ -22,7 +22,7 @@ from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import get_session_with_current_tenant_if_none
+from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.file_record import delete_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id_optional
