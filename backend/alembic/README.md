@@ -30,9 +30,13 @@ For multi-tenant deployments, you can use additional options:
 alembic -x upgrade_all_tenants=true upgrade head
 ```
 
-**Upgrade a specific tenant schema:**
+**Upgrade specific schemas:**
 ```bash
-alembic -x schema=tenant_12345678-1234-1234-1234-123456789012 upgrade head
+# Single schema
+alembic -x schemas=tenant_12345678-1234-1234-1234-123456789012 upgrade head
+
+# Multiple schemas (comma-separated)
+alembic -x schemas=tenant_12345678-1234-1234-1234-123456789012,public,another_tenant upgrade head
 ```
 
 **Upgrade tenants within an alphabetical range:**

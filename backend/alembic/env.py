@@ -168,34 +168,32 @@ def get_schema_options() -> (
             )
 
     # Specific schema names filtering (replaces both schema_name and the old tenant_ids approach)
-    specific_schema_names = None
-    if "specific_schema_names" in x_args:
-        schema_names_str = x_args["specific_schema_names"].strip()
+    schemas = None
+    if "schemas" in x_args:
+        schema_names_str = x_args["schemas"].strip()
         if schema_names_str:
             # Split by comma and strip whitespace
-            specific_schema_names = [
+            schemas = [
                 name.strip() for name in schema_names_str.split(",") if name.strip()
             ]
-            if specific_schema_names:
-                logger.info(f"Specific schema names specified: {specific_schema_names}")
+            if schemas:
+                logger.info(f"Specific schema names specified: {schemas}")
 
     # Validate that only one method is used at a time
     range_filtering = tenant_range_start is not None or tenant_range_end is not None
-    specific_filtering = (
-        specific_schema_names is not None and len(specific_schema_names) > 0
-    )
+    specific_filtering = schemas is not None and len(schemas) > 0
 
     if range_filtering and specific_filtering:
         raise ValueError(
             "Cannot use both tenant range filtering (tenant_range_start/tenant_range_end) "
-            "and specific schema filtering (specific_schema_names) at the same time. "
+            "and specific schema filtering (schemas) at the same time. "
             "Please use only one filtering method."
         )
 
     if upgrade_all_tenants and specific_filtering:
         raise ValueError(
-            "Cannot use both upgrade_all_tenants=true and specific_schema_names at the same time. "
-            "Use either upgrade_all_tenants=true for all tenants, or specific_schema_names for specific schemas."
+            "Cannot use both upgrade_all_tenants=true and schemas at the same time. "
+            "Use either upgrade_all_tenants=true for all tenants, or schemas for specific schemas."
         )
 
     # If any filtering parameters are specified, we're not doing the default single schema migration
@@ -206,7 +204,7 @@ def get_schema_options() -> (
     if MULTI_TENANT and not upgrade_all_tenants and not specific_filtering:
         raise ValueError(
             "In multi-tenant mode, you must specify either upgrade_all_tenants=true "
-            "or provide specific_schema_names. Cannot run default migration."
+            "or provide schemas. Cannot run default migration."
         )
 
     return (
@@ -215,7 +213,7 @@ def get_schema_options() -> (
         continue_on_error,
         tenant_range_start,
         tenant_range_end,
-        specific_schema_names,
+        schemas,
     )
 
 
@@ -268,7 +266,7 @@ async def run_async_migrations() -> None:
         continue_on_error,
         tenant_range_start,
         tenant_range_end,
-        specific_schema_names,
+        schemas,
     ) = get_schema_options()
 
     # without init_engine, subsequent engine calls fail hard intentionally
@@ -287,13 +285,13 @@ async def run_async_migrations() -> None:
         ) -> None:
             provide_iam_token_for_alembic(dialect, conn_rec, cargs, cparams)
 
-    if specific_schema_names:
+    if schemas:
         # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {specific_schema_names}")
+        logger.info(f"Migrating specific schema names: {schemas}")
 
         i_schema = 0
-        num_schemas = len(specific_schema_names)
-        for schema in specific_schema_names:
+        num_schemas = len(schemas)
+        for schema in schemas:
             i_schema += 1
             logger.info(
                 f"Migrating schema: index={i_schema} num_schemas={num_schemas} schema={schema}"
@@ -352,11 +350,11 @@ async def run_async_migrations() -> None:
 
     else:
         # This should not happen in the new design since we require either
-        # upgrade_all_tenants=true or specific_schema_names in multi-tenant mode
-        # and for non-multi-tenant mode, we should use specific_schema_names with the default schema
+        # upgrade_all_tenants=true or schemas in multi-tenant mode
+        # and for non-multi-tenant mode, we should use schemas with the default schema
         raise ValueError(
             "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
-            "or specific_schema_names for specific schemas."
+            "or schemas for specific schemas."
         )
 
     await engine.dispose()
@@ -384,15 +382,15 @@ def run_migrations_offline() -> None:
         continue_on_error,
         tenant_range_start,
         tenant_range_end,
-        specific_schema_names,
+        schemas,
     ) = get_schema_options()
     url = build_connection_string()
 
-    if specific_schema_names:
+    if schemas:
         # Use specific schema names directly without fetching all tenants
-        logger.info(f"Migrating specific schema names: {specific_schema_names}")
+        logger.info(f"Migrating specific schema names: {schemas}")
 
-        for schema in specific_schema_names:
+        for schema in schemas:
             logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
@@ -453,7 +451,7 @@ def run_migrations_offline() -> None:
         # This should not happen in the new design
         raise ValueError(
             "No migration target specified. Use either upgrade_all_tenants=true for all tenants "
-            "or specific_schema_names for specific schemas."
+            "or schemas for specific schemas."
         )
 
 
