@@ -346,6 +346,7 @@ export function LLMProviderUpdateForm({
                         : `[Optional] ${customConfigKey.display_name}`
                     }
                     subtext={subtext ?? undefined}
+                    placeholder={customConfigKey.default_value || undefined}
                   />
                 </div>
               );

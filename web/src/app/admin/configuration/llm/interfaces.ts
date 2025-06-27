@@ -5,6 +5,7 @@ export interface CustomConfigKey {
   is_required: boolean;
   is_secret: boolean;
   key_type: CustomConfigKeyType;
+  default_value?: string;
 }
 
 export type CustomConfigKeyType = "text_input" | "file_input";
