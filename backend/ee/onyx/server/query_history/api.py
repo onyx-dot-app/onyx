@@ -49,6 +49,7 @@ from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
 from onyx.utils.threadpool_concurrency import parallel_yield
+from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
 
@@ -334,6 +335,7 @@ def start_query_history_export(
             "start": start,
             "end": end,
             "start_time": start_time,
+            "tenant_id": get_current_tenant_id(),
         },
     )
 

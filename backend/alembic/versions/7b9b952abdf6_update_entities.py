@@ -57,6 +57,14 @@ def upgrade() -> None:
                 "keep": True,
                 "implication_property": None,
             },
+            "creator": {
+                "name": "creator",
+                "keep": False,
+                "implication_property": {
+                    "implied_entity_type": "from_email",
+                    "implied_relationship_name": "is_creator_of",
+                },
+            },
             "assignee": {
                 "name": "assignee",
                 "keep": False,

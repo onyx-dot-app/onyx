@@ -29,6 +29,14 @@ def get_default_entity_types(vendor_name: str) -> dict[str, KGEntityTypeDefiniti
                     "started_at": KGAttributeProperty(name="started_at", keep=True),
                     "completed_at": KGAttributeProperty(name="completed_at", keep=True),
                     "due_date": KGAttributeProperty(name="due_date", keep=True),
+                    "creator": KGAttributeProperty(
+                        name="creator",
+                        keep=False,
+                        implication_property=KGAttributeImplicationProperty(
+                            implied_entity_type=KGAttributeEntityOption.FROM_EMAIL,
+                            implied_relationship_name="is_creator_of",
+                        ),
+                    ),
                     "assignee": KGAttributeProperty(
                         name="assignee",
                         keep=False,

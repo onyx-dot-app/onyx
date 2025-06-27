@@ -44,13 +44,13 @@ def create_views(
         WHERE document_id IS NOT NULL
     ),
 
-    public_docs AS (
+    base_public_docs AS (
         SELECT d.id as allowed_doc_id
         FROM "{tenant_id}".document d
         INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
         WHERE d.is_public
     ),
-    user_owned_docs AS (
+    user_owned_and_public_docs AS (
         SELECT d.id as allowed_doc_id
         FROM "{tenant_id}".document_by_connector_credential_pair d
         JOIN "{tenant_id}".credential c ON d.credential_id = c.id
@@ -61,7 +61,7 @@ def create_views(
         INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
         WHERE ccp.status != 'DELETING'
         AND ccp.access_type != 'SYNC'
-        AND u.email = :user_email
+        AND (u.email = :user_email or ccp.access_type::text = 'PUBLIC')
     ),
     user_group_accessible_docs AS (
         SELECT d.id as allowed_doc_id
@@ -97,9 +97,9 @@ def create_views(
         AND u.email = :user_email
     )
     SELECT DISTINCT allowed_doc_id FROM (
-        SELECT allowed_doc_id FROM public_docs
+        SELECT allowed_doc_id FROM base_public_docs
         UNION
-        SELECT allowed_doc_id FROM user_owned_docs
+        SELECT allowed_doc_id FROM user_owned_and_public_docs
         UNION
         SELECT allowed_doc_id FROM user_group_accessible_docs
         UNION
