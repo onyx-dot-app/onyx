@@ -104,6 +104,7 @@ def _get_batch_documents_enhanced_metadata(
     source_type_classification_extraction_instructions: dict[
         str, KGEntityTypeInstructions
     ],
+    connector_source: str,
 ) -> dict[str, KGEnhancedDocumentMetadata]:
     """
     Get the entity types for the given unprocessed documents.
@@ -131,7 +132,11 @@ def _get_batch_documents_enhanced_metadata(
 
     # the documents can be of multiple entity types. We need to identify the entity type for each document
     batch_metadata = get_batch_documents_metadata(
-        [unprocessed_document.id for unprocessed_document in unprocessed_document_batch]
+        [
+            unprocessed_document.id
+            for unprocessed_document in unprocessed_document_batch
+        ],
+        connector_source,
     )
 
     for metadata in batch_metadata:
@@ -291,6 +296,7 @@ def kg_extraction(
                 document_classification_extraction_instructions.get(
                     connector_source, {}
                 ),
+                connector_source,
             )
 
             # mark docs in unprocessed_document_batch as EXTRACTING

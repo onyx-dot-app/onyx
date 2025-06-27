@@ -9,9 +9,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import KGConfigSettings
-from onyx.db.models import Connector
 from onyx.db.models import Document
-from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import KGEntityType
 from onyx.db.models import KGRelationshipType
 from onyx.db.tag import get_structured_tags_for_document
@@ -561,31 +559,19 @@ def kg_process_person(
     return None
 
 
-def get_batch_documents_metadata(document_ids: list[str]) -> list[KGMetadataContent]:
+def get_batch_documents_metadata(
+    document_ids: list[str], connector_source: str
+) -> list[KGMetadataContent]:
     """
     Gets the metadata for a batch of documents.
     """
     batch_metadata: list[KGMetadataContent] = []
+    source_type = DocumentSource(connector_source).value
 
     with get_session_with_current_tenant() as db_session:
         for document_id in document_ids:
             # get document metadata
             metadata = get_structured_tags_for_document(document_id, db_session)
-
-            # get document source type
-            source_type = DocumentSource(
-                db_session.query(Connector.source)
-                .join(
-                    DocumentByConnectorCredentialPair,
-                    DocumentByConnectorCredentialPair.connector_id == Connector.id,
-                )
-                .join(
-                    Document,
-                    DocumentByConnectorCredentialPair.id == Document.id,
-                )
-                .filter(Document.id == document_id)
-                .scalar()
-            ).value
 
             batch_metadata.append(
                 KGMetadataContent(
