@@ -25,6 +25,23 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 
+const VERTEX_LOCATION_KWARG = "vertex_location";
+
+function vertex_location_description(description: string | null): JSX.Element {
+  return (
+    <p>
+      {description ? `${description} ` : ""}Please refer to the
+      <a
+        href="https://docs.onyx.app/gen_ai_configs/vertex_ai"
+        className="text-link hover:text-link-hover"
+      >
+        {` `}Vertex AI configuration docs{` `}
+      </a>
+      for all possible values.
+    </p>
+  );
+}
+
 export function LLMProviderUpdateForm({
   llmProviderDescriptor,
   onClose,
@@ -302,6 +319,11 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => {
             if (customConfigKey.key_type === "text_input") {
+              const subtext =
+                customConfigKey.name === VERTEX_LOCATION_KWARG
+                  ? vertex_location_description(customConfigKey.description)
+                  : customConfigKey.description;
+
               return (
                 <div key={customConfigKey.name}>
                   <TextFormField
@@ -312,7 +334,7 @@ export function LLMProviderUpdateForm({
                         ? customConfigKey.display_name
                         : `[Optional] ${customConfigKey.display_name}`
                     }
-                    subtext={customConfigKey.description || undefined}
+                    subtext={subtext ?? undefined}
                   />
                 </div>
               );
