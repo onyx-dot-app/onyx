@@ -249,7 +249,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 CustomConfigKey(
                     name=VERTEX_LOCATION_KWARG,
                     display_name="Location",
-                    description="The location of the Vertex AI model",
+                    description="The location of the Vertex AI model.",
                     is_required=False,
                     is_secret=False,
                     key_type=CustomConfigKeyType.TEXT_INPUT,
