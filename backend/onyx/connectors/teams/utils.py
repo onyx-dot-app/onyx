@@ -188,7 +188,7 @@ def fetch_external_access(
 
     expert_infos = (
         expert_infos
-        if expert_infos
+        if expert_infos is not None
         else fetch_expert_infos(graph_client=graph_client, channel=channel)
     )
     emails = {expert_info.email for expert_info in expert_infos if expert_info.email}
