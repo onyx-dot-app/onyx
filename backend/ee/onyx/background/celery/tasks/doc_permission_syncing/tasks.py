@@ -425,6 +425,7 @@ def connector_permission_sync_generator_task(
                 created = validate_ccpair_for_user(
                     cc_pair.connector.id,
                     cc_pair.credential.id,
+                    cc_pair.access_type,
                     db_session,
                     enforce_creation=False,
                 )

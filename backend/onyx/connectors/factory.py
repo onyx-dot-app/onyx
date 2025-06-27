@@ -60,6 +60,7 @@ from onyx.connectors.zulip.connector import ZulipConnector
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.enums import AccessType
 from onyx.db.models import Credential
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -193,6 +194,7 @@ def instantiate_connector(
 def validate_ccpair_for_user(
     connector_id: int,
     credential_id: int,
+    access_type: AccessType,
     db_session: Session,
     enforce_creation: bool = True,
 ) -> bool:

@@ -953,6 +953,7 @@ def create_connector_with_mock_credential(
         validate_ccpair_for_user(
             connector_id=connector_id,
             credential_id=credential_id,
+            access_type=connector_data.access_type,
             db_session=db_session,
         )
         response = add_credential_to_connector(

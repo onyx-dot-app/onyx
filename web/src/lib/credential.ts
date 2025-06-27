@@ -85,7 +85,11 @@ export function updateCredential(credentialId: number, newDetails: any) {
   });
 }
 
-export function swapCredential(newCredentialId: number, connectorId: number) {
+export function swapCredential(
+  newCredentialId: number,
+  connectorId: number,
+  accessType: AccessType
+) {
   return fetch(`/api/manage/admin/credential/swap`, {
     method: "PUT",
     headers: {
@@ -94,6 +98,7 @@ export function swapCredential(newCredentialId: number, connectorId: number) {
     body: JSON.stringify({
       new_credential_id: newCredentialId,
       connector_id: connectorId,
+      access_type: accessType,
     }),
   });
 }
