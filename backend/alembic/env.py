@@ -101,8 +101,8 @@ def filter_tenants_by_range(
     # the migration will fix the issue.
     sorted_tenant_schemas = sorted(tenant_schemas)
 
-    # Apply range filtering (convert to 0-based indexing)
-    start_idx = (start_range - 1) if start_range is not None else 0
+    # Apply range filtering (0-based indexing)
+    start_idx = start_range if start_range is not None else 0
     end_idx = end_range if end_range is not None else len(sorted_tenant_schemas)
 
     # Ensure indices are within bounds
