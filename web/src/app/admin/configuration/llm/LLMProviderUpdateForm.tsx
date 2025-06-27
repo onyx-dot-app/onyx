@@ -27,6 +27,17 @@ import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 
 const VERTEX_LOCATION_KWARG = "vertex_location";
 
+// A hard coded description.
+//
+// Since `VertexAI` exposes one additional configuration parameter
+// (`vertex_location`), we custom-modify the description for it and add a link.
+//
+// # Note
+// The backend sends only strings for descriptions; the frontend only renders
+// the string and does not perform any parsing / rendering logic on it.
+// Therefore, the backend can't send "hyperlink"-able text. As a result, we
+// need some hardcoding here to intercept that custom-config-key and augment
+// it with a hyperlink.
 function vertex_location_description(description: string | null): JSX.Element {
   return (
     <p>
