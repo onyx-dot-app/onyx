@@ -127,10 +127,11 @@ def get_schema_options() -> (
     x_args_raw = context.get_x_argument()
     x_args = {}
     for arg in x_args_raw:
-        for pair in arg.split(","):
-            if "=" in pair:
-                key, value = pair.split("=", 1)
-                x_args[key.strip()] = value.strip()
+        if "=" in arg:
+            key, value = arg.split("=", 1)
+            x_args[key.strip()] = value.strip()
+        else:
+            raise ValueError(f"Invalid argument: {arg}")
 
     create_schema = x_args.get("create_schema", "true").lower() == "true"
     upgrade_all_tenants = x_args.get("upgrade_all_tenants", "false").lower() == "true"
