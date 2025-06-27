@@ -13,6 +13,7 @@ import {
   Question,
   Gear,
   ArrowSquareOut,
+  MapTrifold,
 } from "@phosphor-icons/react";
 import {
   FiChevronsDown,
@@ -523,6 +524,13 @@ export const BrainIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => {
   return <Brain size={size} className={className} />;
+};
+
+export const KnowledgeMapIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <MapTrifold size={size} className={className} />;
 };
 
 export const EditIcon = ({
