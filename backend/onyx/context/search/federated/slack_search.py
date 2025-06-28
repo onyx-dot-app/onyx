@@ -94,6 +94,21 @@ def get_relevant_regions(
     return relevant_regions, highlighted_texts
 
 
+def get_unnested_elements(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Unnests a tree of element nodes followed by a leaf text node, into a list of leaf elements.
+    """
+    flattened: list[dict[str, Any]] = []
+
+    for block in blocks:
+        if "text" in block:
+            flattened.append(block)
+        elif "elements" in block:
+            flattened.extend(get_unnested_elements(block["elements"]))
+
+    return flattened
+
+
 def process_slack_message(
     match: dict[str, Any], query: SearchQuery
 ) -> SlackMessage | None:
@@ -131,11 +146,7 @@ def process_slack_message(
     # TODO: maybe map to our scores using a polynomial
 
     # get elements and relevant regions
-    elements: list[dict[str, Any]] = [
-        block_element.get("elements", [])
-        for block in match.get("blocks", [])
-        for block_element in block.get("elements", [])
-    ]
+    elements: list[dict[str, Any]] = get_unnested_elements(match.get("blocks", []))
     relevant_regions, highlighted_texts = get_relevant_regions(elements, window=2)
     if not relevant_regions:
         return None
@@ -249,7 +260,7 @@ def retrive_from_slack_api_and_process(
                 semantic_identifier=chunk.blurb,
                 document_id=document_id,
                 source_type=DocumentSource.SLACK,
-                title="",
+                title=chunk.title_prefix,
                 boost=0,
                 recency_bias=doc_slack_messages[document_id].recency_bias,
                 score=doc_slack_messages[document_id].score,
