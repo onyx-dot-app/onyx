@@ -66,10 +66,6 @@ def test_outline_connector_basic(outline_connector: OutlineConnector) -> None:
             assert (
                 section.text.strip() != ""
             ), f"Section {i} text should not be empty in document {doc.id}"
-            # section.link is optional and can be None
-            assert (
-                section.link is not None
-            ), f"Section {i} link should not be None in document {doc.id}"
             assert section.link.startswith(
                 "http"
             ), f"Section {i} link should be a valid URL in document {doc.id}"
