@@ -362,11 +362,20 @@ def retrieve_chunks(
     multilingual_expansion = get_multilingual_expansion(db_session)
     run_queries: list[tuple[Callable, tuple]] = []
 
+    source_filters = (
+        set(query.filters.source_type) if query.filters.source_type else None
+    )
+    normal_search_enabled = (source_filters is None) or (
+        len(set(source_filters) - FEDERATED_SEARCH_FUNCTIONS.keys()) > 0
+    )
+
     # Normal retrieval
-    if not multilingual_expansion or "\n" in query.query or "\r" in query.query:
+    if normal_search_enabled and (
+        not multilingual_expansion or "\n" in query.query or "\r" in query.query
+    ):
         # Don't do query expansion on complex queries, rephrasings likely would not work well
         run_queries.append((doc_index_retrieval, (query, document_index, db_session)))
-    else:
+    elif normal_search_enabled:
         simplified_queries = set()
 
         # Currently only uses query expansion on multilingual use cases
@@ -399,7 +408,7 @@ def retrieve_chunks(
 
     # Federated retrieval
     for source, retrieval_func in FEDERATED_SEARCH_FUNCTIONS.items():
-        if query.filters.source_type is None or source in query.filters.source_type:
+        if query.filters.source_type is None or source in source_filters:
             run_queries.append((retrieval_func, (query, db_session)))
 
     parallel_search_results = run_functions_tuples_in_parallel(run_queries)
