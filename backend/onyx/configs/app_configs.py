@@ -692,6 +692,12 @@ CONTROL_PLANE_API_BASE_URL = os.environ.get(
     "CONTROL_PLANE_API_BASE_URL", "http://localhost:8082"
 )
 
+# TODO: move elsewhere, maybe user settings > connector settings
+# should have search:read scope (and maybe channels:read, users: read) to do in/from filters
+# begins with xoxp-
+SLACK_USER_TOKEN = os.environ.get("SLACK_USER_TOKEN", "")
+NUM_SLACK_SEARCH_DOCS = int(os.environ.get("NUM_SLACK_SEARCH_DOCS", "5"))
+
 OAUTH_SLACK_CLIENT_ID = os.environ.get("OAUTH_SLACK_CLIENT_ID", "")
 OAUTH_SLACK_CLIENT_SECRET = os.environ.get("OAUTH_SLACK_CLIENT_SECRET", "")
 OAUTH_CONFLUENCE_CLOUD_CLIENT_ID = os.environ.get(
