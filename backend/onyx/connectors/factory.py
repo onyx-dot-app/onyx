@@ -46,6 +46,7 @@ from onyx.connectors.mediawiki.wiki import MediaWikiConnector
 from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
+from onyx.connectors.outline.connector import OutlineConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
@@ -90,6 +91,7 @@ def identify_connector_class(
         DocumentSource.PRODUCTBOARD: ProductboardConnector,
         DocumentSource.SLAB: SlabConnector,
         DocumentSource.NOTION: NotionConnector,
+        DocumentSource.OUTLINE: OutlineConnector,
         DocumentSource.ZULIP: ZulipConnector,
         DocumentSource.GURU: GuruConnector,
         DocumentSource.LINEAR: LinearConnector,
