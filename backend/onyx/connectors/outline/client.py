@@ -31,7 +31,18 @@ class OutlineApiClient:
         url: str = self._build_url(endpoint)
         headers = self._build_headers()
         response = requests.post(url, headers=headers, json=data or {})
+        return self._handle_response(response)
 
+    def get(
+        self, endpoint: str, params: Optional[dict[str, str]] = None
+    ) -> dict[str, Any]:
+        """Make a GET request to the Outline API (few endpoints use GET)"""
+        url: str = self._build_url(endpoint)
+        headers = self._build_headers()
+        response = requests.get(url, headers=headers, params=params or {})
+        return self._handle_response(response)
+
+    def _handle_response(self, response: requests.Response) -> dict[str, Any]:
         try:
             json_response = response.json()
         except Exception:
