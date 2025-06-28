@@ -18,6 +18,7 @@ export interface RerankingDetails {
 export enum RerankerProvider {
   COHERE = "cohere",
   LITELLM = "litellm",
+  LLAMA_STACK = "llama_stack",
   BEDROCK = "bedrock",
 }
 

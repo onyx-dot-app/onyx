@@ -113,6 +113,18 @@ export function ProviderCreationModal({
       const customConfig = Object.fromEntries(values.custom_config);
       const providerType = values.provider_type.toLowerCase().split(" ")[0];
       const isOpenAI = providerType === "openai";
+      const isLlamaStack = providerType === "llama_stack";
+
+      // Normalize API URL for Llama Stack
+      let normalizedApiUrl = values.api_url;
+      if (isLlamaStack && normalizedApiUrl) {
+        // Remove trailing slash if present
+        normalizedApiUrl = normalizedApiUrl.replace(/\/$/, "");
+        // Append the normalized endpoint if not already present
+        if (!normalizedApiUrl.endsWith("/v1/openai/v1/embeddings")) {
+          normalizedApiUrl = `${normalizedApiUrl}/v1/openai/v1/embeddings`;
+        }
+      }
 
       const testModelName =
         isOpenAI || isAzure ? "text-embedding-3-small" : values.model_name;
@@ -120,7 +132,7 @@ export function ProviderCreationModal({
       const testEmbeddingPayload = {
         provider_type: providerType,
         api_key: values.api_key,
-        api_url: values.api_url,
+        api_url: normalizedApiUrl,
         model_name: testModelName,
         api_version: values.api_version,
         deployment_name: values.deployment_name,
@@ -148,6 +160,7 @@ export function ProviderCreationModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...values,
+          api_url: normalizedApiUrl, // Use normalized API URL
           api_version: values.api_version,
           deployment_name: values.deployment_name,
           provider_type: values.provider_type.toLowerCase().split(" ")[0],
@@ -222,7 +235,12 @@ export function ProviderCreationModal({
                   <TextFormField
                     name="api_url"
                     label="API URL"
-                    placeholder="API URL"
+                    placeholder={
+                      selectedProvider.provider_type ===
+                      EmbeddingProvider.LLAMA_STACK
+                        ? "Your Llama Stack server base URL (e.g. http://0.0.0.0:8321)"
+                        : "API URL"
+                    }
                     type="text"
                   />
                 )}

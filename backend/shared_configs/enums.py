@@ -7,6 +7,7 @@ class EmbeddingProvider(str, Enum):
     VOYAGE = "voyage"
     GOOGLE = "google"
     LITELLM = "litellm"
+    LLAMA_STACK = "llama_stack"
     AZURE = "azure"
 
 

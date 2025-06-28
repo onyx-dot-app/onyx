@@ -4,6 +4,7 @@ import {
   GoogleIcon,
   IconProps,
   LiteLLMIcon,
+  LlamaStackIcon,
   MicrosoftIcon,
   NomicIcon,
   OpenAIISVG,
@@ -17,6 +18,7 @@ export enum EmbeddingProvider {
   VOYAGE = "voyage",
   GOOGLE = "google",
   LITELLM = "litellm",
+  LLAMA_STACK = "llama_stack",
   AZURE = "azure",
 }
 
@@ -156,6 +158,15 @@ export const LITELLM_CLOUD_PROVIDER: CloudEmbeddingProvider = {
   icon: LiteLLMIcon,
   description: "Open-source library to call LLM APIs using OpenAI format",
   apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
+  embedding_models: [], // No default embedding models
+};
+
+export const LLAMA_STACK_CLOUD_PROVIDER: CloudEmbeddingProvider = {
+  provider_type: EmbeddingProvider.LLAMA_STACK,
+  website: "https://llama-stack.readthedocs.io/",
+  icon: LlamaStackIcon,
+  description: "Llama Stack inference server for running Llama models",
+  apiLink: "https://llama-stack.readthedocs.io/",
   embedding_models: [], // No default embedding models
 };
 

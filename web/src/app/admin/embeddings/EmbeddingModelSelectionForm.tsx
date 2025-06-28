@@ -130,7 +130,8 @@ export function EmbeddingModelSelection({
         <ProviderCreationModal
           updateCurrentModel={updateCurrentModel}
           isProxy={
-            showTentativeProvider.provider_type == EmbeddingProvider.LITELLM
+            showTentativeProvider.provider_type == EmbeddingProvider.LITELLM ||
+            showTentativeProvider.provider_type == EmbeddingProvider.LLAMA_STACK
           }
           isAzure={
             showTentativeProvider.provider_type == EmbeddingProvider.AZURE
@@ -153,7 +154,10 @@ export function EmbeddingModelSelection({
       {changeCredentialsProvider && (
         <ChangeCredentialsModal
           isProxy={
-            changeCredentialsProvider.provider_type == EmbeddingProvider.LITELLM
+            changeCredentialsProvider.provider_type ==
+              EmbeddingProvider.LITELLM ||
+            changeCredentialsProvider.provider_type ==
+              EmbeddingProvider.LLAMA_STACK
           }
           isAzure={
             changeCredentialsProvider.provider_type == EmbeddingProvider.AZURE

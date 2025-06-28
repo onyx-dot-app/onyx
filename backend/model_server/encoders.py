@@ -271,6 +271,31 @@ class CloudEmbedding:
         result = response.json()
         return [embedding["embedding"] for embedding in result["data"]]
 
+    async def _embed_llama_stack(
+        self, texts: list[str], model_name: str | None
+    ) -> list[Embedding]:
+        if not model_name:
+            raise ValueError("Model name is required for Llama Stack embedding.")
+
+        if not self.api_url:
+            raise ValueError("API URL is required for Llama Stack embedding.")
+
+        headers = (
+            {} if not self.api_key else {"Authorization": f"Bearer {self.api_key}"}
+        )
+
+        response = await self.http_client.post(
+            self.api_url,
+            json={
+                "model": model_name,
+                "input": texts,
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        result = response.json()
+        return [embedding["embedding"] for embedding in result["data"]]
+
     @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
     async def embed(
         self,
@@ -288,6 +313,8 @@ class CloudEmbedding:
                 return await self._embed_azure(texts, f"azure/{deployment_name}")
             elif self.provider == EmbeddingProvider.LITELLM:
                 return await self._embed_litellm_proxy(texts, model_name)
+            elif self.provider == EmbeddingProvider.LLAMA_STACK:
+                return await self._embed_llama_stack(texts, model_name)
 
             embedding_type = EmbeddingModelTextType.get_type(self.provider, text_type)
             if self.provider == EmbeddingProvider.COHERE:

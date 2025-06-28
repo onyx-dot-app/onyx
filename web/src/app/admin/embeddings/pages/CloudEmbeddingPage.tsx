@@ -10,6 +10,7 @@ import {
   EmbeddingModelDescriptor,
   EmbeddingProvider,
   LITELLM_CLOUD_PROVIDER,
+  LLAMA_STACK_CLOUD_PROVIDER,
   AZURE_CLOUD_PROVIDER,
 } from "../../../../components/embedding/interfaces";
 import { EmbeddingDetails } from "../EmbeddingModelSelectionForm";
@@ -69,6 +70,10 @@ export default function CloudEmbeddingPage({
     EmbeddingDetails | undefined
   >(undefined);
 
+  const [llamaStackProvider, setLlamaStackProvider] = useState<
+    EmbeddingDetails | undefined
+  >(undefined);
+
   const [azureProvider, setAzureProvider] = useState<
     EmbeddingDetails | undefined
   >(undefined);
@@ -79,6 +84,11 @@ export default function CloudEmbeddingPage({
         provider.provider_type === EmbeddingProvider.LITELLM.toLowerCase()
     );
     setLiteLLMProvider(liteLLMProvider);
+    const llamaStackProvider = embeddingProviderDetails?.find(
+      (provider) =>
+        provider.provider_type === EmbeddingProvider.LLAMA_STACK.toLowerCase()
+    );
+    setLlamaStackProvider(llamaStackProvider);
     const azureProvider = embeddingProviderDetails?.find(
       (provider) =>
         provider.provider_type === EmbeddingProvider.AZURE.toLowerCase()
@@ -154,6 +164,133 @@ export default function CloudEmbeddingPage({
             </div>
           </div>
         ))}
+        <Text className="mt-6">
+          You can set up a Llama Stack server to use self-hosted and cloud-based
+          models.{" "}
+          <a
+            href="https://llama-stack.readthedocs.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 hover:underline"
+          >
+            Learn more about Llama Stack
+          </a>
+        </Text>
+
+        <div
+          key={LLAMA_STACK_CLOUD_PROVIDER.provider_type}
+          className="mt-4 w-full"
+        >
+          <div className="flex items-center mb-2">
+            {LLAMA_STACK_CLOUD_PROVIDER.icon({ size: 40 })}
+            <h2 className="ml-2  mt-2 text-xl font-bold">
+              {LLAMA_STACK_CLOUD_PROVIDER.provider_type}{" "}
+              {LLAMA_STACK_CLOUD_PROVIDER.provider_type ==
+                EmbeddingProvider.COHERE && "(recommended)"}
+            </h2>
+            <HoverPopup
+              mainContent={
+                <FiInfo className="ml-2 mt-2 cursor-pointer" size={18} />
+              }
+              popupContent={
+                <div className="text-sm text-text-800 w-52">
+                  <div className="my-auto">
+                    {LLAMA_STACK_CLOUD_PROVIDER.description}
+                  </div>
+                </div>
+              }
+              style="dark"
+            />
+          </div>
+          <div className="w-full flex flex-col items-start">
+            {!llamaStackProvider ? (
+              <button
+                onClick={() =>
+                  setShowTentativeProvider(LLAMA_STACK_CLOUD_PROVIDER)
+                }
+                className="mb-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm cursor-pointer"
+              >
+                Set API Configuration
+              </button>
+            ) : (
+              <button
+                onClick={() =>
+                  setChangeCredentialsProvider(LLAMA_STACK_CLOUD_PROVIDER)
+                }
+                className="mb-2 hover:underline text-sm cursor-pointer"
+              >
+                Modify API Configuration
+              </button>
+            )}
+
+            {!llamaStackProvider && (
+              <CardSection className="mt-2 w-full max-w-4xl bg-background-50 border border-background-200">
+                <div className="p-4">
+                  <Text className="text-lg font-semibold mb-2">
+                    API URL Required
+                  </Text>
+                  <Text className="text-sm text-text-600 mb-4">
+                    Before you can add models, you need to provide an API URL
+                    for your Llama Stack server. Click the &quot;Set API
+                    Configuration&quot; button above to set up your Llama Stack
+                    configuration.
+                  </Text>
+                  <div className="flex items-center">
+                    <FiInfo className="text-blue-500 mr-2" size={18} />
+                    <Text className="text-sm text-blue-500">
+                      Once configured, you&apos;ll be able to add and manage
+                      your Llama Stack models here.
+                    </Text>
+                  </div>
+                </div>
+              </CardSection>
+            )}
+            {llamaStackProvider && (
+              <>
+                <div className="flex mb-4 flex-wrap gap-4">
+                  {embeddingModelDetails
+                    ?.filter(
+                      (model) =>
+                        model.provider_type ===
+                        EmbeddingProvider.LLAMA_STACK.toLowerCase()
+                    )
+                    .map((model) => (
+                      <CloudModelCard
+                        key={model.model_name}
+                        model={model}
+                        provider={LLAMA_STACK_CLOUD_PROVIDER}
+                        currentModel={currentModel}
+                        setAlreadySelectedModel={setAlreadySelectedModel}
+                        setShowTentativeModel={setShowTentativeModel}
+                        setShowModelInQueue={setShowModelInQueue}
+                        setShowTentativeProvider={setShowTentativeProvider}
+                      />
+                    ))}
+                </div>
+
+                <CardSection
+                  className={`mt-2 w-full max-w-4xl ${
+                    currentModel.provider_type === EmbeddingProvider.LLAMA_STACK
+                      ? "border-2 border-blue-500"
+                      : ""
+                  }`}
+                >
+                  <CustomEmbeddingModelForm
+                    embeddingType={EmbeddingProvider.LLAMA_STACK}
+                    provider={llamaStackProvider}
+                    currentValues={
+                      currentModel.provider_type ===
+                      EmbeddingProvider.LLAMA_STACK
+                        ? (currentModel as CloudEmbeddingModel)
+                        : null
+                    }
+                    setShowTentativeModel={setShowTentativeModel}
+                  />
+                </CardSection>
+              </>
+            )}
+          </div>
+        </div>
 
         <Text className="mt-6">
           Alternatively, you can use a self-hosted model using the LiteLLM

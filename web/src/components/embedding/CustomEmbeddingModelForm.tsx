@@ -57,15 +57,17 @@ export function CustomEmbeddingModelForm({
           <Form>
             <Text className="text-xl text-text-900 font-bold mb-4">
               Specify details for your{" "}
-              {embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"}{" "}
+              {embeddingType === EmbeddingProvider.AZURE
+                ? "Azure"
+                : embeddingType === EmbeddingProvider.LLAMA_STACK
+                  ? "Llama Stack"
+                  : "LiteLLM"}{" "}
               Provider&apos;s model
             </Text>
             <TextFormField
               name="model_name"
               label="Model Name:"
-              subtext={`The name of the ${
-                embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"
-              } model`}
+              subtext={`The name of the embedding model`}
               placeholder="e.g. 'all-MiniLM-L6-v2'"
               autoCompleteDisabled={true}
             />
@@ -106,7 +108,11 @@ export function CustomEmbeddingModelForm({
               className="w-64 mx-auto"
             >
               Configure{" "}
-              {embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"}{" "}
+              {embeddingType === EmbeddingProvider.AZURE
+                ? "Azure"
+                : embeddingType === EmbeddingProvider.LLAMA_STACK
+                  ? "Llama Stack"
+                  : "LiteLLM"}{" "}
               Model
             </Button>
           </Form>

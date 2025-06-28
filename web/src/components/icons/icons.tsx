@@ -44,6 +44,7 @@ import mistralSVG from "../../../public/Mistral.svg";
 import qwenSVG from "../../../public/Qwen.svg";
 import openSourceIcon from "../../../public/OpenSource.png";
 import litellmIcon from "../../../public/litellm.png";
+import llamaStackIcon from "../../../public/Meta.png"; // Using OpenSource icon as placeholder
 import azureIcon from "../../../public/Azure.png";
 import asanaIcon from "../../../public/Asana.png";
 import anthropicSVG from "../../../public/Anthropic.svg";
@@ -281,6 +282,13 @@ export const LiteLLMIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => {
   return <LogoIcon size={size} className={className} src={litellmIcon} />;
+};
+
+export const LlamaStackIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <LogoIcon size={size} className={className} src={llamaStackIcon} />;
 };
 
 export const OpenSourceIcon = ({
