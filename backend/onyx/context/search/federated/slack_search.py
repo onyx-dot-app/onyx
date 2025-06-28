@@ -8,6 +8,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import NUM_SLACK_CHUNKS
 from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
 from onyx.configs.app_configs import SLACK_USER_TOKEN
 from onyx.configs.chat_configs import DOC_TIME_DECAY
@@ -281,10 +282,14 @@ def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceCh
     for chunk in chunks:
         document_id = chunk.source_document.id
 
-        # create highlighted text (do we need this?)
-        highlighted_text = chunk.content
-        for highlighted_text in doc_slack_messages[document_id].highlighted_texts:
-            highlighted_text.replace(highlighted_text, f"<hi>{highlighted_text}</hi>")
+        # create highlighted text
+        match_highlights = chunk.content
+        for highlight in sorted(
+            doc_slack_messages[document_id].highlighted_texts, key=len
+        ):
+            match_highlights = match_highlights.replace(
+                highlight, f"<hi>{highlight}</hi>"
+            )
 
         top_chunks.append(
             InferenceChunk(
@@ -305,11 +310,13 @@ def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceCh
                 is_relevant=True,
                 relevance_explanation="",
                 metadata=doc_slack_messages[document_id].metadata,
-                match_highlights=[highlighted_text],
+                match_highlights=[match_highlights],
                 doc_summary="",
                 chunk_context="",
                 updated_at=doc_slack_messages[document_id].timestamp,
             )
         )
+        if len(top_chunks) >= NUM_SLACK_CHUNKS:
+            break
 
     return top_chunks
