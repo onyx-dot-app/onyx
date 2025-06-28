@@ -44,6 +44,7 @@ import {
   FileIcon2,
   GitbookIcon,
   HighspotIcon,
+  OutlineIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -129,6 +130,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Notion",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/notion",
+  },
+  outline: {
+    displayName: "Outline",
+    category: SourceCategory.Wiki,
+    icon: OutlineIcon,
+    docs: "https://docs.onyx.app/connectors/outline",
   },
   zendesk: {
     icon: ZendeskIcon,
