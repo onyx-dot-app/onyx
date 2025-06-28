@@ -956,6 +956,7 @@ def _get_child_records_by_id_query(
     return query
 
 
+# TODO: move these to daily connector tests
 @pytest.mark.skip(reason="Enable when credentials are available")
 def test_salesforce_connector_single() -> None:
     """Test various manipulations of a single record"""
