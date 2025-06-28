@@ -1333,6 +1333,8 @@ def check_indexing_completion(
         storage = get_document_batch_storage(tenant_id, index_attempt_id, db_session)
 
     try:
+        last_progress_time = time.monotonic()
+        last_batches_completed = 0
         while True:
             # Get current state
             indexing_state = storage.ensure_indexing_state()
@@ -1353,7 +1355,15 @@ def check_indexing_completion(
 
             if extraction_completed:
                 break
-            time.sleep(5)
+
+            if batches_processed > last_batches_completed:
+                last_batches_completed = batches_processed
+                last_progress_time = time.monotonic()
+            elif time.monotonic() - last_progress_time > 3600 * 6:
+                raise RuntimeError(
+                    f"Indexing attempt {index_attempt_id} has been indexing for 6 hours without progress. "
+                    f"Marking it as failed."
+                )
 
         logger.info(
             f"All batches for index attempt {index_attempt_id} have been processed."
