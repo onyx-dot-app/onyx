@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
@@ -13,6 +14,8 @@ from onyx.configs.app_configs import SLACK_USER_TOKEN
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
+from onyx.context.search.federated.models import SLACK_ELEMENT_TYPE_MAP
+from onyx.context.search.federated.models import SlackElement
 from onyx.context.search.federated.models import SlackMessage
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import InferenceChunk
@@ -47,34 +50,71 @@ def build_slack_query(query: SearchQuery) -> str:
     return " ".join([raw_query, filter_query])
 
 
+def get_user_id_mapping(text: str) -> dict[str, str]:
+    """
+    Gets the user id mapping from the slack message text.
+    E.g., <@U0123ABC|John Doe> hello there... -> {"U0123ABC": "John Doe"}
+    """
+    user_id_mapping: dict[str, str] = {}
+    for match in re.finditer(r"<@([A-Z0-9]+)\|([^>]+)>", text):
+        user_id_mapping[match.group(1)] = match.group(2)
+    return user_id_mapping
+
+
+def get_unnested_elements(
+    elements: list[dict[str, Any]], user_id_mapping: dict[str, str]
+) -> list[SlackElement]:
+    """
+    Unnests a tree of element nodes followed by a leaf text node, into a list of leaf elements.
+    """
+    flattened: list[SlackElement] = []
+
+    for element in elements:
+        if "elements" in element:
+            flattened.extend(get_unnested_elements(element["elements"]))
+            continue
+
+        element_type: str | None = element.get("type")
+        if element_type not in SLACK_ELEMENT_TYPE_MAP:
+            continue
+
+        text: str | None = element.get(SLACK_ELEMENT_TYPE_MAP[element_type])
+        highlighted: bool = element.get("style", {}).get("client_highlight", False)
+        if element_type == "user":
+            text = user_id_mapping.get(text)
+        if text:
+            flattened.append(SlackElement(text=text, highlight=highlighted))
+
+    return flattened
+
+
 def get_relevant_regions(
-    elements: list[dict[str, Any]], window: int
+    elements: list[SlackElement], window: int
 ) -> tuple[list[str], set[str]]:
     """
     Takes in a list of elements: {"text": str, "style"?: dict[str, str]}
     and returns a tuple of (relevant regions, highlighted strings)
     E.g.,
     elements = [
-        {"text": "Hello "},
-        {"text": "world", "style": {"client_highlight": True}},
-        {"text": ". How are "},
-        {"text": "you", "style": {"client_highlight": True}},
-        {"text": "? "},
-        {"text": "I'm"},
-        {"text": "fine "},
-        {"text": "thanks!", "style": {"client_highlight": True}},
+        SlackElement(text="Hello "),
+        SlackElement(text="world", highlight=True),
+        SlackElement(text=". How are "),
+        SlackElement(text="you", highlight=True),
+        SlackElement(text="? "),
+        SlackElement(text="I'm"),
+        SlackElement(text="fine "),
+        SlackElement(text="thanks!", highlight=True),
     ]
     window = 1
     Returns: ["Hello world. How are you?", "fine thanks!"], {"world", "you", "thanks!"}
     """
-    texts = [element.get("text", "") for element in elements]
+    texts = [element.text for element in elements]
 
     highlighted_texts: set[str] = set()
     highlighted_idxs: list[int] = []
     for i, element in enumerate(elements):
-        highlighted: bool = element.get("style", {}).get("client_highlight", False)
-        if highlighted:
-            highlighted_texts.add(element.get("text", ""))
+        if element.highlight:
+            highlighted_texts.add(element.text)
             highlighted_idxs.append(i)
 
     # grab text within window of highlighted text
@@ -94,31 +134,18 @@ def get_relevant_regions(
     return relevant_regions, highlighted_texts
 
 
-def get_unnested_elements(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    Unnests a tree of element nodes followed by a leaf text node, into a list of leaf elements.
-    """
-    flattened: list[dict[str, Any]] = []
-
-    for block in blocks:
-        if "text" in block:
-            flattened.append(block)
-        elif "elements" in block:
-            flattened.extend(get_unnested_elements(block["elements"]))
-
-    return flattened
-
-
 def process_slack_message(
     match: dict[str, Any], query: SearchQuery
 ) -> SlackMessage | None:
+    text: str | None = match.get("text")
     permalink: str | None = match.get("permalink")
     thread_ts: str | None = match.get("ts")
     channel_id: str | None = match.get("channel", {}).get("id")
     channel_name: str | None = match.get("channel", {}).get("name")
     username: str | None = match.get("username")
     if (  # can't use any() because of type checking :(
-        permalink is None
+        text is None
+        or permalink is None
         or thread_ts is None
         or channel_id is None
         or channel_name is None
@@ -134,6 +161,9 @@ def process_slack_message(
         if v is not None
     }
 
+    # generate user id mapping
+    user_id_mapping = get_user_id_mapping(text)
+
     # compute recency bias (parallels vespa calculation)
     decay_factor = DOC_TIME_DECAY * query.recency_bias_multiplier
     doc_time = datetime.fromtimestamp(float(thread_ts))
@@ -143,10 +173,10 @@ def process_slack_message(
     # compute score
     score: float = match.get("score", 0.0)  # 0 - inf?
     score = 0.0  # for now
-    # TODO: maybe map to our scores using a polynomial
+    # TODO: maybe map to our scores using a polynomial?
 
     # get elements and relevant regions
-    elements: list[dict[str, Any]] = get_unnested_elements(match.get("blocks", []))
+    elements = get_unnested_elements(match.get("blocks", []), user_id_mapping)
     relevant_regions, highlighted_texts = get_relevant_regions(elements, window=2)
     if not relevant_regions:
         return None
