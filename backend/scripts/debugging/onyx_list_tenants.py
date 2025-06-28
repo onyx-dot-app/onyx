@@ -4,15 +4,19 @@
 Tenant Count Script
 Simple script to count the number of tenants in the database.
 Used by the parallel migration script to determine how to split work.
+
+Usage:
+
+```
+PYTHONPATH=. python scripts/debugging/onyx_list_tenants.py
+```
+
 """
 
 import sys
 
-# Add the backend directory to the Python path
-sys.path.append("/opt/onyx/backend")
-
-from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from shared_configs.configs import TENANT_ID_PREFIX
 
 
