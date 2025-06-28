@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.context.search.enums import SearchType
+from onyx.context.search.federated import FEDERATED_SEARCH_FUNCTIONS
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -359,14 +360,14 @@ def retrieve_chunks(
     """Returns a list of the best chunks from an initial keyword/semantic/ hybrid search."""
 
     multilingual_expansion = get_multilingual_expansion(db_session)
-    # Don't do query expansion on complex queries, rephrasings likely would not work well
+    run_queries: list[tuple[Callable, tuple]] = []
+
+    # Normal retrieval
     if not multilingual_expansion or "\n" in query.query or "\r" in query.query:
-        top_chunks = doc_index_retrieval(
-            query=query, document_index=document_index, db_session=db_session
-        )
+        # Don't do query expansion on complex queries, rephrasings likely would not work well
+        run_queries.append((doc_index_retrieval, (query, document_index, db_session)))
     else:
         simplified_queries = set()
-        run_queries: list[tuple[Callable, tuple]] = []
 
         # Currently only uses query expansion on multilingual use cases
         query_rephrases = multilingual_query_expansion(
@@ -393,13 +394,16 @@ def retrieve_chunks(
                 deep=True,
             )
             run_queries.append(
-                (
-                    doc_index_retrieval,
-                    (q_copy, document_index, db_session),
-                )
+                (doc_index_retrieval, (q_copy, document_index, db_session))
             )
-        parallel_search_results = run_functions_tuples_in_parallel(run_queries)
-        top_chunks = combine_retrieval_results(parallel_search_results)
+
+    # Federated retrieval
+    for source, retrieval_func in FEDERATED_SEARCH_FUNCTIONS.items():
+        if query.filters.source_type is None or source in query.filters.source_type:
+            run_queries.append((retrieval_func, (query, db_session)))
+
+    parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:
         logger.warning(
