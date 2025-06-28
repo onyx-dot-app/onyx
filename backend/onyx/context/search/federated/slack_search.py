@@ -1,0 +1,310 @@
+from collections.abc import Callable
+from datetime import datetime
+from datetime import timedelta
+from typing import Any
+
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+from sqlalchemy.orm import Session
+
+from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
+from onyx.configs.app_configs import SLACK_USER_TOKEN
+from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.connectors.models import IndexingDocument
+from onyx.connectors.models import TextSection
+from onyx.context.search.federated.models import SlackMessage
+from onyx.context.search.models import ChunkMetric
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import MAX_METRICS_CONTENT
+from onyx.context.search.models import RetrievalMetricsContainer
+from onyx.context.search.models import SearchQuery
+from onyx.db.document import DocumentSource
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.document_index_utils import (
+    get_multipass_config,
+)
+from onyx.indexing.chunker import Chunker
+from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
+
+logger = setup_logger()
+
+
+def build_slack_query(query: SearchQuery) -> str:
+    raw_query = " ".join(query.processed_keywords)
+
+    # in the future, we could ask an LLM to generate in/from filters and fuzzy match them
+    # to actual user/channel names (slack will take care of the access control)
+    filter_query = ""
+    time_cutoff = query.filters.time_cutoff
+    if time_cutoff is not None:
+        # slack after: is exclusive, so we need to subtract one day
+        time_cutoff = time_cutoff - timedelta(days=1)
+        filter_query = f"after:{time_cutoff.strftime('%Y-%m-%d')}"
+
+    return " ".join([raw_query, filter_query])
+
+
+def get_relevant_regions(
+    elements: list[dict[str, Any]], window: int
+) -> tuple[list[str], set[str]]:
+    """
+    Takes in a list of elements: {"text": str, "style"?: dict[str, str]}
+    and returns a tuple of (relevant regions, highlighted strings)
+    E.g.,
+    elements = [
+        {"text": "Hello "},
+        {"text": "world", "style": {"client_highlight": True}},
+        {"text": ". How are "},
+        {"text": "you", "style": {"client_highlight": True}},
+        {"text": "? "},
+        {"text": "I'm"},
+        {"text": "fine "},
+        {"text": "thanks!", "style": {"client_highlight": True}},
+    ]
+    window = 1
+    Returns: ["Hello world. How are you?", "fine thanks!"], {"world", "you", "thanks!"}
+    """
+    texts = [element.get("text", "") for element in elements]
+
+    highlighted_texts: set[str] = set()
+    highlighted_idxs: list[int] = []
+    for i, element in enumerate(elements):
+        highlighted: bool = element.get("style", {}).get("client_highlight", False)
+        if highlighted:
+            highlighted_texts.add(element.get("text", ""))
+            highlighted_idxs.append(i)
+
+    # grab text within window of highlighted text
+    relevant_regions: list[str] = []
+    last_end = -1
+    for idx in highlighted_idxs:
+        start = max(0, idx - window)
+        end = idx + window + 1
+
+        if start < last_end:
+            start = last_end
+            relevant_regions[-1] += "".join(texts[start:end])
+        else:
+            relevant_regions.append("".join(texts[start:end]))
+        last_end = end
+
+    return relevant_regions, highlighted_texts
+
+
+def process_slack_message(
+    match: dict[str, Any], query: SearchQuery
+) -> SlackMessage | None:
+    permalink: str | None = match.get("permalink")
+    thread_ts: str | None = match.get("ts")
+    channel_id: str | None = match.get("channel", {}).get("id")
+    channel_name: str | None = match.get("channel", {}).get("name")
+    username: str | None = match.get("username")
+    if (  # can't use any() because of type checking :(
+        permalink is None
+        or thread_ts is None
+        or channel_id is None
+        or channel_name is None
+        or username is None
+    ):
+        return None
+
+    # generate metadata and document id
+    document_id = f"{channel_id}_{thread_ts.replace('.', '')}"
+    metadata: dict[str, str | list[str]] = {
+        k: str(v)
+        for k, v in {"channel": channel_name, "sender": username}.items()
+        if v is not None
+    }
+
+    # compute recency bias (parallels vespa calculation)
+    decay_factor = DOC_TIME_DECAY * query.recency_bias_multiplier
+    doc_time = datetime.fromtimestamp(float(thread_ts))
+    doc_age_years = (datetime.now() - doc_time).total_seconds() / (365 * 24 * 60 * 60)
+    recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
+
+    # compute score
+    score: float = match.get("score", 0.0)  # 0 - inf?
+    score = 0.0  # for now
+    # TODO: maybe map to our scores using a polynomial
+
+    # get elements and relevant regions
+    elements: list[dict[str, Any]] = [
+        block_element.get("elements", [])
+        for block in match.get("blocks", [])
+        for block_element in block.get("elements", [])
+    ]
+    relevant_regions, highlighted_texts = get_relevant_regions(elements, window=2)
+    if not relevant_regions:
+        return None
+
+    # get semantic identifier
+    first_message = relevant_regions[0]
+    snippet = (
+        first_message[:50].rstrip() + "..."
+        if len(first_message) > 50
+        else first_message
+    ).replace("\n", " ")
+    doc_sem_id = f"{username} in #{channel_name}: {snippet}"
+
+    return SlackMessage(
+        document_id=document_id,
+        texts=relevant_regions,
+        highlighted_texts=highlighted_texts,
+        link=permalink,
+        semantic_identifier=doc_sem_id,
+        metadata=metadata,
+        timestamp=doc_time,
+        score=score,
+        recency_bias=recency_bias,
+    )
+
+
+@log_function_time(print_only=True)
+def retrive_from_slack_api_and_process(
+    query: SearchQuery, db_session: Session
+) -> list[InferenceChunk]:
+    # token isn't validated yet
+    slack_client = WebClient(token=SLACK_USER_TOKEN)
+
+    # query slack
+    slack_query = build_slack_query(query)
+    try:
+        response = slack_client.search_messages(
+            query=slack_query, count=NUM_SLACK_SEARCH_DOCS, highlight=True
+        )
+        response.validate()
+        messages: dict[str, Any] = response.get("messages", {})
+        matches: list[dict[str, Any]] = messages.get("matches", [])
+    except SlackApiError as e:
+        logger.error(f"Slack API error: {e}")
+        return []
+
+    # convert response to slack messages
+    slack_messages = [
+        message
+        for match in matches
+        if (message := process_slack_message(match, query)) is not None
+    ]
+    if not slack_messages:
+        return []
+    doc_slack_messages = {
+        slack_message.document_id: slack_message for slack_message in slack_messages
+    }
+
+    # convert slack messages to index documents
+    index_docs = [
+        IndexingDocument(
+            id=slack_message.document_id,
+            sections=[
+                TextSection(text=text, link=slack_message.link)
+                for text in slack_message.texts
+            ],
+            source=DocumentSource.SLACK,
+            semantic_identifier=slack_message.semantic_identifier,
+            metadata=slack_message.metadata,
+            doc_updated_at=slack_message.timestamp,
+        )
+        for slack_message in slack_messages
+    ]
+
+    # convert index docs to doc aware chunks
+    search_settings = get_current_search_settings(db_session)
+    embedder = DefaultIndexingEmbedder.from_db_search_settings(
+        search_settings=search_settings
+    )
+    multipass_config = get_multipass_config(search_settings)
+    enable_contextual_rag = (
+        search_settings.enable_contextual_rag or ENABLE_CONTEXTUAL_RAG
+    )
+    chunker = Chunker(
+        tokenizer=embedder.embedding_model.tokenizer,
+        # do we need all these?
+        enable_multipass=multipass_config.multipass_indexing,
+        enable_large_chunks=multipass_config.enable_large_chunks,
+        enable_contextual_rag=enable_contextual_rag,
+    )
+    chunks = chunker.chunk(index_docs)
+
+    # convert chunks to inference chunks
+    top_chunks: list[InferenceChunk] = []
+    for chunk in chunks:
+        document_id = chunk.source_document.id
+
+        # create highlighted text (do we need this?)
+        highlighted_text = chunk.content
+        for highlighted_text in doc_slack_messages[document_id].highlighted_texts:
+            highlighted_text.replace(highlighted_text, f"<hi>{highlighted_text}</hi>")
+
+        top_chunks.append(
+            InferenceChunk(
+                chunk_id=chunk.chunk_id,
+                blurb=chunk.blurb,
+                content=chunk.content,
+                source_links=chunk.source_links,
+                image_file_id=chunk.image_file_id,
+                section_continuation=chunk.section_continuation,
+                semantic_identifier=chunk.blurb,
+                document_id=document_id,
+                source_type=DocumentSource.SLACK,
+                title="",
+                boost=0,
+                recency_bias=doc_slack_messages[document_id].recency_bias,
+                score=doc_slack_messages[document_id].score,
+                hidden=False,
+                is_relevant=True,
+                relevance_explanation="",
+                metadata=doc_slack_messages[document_id].metadata,
+                match_highlights=[highlighted_text],
+                doc_summary="",
+                chunk_context="",
+                updated_at=doc_slack_messages[document_id].timestamp,
+            )
+        )
+
+    return top_chunks
+
+
+def retrieve_slack_chunks(
+    query: SearchQuery,
+    db_session: Session,
+    retrieval_metrics_callback: (
+        Callable[[RetrievalMetricsContainer], None] | None
+    ) = None,
+) -> list[InferenceChunk]:
+    # check if slack is filtered out
+    filters = query.filters
+    if (
+        filters.source_type is not None
+        and DocumentSource.SLACK not in filters.source_type
+    ):
+        return []
+
+    top_chunks = retrive_from_slack_api_and_process(query, db_session)
+
+    if not top_chunks:
+        logger.warning(
+            "Federated Slack search returned no results "
+            f"with filters: {query.filters}"
+        )
+        return []
+
+    if retrieval_metrics_callback is not None:
+        chunk_metrics = [
+            ChunkMetric(
+                document_id=chunk.document_id,
+                chunk_content_start=chunk.content[:MAX_METRICS_CONTENT],
+                first_link=chunk.source_links[0] if chunk.source_links else None,
+                score=chunk.score if chunk.score is not None else 0,
+            )
+            for chunk in top_chunks
+        ]
+        retrieval_metrics_callback(
+            RetrievalMetricsContainer(
+                search_type=query.search_type, metrics=chunk_metrics
+            )
+        )
+
+    return top_chunks

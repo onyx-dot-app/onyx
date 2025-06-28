@@ -1,0 +1,406 @@
+{
+    "ok": true,
+    "query": "loop me in",
+    "messages": {
+        "total": 5,
+        "pagination": {
+            "total_count": 5,
+            "page": 1,
+            "per_page": 20,
+            "page_count": 1,
+            "first": 1,
+            "last": 5
+        },
+        "paging": {
+            "count": 20,
+            "total": 5,
+            "page": 1,
+            "pages": 1
+        },
+        "matches": [
+            {
+                "iid": "607990a2-f708-41e5-ae6b-10b975c8b046",
+                "team": "T05SS40AFAM",
+                "score": 108389.28,
+                "channel": {
+                    "id": "C0771QKDBPE",
+                    "is_channel": true,
+                    "is_group": false,
+                    "is_im": false,
+                    "is_mpim": false,
+                    "is_shared": false,
+                    "is_org_shared": false,
+                    "is_ext_shared": false,
+                    "is_private": false,
+                    "name": "eng-general",
+                    "pending_shared": [],
+                    "is_pending_ext_shared": false
+                },
+                "type": "message",
+                "user": "U08JZ9N3QNN",
+                "username": "raunak",
+                "ts": "1750986879.565359",
+                "blocks": [
+                    {
+                        "type": "rich_text",
+                        "block_id": "0YgBM",
+                        "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "Loop",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": " "
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "me",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": " in on your progress too"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "text": "\ue000Loop\ue001 \ue000me\ue001 in on your progress too",
+                "permalink": "https://onyx-company.slack.com/archives/C0771QKDBPE/p1750986879565359?thread_ts=1750986784.564639",
+                "no_reactions": true
+            },
+            {
+                "iid": "657639f7-53c0-416d-b728-bad32190a24f",
+                "team": "T05SS40AFAM",
+                "score": 8.46189,
+                "channel": {
+                    "id": "C0898NTJR29",
+                    "is_channel": true,
+                    "is_group": false,
+                    "is_im": false,
+                    "is_mpim": false,
+                    "is_shared": false,
+                    "is_org_shared": false,
+                    "is_ext_shared": false,
+                    "is_private": false,
+                    "name": "devin-stuff",
+                    "pending_shared": [],
+                    "is_pending_ext_shared": false
+                },
+                "type": "message",
+                "user": "U084WBCNY5Q",
+                "username": "devin",
+                "ts": "1738206734.008619",
+                "blocks": [
+                    {
+                        "type": "rich_text",
+                        "block_id": "iNO",
+                        "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "I notice that we're getting database connection errors when trying to run the tests locally. According to the repository notes:\n\n"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "rich_text_quote",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "You should generally not worry about running the code or local testing. Prefer to use the tests that are automatically run in CI as a feedback loop for your PRs."
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "\n\nI've already:\n1. Added transaction safety to the "
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "batch_add_ext_perm_user_if_not_exists",
+                                        "style": {
+                                            "code": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": " function\n2. Created a comprehensive unit test that verifies thread safety and prevents duplicate user creation\n\nLet's proceed with creating a PR and let CI verify our changes. Would you like me to continue with creating the PR?"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "text": "I notice that we're getting database connection errors when trying to run the tests locally. According to the repository notes:\n\n&gt; You should generally not worry about running the code or local testing. Prefer to use the tests that are automatically run in CI as a feedback \ue000loop\ue001 for your PRs.\n\nI've already:\n1. Added transaction safety to the `batch_add_ext_perm_user_if_not_exists` function\n2. Created a comprehensive unit test that verifies thread safety and prevents duplicate user creation\n\nLet's proceed with creating a PR and let CI verify our changes. Would you like \ue000me\ue001 to continue with creating the PR?\n",
+                "permalink": "https://onyx-company.slack.com/archives/C0898NTJR29/p1738206734008619?thread_ts=1738206498.441749",
+                "no_reactions": true
+            },
+            {
+                "iid": "cfacd8b0-a1d2-4237-847b-bc9a9d18da5f",
+                "team": "T05SS40AFAM",
+                "score": 5244.272,
+                "channel": {
+                    "id": "C0771QKDBPE",
+                    "is_channel": true,
+                    "is_group": false,
+                    "is_im": false,
+                    "is_mpim": false,
+                    "is_shared": false,
+                    "is_org_shared": false,
+                    "is_ext_shared": false,
+                    "is_private": false,
+                    "name": "eng-general",
+                    "pending_shared": [],
+                    "is_pending_ext_shared": false
+                },
+                "type": "message",
+                "user": "U05SAH6UGUD",
+                "username": "chris",
+                "ts": "1741707893.653269",
+                "blocks": [
+                    {
+                        "type": "rich_text",
+                        "block_id": "Q2TWt",
+                        "elements": [
+                            {
+                                "type": "rich_text_preformatted",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "ERROR [env_py] Error migrating schema public: (sqlalchemy.dialects.postgresql.asyncpg.InternalServerError) <class 'asyncpg.exceptions.InternalServerError'>: tuple concurrently updated\n[SQL: \n  CREATE OR REPLACE FUNCTION update_chat_message_tsv()\n  RETURNS TRIGGER AS $$\n  BEGIN\n   NEW.message_tsv = to_tsvector('english', NEW.message);\n   RETURN NEW;\n  END;\n  $$ LANGUAGE plpgsql\n  ]\n(Background on this error at: "
+                                    },
+                                    {
+                                        "type": "link",
+                                        "url": "https://sqlalche.me/e/20/2j85",
+                                        "text": "https://sqlalche."
+                                    },
+                                    {
+                                        "type": "link",
+                                        "url": "https://sqlalche.me/e/20/2j85",
+                                        "text": "me",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "link",
+                                        "url": "https://sqlalche.me/e/20/2j85",
+                                        "text": "/e/20/2j85"
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": ")\nTraceback (most recent call last):\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 530, in _prepare_and_execute\n  self._rows = await prepared_stmt.fetch(*parameters)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py\", line 176, in fetch\n  data = await self.__bind_execute(args, 0, timeout)\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py\", line 241, in __bind_execute\n  data, status, _ = await self.__do_execute(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py\", line 230, in __do_execute\n  return await executor(protocol)\n      ^^^^^^^^^^^^^^^^^^^^^^^^\n File \"asyncpg/protocol/protocol.pyx\", line 201, in bind_execute\nasyncpg.exceptions.InternalServerError: tuple concurrently updated\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\n  self.dialect.do_execute(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\n  cursor.execute(statement, parameters)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 563, in execute\n  self._adapt_connection.await_(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 126, in await_only\n  return current.driver.switch(awaitable) # type: ignore[no-any-return]\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 187, in greenlet_spawn\n  value = await result\n      ^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 542, in _prepare_and_execute\n  self._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 492, in _handle_exception\n  self._adapt_connection._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 781, in _handle_exception\n  raise translated_error from error\nsqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.InternalServerError: <class 'asyncpg.exceptions.InternalServerError'>: tuple concurrently updated\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n File \"/usr/local/bin/alembic\", line 8, in <module>\n  sys.exit(main())\n       ^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/config.py\", line 591, in main\n  CommandLine(prog=prog).main(argv=argv)\n File \"/usr/local/lib/python3.11/site-packages/alembic/config.py\", line 585, in main\n  self.run_cmd(cfg, options)\n File \"/usr/local/lib/python3.11/site-packages/alembic/config.py\", line 562, in run_cmd\n  fn(\n File \"/usr/local/lib/python3.11/site-packages/alembic/command.py\", line 378, in upgrade\n  script.run_env()\n File \"/usr/local/lib/python3.11/site-packages/alembic/script/base.py\", line 576, in run_env\n  util.load_python_file(self.dir, \"env.py\")\n File \"/usr/local/lib/python3.11/site-packages/alembic/util/pyfiles.py\", line 94, in load_python_file\n  module = load_module_py(module_id, path)\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/util/pyfiles.py\", line 110, in load_module_py\n  spec.loader.exec_module(module) # type: ignore\n  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"<frozen importlib._bootstrap_external>\", line 940, in exec_module\n File \"<frozen importlib._bootstrap>\", line 241, in _call_with_frames_removed\n File \"/app/alembic/env.py\", line 239, in <module>\n  run_migrations_online()\n File \"/app/alembic/env.py\", line 233, in run_migrations_online\n  asyncio.run(run_async_migrations())\n File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 190, in run\n  return runner.run(main)\n      ^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n  return self._"
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "loop",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": ".run_until_complete(task)\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 653, in run_until_complete\n  return future.result()\n      ^^^^^^^^^^^^^^^\n File \"/app/alembic/env.py\", line 170, in run_async_migrations\n  await connection.run_sync(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/engine.py\", line 841, in run_sync\n  return await greenlet_spawn(fn, self._proxied, *arg, **kw)\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 192, in greenlet_spawn\n  result = context.throw(*sys.exc_info())\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/app/alembic/env.py\", line 115, in do_run_migrations\n  context.run_migrations()\n File \"<string>\", line 8, in run_migrations\n File \"/usr/local/lib/python3.11/site-packages/alembic/runtime/environment.py\", line 868, in run_migrations\n  self.get_context().run_migrations(**kw)\n File \"/usr/local/lib/python3.11/site-packages/alembic/runtime/migration.py\", line 622, in run_migrations\n  step.migration_fn(**kw)\n File \"/app/alembic/versions/3bd4c84fe72f_improved_index.py\", line 47, in upgrade\n  op.execute(\n File \"<string>\", line 8, in execute\n File \"<string>\", line 3, in execute\n File \"/usr/local/lib/python3.11/site-packages/alembic/operations/ops.py\", line 2411, in execute\n  return operations.invoke(op)\n      ^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/operations/base.py\", line 401, in invoke\n  return fn(self, operation)\n      ^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/operations/toimpl.py\", line 207, in execute_sql\n  operations.migration_context.impl.execute(\n File \"/usr/local/lib/python3.11/site-packages/alembic/ddl/impl.py\", line 202, in execute\n  self._exec(sql, execution_options)\n File \"/usr/local/lib/python3.11/site-packages/alembic/ddl/impl.py\", line 193, in _exec\n  return conn.execute( # type: ignore[call-overload]\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1413, in execute\n  return meth(\n      ^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py\", line 483, in _execute_on_connection\n  return connection._execute_clauseelement(\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1637, in _execute_clauseelement\n  ret = self._execute_context(\n     ^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1846, in _execute_context\n  return self._exec_single_context(\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1987, in _exec_single_context\n  self._handle_dbapi_exception(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 2344, in _handle_dbapi_exception\n  raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\n  self.dialect.do_execute(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\n  cursor.execute(statement, parameters)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 563, in execute\n  self._adapt_connection.await_(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 126, in await_only\n  return current.driver.switch(awaitable) # type: ignore[no-any-return]\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 187, in greenlet_spawn\n  value = await result\n      ^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 542, in _prepare_and_execute\n  self._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 492, in _handle_exception\n  self._adapt_connection._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 781, in _handle_exception\n  raise translated_error from error\nsqlalchemy.exc.InternalError: (sqlalchemy.dialects.postgresql.asyncpg.InternalServerError) <class 'asyncpg.exceptions.InternalServerError'>: tuple concurrently updated\n[SQL: \n  CREATE OR REPLACE FUNCTION update_chat_message_tsv()\n  RETURNS TRIGGER AS $$\n  BEGIN\n   NEW.message_tsv = to_tsvector('english', NEW.message);\n   RETURN NEW;\n  END;\n  $$ LANGUAGE plpgsql\n  ]"
+                                    }
+                                ],
+                                "border": 0
+                            }
+                        ]
+                    }
+                ],
+                "text": "```ERROR [env_py] Error migrating schema public: (sqlalchemy.dialects.postgresql.asyncpg.InternalServerError) <class 'asyncpg.exceptions.InternalServerError'>: tuple concurrently updated\n[SQL: \n  CREATE OR REPLACE FUNCTION update_chat_message_tsv()\n  RETURNS TRIGGER AS $$\n  BEGIN\n   NEW.message_tsv = to_tsvector('english', NEW.message);\n   RETURN NEW;\n  END;\n  $$ LANGUAGE plpgsql\n  ]\n(Background on this error at: <https://sqlalche.me/e/20/2j85|https://sqlalche.\ue000me\ue001/e/20/2j85>)\nTraceback (most recent call last):\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 530, in _prepare_and_execute\n  self._rows = await prepared_stmt.fetch(*parameters)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py\", line 176, in fetch\n  data = await self.__bind_execute(args, 0, timeout)\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py\", line 241, in __bind_execute\n  data, status, _ = await self.__do_execute(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/asyncpg/prepared_stmt.py\", line 230, in __do_execute\n  return await executor(protocol)\n      ^^^^^^^^^^^^^^^^^^^^^^^^\n File \"asyncpg/protocol/protocol.pyx\", line 201, in bind_execute\nasyncpg.exceptions.InternalServerError: tuple concurrently updated\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\n  self.dialect.do_execute(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\n  cursor.execute(statement, parameters)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 563, in execute\n  self._adapt_connection.await_(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 126, in await_only\n  return current.driver.switch(awaitable) # type: ignore[no-any-return]\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 187, in greenlet_spawn\n  value = await result\n      ^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 542, in _prepare_and_execute\n  self._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 492, in _handle_exception\n  self._adapt_connection._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 781, in _handle_exception\n  raise translated_error from error\nsqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.InternalServerError: <class 'asyncpg.exceptions.InternalServerError'>: tuple concurrently updated\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n File \"/usr/local/bin/alembic\", line 8, in <module>\n  sys.exit(main())\n       ^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/config.py\", line 591, in main\n  CommandLine(prog=prog).main(argv=argv)\n File \"/usr/local/lib/python3.11/site-packages/alembic/config.py\", line 585, in main\n  self.run_cmd(cfg, options)\n File \"/usr/local/lib/python3.11/site-packages/alembic/config.py\", line 562, in run_cmd\n  fn(\n File \"/usr/local/lib/python3.11/site-packages/alembic/command.py\", line 378, in upgrade\n  script.run_env()\n File \"/usr/local/lib/python3.11/site-packages/alembic/script/base.py\", line 576, in run_env\n  util.load_python_file(self.dir, \"env.py\")\n File \"/usr/local/lib/python3.11/site-packages/alembic/util/pyfiles.py\", line 94, in load_python_file\n  module = load_module_py(module_id, path)\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/util/pyfiles.py\", line 110, in load_module_py\n  spec.loader.exec_module(module) # type: ignore\n  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"<frozen importlib._bootstrap_external>\", line 940, in exec_module\n File \"<frozen importlib._bootstrap>\", line 241, in _call_with_frames_removed\n File \"/app/alembic/env.py\", line 239, in <module>\n  run_migrations_online()\n File \"/app/alembic/env.py\", line 233, in run_migrations_online\n  asyncio.run(run_async_migrations())\n File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 190, in run\n  return runner.run(main)\n      ^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n  return self._\ue000loop\ue001.run_until_complete(task)\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 653, in run_until_complete\n  return future.result()\n      ^^^^^^^^^^^^^^^\n File \"/app/alembic/env.py\", line 170, in run_async_migrations\n  await connection.run_sync(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/ext/asyncio/engine.py\", line 841, in run_sync\n  return await greenlet_spawn(fn, self._proxied, *arg, **kw)\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 192, in greenlet_spawn\n  result = context.throw(*sys.exc_info())\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/app/alembic/env.py\", line 115, in do_run_migrations\n  context.run_migrations()\n File \"<string>\", line 8, in run_migrations\n File \"/usr/local/lib/python3.11/site-packages/alembic/runtime/environment.py\", line 868, in run_migrations\n  self.get_context().run_migrations(**kw)\n File \"/usr/local/lib/python3.11/site-packages/alembic/runtime/migration.py\", line 622, in run_migrations\n  step.migration_fn(**kw)\n File \"/app/alembic/versions/3bd4c84fe72f_improved_index.py\", line 47, in upgrade\n  op.execute(\n File \"<string>\", line 8, in execute\n File \"<string>\", line 3, in execute\n File \"/usr/local/lib/python3.11/site-packages/alembic/operations/ops.py\", line 2411, in execute\n  return operations.invoke(op)\n      ^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/operations/base.py\", line 401, in invoke\n  return fn(self, operation)\n      ^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/alembic/operations/toimpl.py\", line 207, in execute_sql\n  operations.migration_context.impl.execute(\n File \"/usr/local/lib/python3.11/site-packages/alembic/ddl/impl.py\", line 202, in execute\n  self._exec(sql, execution_options)\n File \"/usr/local/lib/python3.11/site-packages/alembic/ddl/impl.py\", line 193, in _exec\n  return conn.execute( # type: ignore[call-overload]\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1413, in execute\n  return meth(\n      ^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py\", line 483, in _execute_on_connection\n  return connection._execute_clauseelement(\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1637, in _execute_clauseelement\n  ret = self._execute_context(\n     ^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1846, in _execute_context\n  return self._exec_single_context(\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1987, in _exec_single_context\n  self._handle_dbapi_exception(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 2344, in _handle_dbapi_exception\n  raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\n  self.dialect.do_execute(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\n  cursor.execute(statement, parameters)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 563, in execute\n  self._adapt_connection.await_(\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 126, in await_only\n  return current.driver.switch(awaitable) # type: ignore[no-any-return]\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 187, in greenlet_spawn\n  value = await result\n      ^^^^^^^^^^^^\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 542, in _prepare_and_execute\n  self._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 492, in _handle_exception\n  self._adapt_connection._handle_exception(error)\n File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 781, in _handle_exception\n  raise translated_error from error\nsqlalchemy.exc.InternalError: (sqlalchemy.dialects.postgresql.asyncpg.InternalServerError) <class 'asyncpg.exceptions.InternalServerError'>: tuple concurrently updated\n[SQL: \n  CREATE OR REPLACE FUNCTION update_chat_message_tsv()\n  RETURNS TRIGGER AS $$\n  BEGIN\n   NEW.message_tsv = to_tsvector('english', NEW.message);\n   RETURN NEW;\n  END;\n  $$ LANGUAGE plpgsql\n  ]```",
+                "permalink": "https://onyx-company.slack.com/archives/C0771QKDBPE/p1741707893653269?thread_ts=1741707874.322909",
+                "no_reactions": true
+            },
+            {
+                "iid": "e9843fcd-57a9-47be-8cb0-0e0538b6f199",
+                "team": "T05SS40AFAM",
+                "score": 148.15147,
+                "channel": {
+                    "id": "C087ZAB7N79",
+                    "is_channel": true,
+                    "is_group": false,
+                    "is_im": false,
+                    "is_mpim": false,
+                    "is_shared": false,
+                    "is_org_shared": false,
+                    "is_ext_shared": false,
+                    "is_private": false,
+                    "name": "danswer-uttr",
+                    "pending_shared": [],
+                    "is_pending_ext_shared": false
+                },
+                "type": "message",
+                "user": "U05SAGZPEA1",
+                "username": "yuhong",
+                "ts": "1730834396.764829",
+                "blocks": [
+                    {
+                        "type": "rich_text",
+                        "block_id": "vqHu7",
+                        "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "Hey folks! Wendi is new to the team and will be helping "
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "me",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": " with marketing related efforts. "
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "Looping",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": " her in!"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "text": "Hey folks! Wendi is new to the team and will be helping \ue000me\ue001 with marketing related efforts. \ue000Looping\ue001 her in!",
+                "permalink": "https://onyx-company.slack.com/archives/C087ZAB7N79/p1730834396764829"
+            },
+            {
+                "iid": "bf7825e9-275c-407e-8368-212eb0257445",
+                "team": "T05SS40AFAM",
+                "score": 3882.908,
+                "channel": {
+                    "id": "C0771QKDBPE",
+                    "is_channel": true,
+                    "is_group": false,
+                    "is_im": false,
+                    "is_mpim": false,
+                    "is_shared": false,
+                    "is_org_shared": false,
+                    "is_ext_shared": false,
+                    "is_private": false,
+                    "name": "eng-general",
+                    "pending_shared": [],
+                    "is_pending_ext_shared": false
+                },
+                "type": "message",
+                "user": "U05SAH6UGUD",
+                "username": "chris",
+                "ts": "1722659228.429399",
+                "blocks": [
+                    {
+                        "type": "rich_text",
+                        "block_id": "gDH+T",
+                        "elements": [
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "Sometimes, OAI will trigger a random security check, which results in a response that could trip up Danswer:\n\n"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "rich_text_preformatted",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": " 'message': '{\"detail\":\"litellm.BadRequestError: litellm.ContentPolicyViolationError: ContentPolicyViolationError: openaiException - Your request was rejected as a result of our safety system. Image descriptions generated from your prompt may contain text that is not allowed by our safety system. If you believe this was done in error, your request may succeed if retried, or by adjusting your prompt.\"}', 'path': 'uri=/copilotchatv2/v1/images/generations'}"
+                                    }
+                                ],
+                                "border": 0
+                            },
+                            {
+                                "type": "rich_text_section",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "Generated code copied from Danswer and pasted into an IDE, loses all whitespace/formatting\n\nSome background-indexer errors which I don\u2019t think impact us, but nevertheless I am including here:\n\n"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "rich_text_preformatted",
+                                "elements": [
+                                    {
+                                        "type": "text",
+                                        "text": "background-1              | (Background on this error at: "
+                                    },
+                                    {
+                                        "type": "link",
+                                        "url": "https://sqlalche.me/e/20/e3q8",
+                                        "text": "https://sqlalche."
+                                    },
+                                    {
+                                        "type": "link",
+                                        "url": "https://sqlalche.me/e/20/e3q8",
+                                        "text": "me",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "link",
+                                        "url": "https://sqlalche.me/e/20/e3q8",
+                                        "text": "/e/20/e3q8"
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": ")\nbackground-1              | Traceback (most recent call last):\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\nbackground-1              |     self.dialect.do_execute(\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\nbackground-1              |     cursor.execute(statement, parameters)\nbackground-1              | psycopg2.OperationalError: SSL SYSCALL error: EOF detected\nbackground-1              |\nbackground-1              |\nbackground-1              | The above exception was the direct cause of the following exception:\nbackground-1              |\nbackground-1              | Traceback (most recent call last):\nbackground-1              |   File \"/app/danswer/background/update.py\", line 406, in update_"
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "loop",
+                                        "style": {
+                                            "client_highlight": true
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": "\nbackground-1              |     check_index_swap(db_session)\nbackground-1              |   File \"/app/danswer/db/swap_index.py\", line 23, in check_index_swap\nbackground-1              |     all_cc_pairs = get_connector_credential_pairs(db_session)\nbackground-1              |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/app/danswer/db/connector_credential_pair.py\", line 30, in get_connector_credential_pairs\nbackground-1              |     results = db_session.scalars(stmt)\nbackground-1              |               ^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py\", line 2344, in scalars\nbackground-1              |     return self._execute_internal(\nbackground-1              |            ^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py\", line 2127, in _execute_internal\nbackground-1              |     result: Result[Any] = compile_state_cls.orm_execute_statement(\nbackground-1              |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/context.py\", line 293, in orm_execute_statement\nbackground-1              |     result = conn.execute(\nbackground-1              |              ^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1413, in execute\nbackground-1              |     return meth(\nbackground-1              |            ^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py\", line 483, in _execute_on_connection\nbackground-1              |     return connection._execute_clauseelement(\nbackground-1              |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1637, in _execute_clauseelement\nbackground-1              |     ret = self._execute_context(\nbackground-1              |           ^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1846, in _execute_context\nbackground-1              |     return self._exec_single_context(\nbackground-1              |            ^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1987, in _exec_single_context\nbackground-1              |     self._handle_dbapi_exception(\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 2344, in _handle_dbapi_exception\nbackground-1              |     raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\nbackground-1              |     self.dialect.do_execute(\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\nbackground-1              |     cursor.execute(statement, parameters)\nbackground-1              | sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) SSL SYSCALL error: EOF detected\nbackground-1              |\nbackground-1              | [SQL: SELECT connector_credential_pair.id, connector_credential_pair.name, connector_credential_pair.connector_id, connector_credential_pair.credential_id, connector_credential_pair.is_public, connector_credential_pair.last_successful_index_time, connector_credential_pair.total_docs_indexed\nbackground-1              | FROM connector_credential_pair]"
+                                    }
+                                ],
+                                "border": 0
+                            },
+                            {
+                                "type": "rich_text_section",
+                                "elements": []
+                            }
+                        ]
+                    }
+                ],
+                "text": "Sometimes, OAI will trigger a random security check, which results in a response that could trip up Danswer:\n\n``` 'message': '{\"detail\":\"litellm.BadRequestError: litellm.ContentPolicyViolationError: ContentPolicyViolationError: openaiException - Your request was rejected as a result of our safety system. Image descriptions generated from your prompt may contain text that is not allowed by our safety system. If you believe this was done in error, your request may succeed if retried, or by adjusting your prompt.\"}', 'path': 'uri=/copilotchatv2/v1/images/generations'}```\nGenerated code copied from Danswer and pasted into an IDE, loses all whitespace/formatting\n\nSome background-indexer errors which I don\u2019t think impact us, but nevertheless I am including here:\n\n```background-1              | (Background on this error at: <https://sqlalche.me/e/20/e3q8|https://sqlalche.\ue000me\ue001/e/20/e3q8>)\nbackground-1              | Traceback (most recent call last):\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\nbackground-1              |     self.dialect.do_execute(\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\nbackground-1              |     cursor.execute(statement, parameters)\nbackground-1              | psycopg2.OperationalError: SSL SYSCALL error: EOF detected\nbackground-1              |\nbackground-1              |\nbackground-1              | The above exception was the direct cause of the following exception:\nbackground-1              |\nbackground-1              | Traceback (most recent call last):\nbackground-1              |   File \"/app/danswer/background/update.py\", line 406, in update_\ue000loop\ue001\nbackground-1              |     check_index_swap(db_session)\nbackground-1              |   File \"/app/danswer/db/swap_index.py\", line 23, in check_index_swap\nbackground-1              |     all_cc_pairs = get_connector_credential_pairs(db_session)\nbackground-1              |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/app/danswer/db/connector_credential_pair.py\", line 30, in get_connector_credential_pairs\nbackground-1              |     results = db_session.scalars(stmt)\nbackground-1              |               ^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py\", line 2344, in scalars\nbackground-1              |     return self._execute_internal(\nbackground-1              |            ^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/session.py\", line 2127, in _execute_internal\nbackground-1              |     result: Result[Any] = compile_state_cls.orm_execute_statement(\nbackground-1              |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/orm/context.py\", line 293, in orm_execute_statement\nbackground-1              |     result = conn.execute(\nbackground-1              |              ^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1413, in execute\nbackground-1              |     return meth(\nbackground-1              |            ^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/sql/elements.py\", line 483, in _execute_on_connection\nbackground-1              |     return connection._execute_clauseelement(\nbackground-1              |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1637, in _execute_clauseelement\nbackground-1              |     ret = self._execute_context(\nbackground-1              |           ^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1846, in _execute_context\nbackground-1              |     return self._exec_single_context(\nbackground-1              |            ^^^^^^^^^^^^^^^^^^^^^^^^^^\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1987, in _exec_single_context\nbackground-1              |     self._handle_dbapi_exception(\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 2344, in _handle_dbapi_exception\nbackground-1              |     raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/base.py\", line 1968, in _exec_single_context\nbackground-1              |     self.dialect.do_execute(\nbackground-1              |   File \"/usr/local/lib/python3.11/site-packages/sqlalchemy/engine/default.py\", line 920, in do_execute\nbackground-1              |     cursor.execute(statement, parameters)\nbackground-1              | sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) SSL SYSCALL error: EOF detected\nbackground-1              |\nbackground-1              | [SQL: SELECT connector_credential_pair.id, connector_credential_pair.name, connector_credential_pair.connector_id, connector_credential_pair.credential_id, connector_credential_pair.is_public, connector_credential_pair.last_successful_index_time, connector_credential_pair.total_docs_indexed\nbackground-1              | FROM connector_credential_pair]```",
+                "permalink": "https://onyx-company.slack.com/archives/C0771QKDBPE/p1722659228429399?thread_ts=1722659098.056769",
+                "no_reactions": true
+            }
+        ]
+    }
+}
