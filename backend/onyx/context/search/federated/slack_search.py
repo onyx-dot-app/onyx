@@ -1,5 +1,4 @@
 import re
-from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
@@ -17,10 +16,7 @@ from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SLACK_ELEMENT_TYPE_MAP
 from onyx.context.search.federated.models import SlackElement
 from onyx.context.search.federated.models import SlackMessage
-from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import MAX_METRICS_CONTENT
-from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.db.document import DocumentSource
 from onyx.db.search_settings import get_current_search_settings
@@ -65,7 +61,8 @@ def get_unnested_elements(
     elements: list[dict[str, Any]], user_id_mapping: dict[str, str]
 ) -> list[SlackElement]:
     """
-    Unnests a tree of element nodes followed by a leaf text node, into a list of leaf elements.
+    Unnests a tree of nodes into a list of leaf SlackElements.
+    Only elements that are in SLACK_ELEMENT_TYPE_MAP are extracted.
     """
     flattened: list[SlackElement] = []
 
@@ -210,9 +207,7 @@ def process_slack_message(
 
 
 @log_function_time(print_only=True)
-def retrive_from_slack_api_and_process(
-    query: SearchQuery, db_session: Session
-) -> list[InferenceChunk]:
+def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceChunk]:
     # token isn't validated yet
     slack_client = WebClient(token=SLACK_USER_TOKEN)
 
@@ -308,49 +303,6 @@ def retrive_from_slack_api_and_process(
                 doc_summary="",
                 chunk_context="",
                 updated_at=doc_slack_messages[document_id].timestamp,
-            )
-        )
-
-    return top_chunks
-
-
-def retrieve_slack_chunks(
-    query: SearchQuery,
-    db_session: Session,
-    retrieval_metrics_callback: (
-        Callable[[RetrievalMetricsContainer], None] | None
-    ) = None,
-) -> list[InferenceChunk]:
-    # check if slack is filtered out
-    filters = query.filters
-    if (
-        filters.source_type is not None
-        and DocumentSource.SLACK not in filters.source_type
-    ):
-        return []
-
-    top_chunks = retrive_from_slack_api_and_process(query, db_session)
-
-    if not top_chunks:
-        logger.warning(
-            "Federated Slack search returned no results "
-            f"with filters: {query.filters}"
-        )
-        return []
-
-    if retrieval_metrics_callback is not None:
-        chunk_metrics = [
-            ChunkMetric(
-                document_id=chunk.document_id,
-                chunk_content_start=chunk.content[:MAX_METRICS_CONTENT],
-                first_link=chunk.source_links[0] if chunk.source_links else None,
-                score=chunk.score if chunk.score is not None else 0,
-            )
-            for chunk in top_chunks
-        ]
-        retrieval_metrics_callback(
-            RetrievalMetricsContainer(
-                search_type=query.search_type, metrics=chunk_metrics
             )
         )
 
