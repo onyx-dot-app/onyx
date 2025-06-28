@@ -13,3 +13,15 @@ class SlackMessage(BaseModel):
     timestamp: datetime
     score: float
     recency_bias: float
+
+
+SLACK_ELEMENT_TYPE_MAP: dict[str, str] = {
+    "text": "text",
+    "link": "url",
+    "user": "user_id",
+}
+
+
+class SlackElement(BaseModel):
+    text: str
+    highlight: bool
