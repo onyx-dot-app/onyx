@@ -56,7 +56,6 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import ConnectorFailure
-from onyx.connectors.models import DocExtractionContext
 from onyx.connectors.models import DocIndexingContext
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -74,14 +73,11 @@ from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import IndexAttemptError
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
-from onyx.db.index_attempt import mark_attempt_partially_succeeded
-from onyx.db.index_attempt import mark_attempt_succeeded
 from onyx.db.index_attempt import update_docs_indexed
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_default_document_index
-from onyx.file_store.document_batch_storage import DocumentBatchStorage
 from onyx.file_store.document_batch_storage import get_document_batch_storage
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -1474,42 +1470,6 @@ def _check_failure_threshold(
         )
 
 
-def _initialize_indexing_state(
-    storage: DocumentBatchStorage,
-) -> DocIndexingContext:
-    curr_state = storage.get_indexing_state()
-    if curr_state:
-        return curr_state
-
-    current_state = DocIndexingContext(
-        batches_done=0,
-        unfinished_batches=set(),
-        total_failures=0,
-        net_doc_change=0,
-        total_chunks=0,
-    )
-    storage.store_indexing_state(current_state)
-    return current_state
-
-
-def _ensure_indexing_state(
-    storage: DocumentBatchStorage,
-) -> DocIndexingContext:
-    current_state = storage.get_indexing_state()
-    if not current_state:
-        raise ValueError("No indexing state found")
-    return current_state
-
-
-def _ensure_extraction_state(
-    storage: DocumentBatchStorage,
-) -> DocExtractionContext:
-    current_state = storage.get_extraction_state()
-    if not current_state:
-        raise ValueError("No extraction state found")
-    return current_state
-
-
 def _update_indexing_state(
     index_attempt_id: int,
     tenant_id: str,
@@ -1520,7 +1480,7 @@ def _update_indexing_state(
     with get_session_with_current_tenant() as db_session:
         storage = get_document_batch_storage(tenant_id, index_attempt_id, db_session)
 
-        current_state = _ensure_indexing_state(storage)
+        current_state = storage.ensure_indexing_state()
         current_state.batches_done += 1
 
         current_state.total_failures += failures
@@ -1674,8 +1634,7 @@ def document_indexing_pipeline_task(
                     code=IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING.code,
                 )
 
-            with cross_batch_state_lock:
-                current_indexing_state = _initialize_indexing_state(storage)
+            current_indexing_state = storage.ensure_indexing_state()
 
             callback = IndexingCallback(
                 os.getppid(),
@@ -1779,14 +1738,8 @@ def document_indexing_pipeline_task(
         if callback:
             # _run_indexing for legacy reasons
             callback.progress("_run_indexing", len(documents))
-        # Check if all batches are complete and signal completion if so
-        with get_session_with_current_tenant() as db_session:
-            # Use the same Redis lock for consistency
-            with cross_batch_state_lock:
-                current_extraction_state = _ensure_extraction_state(storage)
-                check_indexing_completion(index_attempt_id, tenant_id)
 
-                # redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
+        # redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
         # Add telemetry for indexing progress
         optional_telemetry(
             record_type=RecordType.INDEXING_PROGRESS,
@@ -1795,7 +1748,7 @@ def document_indexing_pipeline_task(
                 "cc_pair_id": cc_pair_id,
                 "current_docs_indexed": current_indexing_state.net_doc_change,
                 "current_chunks_indexed": current_indexing_state.total_chunks,
-                "source": current_extraction_state.source.value,
+                "source": index_attempt.connector_credential_pair.connector.source.value,
             },
             tenant_id=tenant_id,
         )
@@ -1835,116 +1788,3 @@ def document_indexing_pipeline_task(
     finally:
         if per_batch_lock and per_batch_lock.owned():
             per_batch_lock.release()
-
-
-def check_indexing_completion(
-    index_attempt_id: int,
-    tenant_id: str,
-) -> None:
-
-    task_logger.info(
-        f"Checking for document processing completion: "
-        f"attempt={index_attempt_id} "
-        f"tenant={tenant_id}"
-    )
-
-    with get_session_with_current_tenant() as db_session:
-        storage = get_document_batch_storage(tenant_id, index_attempt_id, db_session)
-
-    try:
-        # Get current state
-        extraction_state = _ensure_extraction_state(storage)
-        indexing_state = _ensure_indexing_state(storage)
-
-        # Check if extraction is complete and all batches are processed
-        batches_total = extraction_state.doc_extraction_complete_batch_num
-        batches_processed = indexing_state.batches_done
-        extraction_completed = batches_total is not None and (
-            batches_processed >= batches_total
-        )
-
-        task_logger.info(
-            f"Processing status: "
-            f"extraction_completed={extraction_completed} "
-            f"batches_processed={batches_processed}/{batches_total or '?'}"  # probably off by 1
-        )
-
-        if not extraction_completed:
-            return
-
-        task_logger.info(
-            f"All batches for index attempt {index_attempt_id} have been processed."
-        )
-
-        # All processing is complete
-        total_failures = indexing_state.total_failures
-
-        with get_session_with_current_tenant() as db_session:
-            if total_failures == 0:
-                mark_attempt_succeeded(index_attempt_id, db_session)
-                task_logger.info(
-                    f"Index attempt {index_attempt_id} completed successfully"
-                )
-            else:
-                mark_attempt_partially_succeeded(index_attempt_id, db_session)
-                task_logger.info(
-                    f"Index attempt {index_attempt_id} completed with {total_failures} failures"
-                )
-
-            # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
-            index_attempt = get_index_attempt(db_session, index_attempt_id)
-            if (
-                index_attempt
-                and index_attempt.connector_credential_pair.indexing_trigger is not None
-            ):
-                task_logger.info(
-                    "Clearing indexing trigger after completion: "
-                    f"cc_pair={index_attempt.connector_credential_pair.id} "
-                    f"trigger={index_attempt.connector_credential_pair.indexing_trigger}"
-                )
-                mark_ccpair_with_indexing_trigger(
-                    index_attempt.connector_credential_pair.id, None, db_session
-                )
-
-        # Clean up all remaining storage
-        storage.cleanup_all_batches()
-
-        # Clean up the fence to allow the next run to start
-        with get_session_with_current_tenant() as db_session:
-            index_attempt = get_index_attempt(db_session, index_attempt_id)
-            if index_attempt and index_attempt.search_settings:
-                redis_connector = RedisConnector(
-                    tenant_id, index_attempt.connector_credential_pair_id
-                )
-                redis_connector_index = redis_connector.new_index(
-                    index_attempt.search_settings.id
-                )
-                redis_connector_index.reset()
-                task_logger.info(
-                    f"Resetting indexing fence for attempt {index_attempt_id}"
-                )
-
-    except Exception as e:
-        task_logger.exception(
-            f"Failed to monitor document processing completion: "
-            f"attempt={index_attempt_id} "
-            f"error={str(e)}"
-        )
-
-        # Mark the attempt as failed if monitoring fails
-        try:
-            with get_session_with_current_tenant() as db_session:
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session,
-                    failure_reason=f"Processing monitoring failed: {str(e)}",
-                    full_exception_trace=traceback.format_exc(),
-                )
-        except Exception:
-            task_logger.exception("Failed to mark attempt as failed")
-
-        # Try to clean up storage
-        try:
-            storage.cleanup_all_batches()
-        except Exception:
-            task_logger.exception("Failed to cleanup storage after monitoring failure")

@@ -74,6 +74,20 @@ class DocumentBatchStorage(ABC):
     def cleanup_all_batches(self) -> None:
         """Clean up all batches and state for this index attempt."""
 
+    def ensure_extraction_state(self) -> DocExtractionContext:
+        """Ensure extraction state exists."""
+        state = self.get_extraction_state()
+        if not state:
+            raise RuntimeError("Expected extraction state not found")
+        return state
+
+    def ensure_indexing_state(self) -> DocIndexingContext:
+        """Ensure indexing state exists."""
+        state = self.get_indexing_state()
+        if not state:
+            raise RuntimeError("Expected indexing state not found")
+        return state
+
     def _serialize_documents(self, documents: list[Document]) -> str:
         """Serialize documents to JSON string."""
         # Use mode='json' to properly serialize datetime and other complex types

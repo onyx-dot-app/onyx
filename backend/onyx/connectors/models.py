@@ -392,7 +392,6 @@ class DocExtractionContext(BaseModel):
 
 class DocIndexingContext(BaseModel):
     batches_done: int
-    unfinished_batches: set[int]
     total_failures: int
     net_doc_change: int
     total_chunks: int
