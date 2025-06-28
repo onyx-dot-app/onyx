@@ -2036,13 +2036,13 @@ export function ChatPage({
     if (user?.is_anonymous_user) {
       return;
     }
-    (Cookies.set(
+    Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!sidebarVisible).toLocaleLowerCase()
     ),
       {
         path: "/",
-      });
+      };
 
     toggle();
   };

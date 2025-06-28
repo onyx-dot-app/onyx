@@ -33,13 +33,13 @@ export default function SidebarWrapper<T extends object>({
   const [untoggled, setUntoggled] = useState(false);
 
   const toggleSidebar = useCallback(() => {
-    (Cookies.set(
+    Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!sidebarVisible).toLocaleLowerCase()
     ),
       {
         path: "/",
-      });
+      };
     setSidebarVisible((sidebarVisible) => !sidebarVisible);
   }, [sidebarVisible]);
 
