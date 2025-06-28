@@ -241,8 +241,14 @@ def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceCh
         IndexingDocument(
             id=slack_message.document_id,
             sections=[
-                TextSection(text=text, link=slack_message.link)
-                for text in slack_message.texts
+                TextSection(
+                    text="\n".join(slack_message.texts), link=slack_message.link
+                )
+            ],
+            processed_sections=[
+                TextSection(
+                    text="\n".join(slack_message.texts), link=slack_message.link
+                )
             ],
             source=DocumentSource.SLACK,
             semantic_identifier=slack_message.semantic_identifier,
@@ -288,7 +294,7 @@ def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceCh
                 source_links=chunk.source_links,
                 image_file_id=chunk.image_file_id,
                 section_continuation=chunk.section_continuation,
-                semantic_identifier=chunk.blurb,
+                semantic_identifier=doc_slack_messages[document_id].semantic_identifier,
                 document_id=document_id,
                 source_type=DocumentSource.SLACK,
                 title=chunk.title_prefix,
