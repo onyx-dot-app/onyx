@@ -467,11 +467,11 @@ def upgrade() -> None:
 
     # Create GIN index for clustering and normalization
     op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
+        "CREATE INDEX IF NOT EXISTS idx_kg_entity_clustering_trigrams "
         f"ON kg_entity USING GIN (name {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.gin_trgm_ops)"
     )
     op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_normalization_trigrams "
+        "CREATE INDEX IF NOT EXISTS idx_kg_entity_normalization_trigrams "
         "ON kg_entity USING GIN (name_trigrams)"
     )
 
@@ -625,9 +625,8 @@ def downgrade() -> None:
         op.execute(f"DROP FUNCTION IF EXISTS {function}()")
 
     # Drop index
-    op.execute("COMMIT")  # Commit to allow CONCURRENTLY
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_clustering_trigrams")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_normalization_trigrams")
+    op.execute("DROP INDEX IF EXISTS idx_kg_entity_clustering_trigrams")
+    op.execute("DROP INDEX IF EXISTS idx_kg_entity_normalization_trigrams")
 
     # Drop tables in reverse order of creation to handle dependencies
     op.drop_table("kg_term")
