@@ -15,6 +15,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 SecondsSinceUnixEpoch = float
 
@@ -58,6 +59,12 @@ class BaseConnector(abc.ABC, Generic[CT]):
 
         Default is a no-op (always successful).
         """
+        validate_connector_settings_fn = fetch_ee_implementation_or_noop(
+            "onyx.connectors.perm_sync_valid",
+            "validate_perm_sync",
+            noop_return_value=None,
+        )
+        validate_connector_settings_fn(self)
 
     def validate_perm_sync(self) -> None:
         """
