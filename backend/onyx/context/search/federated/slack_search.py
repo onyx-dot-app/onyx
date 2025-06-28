@@ -71,17 +71,19 @@ def get_unnested_elements(
 
     for element in elements:
         if "elements" in element:
-            flattened.extend(get_unnested_elements(element["elements"]))
+            flattened.extend(
+                get_unnested_elements(element["elements"], user_id_mapping)
+            )
             continue
 
         element_type: str | None = element.get("type")
         if element_type not in SLACK_ELEMENT_TYPE_MAP:
             continue
 
-        text: str | None = element.get(SLACK_ELEMENT_TYPE_MAP[element_type])
+        text: str = element.get(SLACK_ELEMENT_TYPE_MAP[element_type], "")
         highlighted: bool = element.get("style", {}).get("client_highlight", False)
         if element_type == "user":
-            text = user_id_mapping.get(text)
+            text = user_id_mapping.get(text, "")
         if text:
             flattened.append(SlackElement(text=text, highlight=highlighted))
 
