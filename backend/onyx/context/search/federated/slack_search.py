@@ -80,7 +80,11 @@ def get_unnested_elements(
         if element_type not in SLACK_ELEMENT_TYPE_MAP:
             continue
 
-        text: str = element.get(SLACK_ELEMENT_TYPE_MAP[element_type], "")
+        text: str = ""
+        for field in SLACK_ELEMENT_TYPE_MAP[element_type]:
+            text = element.get(field, "")
+            if text:
+                break
         highlighted: bool = element.get("style", {}).get("client_highlight", False)
         if element_type == "user":
             text = user_id_mapping.get(text, "")

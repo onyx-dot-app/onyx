@@ -15,10 +15,10 @@ class SlackMessage(BaseModel):
     recency_bias: float
 
 
-SLACK_ELEMENT_TYPE_MAP: dict[str, str] = {
-    "text": "text",
-    "link": "url",
-    "user": "user_id",
+SLACK_ELEMENT_TYPE_MAP: dict[str, list[str]] = {
+    "text": ["text"],
+    "link": ["text", "url"],
+    "user": ["user_id"],
 }
 
 
