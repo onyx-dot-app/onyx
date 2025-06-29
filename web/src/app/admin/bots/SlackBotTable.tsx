@@ -111,7 +111,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Slack Bot to begin chatting with Danswer!
+                Please add a New Slack Bot to begin chatting with ONYX!
               </TableCell>
             </TableRow>
           )}
