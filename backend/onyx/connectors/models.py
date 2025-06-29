@@ -364,7 +364,8 @@ class ConnectorFailure(BaseModel):
 
 
 class OnyxMetadata(BaseModel):
-    doc_id: str | None = None
+    # Note that doc_id cannot be overriden here as it may cause issues
+    # with the display functionalities in the UI. Ask @chris if clarification is needed.
     source_type: DocumentSource | None = None
     link: str | None = None
     file_display_name: str | None = None

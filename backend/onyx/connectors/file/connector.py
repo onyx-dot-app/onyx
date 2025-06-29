@@ -171,7 +171,6 @@ def _process_file(
         custom_tags.update(more_custom_tags)
 
         # File-specific metadata overrides metadata processed so far
-        doc_id = onyx_metadata.doc_id or doc_id
         source_type = onyx_metadata.source_type or source_type
         primary_owners = onyx_metadata.primary_owners or primary_owners
         secondary_owners = onyx_metadata.secondary_owners or secondary_owners
