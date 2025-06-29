@@ -108,6 +108,11 @@ export interface NotionCredentialJson {
   notion_integration_token: string;
 }
 
+export interface OutlineCredentialJson {
+  outline_base_url: string;
+  outline_api_token: string;
+}
+
 export interface ZulipCredentialJson {
   zuliprc_content: string;
 }
@@ -267,6 +272,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
   productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
   slab: { slab_bot_token: "" } as SlabCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
+  outline: {
+    outline_base_url: "",
+    outline_api_token: "",
+  } as OutlineCredentialJson,
   guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
   gong: {
     gong_access_key: "",
@@ -441,6 +450,10 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Notion
   notion_integration_token: "Notion Integration Token",
+
+  // Outline
+  outline_base_url: "Outline Base URL",
+  outline_api_token: "Outline API Token",
 
   // Zulip
   zuliprc_content: "Zuliprc Content",

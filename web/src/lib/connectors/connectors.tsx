@@ -808,6 +808,11 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  outline: {
+    description: "Sync documents and collections from Outline knowledge base",
+    values: [],
+    advanced_values: [],
+  },
   hubspot: {
     description: "Configure HubSpot connector",
     values: [
@@ -1559,6 +1564,8 @@ export interface ZulipConfig {
 export interface NotionConfig {
   root_page_id?: string;
 }
+
+export interface OutlineConfig {}
 
 export interface HubSpotConfig {
   object_types?: string[];
