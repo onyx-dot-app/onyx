@@ -109,12 +109,14 @@ def process_onyx_metadata(
 
     return (
         OnyxMetadata(
+            doc_id=metadata.get("document_id"),
+            source_type=metadata.get("connector_type"),
             link=metadata.get("link"),
             file_display_name=metadata.get("file_display_name"),
+            title=metadata.get("title"),
             primary_owners=p_owners,
             secondary_owners=s_owners,
             doc_updated_at=doc_updated_at,
-            title=metadata.get("title"),
         ),
         {
             k: v
