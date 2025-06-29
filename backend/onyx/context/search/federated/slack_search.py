@@ -8,7 +8,6 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import NUM_SLACK_CHUNKS
 from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
 from onyx.configs.app_configs import SLACK_USER_TOKEN
 from onyx.configs.chat_configs import DOC_TIME_DECAY
@@ -121,7 +120,7 @@ def get_relevant_regions(
             highlighted_texts.add(element.text)
             highlighted_idxs.append(i)
 
-    # grab text within window of highlighted text
+    # grab surrounding text within window of highlighted text
     relevant_regions: list[str] = []
     last_end = -1
     for idx in highlighted_idxs:
@@ -316,7 +315,5 @@ def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceCh
                 updated_at=doc_slack_messages[document_id].timestamp,
             )
         )
-        if len(top_chunks) >= NUM_SLACK_CHUNKS:
-            break
 
     return top_chunks
