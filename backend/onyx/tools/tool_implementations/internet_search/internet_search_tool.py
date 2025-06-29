@@ -20,6 +20,7 @@ from onyx.llm.utils import message_to_string
 from onyx.prompts.chat_prompts import INTERNET_SEARCH_QUERY_REPHRASE
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
+from onyx.tools.constants import INTERNET_SEARCH_TOOL_NAME
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -108,7 +109,7 @@ def internet_search_response_to_search_docs(
 
 # override_kwargs is not supported for internet search tools
 class InternetSearchTool(Tool[None]):
-    _NAME = "run_internet_search"
+    _NAME = INTERNET_SEARCH_TOOL_NAME
     _DISPLAY_NAME = "Internet Search"
     _DESCRIPTION = "Perform an internet search for up-to-date information."
 

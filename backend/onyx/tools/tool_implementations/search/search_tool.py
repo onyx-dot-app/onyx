@@ -39,6 +39,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
+from onyx.tools.constants import SEARCH_TOOL_NAME
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -81,7 +82,7 @@ HINT: if you are unfamiliar with the user input OR think the user input is a typ
 
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
-    _NAME = "run_search"
+    _NAME = SEARCH_TOOL_NAME
     _DISPLAY_NAME = "Search Tool"
     _DESCRIPTION = SEARCH_TOOL_DESCRIPTION
 
