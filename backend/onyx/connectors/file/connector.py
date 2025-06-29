@@ -171,10 +171,13 @@ def _process_file(
         custom_tags.update(more_custom_tags)
 
         # File-specific metadata overrides metadata processed so far
+        doc_id = onyx_metadata.doc_id or doc_id
+        source_type = onyx_metadata.source_type or source_type
         primary_owners = onyx_metadata.primary_owners or primary_owners
         secondary_owners = onyx_metadata.secondary_owners or secondary_owners
         time_updated = onyx_metadata.doc_updated_at or time_updated
         file_display_name = onyx_metadata.file_display_name or file_display_name
+        title = onyx_metadata.title or onyx_metadata.file_display_name or title
         link = onyx_metadata.link or link
 
     # Build sections: first the text as a single Section

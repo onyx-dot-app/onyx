@@ -364,8 +364,11 @@ class ConnectorFailure(BaseModel):
 
 
 class OnyxMetadata(BaseModel):
+    doc_id: str | None = None
+    source_type: DocumentSource | None = None
     link: str | None = None
     file_display_name: str | None = None
     primary_owners: list[BasicExpertInfo] | None = None
     secondary_owners: list[BasicExpertInfo] | None = None
     doc_updated_at: datetime | None = None
+    title: str | None = None

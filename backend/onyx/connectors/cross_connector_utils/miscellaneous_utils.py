@@ -114,6 +114,7 @@ def process_onyx_metadata(
             primary_owners=p_owners,
             secondary_owners=s_owners,
             doc_updated_at=doc_updated_at,
+            title=metadata.get("title"),
         ),
         {
             k: v
