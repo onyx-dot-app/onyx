@@ -18,16 +18,16 @@ from onyx.context.search.models import SearchQuery
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
+from onyx.context.search.utils import get_query_embedding
+from onyx.context.search.utils import get_query_embeddings
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.connector import fetch_unique_document_sources
-from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -35,9 +35,6 @@ from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import TimeoutThread
 from onyx.utils.threadpool_concurrency import wait_on_background
 from onyx.utils.timing import log_function_time
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
@@ -115,34 +112,6 @@ def combine_retrieval_results(
     )
 
     return sorted_chunks
-
-
-def get_query_embedding(query: str, db_session: Session) -> Embedding:
-    search_settings = get_current_search_settings(db_session)
-
-    model = EmbeddingModel.from_db_model(
-        search_settings=search_settings,
-        # The below are globally set, this flow always uses the indexing one
-        server_host=MODEL_SERVER_HOST,
-        server_port=MODEL_SERVER_PORT,
-    )
-
-    query_embedding = model.encode([query], text_type=EmbedTextType.QUERY)[0]
-    return query_embedding
-
-
-def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedding]:
-    search_settings = get_current_search_settings(db_session)
-
-    model = EmbeddingModel.from_db_model(
-        search_settings=search_settings,
-        # The below are globally set, this flow always uses the indexing one
-        server_host=MODEL_SERVER_HOST,
-        server_port=MODEL_SERVER_PORT,
-    )
-
-    query_embedding = model.encode(queries, text_type=EmbedTextType.QUERY)
-    return query_embedding
 
 
 @log_function_time(print_only=True)
@@ -410,7 +379,7 @@ def retrieve_chunks(
     # Federated retrieval
     connector_sources = set(fetch_unique_document_sources(db_session))
     for source, retrieval_func in FEDERATED_SEARCH_FUNCTIONS.items():
-        # TODO: checking connector may change with new federated connectors
+        # TODO: checking connector logic may change with new federated connectors
         if source in connector_sources and (
             source_filters is None or source in source_filters
         ):
