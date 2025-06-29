@@ -925,6 +925,17 @@ def connector_document_extraction(
         if index_attempt.search_settings is None:
             raise ValueError("Search settings must be set for indexing")
 
+        # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
+        if index_attempt.connector_credential_pair.indexing_trigger is not None:
+            logger.info(
+                "Clearing indexing trigger: "
+                f"cc_pair={index_attempt.connector_credential_pair.id} "
+                f"trigger={index_attempt.connector_credential_pair.indexing_trigger}"
+            )
+            mark_ccpair_with_indexing_trigger(
+                index_attempt.connector_credential_pair.id, None, db_session
+            )
+
         db_connector = index_attempt.connector_credential_pair.connector
         db_credential = index_attempt.connector_credential_pair.credential
         is_primary = index_attempt.search_settings.status == IndexModelStatus.PRESENT
@@ -1208,8 +1219,6 @@ def connector_document_extraction(
         final_state.doc_extraction_complete_batch_num = batch_num
         batch_storage.store_extraction_state(final_state)
 
-        # TODO: the connector CAN run for awhile at the end while yielding no doc batches.
-        # We should check_indexing_completion HERE using maybe the index attempt table
         check_indexing_completion(index_attempt_id, tenant_id)
 
     except Exception as e:
@@ -1297,7 +1306,6 @@ def connector_document_extraction(
                     )
 
             memory_tracer.stop()
-            raise e
         else:
             with get_session_with_current_tenant() as db_session_temp:
                 mark_attempt_failed(
@@ -1380,21 +1388,6 @@ def check_indexing_completion(
                 mark_attempt_partially_succeeded(index_attempt_id, db_session)
                 logger.info(
                     f"Index attempt {index_attempt_id} completed with {total_failures} failures"
-                )
-
-            # Clear the indexing trigger if it was set, to prevent duplicate indexing attempts
-            index_attempt = get_index_attempt(db_session, index_attempt_id)
-            if (
-                index_attempt
-                and index_attempt.connector_credential_pair.indexing_trigger is not None
-            ):
-                logger.info(
-                    "Clearing indexing trigger after completion: "
-                    f"cc_pair={index_attempt.connector_credential_pair.id} "
-                    f"trigger={index_attempt.connector_credential_pair.indexing_trigger}"
-                )
-                mark_ccpair_with_indexing_trigger(
-                    index_attempt.connector_credential_pair.id, None, db_session
                 )
 
         # Clean up all remaining storage
