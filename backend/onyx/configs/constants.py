@@ -185,6 +185,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    DRUPAL_WIKI = "drupal_wiki"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
