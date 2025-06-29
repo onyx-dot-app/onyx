@@ -70,20 +70,19 @@ def _get_all_backend_configs() -> List[BackendConfig]:
     if S3_ENDPOINT_URL:
         minio_access_key = "minioadmin"
         minio_secret_key = "minioadmin"
-        if minio_access_key and minio_secret_key:
-            configs.append(
-                {
-                    "endpoint_url": S3_ENDPOINT_URL,
-                    "access_key": minio_access_key,
-                    "secret_key": minio_secret_key,
-                    "region": "us-east-1",
-                    "verify_ssl": False,
-                    "backend_name": "MinIO",
-                }
-            )
+        configs.append(
+            {
+                "endpoint_url": S3_ENDPOINT_URL,
+                "access_key": minio_access_key,
+                "secret_key": minio_secret_key,
+                "region": "us-east-1",
+                "verify_ssl": False,
+                "backend_name": "MinIO",
+            }
+        )
 
     # AWS S3 configuration (if credentials are available)
-    if S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
+    elif S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
         configs.append(
             {
                 "endpoint_url": None,
@@ -116,7 +115,6 @@ def file_store(
 
     # Create S3BackedFileStore with backend-specific configuration
     store = S3BackedFileStore(
-        db_session=db_session,
         bucket_name=TEST_BUCKET_NAME,
         aws_access_key_id=backend_config["access_key"],
         aws_secret_access_key=backend_config["secret_key"],
@@ -827,7 +825,6 @@ class TestS3BackedFileStore:
                     # Create a new database session for each worker to avoid conflicts
                     with get_session_with_current_tenant() as worker_session:
                         worker_file_store = S3BackedFileStore(
-                            db_session=worker_session,
                             bucket_name=current_bucket_name,
                             aws_access_key_id=current_access_key,
                             aws_secret_access_key=current_secret_key,
@@ -849,6 +846,7 @@ class TestS3BackedFileStore:
                             display_name=f"Worker {worker_id} File",
                             file_origin=file_origin,
                             file_type=file_type,
+                            db_session=worker_session,
                         )
                         results.append((file_name, content))
                         return True

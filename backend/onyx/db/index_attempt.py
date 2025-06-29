@@ -28,6 +28,8 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 
+# from sqlalchemy.sql.selectable import Select
+
 # Comment out unused imports that cause mypy errors
 # from onyx.auth.models import UserRole
 # from onyx.configs.constants import MAX_LAST_VALID_CHECKPOINT_AGE_SECONDS
@@ -95,9 +97,25 @@ def get_recent_attempts_for_cc_pair(
 
 
 def get_index_attempt(
-    db_session: Session, index_attempt_id: int
+    db_session: Session,
+    index_attempt_id: int,
+    eager_load_cc_pair: bool = False,
+    eager_load_search_settings: bool = False,
 ) -> IndexAttempt | None:
     stmt = select(IndexAttempt).where(IndexAttempt.id == index_attempt_id)
+    if eager_load_cc_pair:
+        stmt = stmt.options(
+            joinedload(IndexAttempt.connector_credential_pair).joinedload(
+                ConnectorCredentialPair.connector
+            )
+        )
+        stmt = stmt.options(
+            joinedload(IndexAttempt.connector_credential_pair).joinedload(
+                ConnectorCredentialPair.credential
+            )
+        )
+    if eager_load_search_settings:
+        stmt = stmt.options(joinedload(IndexAttempt.search_settings))
     return db_session.scalars(stmt).first()
 
 
@@ -373,16 +391,22 @@ def update_docs_indexed(
     new_docs_indexed: int,
     docs_removed_from_index: int,
 ) -> None:
+    """Updates the docs_indexed and new_docs_indexed fields of an index attempt.
+    Adds the given values to the current values in the db"""
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
             .where(IndexAttempt.id == index_attempt_id)
-            .with_for_update()
+            .with_for_update()  # Locks the row when we try to update
         ).scalar_one()
 
-        attempt.total_docs_indexed = total_docs_indexed
-        attempt.new_docs_indexed = new_docs_indexed
-        attempt.docs_removed_from_index = docs_removed_from_index
+        attempt.total_docs_indexed = (
+            attempt.total_docs_indexed or 0
+        ) + total_docs_indexed
+        attempt.new_docs_indexed = (attempt.new_docs_indexed or 0) + new_docs_indexed
+        attempt.docs_removed_from_index = (
+            attempt.docs_removed_from_index or 0
+        ) + docs_removed_from_index
         db_session.commit()
     except Exception:
         db_session.rollback()

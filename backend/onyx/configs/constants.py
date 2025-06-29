@@ -66,6 +66,7 @@ POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
+POSTGRES_CELERY_WORKER_docfetching_APP_NAME = "celery_worker_docfetching"
 POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_CELERY_WORKER_KG_PROCESSING_APP_NAME = "celery_worker_kg_processing"
@@ -323,6 +324,10 @@ class OnyxCeleryQueues:
     CONNECTOR_INDEXING = "connector_indexing"
     USER_FILES_INDEXING = "user_files_indexing"
 
+    # Document processing pipeline queue
+    DOCUMENT_INDEXING_PIPELINE = "document_indexing_pipeline"
+    CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
+
     # Monitoring queue
     MONITORING = "monitoring"
 
@@ -454,6 +459,11 @@ class OnyxCeleryTask:
         "connector_external_group_sync_generator_task"
     )
     CONNECTOR_INDEXING_PROXY_TASK = "connector_indexing_proxy_task"
+
+    # New split indexing tasks
+    CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
+    DOCUMENT_INDEXING_PIPELINE_TASK = "document_indexing_pipeline_task"
+
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
