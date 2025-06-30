@@ -8,8 +8,6 @@ from typing import List
 from typing import Optional
 from typing import TypeAlias
 
-from sqlalchemy.orm import Session
-
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import DocExtractionContext
 from onyx.connectors.models import DocIndexingContext
@@ -287,10 +285,10 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
 
 def get_document_batch_storage(
-    tenant_id: str, index_attempt_id: int, db_session: Session
+    tenant_id: str, index_attempt_id: int
 ) -> DocumentBatchStorage:
     """Factory function to get the configured document batch storage implementation."""
     # The get_default_file_store will now correctly use S3BackedFileStore
     # or other configured stores based on environment variables
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     return FileStoreDocumentBatchStorage(tenant_id, index_attempt_id, file_store)

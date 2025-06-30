@@ -17,7 +17,6 @@ from requests import JSONDecodeError
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
@@ -205,27 +204,26 @@ class CustomTool(BaseTool):
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str
     ) -> List[str]:
-        with get_session_with_current_tenant() as db_session:
-            file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
 
-            file_id = str(uuid.uuid4())
+        file_id = str(uuid.uuid4())
 
-            # Handle both binary and text content
-            if isinstance(file_content, str):
-                content = BytesIO(file_content.encode())
-            else:
-                content = BytesIO(file_content)
+        # Handle both binary and text content
+        if isinstance(file_content, str):
+            content = BytesIO(file_content.encode())
+        else:
+            content = BytesIO(file_content)
 
-            file_store.save_file(
-                file_id=file_id,
-                content=content,
-                display_name=file_id,
-                file_origin=FileOrigin.CHAT_UPLOAD,
-                file_type=content_type,
-                file_metadata={
-                    "content_type": content_type,
-                },
-            )
+        file_store.save_file(
+            file_id=file_id,
+            content=content,
+            display_name=file_id,
+            file_origin=FileOrigin.CHAT_UPLOAD,
+            file_type=content_type,
+            file_metadata={
+                "content_type": content_type,
+            },
+        )
 
         return [file_id]
 
@@ -328,22 +326,21 @@ class CustomTool(BaseTool):
 
         # Load files from storage
         files = []
-        with get_session_with_current_tenant() as db_session:
-            file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
 
-            for file_id in response.tool_result.file_ids:
-                try:
-                    file_io = file_store.read_file(file_id, mode="b")
-                    files.append(
-                        InMemoryChatFile(
-                            file_id=file_id,
-                            filename=file_id,
-                            content=file_io.read(),
-                            file_type=file_type,
-                        )
+        for file_id in response.tool_result.file_ids:
+            try:
+                file_io = file_store.read_file(file_id, mode="b")
+                files.append(
+                    InMemoryChatFile(
+                        file_id=file_id,
+                        filename=file_id,
+                        content=file_io.read(),
+                        file_type=file_type,
                     )
-                except Exception:
-                    logger.exception(f"Failed to read file {file_id}")
+                )
+            except Exception:
+                logger.exception(f"Failed to read file {file_id}")
 
             # Update prompt with file content
             prompt_builder.update_user_prompt(

@@ -259,7 +259,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
             # set up the file store (e.g. create bucket if needed). On multi-tenant,
             # this is done via IaC
-            get_default_file_store(db_session).initialize()
+            get_default_file_store().initialize()
     else:
         setup_multitenant_onyx()
 

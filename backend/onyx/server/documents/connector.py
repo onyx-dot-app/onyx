@@ -421,7 +421,7 @@ def extract_zip_metadata(zf: zipfile.ZipFile) -> dict[str, Any]:
     return zip_metadata
 
 
-def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResponse:
+def upload_files(files: list[UploadFile]) -> FileUploadResponse:
     for file in files:
         if not file.filename:
             raise HTTPException(status_code=400, detail="File name cannot be empty")
@@ -434,7 +434,7 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
     deduped_file_paths = []
     zip_metadata = {}
     try:
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         seen_zip = False
         for file in files:
             if file.content_type and file.content_type.startswith("application/zip"):
@@ -491,9 +491,8 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
 def upload_files_api(
     files: list[UploadFile],
     _: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
-    return upload_files(files, db_session)
+    return upload_files(files)
 
 
 @router.get("/admin/connector")

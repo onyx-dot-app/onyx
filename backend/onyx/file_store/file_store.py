@@ -22,11 +22,14 @@ from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.file_record import delete_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.file_record import get_filerecord_by_prefix
 from onyx.db.file_record import upsert_filerecord
+from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
@@ -128,6 +131,12 @@ class FileStore(ABC):
     def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
         """
         Get the file + parse out the mime type.
+        """
+
+    @abstractmethod
+    def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
+        """
+        List all file IDs that start with the given prefix.
         """
 
 
@@ -408,6 +417,16 @@ class S3BackedFileStore(FileStore):
         except Exception:
             return None
 
+    def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
+        """
+        List all file IDs that start with the given prefix.
+        """
+        with get_session_with_current_tenant() as db_session:
+            file_records = get_filerecord_by_prefix(
+                prefix=prefix, db_session=db_session
+            )
+        return file_records
+
 
 def get_s3_file_store() -> S3BackedFileStore:
     """
@@ -432,7 +451,7 @@ def get_s3_file_store() -> S3BackedFileStore:
     )
 
 
-def get_default_file_store(db_session: Session) -> FileStore:
+def get_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation.
 

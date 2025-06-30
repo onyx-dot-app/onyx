@@ -900,10 +900,7 @@ def connector_document_extraction(
     )
 
     # Get batch storage (transition to IN_PROGRESS is handled by run_indexing_entrypoint)
-    with get_session_with_current_tenant() as db_session:
-        batch_storage = get_document_batch_storage(
-            tenant_id, index_attempt_id, db_session
-        )
+    batch_storage = get_document_batch_storage(tenant_id, index_attempt_id)
 
     # Initialize memory tracer. NOTE: won't actually do anything if
     # `INDEXING_TRACER_INTERVAL` is 0.
@@ -1337,12 +1334,12 @@ def check_indexing_completion(
         f"tenant={tenant_id}"
     )
 
-    with get_session_with_current_tenant() as db_session:
-        storage = get_document_batch_storage(tenant_id, index_attempt_id, db_session)
+    storage = get_document_batch_storage(tenant_id, index_attempt_id)
 
     try:
         last_progress_time = time.monotonic()
         last_batches_completed = 0
+        # TODO: if there are no indexing workers running, fail the attempt
         while True:
             # Get current state
             indexing_state = storage.ensure_indexing_state()

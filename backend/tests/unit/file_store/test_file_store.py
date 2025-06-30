@@ -77,9 +77,9 @@ def sample_file_io(sample_content: bytes) -> BytesIO:
 class TestExternalStorageFileStore:
     """Test external storage file store functionality (S3-compatible)"""
 
-    def test_get_default_file_store_s3(self, db_session: Session) -> None:
+    def test_get_default_file_store_s3(self) -> None:
         """Test that external storage file store is returned"""
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         assert isinstance(file_store, S3BackedFileStore)
 
     def test_s3_client_initialization_with_credentials(self) -> None:
@@ -311,8 +311,8 @@ class TestExternalStorageFileStore:
 class TestFileStoreInterface:
     """Test the general file store interface"""
 
-    def test_file_store_always_external_storage(self, db_session: Session) -> None:
+    def test_file_store_always_external_storage(self) -> None:
         """Test that external storage file store is always returned"""
         # File store should always be S3BackedFileStore regardless of environment
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         assert isinstance(file_store, S3BackedFileStore)

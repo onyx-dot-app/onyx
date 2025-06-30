@@ -716,17 +716,16 @@ def _update_indexing_state(
     new_docs: int,
     total_chunks: int,
 ) -> DocIndexingContext:
-    with get_session_with_current_tenant() as db_session:
-        storage = get_document_batch_storage(tenant_id, index_attempt_id, db_session)
+    storage = get_document_batch_storage(tenant_id, index_attempt_id)
 
-        current_state = storage.ensure_indexing_state()
-        current_state.batches_done += 1
+    current_state = storage.ensure_indexing_state()
+    current_state.batches_done += 1
 
-        current_state.total_failures += failures
-        current_state.net_doc_change += new_docs
-        current_state.total_chunks += total_chunks
-        storage.store_indexing_state(current_state)
-        return current_state
+    current_state.total_failures += failures
+    current_state.net_doc_change += new_docs
+    current_state.total_chunks += total_chunks
+    storage.store_indexing_state(current_state)
+    return current_state
 
 
 def _resolve_indexing_errors(
@@ -800,8 +799,7 @@ def document_indexing_pipeline_task(
     )
 
     # Get the document batch storage
-    with get_session_with_current_tenant() as db_session:
-        storage = get_document_batch_storage(tenant_id, index_attempt_id, db_session)
+    storage = get_document_batch_storage(tenant_id, index_attempt_id)
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)

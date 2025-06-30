@@ -33,7 +33,7 @@ def save_checkpoint(
     """Save a checkpoint for a given index attempt to the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
 
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_store.save_file(
         content=BytesIO(checkpoint.model_dump_json().encode()),
         display_name=checkpoint_pointer,
@@ -52,11 +52,11 @@ def save_checkpoint(
 
 
 def load_checkpoint(
-    db_session: Session, index_attempt_id: int, connector: BaseConnector
+    index_attempt_id: int, connector: BaseConnector
 ) -> ConnectorCheckpoint:
     """Load a checkpoint for a given index attempt from the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
     checkpoint_data = checkpoint_io.read().decode("utf-8")
     if isinstance(connector, CheckpointedConnector):
@@ -144,7 +144,6 @@ def get_latest_valid_checkpoint(
 
     try:
         previous_checkpoint = load_checkpoint(
-            db_session=db_session,
             index_attempt_id=latest_valid_checkpoint_candidate.id,
             connector=connector,
         )
@@ -201,7 +200,7 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
     if not index_attempt.checkpoint_pointer:
         return None
 
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_store.delete_file(index_attempt.checkpoint_pointer)
 
     index_attempt.checkpoint_pointer = None

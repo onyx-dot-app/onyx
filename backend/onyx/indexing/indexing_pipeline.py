@@ -41,7 +41,6 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
@@ -496,36 +495,33 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
                 # Try to get image summary
                 try:
-                    with get_session_with_current_tenant() as db_session:
-                        file_store = get_default_file_store(db_session)
+                    file_store = get_default_file_store()
 
-                        file_record = file_store.read_file_record(
+                    file_record = file_store.read_file_record(
+                        file_id=section.image_file_id
+                    )
+                    if not file_record:
+                        logger.warning(
+                            f"Image file {section.image_file_id} not found in FileStore"
+                        )
+
+                        processed_section.text = "[Image could not be processed]"
+                    else:
+                        # Get the image data
+                        image_data_io = file_store.read_file(
                             file_id=section.image_file_id
                         )
-                        if not file_record:
-                            logger.warning(
-                                f"Image file {section.image_file_id} not found in FileStore"
-                            )
+                        image_data = image_data_io.read()
+                        summary = summarize_image_with_error_handling(
+                            llm=llm,
+                            image_data=image_data,
+                            context_name=file_record.display_name or "Image",
+                        )
 
-                            processed_section.text = "[Image could not be processed]"
+                        if summary:
+                            processed_section.text = summary
                         else:
-                            # Get the image data
-                            image_data_io = file_store.read_file(
-                                file_id=section.image_file_id
-                            )
-                            image_data = image_data_io.read()
-                            summary = summarize_image_with_error_handling(
-                                llm=llm,
-                                image_data=image_data,
-                                context_name=file_record.display_name or "Image",
-                            )
-
-                            if summary:
-                                processed_section.text = summary
-                            else:
-                                processed_section.text = (
-                                    "[Image could not be summarized]"
-                                )
+                            processed_section.text = "[Image could not be summarized]"
                 except Exception as e:
                     logger.error(f"Error processing image section: {e}")
                     processed_section.text = "[Error processing image]"

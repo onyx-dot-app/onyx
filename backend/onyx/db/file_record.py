@@ -43,6 +43,15 @@ def get_filerecord_by_file_id(
     return filestore
 
 
+def get_filerecord_by_prefix(
+    prefix: str,
+    db_session: Session,
+) -> list[FileRecord]:
+    return (
+        db_session.query(FileRecord).filter(FileRecord.file_id.like(f"{prefix}%")).all()
+    )
+
+
 def delete_filerecord_by_file_id(
     file_id: str,
     db_session: Session,

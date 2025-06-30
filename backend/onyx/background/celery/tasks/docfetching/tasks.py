@@ -55,7 +55,7 @@ def docfetching_task(
     search_settings_id: int,
     is_ee: bool,
     tenant_id: str,
-) -> int | None:
+) -> None:
     """
     TODO: update docstring to reflect docfetching
     Indexing task. For a cc pair, this task pulls all document IDs from the source
@@ -93,8 +93,6 @@ def docfetching_task(
         f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id}"
     )
-
-    n_final_progress: int | None = None
 
     # 20 is the documented default for httpx max_keepalive_connections
     if MANAGED_VESPA:
@@ -259,7 +257,7 @@ def docfetching_task(
         )
 
         # get back the total number of indexed docs and return it
-        n_final_progress = redis_connector_index.get_progress()
+        redis_connector_index.get_progress()
         redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
     except ConnectorValidationError:
         raise SimpleJobException(
@@ -297,7 +295,7 @@ def docfetching_task(
         f"cc_pair={cc_pair_id} "
         f"search_settings={search_settings_id}"
     )
-    return n_final_progress
+    os._exit(0)  # ensure process exits cleanly
 
 
 def process_job_result(

@@ -6,7 +6,6 @@ from typing import IO
 
 from fastapi import HTTPException
 from fastapi import UploadFile
-from sqlalchemy.orm import Session
 
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
@@ -99,9 +98,7 @@ def guess_file_type(filename: str) -> str:
     return "application/octet-stream"
 
 
-def upload_logo(
-    db_session: Session, file: UploadFile | str, is_logotype: bool = False
-) -> bool:
+def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
     content: IO[Any]
 
     if isinstance(file, str):
@@ -129,7 +126,7 @@ def upload_logo(
         display_name = file.filename
         file_type = file.content_type or "image/jpeg"
 
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_store.save_file(
         content=content,
         display_name=display_name,
