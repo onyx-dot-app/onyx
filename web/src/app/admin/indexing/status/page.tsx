@@ -6,7 +6,10 @@ import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Link from "next/link";
 import Text from "@/components/ui/text";
-import { useConnectorCredentialIndexingStatus } from "@/lib/hooks";
+import {
+  useConnectorCredentialIndexingStatus,
+  useFederatedConnectors,
+} from "@/lib/hooks";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 import { Button } from "@/components/ui/button";
 
@@ -23,7 +26,22 @@ function Main() {
     error: editableIndexAttemptError,
   } = useConnectorCredentialIndexingStatus(undefined, true);
 
-  if (indexAttemptIsLoading || editableIndexAttemptIsLoading) {
+  const {
+    data: federatedConnectorsData,
+    isLoading: federatedConnectorsIsLoading,
+    error: federatedConnectorsError,
+  } = useFederatedConnectors();
+
+  // Debug logging
+  console.log("Federated connectors data:", federatedConnectorsData);
+  console.log("Federated connectors error:", federatedConnectorsError);
+  console.log("Federated connectors loading:", federatedConnectorsIsLoading);
+
+  if (
+    indexAttemptIsLoading ||
+    editableIndexAttemptIsLoading ||
+    federatedConnectorsIsLoading
+  ) {
     return <LoadingAnimation text="" />;
   }
 
@@ -42,7 +60,10 @@ function Main() {
     );
   }
 
-  if (indexAttemptData.length === 0) {
+  if (
+    indexAttemptData.length === 0 &&
+    (!federatedConnectorsData || federatedConnectorsData.length === 0)
+  ) {
     return (
       <Text>
         It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
@@ -69,6 +90,7 @@ function Main() {
     <CCPairIndexingStatusTable
       ccPairsIndexingStatuses={indexAttemptData}
       editableCcPairsIndexingStatuses={editableIndexAttemptData}
+      federatedConnectors={federatedConnectorsData || []}
     />
   );
 }

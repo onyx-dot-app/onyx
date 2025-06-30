@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.context.search.enums import SearchType
+from onyx.context.search.federated import FEDERATED_SEARCH_FUNCTIONS
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -18,6 +19,7 @@ from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
 from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
 from onyx.context.search.utils import inference_section_from_chunks
+from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.interfaces import DocumentIndex
@@ -359,14 +361,23 @@ def retrieve_chunks(
     """Returns a list of the best chunks from an initial keyword/semantic/ hybrid search."""
 
     multilingual_expansion = get_multilingual_expansion(db_session)
-    # Don't do query expansion on complex queries, rephrasings likely would not work well
-    if not multilingual_expansion or "\n" in query.query or "\r" in query.query:
-        top_chunks = doc_index_retrieval(
-            query=query, document_index=document_index, db_session=db_session
-        )
-    else:
+    run_queries: list[tuple[Callable, tuple]] = []
+
+    source_filters = (
+        set(query.filters.source_type) if query.filters.source_type else None
+    )
+    normal_search_enabled = (source_filters is None) or (
+        len(set(source_filters) - FEDERATED_SEARCH_FUNCTIONS.keys()) > 0
+    )
+
+    # Normal retrieval
+    if normal_search_enabled and (
+        not multilingual_expansion or "\n" in query.query or "\r" in query.query
+    ):
+        # Don't do query expansion on complex queries, rephrasings likely would not work well
+        run_queries.append((doc_index_retrieval, (query, document_index, db_session)))
+    elif normal_search_enabled:
         simplified_queries = set()
-        run_queries: list[tuple[Callable, tuple]] = []
 
         # Currently only uses query expansion on multilingual use cases
         query_rephrases = multilingual_query_expansion(
@@ -393,13 +404,20 @@ def retrieve_chunks(
                 deep=True,
             )
             run_queries.append(
-                (
-                    doc_index_retrieval,
-                    (q_copy, document_index, db_session),
-                )
+                (doc_index_retrieval, (q_copy, document_index, db_session))
             )
-        parallel_search_results = run_functions_tuples_in_parallel(run_queries)
-        top_chunks = combine_retrieval_results(parallel_search_results)
+
+    # Federated retrieval
+    connector_sources = set(fetch_unique_document_sources(db_session))
+    for source, retrieval_func in FEDERATED_SEARCH_FUNCTIONS.items():
+        # TODO: checking connector may change with new federated connectors
+        if source in connector_sources and (
+            source_filters is None or source in source_filters
+        ):
+            run_queries.append((retrieval_func, (query, db_session)))
+
+    parallel_search_results = run_functions_tuples_in_parallel(run_queries)
+    top_chunks = combine_retrieval_results(parallel_search_results)
 
     if not top_chunks:
         logger.warning(

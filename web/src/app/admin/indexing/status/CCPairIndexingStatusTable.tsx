@@ -17,6 +17,7 @@ import {
   GroupedConnectorSummaries,
   ValidSources,
   ValidStatuses,
+  FederatedConnectorInfo,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
@@ -213,12 +214,207 @@ border border-border dark:border-neutral-700
   );
 }
 
+function FederatedConnectorRow({
+  federatedConnector,
+  invisible,
+}: {
+  federatedConnector: FederatedConnectorInfo;
+  invisible?: boolean;
+}) {
+  const router = useRouter();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  const handleManageClick = (e: any) => {
+    e.stopPropagation();
+    router.push(`/admin/federated/${federatedConnector.id}`);
+  };
+
+  return (
+    <TableRow
+      className={`
+border border-border dark:border-neutral-700
+        hover:bg-accent-background ${
+          invisible
+            ? "invisible !h-0 !-mb-10 !border-none"
+            : "!border border-border dark:border-neutral-700"
+        }  w-full cursor-pointer relative `}
+      onClick={() => {
+        router.push(`/admin/federated/${federatedConnector.id}`);
+      }}
+    >
+      <TableCell className="">
+        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
+          {federatedConnector.name}
+        </p>
+      </TableCell>
+      <TableCell>
+        {federatedConnector.last_success
+          ? timeAgo(federatedConnector.last_success)
+          : "-"}
+      </TableCell>
+      <TableCell>
+        <Badge
+          variant={
+            federatedConnector.status === "active" ? "success" : "destructive"
+          }
+        >
+          {federatedConnector.status === "active" ? "Active" : "Inactive"}
+        </Badge>
+      </TableCell>
+      {isPaidEnterpriseFeaturesEnabled && (
+        <TableCell>
+          <Badge variant="secondary" icon={FiRefreshCw}>
+            Federated Access
+          </Badge>
+        </TableCell>
+      )}
+      <TableCell>{federatedConnector.entities_count} entities</TableCell>
+      <TableCell>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <FiSettings
+                className="cursor-pointer"
+                onClick={handleManageClick}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Manage Federated Connector</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function FederatedSection({
+  federatedConnectors,
+  searchTerm,
+  isOpen,
+  onToggle,
+}: {
+  federatedConnectors: FederatedConnectorInfo[];
+  searchTerm: string;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  // Debug logging
+  console.log("FederatedSection called with:", {
+    federatedConnectors,
+    searchTerm,
+    isOpen,
+    federatedConnectorsLength: federatedConnectors.length,
+  });
+
+  // Filter federated connectors based on search term
+  const filteredConnectors = federatedConnectors.filter((connector) =>
+    connector.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  console.log("Filtered connectors:", filteredConnectors);
+
+  if (filteredConnectors.length === 0) {
+    console.log("No filtered connectors, returning null");
+    return null;
+  }
+
+  return (
+    <>
+      <br className="mt-4" />
+      <TableRow
+        onClick={onToggle}
+        className="border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
+      >
+        <TableCell>
+          <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
+            <div className="cursor-pointer">
+              {isOpen ? (
+                <FiChevronDown size={20} />
+              ) : (
+                <FiChevronRight size={20} />
+              )}
+            </div>
+            <FiRefreshCw size={20} />
+            Federated Connectors
+          </div>
+        </TableCell>
+
+        <TableCell>
+          <div className="text-sm text-neutral-500 dark:text-neutral-300">
+            Total Connectors
+          </div>
+          <div className="text-xl font-semibold">
+            {filteredConnectors.length}
+          </div>
+        </TableCell>
+
+        <TableCell>
+          <div className="text-sm text-neutral-500 dark:text-neutral-300">
+            Active Connectors
+          </div>
+          <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
+            {filteredConnectors.filter((fc) => fc.status === "active").length}/
+            {filteredConnectors.length}
+          </p>
+        </TableCell>
+
+        {isPaidEnterpriseFeaturesEnabled && (
+          <TableCell>
+            <div className="text-sm text-neutral-500 dark:text-neutral-300">
+              Federated Access
+            </div>
+            <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
+              {filteredConnectors.length}/{filteredConnectors.length}
+            </p>
+          </TableCell>
+        )}
+
+        <TableCell>
+          <div className="text-sm text-neutral-500 dark:text-neutral-300">
+            Total Entities
+          </div>
+          <div className="text-xl font-semibold">
+            {filteredConnectors.reduce((sum, fc) => sum + fc.entities_count, 0)}
+          </div>
+        </TableCell>
+
+        <TableCell />
+      </TableRow>
+      {isOpen && (
+        <>
+          <TableRow className="border border-border dark:border-neutral-700">
+            <TableHead>Name</TableHead>
+            <TableHead>Last Updated</TableHead>
+            <TableHead>Status</TableHead>
+            {isPaidEnterpriseFeaturesEnabled && (
+              <TableHead>Access Type</TableHead>
+            )}
+            <TableHead>Entities</TableHead>
+            <TableHead></TableHead>
+          </TableRow>
+          {filteredConnectors.map((federatedConnector) => (
+            <FederatedConnectorRow
+              key={federatedConnector.id}
+              federatedConnector={federatedConnector}
+            />
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
 export function CCPairIndexingStatusTable({
   ccPairsIndexingStatuses,
   editableCcPairsIndexingStatuses,
+  federatedConnectors,
 }: {
   ccPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
   editableCcPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
+  federatedConnectors: FederatedConnectorInfo[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -236,6 +432,11 @@ export function CCPairIndexingStatusTable({
   >(() => {
     const savedState = Cookies.get(TOGGLED_CONNECTORS_COOKIE_NAME);
     return savedState ? JSON.parse(savedState) : {};
+  });
+
+  const [federatedToggled, setFederatedToggled] = useState<boolean>(() => {
+    const savedState = Cookies.get("TOGGLED_FEDERATED_COOKIE");
+    return savedState ? JSON.parse(savedState) : false;
   });
 
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
@@ -416,24 +617,6 @@ export function CCPairIndexingStatusTable({
     }
   };
 
-  const clearAllFilters = () => {
-    const emptyFilters: FilterOptions = {
-      accessType: null,
-      docsCountFilter: {
-        operator: null,
-        value: null,
-      },
-      lastStatus: null,
-    };
-
-    setFilterOptions(emptyFilters);
-
-    // Reset the FilterComponent's internal state
-    if (filterComponentRef.current) {
-      filterComponentRef.current.resetFilters();
-    }
-  };
-
   // Check if filters are active
   const hasActiveFilters = useMemo(() => {
     return (
@@ -457,6 +640,16 @@ export function CCPairIndexingStatusTable({
       JSON.stringify(newConnectorsToggled)
     );
   };
+
+  const toggleFederated = () => {
+    const newFederatedToggled = !federatedToggled;
+    setFederatedToggled(newFederatedToggled);
+    Cookies.set(
+      "TOGGLED_FEDERATED_COOKIE",
+      JSON.stringify(newFederatedToggled)
+    );
+  };
+
   const toggleSources = () => {
     const connectors = sortedSources.reduce(
       (acc, source) => {
@@ -663,6 +856,14 @@ export function CCPairIndexingStatusTable({
               }
               return null;
             })}
+          {federatedConnectors.length > 0 && (
+            <FederatedSection
+              federatedConnectors={federatedConnectors}
+              searchTerm={searchTerm}
+              isOpen={federatedToggled}
+              onToggle={toggleFederated}
+            />
+          )}
         </TableBody>
       </Table>
     </>
