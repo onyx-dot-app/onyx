@@ -54,6 +54,9 @@ interface PartialSourceMetadata {
   displayName: string;
   category: SourceCategory;
   docs?: string;
+  oauthSupported?: boolean;
+  federated?: boolean;
+  federatedTooltip?: string;
 }
 
 type SourceMap = {
@@ -79,6 +82,10 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
     docs: "https://docs.onyx.app/connectors/slack",
     oauthSupported: true,
+    federated: true,
+    federatedTooltip:
+      "⚠️ WARNING: Due to Slack's rate limit and ToS changes, Slack is now federated. " +
+      "This will result in significantly greater latency and lower search quality.",
   },
   discord: {
     icon: ColorDiscordIcon,

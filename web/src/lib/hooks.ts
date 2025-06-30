@@ -7,6 +7,7 @@ import {
   ConnectorStatus,
   CCPairBasicInfo,
   ValidSources,
+  FederatedConnectorInfo,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
@@ -118,6 +119,20 @@ export const useBasicConnectorStatus = () => {
   return {
     ...swrResponse,
     refreshIndexingStatus: () => mutate(url),
+  };
+};
+
+export const useFederatedConnectors = () => {
+  const { mutate } = useSWRConfig();
+  const url = "/api/manage/admin/federated";
+  const swrResponse = useSWR<FederatedConnectorInfo[]>(
+    url,
+    errorHandlingFetcher
+  );
+
+  return {
+    ...swrResponse,
+    refreshFederatedConnectors: () => mutate(url),
   };
 };
 

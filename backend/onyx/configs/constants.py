@@ -190,6 +190,10 @@ class DocumentSource(str, Enum):
     MOCK_CONNECTOR = "mock_connector"
 
 
+class FederatedConnectorSource(str, Enum):
+    FEDERATED_SLACK = "federated_slack"
+
+
 DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
 
 

@@ -175,6 +175,16 @@ export interface ConnectorIndexingStatus<
   docs_indexed: number;
 }
 
+export interface FederatedConnectorInfo {
+  id: number;
+  source: string;
+  name: string;
+  status: string;
+  last_success: string | null;
+  docs_indexed: number;
+  entities_count: number;
+}
+
 export interface OAuthPrepareAuthorizationResponse {
   url: string;
 }
@@ -418,3 +428,27 @@ export const oauthSupportedSources: ConfigurableSources[] = [
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+
+// Federated Connector Types
+export interface CredentialFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+}
+
+export interface CredentialSchemaResponse {
+  credentials: Record<string, CredentialFieldSpec>;
+}
+
+export interface FederatedConnectorCreateRequest {
+  source: string;
+  credentials: Record<string, any>;
+}
+
+export interface FederatedConnectorCreateResponse {
+  id: number;
+  source: string;
+}

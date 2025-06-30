@@ -1,49 +1,120 @@
 "use client";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { ConnectorIcon } from "@/components/icons/icons";
+import { AlertIcon, ConnectorIcon, InfoIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useFederatedConnectors } from "@/lib/hooks";
+import { FederatedConnectorInfo } from "@/lib/types";
 
 function SourceTile({
   sourceMetadata,
   preSelect,
+  federatedConnectors,
 }: {
   sourceMetadata: SourceMetadata;
   preSelect?: boolean;
+  federatedConnectors?: FederatedConnectorInfo[];
 }) {
+  // Check if there's already a federated connector for this source
+  const existingFederatedConnector = useMemo(() => {
+    if (!sourceMetadata.federated || !federatedConnectors) {
+      return null;
+    }
+
+    return federatedConnectors.find(
+      (connector) =>
+        connector.source === `federated_${sourceMetadata.internalName}`
+    );
+  }, [sourceMetadata, federatedConnectors]);
+
+  // Determine the URL to navigate to
+  const navigationUrl = useMemo(() => {
+    if (existingFederatedConnector) {
+      return `/admin/federated/${existingFederatedConnector.id}`;
+    }
+    return sourceMetadata.adminUrl;
+  }, [existingFederatedConnector, sourceMetadata.adminUrl]);
+
   return (
-    <Link
-      className={`flex
-        flex-col
-        items-center
-        justify-center
-        p-4
-        rounded-lg
-        w-40
-        cursor-pointer
-        shadow-md
-        hover:bg-accent-background-hovered
-        ${
-          preSelect
-            ? "bg-accent-background-hovered subtle-pulse"
-            : "bg-accent-background"
-        }
-      `}
-      href={sourceMetadata.adminUrl}
-    >
-      <SourceIcon sourceType={sourceMetadata.internalName} iconSize={24} />
-      <p className="font-medium text-sm mt-2">{sourceMetadata.displayName}</p>
-    </Link>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Link
+            className={`flex
+              flex-col
+              items-center
+              justify-center
+              p-4
+              rounded-lg
+              w-40
+              cursor-pointer
+              shadow-md
+              hover:bg-accent-background-hovered
+              relative
+              ${
+                preSelect
+                  ? "bg-accent-background-hovered subtle-pulse"
+                  : "bg-accent-background"
+              }
+            `}
+            href={navigationUrl}
+          >
+            {sourceMetadata.federated && (
+              <div className="absolute -top-2 -left-2 z-10 bg-white rounded-full p-1 shadow-md border border-orange-200">
+                <AlertIcon
+                  size={18}
+                  className="text-orange-500 font-bold stroke-2"
+                />
+              </div>
+            )}
+            <SourceIcon
+              sourceType={sourceMetadata.internalName}
+              iconSize={24}
+            />
+            <p className="font-medium text-sm mt-2">
+              {sourceMetadata.displayName}
+            </p>
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-sm">
+          {existingFederatedConnector ? (
+            <p className="text-xs">
+              <strong>Federated connector already configured.</strong> Click to
+              edit the existing connector.
+            </p>
+          ) : sourceMetadata.federated ? (
+            <p className="text-xs">
+              {sourceMetadata.federatedTooltip ? (
+                sourceMetadata.federatedTooltip
+              ) : (
+                <>
+                  <strong>Federated Search.</strong> This will result in greater
+                  latency and lower search quality.
+                </>
+              )}
+            </p>
+          ) : null}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
+
 export default function Page() {
   const sources = useMemo(() => listSourceMetadata(), []);
   const [searchTerm, setSearchTerm] = useState("");
+  const { data: federatedConnectors } = useFederatedConnectors();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,7 +164,20 @@ export default function Page() {
       ) {
         const firstSource = filteredCategories[0][1][0];
         if (firstSource) {
-          window.open(firstSource.adminUrl, "_self");
+          // Check if this source has an existing federated connector
+          const existingFederatedConnector =
+            firstSource.federated && federatedConnectors
+              ? federatedConnectors.find(
+                  (connector) =>
+                    connector.source === `federated_${firstSource.internalName}`
+                )
+              : null;
+
+          const url = existingFederatedConnector
+            ? `/admin/federated/${existingFederatedConnector.id}`
+            : firstSource.adminUrl;
+
+          window.open(url, "_self");
         }
       }
     }
@@ -137,6 +221,7 @@ export default function Page() {
                   }
                   key={source.internalName}
                   sourceMetadata={source}
+                  federatedConnectors={federatedConnectors}
                 />
               ))}
             </div>
