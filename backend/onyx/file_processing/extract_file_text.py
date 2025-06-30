@@ -28,6 +28,7 @@ from pypdf.errors import PdfStreamError
 
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
@@ -533,7 +534,7 @@ def extract_text_and_images(
         if extension == ".pdf":
             file.seek(0)
             text_content, pdf_metadata, images = read_pdf_file(
-                file, pdf_pass, extract_images=True
+                file, pdf_pass, extract_images=get_image_extraction_and_analysis_enabled()
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
