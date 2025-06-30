@@ -4,6 +4,7 @@ from usp.tree import sitemap_tree_for_homepage
 from datetime import datetime
 from onyx.utils.logger import setup_logger
 from onyx.db.models import ChatMessage
+from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 import os
 from langfuse import Langfuse
 
@@ -60,6 +61,8 @@ def add_metadata_to_llm(llm, generation, user, user_message, chat_session):
     user_id = "anon"
     if user is not None:
         user_id = user.email
+    if user_id.startswith(DANSWER_API_KEY_PREFIX.lower()):
+        user_id = user_id.split("@")[0].split(DANSWER_API_KEY_PREFIX.lower())[1]
     llm._model_kwargs={
         'metadata':{
             "debug_langfuse": True,
