@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 from typing import Any
 
+from langchain_core.messages import HumanMessage
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
@@ -26,6 +27,8 @@ from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llms
 from onyx.llm.interfaces import LLM
+from onyx.llm.utils import message_to_string
+from onyx.prompts.federated_search import SLACK_QUERY_EXPANSION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
@@ -43,11 +46,20 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
     if time_cutoff is not None:
         # slack after: is exclusive, so we need to subtract one day
         time_cutoff = time_cutoff - timedelta(days=1)
-        time_filter = f"after:{time_cutoff.strftime('%Y-%m-%d')}"
+        time_filter = f" after:{time_cutoff.strftime('%Y-%m-%d')}"
 
-    # TODO: use llm for sophisticated query expansion
+    # use llm to generate slack queries
+    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query.query)
+    try:
+        msg = HumanMessage(content=prompt)
+        response = llm.invoke([msg])
+        rephrased_queries = message_to_string(response).split("\n")
+    except Exception as e:
+        logger.error(f"Error expanding query: {e}")
+        rephrased_queries = [query.query]
+
     return [
-        " ".join(query.processed_keywords + [time_filter]),
+        rephrased_query.strip() + time_filter for rephrased_query in rephrased_queries
     ]
 
 
@@ -76,12 +88,12 @@ def query_slack(query_string: str, original_query: SearchQuery) -> list[SlackMes
         username: str | None = match.get("username")
         score: float = match.get("score", 0.0)
         if (  # can't use any() because of type checking :(
-            text is None
-            or permalink is None
-            or thread_ts is None
-            or channel_id is None
-            or channel_name is None
-            or username is None
+            not text
+            or not permalink
+            or not thread_ts
+            or not channel_id
+            or not channel_name
+            or not username
         ):
             continue
 
@@ -156,6 +168,9 @@ def merge_slack_messages(
             # add the message to the list
             docid_to_message[message.document_id] = message
             merged_messages.append(message)
+
+    # re-sort by score
+    merged_messages.sort(key=lambda x: x.slack_score, reverse=True)
 
     return merged_messages, docid_to_message
 
