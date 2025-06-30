@@ -9,6 +9,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import NUM_MAX_SLACK_QUERIES
 from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
 from onyx.configs.app_configs import SLACK_USER_TOKEN
 from onyx.configs.chat_configs import DOC_TIME_DECAY
@@ -59,7 +60,8 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
         rephrased_queries = [query.query]
 
     return [
-        rephrased_query.strip() + time_filter for rephrased_query in rephrased_queries
+        rephrased_query.strip() + time_filter
+        for rephrased_query in rephrased_queries[:NUM_MAX_SLACK_QUERIES]
     ]
 
 
