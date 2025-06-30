@@ -323,12 +323,12 @@ function ActionForm({
                       {values.customHeaders.some(
                         (header) => header.key.toLowerCase() === "authorization"
                       ) && (
-                        <TooltipContent side="top" align="center">
-                          <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                            {i18n.t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
-                          </p>
-                        </TooltipContent>
-                      )}
+                          <TooltipContent side="top" align="center">
+                            <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
+                              {i18n.t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
+                            </p>
+                          </TooltipContent>
+                        )}
                     </Tooltip>
                   </TooltipProvider>
                   <div className="flex flex-col">

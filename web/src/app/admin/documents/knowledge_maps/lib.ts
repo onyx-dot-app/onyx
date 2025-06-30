@@ -41,7 +41,7 @@ export const createKnowledgeMap = async ({
   document_set_id,
   flowise_pipeline_id,
 }: KnowledgeMapCreationRequest) => {
-  return fetch("/api/knowledge/new", {
+  return fetch("/api/knowledge/", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -62,7 +62,7 @@ export const updateKnowledgeMap = async ({
   document_set_id,
   flowise_pipeline_id,
 }: KnowledgeMapUpdateRequest) => {
-  return fetch("/api/knowledge/patch", {
+  return fetch("/api/knowledge/", {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",

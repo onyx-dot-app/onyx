@@ -31,7 +31,7 @@ export async function fetchAssistantEditorInfoSS(
     fetchSS("/manage/connector-status"),
     fetchSS("/manage/document-set"),
     fetchSS("/llm/provider"),
-    fetchSS("/knowledge/get"),
+    fetchSS("/knowledge/"),
     // duplicate fetch, but shouldn't be too big of a deal
     // this page is not a high traffic page
     getCurrentUserSS(),

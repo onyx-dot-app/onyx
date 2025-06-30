@@ -2,7 +2,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
 import { KnowledgeMapCreationRequest } from "./lib";
 
-const KNOWLEDGE_MAPS_URL = "/api/knowledge/get";
+const KNOWLEDGE_MAPS_URL = "/api/knowledge/";
 
 export function refreshKnowledgeMaps() {
   mutate(KNOWLEDGE_MAPS_URL);
