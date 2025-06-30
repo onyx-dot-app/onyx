@@ -48,7 +48,7 @@ class ZendeskCredentialsNotSetUpError(PermissionError):
 
 class ZendeskClient:
     def __init__(self, subdomain: str, email: str, token: str):
-        self.base_url = f"https://{subdomain}.zendesk.com/api/v2"
+        self.base_url = f"https://{subdomain}/api/v2"
         self.auth = (f"{email}/token", token)
 
     @retry_builder()
@@ -367,11 +367,7 @@ class ZendeskConnector(
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         # Subdomain is actually the whole URL
-        subdomain = (
-            credentials["zendesk_subdomain"]
-            .replace("https://", "")
-            .split(".zendesk.com")[0]
-        )
+        subdomain = credentials["zendesk_subdomain"].replace("https://", "")
         self.subdomain = subdomain
 
         self.client = ZendeskClient(
