@@ -98,6 +98,8 @@ import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
+import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
@@ -190,6 +192,29 @@ export function ChatPage({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
+
+  // Federated OAuth status
+  const {
+    connectors: federatedConnectors,
+    hasUnauthenticatedConnectors,
+    loading: oauthLoading,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
+
+  // Check localStorage for previous skip preference
+  const [oAuthModalHidden, setOAuthModalHidden] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("federatedOAuthModalSkipped") === "true";
+    }
+    return false;
+  });
+
+  const handleOAuthModalSkip = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("federatedOAuthModalSkipped", "true");
+    }
+    setOAuthModalHidden(true);
+  };
 
   const defaultAssistantIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.PERSONA_ID
@@ -2330,6 +2355,14 @@ export function ChatPage({
 
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 
+      {isReady && !oAuthModalHidden && hasUnauthenticatedConnectors && (
+        <FederatedOAuthModal
+          connectors={federatedConnectors}
+          onClose={() => setOAuthModalHidden(true)}
+          onSkip={handleOAuthModalSkip}
+        />
+      )}
+
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
       {popup}
@@ -2358,6 +2391,9 @@ export function ChatPage({
           setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectors}
+          refetchFederatedConnectors={refetchFederatedConnectors}
           onClose={() => {
             setUserSettingsToggled(false);
             setSettingsToggled(false);

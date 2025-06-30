@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -73,13 +74,15 @@ def create_federated_connector(
 def update_federated_connector_oauth_token(
     db_session: Session,
     federated_connector_id: int,
+    user_id: UUID,
     token: str,
     expires_at: datetime,
 ) -> FederatedConnectorOAuthToken:
-    """Update or create OAuth token for a federated connector."""
-    # First, try to find existing token
+    """Update or create OAuth token for a federated connector and user."""
+    # First, try to find existing token for this user and connector
     stmt = select(FederatedConnectorOAuthToken).where(
-        FederatedConnectorOAuthToken.federated_connector_id == federated_connector_id
+        FederatedConnectorOAuthToken.federated_connector_id == federated_connector_id,
+        FederatedConnectorOAuthToken.user_id == user_id,
     )
     existing_token = db_session.execute(stmt).scalar_one_or_none()
 
@@ -93,6 +96,7 @@ def update_federated_connector_oauth_token(
         # Create new token
         oauth_token = FederatedConnectorOAuthToken(
             federated_connector_id=federated_connector_id,
+            user_id=user_id,
             token=token,
             expires_at=expires_at,
         )
@@ -104,10 +108,12 @@ def update_federated_connector_oauth_token(
 def get_federated_connector_oauth_token(
     db_session: Session,
     federated_connector_id: int,
+    user_id: UUID,
 ) -> FederatedConnectorOAuthToken | None:
-    """Get OAuth token for a federated connector."""
+    """Get OAuth token for a federated connector and user."""
     stmt = select(FederatedConnectorOAuthToken).where(
-        FederatedConnectorOAuthToken.federated_connector_id == federated_connector_id
+        FederatedConnectorOAuthToken.federated_connector_id == federated_connector_id,
+        FederatedConnectorOAuthToken.user_id == user_id,
     )
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()

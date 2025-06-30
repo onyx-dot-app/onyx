@@ -1,21 +1,20 @@
-import os
 import secrets
 from typing import Any
-from typing import Dict
-from typing import Optional
 from urllib.parse import urlencode
 
 import requests
 from pydantic import ValidationError
+from typing_extensions import override
 
+from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.federated_connectors.base import CredentialField
-from onyx.federated_connectors.base import EntityField
-from onyx.federated_connectors.base import FederatedConnectorBase
-from onyx.federated_connectors.base import OAuthResult
+from onyx.federated_connectors.interfaces import FederatedConnectorBase
+from onyx.federated_connectors.models import CredentialField
+from onyx.federated_connectors.models import EntityField
+from onyx.federated_connectors.models import OAuthResult
 from onyx.federated_connectors.slack.models import SlackCredentials
 from onyx.federated_connectors.slack.models import SlackEntities
 from onyx.federated_connectors.slack.models import SlackOAuthConfig
@@ -27,7 +26,8 @@ logger = setup_logger()
 class SlackFederatedConnector(FederatedConnectorBase):
     """Federated connector implementation for Slack."""
 
-    def validate(self, entities: Dict[str, Any]) -> bool:
+    @override
+    def validate(self, entities: dict[str, Any]) -> bool:
         """Check the entities and verify that they match the expected structure/all values are valid.
 
         For Slack federated search, we expect:
@@ -45,7 +45,8 @@ class SlackFederatedConnector(FederatedConnectorBase):
             logger.error(f"Error validating Slack entities: {e}")
             return False
 
-    def entities(self) -> Dict[str, EntityField]:
+    @override
+    def entities(self) -> dict[str, EntityField]:
         """Return the specifications of what entities are available for this federated search type.
 
         Returns a specification that tells the caller:
@@ -68,7 +69,8 @@ class SlackFederatedConnector(FederatedConnectorBase):
             ),
         }
 
-    def credentials_schema(self) -> Dict[str, CredentialField]:
+    @override
+    def credentials_schema(self) -> dict[str, CredentialField]:
         """Return the specification of what credentials are required for Slack connector."""
         return {
             "client_id": CredentialField(
@@ -94,7 +96,8 @@ class SlackFederatedConnector(FederatedConnectorBase):
             ),
         }
 
-    def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
+    @override
+    def validate_credentials(self, credentials: dict[str, Any]) -> bool:
         """Validate that the provided credentials match the expected structure."""
         try:
             # Use Pydantic model for validation
@@ -107,26 +110,24 @@ class SlackFederatedConnector(FederatedConnectorBase):
             logger.error(f"Error validating Slack credentials: {e}")
             return False
 
-    def __init__(self, oauth_config: Optional[SlackOAuthConfig] = None):
-        """Initialize with OAuth configuration.
+    def __init__(self, credentials: dict[str, Any]):
+        """Initialize with credentials.
 
         Args:
-            oauth_config: OAuth configuration. If not provided, will use defaults or env vars.
+            credentials: Credentials from the federated connector. If not provided, will use defaults or env vars.
         """
-        self.oauth_config = oauth_config or self._get_default_oauth_config()
-
-    def _get_default_oauth_config(self) -> SlackOAuthConfig:
-        """Get default OAuth configuration from environment or config files."""
-        # In production, these should come from environment variables or secure config
-        return SlackOAuthConfig(
-            client_id=os.getenv("SLACK_CLIENT_ID", "your_slack_client_id"),
-            client_secret=os.getenv("SLACK_CLIENT_SECRET", "your_slack_client_secret"),
-            redirect_uri=os.getenv(
-                "SLACK_REDIRECT_URI",
-                "http://localhost:8080/api/federated/slack/callback",
-            ),
+        self.oauth_config = SlackOAuthConfig(
+            client_id=credentials.get("client_id", ""),
+            client_secret=credentials.get("client_secret", ""),
+            redirect_uri=credentials.get("redirect_uri")
+            or self._get_default_redirect_uri(),
         )
 
+    def _get_default_redirect_uri(self) -> str:
+        """Get default redirect URI."""
+        return f"{WEB_DOMAIN}/api/federated/slack/callback"
+
+    @override
     def authorize(self) -> str:
         """Get back the OAuth URL for Slack authorization.
 
@@ -138,7 +139,7 @@ class SlackFederatedConnector(FederatedConnectorBase):
         # Build OAuth URL with proper parameters
         params = {
             "client_id": self.oauth_config.client_id,
-            "scope": " ".join(self.oauth_config.scopes),
+            "user_scope": " ".join(["search:read"]),
             "redirect_uri": self.oauth_config.redirect_uri,
             "state": state,
         }
@@ -149,7 +150,8 @@ class SlackFederatedConnector(FederatedConnectorBase):
         logger.info("Generated Slack OAuth authorization URL")
         return oauth_url
 
-    def callback(self, callback_data: Dict[str, Any]) -> OAuthResult:
+    @override
+    def callback(self, callback_data: dict[str, Any]) -> OAuthResult:
         """Handle the response from the OAuth flow and return it in a standard format.
 
         Args:
@@ -230,7 +232,7 @@ class SlackFederatedConnector(FederatedConnectorBase):
                 error_description=f"Error processing OAuth callback: {str(e)}",
             )
 
-    def _exchange_code_for_token(self, code: str) -> Dict[str, Any]:
+    def _exchange_code_for_token(self, code: str) -> dict[str, Any]:
         """Exchange authorization code for access token.
 
         Args:
@@ -255,6 +257,7 @@ class SlackFederatedConnector(FederatedConnectorBase):
             logger.error(f"Error exchanging code for token: {e}")
             return {"ok": False, "error": str(e)}
 
+    @override
     def search(
         self,
         query: SearchQuery,

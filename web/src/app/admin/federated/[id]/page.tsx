@@ -62,7 +62,7 @@ export default function FederatedConnectorPage(props: {
     if (!params?.id) return;
 
     try {
-      const response = await fetch(`/api/manage/admin/federated/${params.id}`);
+      const response = await fetch(`/api/federated/${params.id}`);
       if (!response.ok) {
         throw new Error("Failed to fetch federated connector");
       }
@@ -87,7 +87,7 @@ export default function FederatedConnectorPage(props: {
 
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/manage/admin/federated/${params.id}`, {
+      const response = await fetch(`/api/federated/${params.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -124,7 +124,7 @@ export default function FederatedConnectorPage(props: {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/manage/admin/federated/${params.id}`, {
+      const response = await fetch(`/api/federated/${params.id}`, {
         method: "DELETE",
       });
 

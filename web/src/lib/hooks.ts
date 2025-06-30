@@ -124,7 +124,7 @@ export const useBasicConnectorStatus = () => {
 
 export const useFederatedConnectors = () => {
   const { mutate } = useSWRConfig();
-  const url = "/api/manage/admin/federated";
+  const url = "/api/federated";
   const swrResponse = useSWR<FederatedConnectorInfo[]>(
     url,
     errorHandlingFetcher

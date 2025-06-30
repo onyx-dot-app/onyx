@@ -74,16 +74,6 @@ class SlackOAuthConfig(BaseModel):
     client_id: str = Field(..., description="Slack app client ID")
     client_secret: str = Field(..., description="Slack app client secret")
     redirect_uri: str = Field(..., description="OAuth redirect URI")
-    scopes: list[str] = Field(
-        default_factory=lambda: [
-            "search:read",
-            "channels:read",
-            "groups:read",
-            "im:read",
-            "mpim:read",
-        ],
-        description="OAuth scopes to request",
-    )
     state: Optional[str] = Field(
         default=None, description="OAuth state parameter for security"
     )

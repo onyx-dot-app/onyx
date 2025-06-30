@@ -39,7 +39,7 @@ async function fetchCredentialSchema(
   source: string
 ): Promise<CredentialSchemaResponse> {
   const response = await fetch(
-    `/api/manage/admin/federated/sources/federated_${source}/credentials/schema`
+    `/api/federated/sources/federated_${source}/credentials/schema`
   );
   if (!response.ok) {
     throw new Error(`Failed to fetch schema: ${response.statusText}`);
@@ -53,7 +53,7 @@ async function validateCredentials(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const response = await fetch(
-      `/api/manage/admin/federated/sources/federated_${source}/credentials/validate`,
+      `/api/federated/sources/federated_${source}/credentials/validate`,
       {
         method: "POST",
         headers: {
@@ -78,7 +78,7 @@ async function createFederatedConnector(
   credentials: CredentialForm
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch("/api/manage/admin/federated", {
+    const response = await fetch("/api/federated", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

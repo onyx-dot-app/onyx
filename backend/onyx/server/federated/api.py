@@ -25,15 +25,15 @@ from onyx.db.federated import update_federated_connector
 from onyx.db.federated import update_federated_connector_oauth_token
 from onyx.db.federated import validate_federated_connector_credentials
 from onyx.db.models import User
-from onyx.federated_connectors.base import FederatedConnectorBase
 from onyx.federated_connectors.factory import get_federated_connector
+from onyx.federated_connectors.interfaces import FederatedConnectorBase
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/manage/admin/federated")
+router = APIRouter(prefix="/federated")
 
 
 class FederatedConnectorCredentials(BaseModel):
@@ -94,6 +94,17 @@ class FederatedConnectorStatus(BaseModel):
     name: str
 
 
+class UserOAuthStatus(BaseModel):
+    """OAuth status for a specific user and federated connector"""
+
+    federated_connector_id: int
+    source: FederatedConnectorSource
+    name: str
+    has_oauth_token: bool
+    oauth_token_expires_at: Optional[datetime] = None
+    authorize_url: Optional[str] = None
+
+
 class FederatedConnectorDetail(BaseModel):
     id: int
     source: FederatedConnectorSource
@@ -122,10 +133,11 @@ class CredentialSchemaResponse(BaseModel):
 
 def _get_federated_connector_instance(
     source: FederatedConnectorSource,
+    credentials: dict[str, Any] | None = None,
 ) -> FederatedConnectorBase:
     """Factory function to get the appropriate federated connector instance."""
     try:
-        return get_federated_connector(source)
+        return get_federated_connector(source, credentials)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -390,7 +402,7 @@ def get_authorize_url(
             raise HTTPException(status_code=404, detail="Federated connector not found")
 
         connector_instance = _get_federated_connector_instance(
-            federated_connector.source
+            federated_connector.source, federated_connector.credentials
         )
         authorize_url = connector_instance.authorize()
 
@@ -422,7 +434,7 @@ def handle_oauth_callback(
         callback_data = dict(request.query_params)
 
         connector_instance = _get_federated_connector_instance(
-            federated_connector.source
+            federated_connector.source, federated_connector.credentials
         )
         oauth_result = connector_instance.callback(callback_data)
 
@@ -435,6 +447,7 @@ def handle_oauth_callback(
             update_federated_connector_oauth_token(
                 db_session=db_session,
                 federated_connector_id=id,
+                user_id=user.id,
                 token=oauth_result.access_token,
                 expires_at=oauth_result.expires_at,
             )
@@ -477,6 +490,54 @@ def get_federated_connectors(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/oauth-status")
+def get_user_oauth_status(
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> list[UserOAuthStatus]:
+    """Get OAuth status for all federated connectors for the current user"""
+    try:
+        federated_connectors = fetch_all_federated_connectors(db_session)
+
+        result = []
+        for fc in federated_connectors:
+            # Check if user has OAuth token for this connector
+            oauth_token = None
+            for token in fc.oauth_tokens:
+                if token.user_id == user.id:
+                    oauth_token = token
+                    break
+
+            # Generate authorize URL if needed
+            authorize_url = None
+            if not oauth_token:
+                try:
+                    connector_instance = _get_federated_connector_instance(
+                        fc.source, fc.credentials
+                    )
+                    authorize_url = connector_instance.authorize()
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to generate authorize URL for {fc.source}: {e}"
+                    )
+
+            status_data = UserOAuthStatus(
+                federated_connector_id=fc.id,
+                source=fc.source,
+                name=f"{fc.source.replace('_', ' ').title()}",
+                has_oauth_token=oauth_token is not None,
+                oauth_token_expires_at=oauth_token.expires_at if oauth_token else None,
+                authorize_url=authorize_url,
+            )
+            result.append(status_data)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error getting user OAuth status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{id}")
 def get_federated_connector_detail(
     id: int,
@@ -489,11 +550,12 @@ def get_federated_connector_detail(
         if not federated_connector:
             raise HTTPException(status_code=404, detail="Federated connector not found")
 
-        # Get OAuth token information
+        # Get OAuth token information for the current user
         oauth_token = None
         for token in federated_connector.oauth_tokens:
-            oauth_token = token
-            break  # Get the first (most recent) token
+            if token.user_id == user.id:
+                oauth_token = token
+                break
 
         # Get document set mappings
         document_sets = []
@@ -593,4 +655,49 @@ def delete_federated_connector_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error deleting federated connector {id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{id}/oauth")
+def disconnect_oauth_token(
+    id: int,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[bool]:
+    """Disconnect OAuth token for the current user from a federated connector"""
+    try:
+        # Check if the federated connector exists
+        federated_connector = fetch_federated_connector_by_id(id, db_session)
+        if not federated_connector:
+            raise HTTPException(status_code=404, detail="Federated connector not found")
+
+        # Find and delete the user's OAuth token
+        oauth_token = None
+        for token in federated_connector.oauth_tokens:
+            if token.user_id == user.id:
+                oauth_token = token
+                break
+
+        if oauth_token:
+            db_session.delete(oauth_token)
+            db_session.commit()
+
+            return StatusResponse(
+                success=True,
+                message="OAuth token disconnected successfully",
+                data=True,
+            )
+        else:
+            return StatusResponse(
+                success=False,
+                message="No OAuth token found for this user",
+                data=False,
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error disconnecting OAuth token for federated connector {id}: {e}"
+        )
         raise HTTPException(status_code=500, detail=str(e))

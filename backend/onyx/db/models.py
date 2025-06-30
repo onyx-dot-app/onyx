@@ -1438,12 +1438,16 @@ class FederatedConnectorOAuthToken(Base):
     federated_connector_id: Mapped[int] = mapped_column(
         ForeignKey("federated_connector.id"), nullable=False
     )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
     token: Mapped[str] = mapped_column(String, nullable=False)
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
 
     federated_connector: Mapped["FederatedConnector"] = relationship(
         "FederatedConnector", back_populates="oauth_tokens"
     )
+    user: Mapped["User"] = relationship("User")
 
 
 class FederatedConnector__DocumentSet(Base):
