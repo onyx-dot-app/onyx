@@ -488,6 +488,7 @@ SLACK_USER_TOKEN = os.environ.get(
 NUM_SLACK_SEARCH_DOCS = int(
     os.environ.get("NUM_SLACK_SEARCH_DOCS", "5")
 )  # how many messages (docs) to search. Total chunks count be greater than this.
+NUM_MAX_SLACK_QUERIES = int(os.environ.get("NUM_MAX_SLACK_QUERIES", "5"))
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
