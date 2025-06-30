@@ -1,0 +1,25 @@
+# TODO: maybe ask it to generate in and from filters, and fuzzy match them later
+SLACK_QUERY_EXPANSION_PROMPT = """
+Rewrite the user's query and, if helpful, split it into at most five keyword-only queries, \
+so that Slack's keyword search yields the best matches.
+
+Keep in mind the Slack's search behavior:
+- Pure keyword AND search (no semantics).
+- Word order matters.
+- More words = fewer matches, so keep each query concise.
+
+Guidelines:
+1. Remove stop-words and obvious noise.
+2. Remove or down-weight meta-instructions (e.g., "show me", "summary of", "how do I") that are \
+unlikely to appear in the target messages.
+3. If the query has many keywords, produce several focused queries that keep related words together; \
+never explode into single-word queries.
+4. Preserve phrases that belong together (e.g., "performance issues"); a word may appear in multiple queries.
+5. When unsure, produce both a broad and a narrow query.
+6. If the user asks for X or Y, create separate queries for X and Y.
+
+Here is the original query:
+{query}
+
+Return EXACTLY the new query(ies), one per line, at most five. Nothing else.
+"""
