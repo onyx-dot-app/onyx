@@ -7,10 +7,14 @@ from onyx.db.models import ChatMessage
 from onyx.configs.constants import DANSWER_API_KEY_PREFIX
 import os
 from langfuse import Langfuse
+import json
+import xml.etree.ElementTree as ET
 
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY")
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY")
 LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST", None)
+SOER_LOGIN = os.environ.get("SOER_LOGIN")
+SOER_PASSWORD = os.environ.get("SOER_PASSWORD")
 
 langfuse = None
 
@@ -47,6 +51,55 @@ def list_pages_for_site_eea(site):
     pages = [page.url for page in tree.all_pages() if test_url(rp, page)]
     pages = list(dict.fromkeys(pages))
     return(pages)
+
+def soer_login():
+    login_url = "https://www.eea.europa.eu/++api++/@login"
+    payload = {
+        "login": SOER_LOGIN,
+        "password": SOER_PASSWORD
+    }
+
+    headers = {
+        'accept': 'application/json',
+    }
+
+    session = requests.Session()
+
+    response = session.post(login_url, json=payload, headers=headers)
+
+    resp = {
+        'authenticated': False,
+    }
+    if response.ok:
+        __ac__eea = ""
+        for cookie in session.cookies:
+            if cookie.name == '__ac__eea':
+                __ac__eea = cookie.value
+
+        resp = {
+            'authenticated': True,
+            '__ac__eea': cookie.value,
+            'auth_token': json.loads(response.text).get("token")
+        }
+    return resp
+
+def read_protected_sitemap(sitemap, auth):
+    cookies = {'auth_token': auth['auth_token'], "__ac__eea": auth['__ac__eea']}
+
+    response = requests.get(sitemap, cookies=cookies)
+
+    root = ET.fromstring(response.text)
+
+    ns = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+
+    urls = [f"{loc.text}?protected=true" for loc in root.findall('.//ns:loc', ns)]
+
+    return urls
+
+def list_pages_for_protected_site_eea(site: str, auth) -> list[str]:
+    """Get list of pages from a site's sitemaps"""
+
+    return read_protected_sitemap(site, auth)
 
 def is_pdf_mime_type(url):
     response = requests.head(url, stream=True)

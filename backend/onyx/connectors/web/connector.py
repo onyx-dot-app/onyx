@@ -40,7 +40,7 @@ from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
 #from onyx.utils.sitemap_eea import list_pages_for_site_eea
-from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea
+from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea, list_pages_for_protected_site_eea, soer_login
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -170,6 +170,8 @@ def protected_url_check(url: str) -> None:
 
 
 def check_internet_connection(url: str) -> None:
+    if url.endswith("protected=true"):
+        return
     try:
         # Use a more realistic browser-like request
         session = requests.Session()
@@ -342,6 +344,12 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
             for loc_tag in soup.find_all("loc")
         ]
 
+        if sitemap_url.endswith("protected=true"):
+            eea_auth = soer_login()
+            global eea_global_auth
+            eea_global_auth = eea_auth
+            urls = list_pages_for_protected_site_eea(sitemap_url, eea_auth)
+
         if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
             urls = list_pages_for_site(sitemap_url)
@@ -420,7 +428,21 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
                 "path": "/",
             },
         ]
-
+        if eea_global_auth is not None:
+            cookies.append({
+                    "name": "__ac__eea",
+                    "value": eea_global_auth['__ac__eea'],
+                    "domain": "www.eea.europa.eu",
+                    "path": "/",
+                },
+            )
+            cookies.append({
+                "name": "auth_token",
+                "value": eea_global_auth['auth_token'],
+                "domain": "www.eea.europa.eu",
+                "path": "/",
+                }
+            )
         # Add cookies to the context
         for cookie in cookies:
             try:
