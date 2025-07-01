@@ -1,3 +1,10 @@
+from ragas import evaluate
+from ragas import EvaluationDataset
+from ragas import SingleTurnSample
+from ragas.dataset_schema import EvaluationResult
+from ragas.metrics import Faithfulness
+from ragas.metrics import ResponseGroundedness
+from ragas.metrics import ResponseRelevancy
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -5,8 +12,8 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.db.models import Document
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.utils.logger import setup_logger
-from tests.regression.search_quality.models import DocumentContext
 from tests.regression.search_quality.models import GroundTruth
+from tests.regression.search_quality.models import RetrievedDocument
 
 logger = setup_logger(__name__)
 
@@ -36,9 +43,9 @@ def find_document(ground_truth: GroundTruth, db_session: Session) -> Document | 
     return docs[0]
 
 
-def search_docs_to_doc_contexts(docs: list[SavedSearchDoc]) -> list[DocumentContext]:
+def search_docs_to_doc_contexts(docs: list[SavedSearchDoc]) -> list[RetrievedDocument]:
     return [
-        DocumentContext(
+        RetrievedDocument(
             document_id=doc.document_id,
             content=build_doc_context_str(
                 semantic_identifier=doc.semantic_identifier,
@@ -52,3 +59,20 @@ def search_docs_to_doc_contexts(docs: list[SavedSearchDoc]) -> list[DocumentCont
         )
         for ind, doc in enumerate(docs)
     ]
+
+
+def ragas_evaluate(question: str, answer: str, contexts: list[str]) -> EvaluationResult:
+    sample = SingleTurnSample(
+        user_input=question,
+        retrieved_contexts=contexts,
+        response=answer,
+    )
+    dataset = EvaluationDataset([sample])
+    return evaluate(
+        dataset,
+        metrics=[
+            ResponseRelevancy(),
+            ResponseGroundedness(),
+            Faithfulness(),
+        ],
+    )

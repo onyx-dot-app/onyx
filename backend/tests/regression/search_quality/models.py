@@ -34,7 +34,7 @@ class OneshotQAResult(BaseModel):
     answer: str | None
 
 
-class DocumentContext(BaseModel):
+class RetrievedDocument(BaseModel):
     document_id: str
     content: str
 
@@ -47,7 +47,10 @@ class AnalysisSummary(BaseModel):
     total_results: int
     ground_truth_count: int
     answer: str | None = None
-    retrieved: list[DocumentContext] = []
+    response_relevancy: float | None = None
+    response_groundedness: float | None = None
+    faithfulness: float | None = None
+    retrieved: list[RetrievedDocument] = []
     time_taken: float | None = None
 
 
@@ -63,10 +66,9 @@ class SearchMetrics(BaseModel):
 
 
 class AnswerMetrics(BaseModel):
-    # context_relevancy: float | None = None
-    # answer_relevancy: float | None = None
-    # faithfulness: float | None = None
-    pass
+    average_response_relevancy: float
+    average_response_groundedness: float
+    average_faithfulness: float
 
 
 class CombinedMetrics(SearchMetrics, AnswerMetrics):
