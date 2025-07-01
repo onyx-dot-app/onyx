@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 import time
 from collections import defaultdict
 from concurrent.futures import as_completed
@@ -9,6 +10,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import requests
+from dotenv import load_dotenv
 from pydantic import ValidationError
 from requests.exceptions import RequestException
 from retry import retry
@@ -35,6 +37,7 @@ from tests.regression.search_quality.models import EvalConfig
 from tests.regression.search_quality.models import OneshotQAResult
 from tests.regression.search_quality.models import TestQuery
 from tests.regression.search_quality.utils import find_document
+from tests.regression.search_quality.utils import ragas_evaluate
 from tests.regression.search_quality.utils import search_docs_to_doc_contexts
 
 logger = setup_logger(__name__)
@@ -150,6 +153,14 @@ class SearchAnswerAnalyzer:
                 print(f"  Top-{k} accuracy: {acc:.1f}%")
             print(f"Average time taken: {metrics_all.average_time_taken:.2f}s")
 
+        if not self.config.search_only:
+            print(
+                "\nAnswer evaluation metrics:\n"
+                f"  Average response relevancy: {metrics_all.average_response_relevancy:.2f}\n"
+                f"  Average response groundedness: {metrics_all.average_response_groundedness:.2f}\n"
+                f"  Average faithfulness: {metrics_all.average_faithfulness:.2f}"
+            )
+
     def generate_detailed_report(self, export_path: Path) -> None:
         logger.info("Generating detailed report...")
 
@@ -168,8 +179,17 @@ class SearchAnswerAnalyzer:
                     "category",
                     "total_queries",
                     "found",
-                    "accuracy_pct",
-                    "avg_rank_when_found",
+                    "percent_found",
+                    "avg_rank_found",
+                    *(
+                        [
+                            "avg_response_relevancy",
+                            "avg_response_groundedness",
+                            "avg_faithfulness",
+                        ]
+                        if not self.config.search_only
+                        else []
+                    ),
                     "avg_time_taken_sec",
                 ]
             )
@@ -200,6 +220,15 @@ class SearchAnswerAnalyzer:
                         found_count,
                         f"{accuracy:.1f}",
                         f"{avg_rank:.2f}" if avg_rank is not None else "",
+                        *(
+                            [
+                                f"{metrics.average_response_relevancy:.2f}",
+                                f"{metrics.average_response_groundedness:.2f}",
+                                f"{metrics.average_faithfulness:.2f}",
+                            ]
+                            if not self.config.search_only
+                            else []
+                        ),
                         f"{metrics.average_time_taken:.2f}",
                     ]
                 )
@@ -394,7 +423,6 @@ class SearchAnswerAnalyzer:
                     top_documents=top_documents,
                     answer=result.answer,
                 )
-            raise RuntimeError(f"OneShot QA returned no documents for query {query}")
         except RequestException as e:
             raise RuntimeError(
                 f"OneShot QA failed for query '{query}': {e}."
@@ -402,6 +430,7 @@ class SearchAnswerAnalyzer:
                 if response
                 else ""
             )
+        raise RuntimeError(f"OneShot QA returned no documents for query {query}")
 
     def _run_and_analyze_one(self, test_case: TestQuery) -> AnalysisSummary:
         result = self._perform_oneshot_qa(test_case.question)
@@ -416,8 +445,36 @@ class SearchAnswerAnalyzer:
                 found = True
                 break
 
-        # get the search contexts
+        # get the search contents
         retrieved = search_docs_to_doc_contexts(result.top_documents)
+
+        # do answer evaluation
+        response_relevancy: float | None = None
+        response_groundedness: float | None = None
+        faithfulness: float | None = None
+        contexts = [c.content for c in retrieved[: self.config.max_answer_context]]
+        if not self.config.search_only:
+            if result.answer is None:
+                logger.error(
+                    "No answer found for query: %s, skipping answer evaluation",
+                    test_case.question,
+                )
+            else:
+                try:
+                    ragas_result = ragas_evaluate(
+                        question=test_case.question,
+                        answer=result.answer,
+                        contexts=contexts,
+                    ).scores[0]
+                    response_relevancy = ragas_result["answer_relevancy"]
+                    response_groundedness = ragas_result["nv_response_groundedness"]
+                    faithfulness = ragas_result["faithfulness"]
+                except Exception as e:
+                    logger.error(
+                        "Error evaluating answer for query %s: %s",
+                        test_case.question,
+                        e,
+                    )
 
         return AnalysisSummary(
             question=test_case.question,
@@ -427,6 +484,9 @@ class SearchAnswerAnalyzer:
             total_results=len(result.top_documents),
             ground_truth_count=len(test_case.ground_truth_docids),
             answer=result.answer,
+            response_relevancy=response_relevancy,
+            response_groundedness=response_groundedness,
+            faithfulness=faithfulness,
             retrieved=retrieved,
             time_taken=result.time_taken,
         )
@@ -445,15 +505,33 @@ class SearchAnswerAnalyzer:
         total_queries = len(results)
         found_ranks = [r.rank for r in results if r.found and r.rank is not None]
         found_count = len(found_ranks)
+        best_rank = 0
+        worst_rank = 0
+        average_rank = 0.0
+        response_relevancy = 0.0
+        response_groundedness = 0.0
+        faithfulness = 0.0
 
         if found_ranks:
             best_rank = min(found_ranks)
             worst_rank = max(found_ranks)
             average_rank = sum(found_ranks) / found_count
-        else:
-            best_rank = 0
-            worst_rank = 0
-            average_rank = 0.0
+
+        if not self.config.search_only:
+            scores = [
+                r.response_relevancy
+                for r in results
+                if r.response_relevancy is not None
+            ]
+            response_relevancy = sum(scores) / len(scores)
+            scores = [
+                r.response_groundedness
+                for r in results
+                if r.response_groundedness is not None
+            ]
+            response_groundedness = sum(scores) / len(scores)
+            scores = [r.faithfulness for r in results if r.faithfulness is not None]
+            faithfulness = sum(scores) / len(scores)
 
         top_k_accuracy: dict[int, float] = {}
         for k in TOP_K_LIST:
@@ -470,6 +548,9 @@ class SearchAnswerAnalyzer:
             worst_rank=worst_rank,
             average_rank=average_rank,
             top_k_accuracy=top_k_accuracy,
+            average_response_relevancy=response_relevancy,
+            average_response_groundedness=response_groundedness,
+            average_faithfulness=faithfulness,
             average_time_taken=avg_time_taken,
         )
 
@@ -505,6 +586,14 @@ def run_search_eval(
     tenant_id: str | None,
 ) -> None:
     current_dir = Path(__file__).parent
+    env_dir = current_dir.parent.parent.parent.parent / ".vscode" / ".env"
+    if not env_dir.exists():
+        raise RuntimeError(
+            "Could not find .env file. Please create one in the root .vscode directory."
+        )
+    load_dotenv(env_dir)
+    if not config.search_only and not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY is required for answer evaluation")
 
     # create the export folder
     export_folder = current_dir / datetime.now().strftime("eval-%Y-%m-%d-%H-%M-%S")
