@@ -248,6 +248,14 @@ def _execute_paginated_retrieval(
         next_page_token = results.get(NEXT_PAGE_TOKEN_KEY)
         if list_key:
             for item in results.get(list_key, []):
+                if "1G0rnd9CdK8LTRc-V02U7uTWfuJjv_9f961LvbtHTTwg" in (
+                    item.get("id") or ""
+                ):
+                    print("found ya")
                 yield item
         else:
+            if "1G0rnd9CdK8LTRc-V02U7uTWfuJjv_9f961LvbtHTTwg" in (
+                results.get("id") or ""
+            ):
+                print("found ya")
             yield results

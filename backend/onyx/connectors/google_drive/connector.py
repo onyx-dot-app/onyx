@@ -203,7 +203,9 @@ class GoogleDriveConnector(
         specific_requests_made = False
         if bool(shared_drive_urls) or bool(my_drive_emails) or bool(shared_folder_urls):
             specific_requests_made = True
+        self.specific_requests_made = specific_requests_made
 
+        # NOTE: potentially modified in load_credentials if using service account
         self.include_files_shared_with_me = (
             False if specific_requests_made else include_files_shared_with_me
         )
@@ -283,6 +285,12 @@ class GoogleDriveConnector(
             credentials=credentials,
             source=DocumentSource.GOOGLE_DRIVE,
         )
+
+        if (
+            isinstance(self._creds, ServiceAccountCredentials)
+            and not self.specific_requests_made
+        ):
+            self.include_files_shared_with_me = True
 
         self._creds_dict = new_creds_dict
 
