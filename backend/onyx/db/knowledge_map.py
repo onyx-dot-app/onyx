@@ -31,6 +31,17 @@ def get_answers_by_document_id(
     return db_session.scalars(stmt).all()
 
 
+def get_answers_by_knowledge_map_id(
+        db_session: Session, knowledge_map_id: int, limit: int | None = None
+) -> Sequence[KnowledgeMapAnswer]:
+    stmt = select(KnowledgeMapAnswer).where(KnowledgeMapAnswer.knowledge_map_id == knowledge_map_id)
+
+    if limit:
+        stmt = stmt.limit(limit)
+
+    return db_session.scalars(stmt).all()
+
+
 def get_knowledge_map_list(db_session: Session, limit: int | None = None) -> Sequence[KnowledgeMap]:
     stmt = select(KnowledgeMap)
 
