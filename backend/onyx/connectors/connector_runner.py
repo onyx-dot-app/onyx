@@ -14,6 +14,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
 from onyx.utils.logger import setup_logger
 
 
@@ -27,7 +28,8 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 class CheckpointOutputWrapper(Generic[CT]):
     """
-    Wraps a CheckpointOutput generator to give things back in a more digestible format.
+    Wraps a CheckpointOutput generator to give things back in a more digestible format,
+    specifically for Document outputs.
     The connector format is easier for the connector implementor (e.g. it enforces exactly
     one new checkpoint is returned AND that the checkpoint is at the end), thus the different
     formats.
@@ -40,7 +42,7 @@ class CheckpointOutputWrapper(Generic[CT]):
         self,
         checkpoint_connector_generator: CheckpointOutput[CT],
     ) -> Generator[
-        tuple[Document | None, ConnectorFailure | None, CT | None],
+        tuple[Document | SlimDocument | None, ConnectorFailure | None, CT | None],
         None,
         None,
     ]:
@@ -53,6 +55,8 @@ class CheckpointOutputWrapper(Generic[CT]):
 
         for document_or_failure in _inner_wrapper(checkpoint_connector_generator):
             if isinstance(document_or_failure, Document):
+                yield document_or_failure, None, None
+            elif isinstance(document_or_failure, SlimDocument):
                 yield document_or_failure, None, None
             elif isinstance(document_or_failure, ConnectorFailure):
                 yield None, document_or_failure, None
