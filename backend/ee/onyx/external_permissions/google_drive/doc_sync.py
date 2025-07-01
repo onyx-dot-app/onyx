@@ -40,6 +40,23 @@ def _get_slim_doc_generator(
     )
 
 
+def _merge_permissions_lists(
+    permission_lists: list[list[GoogleDrivePermission]],
+) -> list[GoogleDrivePermission]:
+    """
+    Merge a list of permission lists into a single list of permissions.
+    """
+    seen_permission_ids: set[str] = set()
+    merged_permissions: list[GoogleDrivePermission] = []
+    for permission_list in permission_lists:
+        for permission in permission_list:
+            if permission.id not in seen_permission_ids:
+                merged_permissions.append(permission)
+                seen_permission_ids.add(permission.id)
+
+    return merged_permissions
+
+
 def get_external_access_for_raw_gdrive_file(
     file: GoogleDriveFileType,
     company_domain: str,
@@ -83,7 +100,10 @@ def get_external_access_for_raw_gdrive_file(
                 f"Failed to get all permissions for file {doc_id} with retriever service, "
                 "trying admin service"
             )
-            permissions_list = _get_permissions(admin_drive_service)
+            backup_permissions_list = _get_permissions(admin_drive_service)
+            permissions_list = _merge_permissions_lists(
+                [permissions_list, backup_permissions_list]
+            )
 
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
