@@ -315,13 +315,17 @@ def align_basic_advanced(
 def _get_external_access_for_raw_gdrive_file(
     file: GoogleDriveFileType,
     company_domain: str,
-    drive_service: GoogleDriveService,
+    retriever_drive_service: GoogleDriveService | None,
+    admin_drive_service: GoogleDriveService,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
     """
     external_access_fn = cast(
-        Callable[[GoogleDriveFileType, str, GoogleDriveService], ExternalAccess],
+        Callable[
+            [GoogleDriveFileType, str, GoogleDriveService | None, GoogleDriveService],
+            ExternalAccess,
+        ],
         fetch_versioned_implementation_with_fallback(
             "onyx.external_permissions.google_drive.doc_sync",
             "get_external_access_for_raw_gdrive_file",
@@ -331,7 +335,8 @@ def _get_external_access_for_raw_gdrive_file(
     return external_access_fn(
         file,
         company_domain,
-        drive_service,
+        retriever_drive_service,
+        admin_drive_service,
     )
 
 
@@ -491,7 +496,9 @@ def _convert_drive_item_to_document(
             _get_external_access_for_raw_gdrive_file(
                 file=file,
                 company_domain=permission_sync_context.google_domain,
-                drive_service=get_drive_service(
+                # try both retriever_email and primary_admin_email if necessary
+                retriever_drive_service=_get_drive_service(),
+                admin_drive_service=get_drive_service(
                     creds, user_email=permission_sync_context.primary_admin_email
                 ),
             )
@@ -557,14 +564,22 @@ def build_slim_document(
     if file.get("mimeType") in [DRIVE_FOLDER_TYPE, DRIVE_SHORTCUT_TYPE]:
         return None
 
-    owner_email = file.get("owners", [{}])[0].get("emailAddress")
+    owner_email = cast(str | None, file.get("owners", [{}])[0].get("emailAddress"))
     external_access = (
         _get_external_access_for_raw_gdrive_file(
             file=file,
             company_domain=permission_sync_context.google_domain,
-            drive_service=get_drive_service(
+            retriever_drive_service=(
+                get_drive_service(
+                    creds,
+                    user_email=owner_email,
+                )
+                if owner_email
+                else None
+            ),
+            admin_drive_service=get_drive_service(
                 creds,
-                user_email=owner_email or permission_sync_context.primary_admin_email,
+                user_email=permission_sync_context.primary_admin_email,
             ),
         )
         if permission_sync_context

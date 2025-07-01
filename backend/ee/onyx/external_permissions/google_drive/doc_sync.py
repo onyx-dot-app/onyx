@@ -41,7 +41,10 @@ def _get_slim_doc_generator(
 
 
 def get_external_access_for_raw_gdrive_file(
-    file: GoogleDriveFileType, company_domain: str, drive_service: GoogleDriveService
+    file: GoogleDriveFileType,
+    company_domain: str,
+    retriever_drive_service: GoogleDriveService | None,
+    admin_drive_service: GoogleDriveService,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -62,11 +65,25 @@ def get_external_access_for_raw_gdrive_file(
             GoogleDrivePermission.from_drive_permission(p) for p in permissions
         ]
     elif permission_ids:
-        permissions_list = get_permissions_by_ids(
-            drive_service=drive_service,
-            doc_id=doc_id,
-            permission_ids=permission_ids,
+
+        def _get_permissions(
+            drive_service: GoogleDriveService,
+        ) -> list[GoogleDrivePermission]:
+            return get_permissions_by_ids(
+                drive_service=drive_service,
+                doc_id=doc_id,
+                permission_ids=permission_ids,
+            )
+
+        permissions_list = _get_permissions(
+            retriever_drive_service or admin_drive_service
         )
+        if len(permissions_list) != len(permission_ids) and retriever_drive_service:
+            logger.warning(
+                f"Failed to get all permissions for file {doc_id} with retriever service, "
+                "trying admin service"
+            )
+            permissions_list = _get_permissions(admin_drive_service)
 
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
