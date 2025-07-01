@@ -35,6 +35,7 @@ from tests.regression.search_quality.models import EvalConfig
 from tests.regression.search_quality.models import OneshotQAResult
 from tests.regression.search_quality.models import TestQuery
 from tests.regression.search_quality.utils import find_document
+from tests.regression.search_quality.utils import search_docs_to_doc_contexts
 
 logger = setup_logger(__name__)
 
@@ -152,13 +153,13 @@ class SearchAnswerAnalyzer:
     def generate_detailed_report(self, export_path: Path) -> None:
         logger.info("Generating detailed report...")
 
-        # persist self.results as json for further inspection
-        results_json_path = export_path / "analysis_results.json"
+        # save results for future inspection
+        results_json_path = export_path / "search_results.json"
         with results_json_path.open("w") as f:
             json.dump([r.model_dump(mode="json") for r in self.results], f, indent=4)
-        logger.info("Saved full analysis results to %s", results_json_path)
+        logger.info("Saved search results to %s", results_json_path)
 
-        # prepare csv writer
+        # save results by category
         csv_path = export_path / "results_by_category.csv"
         with csv_path.open("w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
@@ -366,7 +367,6 @@ class SearchAnswerAnalyzer:
             ),
             rerank_settings=self._rerank_settings,
             return_contexts=True,
-            # TODO: this doesn't quite work, it always generates an answer
             skip_gen_ai_answer_generation=self.config.search_only,
         )
 
@@ -416,7 +416,8 @@ class SearchAnswerAnalyzer:
                 found = True
                 break
 
-        # TODO: run answer evaluation
+        # get the search contexts
+        retrieved = search_docs_to_doc_contexts(result.top_documents)
 
         return AnalysisSummary(
             question=test_case.question,
@@ -426,6 +427,7 @@ class SearchAnswerAnalyzer:
             total_results=len(result.top_documents),
             ground_truth_count=len(test_case.ground_truth_docids),
             answer=result.answer,
+            retrieved=retrieved,
             time_taken=result.time_taken,
         )
 
