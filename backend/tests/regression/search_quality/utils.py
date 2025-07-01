@@ -1,8 +1,11 @@
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import SavedSearchDoc
 from onyx.db.models import Document
+from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.utils.logger import setup_logger
+from tests.regression.search_quality.models import DocumentContext
 from tests.regression.search_quality.models import GroundTruth
 
 logger = setup_logger(__name__)
@@ -31,3 +34,21 @@ def find_document(ground_truth: GroundTruth, db_session: Session) -> Document | 
             docs[0].id,
         )
     return docs[0]
+
+
+def search_docs_to_doc_contexts(docs: list[SavedSearchDoc]) -> list[DocumentContext]:
+    return [
+        DocumentContext(
+            document_id=doc.document_id,
+            content=build_doc_context_str(
+                semantic_identifier=doc.semantic_identifier,
+                source_type=doc.source_type,
+                content=doc.blurb,  # getting the full content is painful
+                metadata_dict=doc.metadata,
+                updated_at=doc.updated_at,
+                ind=ind,
+                include_metadata=True,
+            ),
+        )
+        for ind, doc in enumerate(docs)
+    ]

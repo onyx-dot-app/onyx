@@ -49,8 +49,8 @@ python run_search_eval.py
 
 6. After the run an `eval-YYYY-MM-DD-HH-MM-SS` folder is created containing:
 
-   * `test_queries.json`   – the dataset used with the found ground truth documents
-   * `analysis_results.json` – per-query details.
+   * `test_queries.json`   – the dataset used with the indexed ground truth documents.
+   * `search_results.json` – per-query details.
    * `results_by_category.csv` – aggregated metrics per category and for "all".
    * `search_position_chart.png` – bar-chart of ground-truth ranks.
 

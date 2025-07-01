@@ -34,6 +34,11 @@ class OneshotQAResult(BaseModel):
     answer: str | None
 
 
+class DocumentContext(BaseModel):
+    document_id: str
+    content: str
+
+
 class AnalysisSummary(BaseModel):
     question: str
     categories: list[str]
@@ -42,11 +47,8 @@ class AnalysisSummary(BaseModel):
     total_results: int
     ground_truth_count: int
     answer: str | None = None
+    retrieved: list[DocumentContext] = []
     time_taken: float | None = None
-
-    # TODO: add additional info needed for answer evaluation
-    # the SavedSearchDoc contains the chunk content, making it very easy to apply ragas
-    # will also need the content for the ground truth documents
 
 
 class SearchMetrics(BaseModel):
@@ -60,7 +62,6 @@ class SearchMetrics(BaseModel):
     top_k_accuracy: dict[int, float]
 
 
-# TODO: add answer evaluation metrics
 class AnswerMetrics(BaseModel):
     # context_relevancy: float | None = None
     # answer_relevancy: float | None = None
