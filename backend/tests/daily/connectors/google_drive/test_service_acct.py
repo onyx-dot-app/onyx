@@ -511,7 +511,7 @@ def test_specific_user_email_shared_with_me(
     mock_get_api_key: MagicMock,
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
 ) -> None:
-    print("\n\nRunning test_specific_user_emails_restricted_folder")
+    print("\n\nRunning test_specific_user_email_shared_with_me")
 
     # Test with admin email - should get 1 doc
     connector = google_drive_service_acct_connector_factory(
@@ -535,6 +535,5 @@ def test_specific_user_email_shared_with_me(
     # expected += ['perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7']
     # expected += ['file_22.txt'] # Shared drive
 
-    print(docs)
     doc_titles = set(doc.semantic_identifier for doc in docs)
     assert doc_titles == set(expected)
