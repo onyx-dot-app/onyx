@@ -1,6 +1,5 @@
 import csv
 import json
-import os
 import time
 from collections import defaultdict
 from concurrent.futures import as_completed
@@ -313,7 +312,6 @@ class SearchAnswerAnalyzer:
         # make layout tight and save
         plt.tight_layout()
 
-        os.path.dirname(__file__)
         chart_file = export_path / "search_position_chart.png"
         plt.savefig(chart_file, dpi=300, bbox_inches="tight")
         logger.info("Search position chart saved to: %s", chart_file)

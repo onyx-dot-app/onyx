@@ -34,6 +34,10 @@ class AnalysisSummary(BaseModel):
     answer: str | None = None
     time_taken: float | None = None
 
+    # TODO: add additional info needed for answer evaluation
+    # the SavedSearchDoc contains the chunk content, making it very easy to apply ragas
+    # will also need the content for the ground truth documents
+
 
 class SearchMetrics(BaseModel):
     total_queries: int

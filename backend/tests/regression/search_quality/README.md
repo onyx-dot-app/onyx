@@ -7,7 +7,7 @@ In the meanwhile, it is used to evaluate the search quality using locally ingest
 
 ## Usage
 
-1. Ensure you have the required dependencies installed and onyx running. Note that auth must be disabled for this script to work.
+1. Ensure you have the required dependencies installed and onyx running. Note that auth must be disabled for this script to work (`AUTH_TYPE=disabled`, which is the case by default).
 
 2. Set up the PYTHONPATH permanently:
    Add the following line to your shell configuration file (e.g., `~/.bashrc`, `~/.zshrc`, or `~/.bash_profile`):
