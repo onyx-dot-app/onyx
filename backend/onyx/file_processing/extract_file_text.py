@@ -534,7 +534,9 @@ def extract_text_and_images(
         if extension == ".pdf":
             file.seek(0)
             text_content, pdf_metadata, images = read_pdf_file(
-                file, pdf_pass, extract_images=get_image_extraction_and_analysis_enabled()
+                file,
+                pdf_pass,
+                extract_images=get_image_extraction_and_analysis_enabled(),
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
@@ -610,7 +612,6 @@ def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
     doc = DocxDocument(BytesIO(docx_content))
 
     # Extract text from the document
-
     all_paras = [p.text for p in doc.paragraphs]
     text_content = "\n".join(all_paras)
 
