@@ -8,9 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # type: ignore
 import requests
 from dotenv import load_dotenv
+from matplotlib.patches import Patch  # type: ignore
 from pydantic import ValidationError
 from requests.exceptions import RequestException
 from retry import retry
@@ -319,8 +320,6 @@ class SearchAnswerAnalyzer:
 
         # add legend if we have both found and not found
         if not_found_count > 0 and found_results:
-            from matplotlib.patches import Patch
-
             legend_elements = [
                 Patch(facecolor="#3498db", alpha=0.7, label="Found in Results"),
                 Patch(facecolor="#e74c3c", alpha=0.7, label="Not Found"),
