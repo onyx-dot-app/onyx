@@ -1,10 +1,10 @@
-from ragas import evaluate
-from ragas import EvaluationDataset
-from ragas import SingleTurnSample
-from ragas.dataset_schema import EvaluationResult
-from ragas.metrics import Faithfulness
-from ragas.metrics import ResponseGroundedness
-from ragas.metrics import ResponseRelevancy
+from ragas import evaluate  # type: ignore
+from ragas import EvaluationDataset  # type: ignore
+from ragas import SingleTurnSample  # type: ignore
+from ragas.dataset_schema import EvaluationResult  # type: ignore
+from ragas.metrics import Faithfulness  # type: ignore
+from ragas.metrics import ResponseGroundedness  # type: ignore
+from ragas.metrics import ResponseRelevancy  # type: ignore
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
