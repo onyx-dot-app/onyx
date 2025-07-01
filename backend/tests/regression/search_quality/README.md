@@ -36,14 +36,15 @@ cd path/to/onyx/backend/tests/regression/search_quality
 
 ```
 python run_search_eval.py
-  --dataset  custom_queries.json   # path to the test-set JSON file (default: ./test_queries.json)
-  --num_results                    # maximum number of results to check for each query (default: 50)
-  --workers                        # number of parallel workers (default: 10)
-  --timeout                        # request timeout in seconds (default: 120)
-  --api_url                        # base URL of the Onyx API server (default: http://127.0.0.1:8080)
-  --search_only                    # only perform search and not answer generation (default: false)
-  --rerank_all                     # override the search settings to rerank all results (default: false)
-  --tenant_id                      # tenant ID to use for the evaluation (default: None)
+  -d --dataset          # Path to the test-set JSON file (default: ./test_queries.json)
+  -n --num_search       # Maximum number of search results to check per query (default: 50)
+  -a --num_answer       # Maximum number of search results to use for answer evaluation (default: 25)
+  -w --workers          # Number of parallel search requests (default: 10)
+  -q --timeout          # Request timeout in seconds (default: 120)
+  -e --api_endpoint     # Base URL of the Onyx API server (default: http://127.0.0.1:8080)
+  -s --search_only      # Only perform search and not answer evaluation (default: false)
+  -r --rerank_all       # Always rerank all search results (default: false)
+  -t --tenant_id        # Tenant ID to use for the evaluation (default: None)
 ```
 
 6. After the run an `eval-YYYY-MM-DD-HH-MM-SS` folder is created containing:
