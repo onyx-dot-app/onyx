@@ -1,5 +1,6 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
+import {KnowledgeMapAnswer} from "@/app/admin/documents/knowledge_maps/lib";
 
 export interface StarterMessageBase {
   message: string;
@@ -41,6 +42,7 @@ export interface Persona {
   users: MinimalUserSnapshot[];
   groups: number[];
   document_sets: DocumentSet[];
+  knowledge_maps: KnowledgeMapAnswer[];
   llm_model_provider_override?: string;
   llm_model_version_override?: string;
   num_chunks?: number;

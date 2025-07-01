@@ -270,6 +270,8 @@ export function AssistantEditor({
     document_set_ids:
       existingPersona?.document_sets?.map((documentSet) => documentSet.id) ??
       ([] as number[]),
+    knowledge_maps_ids: existingPersona?.knowledge_maps?.map((knowledge_map) => knowledge_map.id) ??
+      ([] as number[]),
     num_chunks: existingPersona?.num_chunks ?? null,
     search_start_date: existingPersona?.search_start_date
       ? existingPersona?.search_start_date.toString().split("T")[0]
@@ -298,9 +300,10 @@ export function AssistantEditor({
     selectedGroups: existingPersona?.groups ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
     user_folder_ids: existingPersona?.user_folder_ids ?? [],
+
     knowledge_source:
       (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
-      (existingPersona?.user_folder_ids?.length ?? 0) > 0
+        (existingPersona?.user_folder_ids?.length ?? 0) > 0
         ? "user_files"
         : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
@@ -594,9 +597,9 @@ export function AssistantEditor({
             users: values.is_public
               ? undefined
               : [
-                  ...(user && !checkUserIsNoAuthUser(user.id) ? [user.id] : []),
-                  ...values.selectedUsers.map((u: MinimalUserSnapshot) => u.id),
-                ],
+                ...(user && !checkUserIsNoAuthUser(user.id) ? [user.id] : []),
+                ...values.selectedUsers.map((u: MinimalUserSnapshot) => u.id),
+              ],
             tool_ids: enabledTools,
             remove_image: removePersonaImage,
             search_start_date: values.search_start_date
@@ -804,7 +807,7 @@ export function AssistantEditor({
                             const newShape = generateRandomIconShape();
                             const randomColor =
                               colorOptions[
-                                Math.floor(Math.random() * colorOptions.length)
+                              Math.floor(Math.random() * colorOptions.length)
                               ];
                             setFieldValue("icon_shape", newShape.encodedGrid);
                             setFieldValue("icon_color", randomColor);
@@ -900,11 +903,10 @@ export function AssistantEditor({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div
-                                      className={`${
-                                        ccPairs.length === 0
+                                      className={`${ccPairs.length === 0
                                           ? "opacity-70 cursor-not-allowed"
                                           : ""
-                                      }`}
+                                        }`}
                                     >
                                       <SwitchField
                                         size="sm"
@@ -943,11 +945,10 @@ export function AssistantEditor({
                           <div className="mt-1.5 mb-2.5">
                             <div className="flex gap-2.5">
                               <div
-                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
-                                  values.knowledge_source === "team_knowledge"
+                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${values.knowledge_source === "team_knowledge"
                                     ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                                     : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
-                                }`}
+                                  }`}
                                 onClick={() =>
                                   setFieldValue(
                                     "knowledge_source",
@@ -964,11 +965,10 @@ export function AssistantEditor({
                               </div>
 
                               <div
-                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
-                                  values.knowledge_source === "user_files"
+                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${values.knowledge_source === "user_files"
                                     ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
                                     : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
-                                }`}
+                                  }`}
                                 onClick={() =>
                                   setFieldValue(
                                     "knowledge_source",
@@ -998,25 +998,25 @@ export function AssistantEditor({
                             </SubLabel>
                             {(selectedFiles.length > 0 ||
                               selectedFolders.length > 0) && (
-                              <div className="flex flex-wrap mb-2 max-w-sm gap-2">
-                                {selectedFiles.map((file) => (
-                                  <SourceChip
-                                    key={file.id}
-                                    onRemove={() => {}}
-                                    title={file.name}
-                                    icon={<FileIcon size={16} />}
-                                  />
-                                ))}
-                                {selectedFolders.map((folder) => (
-                                  <SourceChip
-                                    key={folder.id}
-                                    onRemove={() => {}}
-                                    title={folder.name}
-                                    icon={<FolderIcon size={16} />}
-                                  />
-                                ))}
-                              </div>
-                            )}
+                                <div className="flex flex-wrap mb-2 max-w-sm gap-2">
+                                  {selectedFiles.map((file) => (
+                                    <SourceChip
+                                      key={file.id}
+                                      onRemove={() => { }}
+                                      title={file.name}
+                                      icon={<FileIcon size={16} />}
+                                    />
+                                  ))}
+                                  {selectedFolders.map((folder) => (
+                                    <SourceChip
+                                      key={folder.id}
+                                      onRemove={() => { }}
+                                      title={folder.name}
+                                      icon={<FolderIcon size={16} />}
+                                    />
+                                  ))}
+                                </div>
+                              )}
                             <button
                               onClick={() => setFilePickerModalOpen(true)}
                               className="text-primary hover:underline"
@@ -1196,7 +1196,7 @@ export function AssistantEditor({
                                         <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
                                           {knowledgeMaps.map((map) => {
                                             const ind =
-                                              values.knowledge_maps_ids.indexOf(
+                                              values.knowledge_maps_ids?.indexOf(
                                                 map.id
                                               );
                                             let isSelected = ind !== -1;
@@ -1294,10 +1294,10 @@ export function AssistantEditor({
                   currentLlm={
                     values.llm_model_version_override
                       ? structureValue(
-                          values.llm_model_provider_override,
-                          "",
-                          values.llm_model_version_override
-                        )
+                        values.llm_model_provider_override,
+                        "",
+                        values.llm_model_version_override
+                      )
                       : null
                   }
                   requiresImageGeneration={
@@ -1611,8 +1611,8 @@ export function AssistantEditor({
                                   );
                                   const newLabelIds = isSelected
                                     ? values.label_ids.filter(
-                                        (id: number) => id !== label.id
-                                      )
+                                      (id: number) => id !== label.id
+                                    )
                                     : [...values.label_ids, label.id];
                                   setFieldValue("label_ids", newLabelIds);
                                 }

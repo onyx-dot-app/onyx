@@ -78,7 +78,7 @@ export const updateKnowledgeMap = async ({
 };
 
 export const deleteKnowledgeMap = async (knowledge_map_id: number) => {
-  return fetch(`/api/knowledge/delete?knowledge_map_id=${knowledge_map_id}`, {
+  return fetch(`/api/knowledge?knowledge_map_id=${knowledge_map_id}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
@@ -87,7 +87,7 @@ export const deleteKnowledgeMap = async (knowledge_map_id: number) => {
 };
 
 export const generateAnswers = async (knowledge_map_id: number) => {
-  return fetch(`/api/knowledge/answers`, {
+  return fetch(`/api/knowledge/answers?knowledge_map_id=${knowledge_map_id}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
