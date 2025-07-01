@@ -211,6 +211,12 @@ class SearchAnswerAnalyzer:
                 avg_rank = metrics.average_rank if metrics.found_count > 0 else None
                 if avg_rank is not None:
                     print(f"  average rank (when found): {avg_rank:.2f}")
+                if not self.config.search_only:
+                    print(
+                        f"  average response relevancy: {metrics.average_response_relevancy:.2f}\n"
+                        f"  average response groundedness: {metrics.average_response_groundedness:.2f}\n"
+                        f"  average faithfulness: {metrics.average_faithfulness:.2f}"
+                    )
                 print(f"  average time taken: {metrics.average_time_taken:.2f}s")
 
                 csv_writer.writerow(
@@ -594,6 +600,16 @@ def run_search_eval(
     load_dotenv(env_dir)
     if not config.search_only and not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is required for answer evaluation")
+
+    # check onyx is running
+    try:
+        response = requests.get(
+            f"{config.api_url}/health", timeout=config.request_timeout
+        )
+        response.raise_for_status()
+    except RequestException as e:
+        raise RuntimeError(f"Could not connect to Onyx API: {e}")
+    logger.info("Onyx API is running")
 
     # create the export folder
     export_folder = current_dir / datetime.now().strftime("eval-%Y-%m-%d-%H-%M-%S")
