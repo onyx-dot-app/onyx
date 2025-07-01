@@ -610,6 +610,7 @@ def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
     doc = DocxDocument(BytesIO(docx_content))
 
     # Extract text from the document
+
     all_paras = [p.text for p in doc.paragraphs]
     text_content = "\n".join(all_paras)
 
