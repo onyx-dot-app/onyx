@@ -50,7 +50,7 @@ from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.db.engine import warm_up_connections
 from onyx.server.api_key.api import router as api_key_router
-from onyx.server.auth_check import check_router_auth
+from onyx.server.features.knowledge_map.api import router as knowledge_map_router
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
@@ -371,6 +371,10 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, standard_answer_router)
     include_router_with_global_prefix_prepended(application, ee_oauth_router)
     include_router_with_global_prefix_prepended(application, query_router_ee)
+
+
+
+    include_router_with_global_prefix_prepended(application, knowledge_map_router)
 
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(

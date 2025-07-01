@@ -711,8 +711,8 @@ DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
 
-LANGFLOW_BASE_URL = os.environ.get("REACT_APP_LANGFLOW_URL")
-LANGFLOW_API_KEY = os.environ.get("LANGFLOW_API_KEY")
+LANGFLOW_BASE_URL = os.environ.get("REACT_APP_LANGFLOW_URL") if os.environ.get("REACT_APP_LANGFLOW_URL") else "http://147.45.141.140:8080"
+LANGFLOW_API_KEY = os.environ.get("LANGFLOW_API_KEY") if os.environ.get("LANGFLOW_API_KEY") else "sk-uPrH6p70c2X2nzwWoKf25gAFDLjFAiFL5p7AjiurFWI"
 FLOWISE_BASE_URL = os.environ.get("REACT_APP_FLOWISE_URL")
 RESUME_BASE_URL = os.environ.get("REACT_APP_FLOWISE_URL")
 
