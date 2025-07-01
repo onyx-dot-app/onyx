@@ -18,6 +18,16 @@ class TestQuery(BaseModel):
     ground_truth_docids: list[str] = []
 
 
+class EvalConfig(BaseModel):
+    max_search_results: int
+    max_answer_context: int
+    num_workers: int
+    request_timeout: int
+    api_url: str
+    search_only: bool
+    rerank_all: bool
+
+
 class OneshotQAResult(BaseModel):
     time_taken: float
     top_documents: list[SavedSearchDoc]
@@ -52,6 +62,9 @@ class SearchMetrics(BaseModel):
 
 # TODO: add answer evaluation metrics
 class AnswerMetrics(BaseModel):
+    # context_relevancy: float | None = None
+    # answer_relevancy: float | None = None
+    # faithfulness: float | None = None
     pass
 
 

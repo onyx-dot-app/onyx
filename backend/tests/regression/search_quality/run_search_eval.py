@@ -31,30 +31,21 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.regression.search_quality.models import AnalysisSummary
 from tests.regression.search_quality.models import CombinedMetrics
+from tests.regression.search_quality.models import EvalConfig
 from tests.regression.search_quality.models import OneshotQAResult
 from tests.regression.search_quality.models import TestQuery
 from tests.regression.search_quality.utils import find_document
 
 logger = setup_logger(__name__)
 
-DEFAULT_API_SERVER_URL = "http://127.0.0.1:8080"
 GENERAL_HEADERS = {"Content-Type": "application/json"}
-
-DEFAULT_MAX_RESULTS_TO_CHECK = 50
-DEFAULT_PARALLEL_WORKERS = 10
-DEFAULT_REQUEST_TIMEOUT = 120
-DEFAULT_DATASET_FILENAME = "test_queries.json"
+TOP_K_LIST = [1, 3, 5, 10]
 
 
 class SearchAnswerAnalyzer:
     def __init__(
         self,
-        max_results_to_check: int,
-        parallel_workers: int,
-        request_timeout: int,
-        api_url: str,
-        search_only: bool = False,
-        rerank_all: bool = False,
+        config: EvalConfig,
         tenant_id: str | None = None,
     ):
         if not MULTI_TENANT:
@@ -63,17 +54,8 @@ class SearchAnswerAnalyzer:
         elif tenant_id is None:
             raise ValueError("Tenant ID is required for multi-tenant")
 
-        # TODO: add ragas-based answer evaluation
-        if search_only is False:
-            raise NotImplementedError("Answer evaluation is not implemented yet")
-
+        self.config = config
         self.tenant_id = tenant_id
-        self.search_only = search_only
-        self.max_results_to_check = max_results_to_check
-        self.parallel_workers = parallel_workers
-        self.request_timeout = request_timeout
-        self.api_url = api_url
-        self.rerank_all = rerank_all
 
         self.results: list[AnalysisSummary] = []
         self.stats: dict[str, list[AnalysisSummary]] = defaultdict(list)
@@ -95,11 +77,11 @@ class SearchAnswerAnalyzer:
 
         # run the analysis
         logger.info("Starting analysis of %d queries...", dataset_size)
-        logger.info("Using %d parallel workers", self.parallel_workers)
+        logger.info("Using %d parallel workers", self.config.num_workers)
 
         indexed_test_cases = [(i, test_case) for i, test_case in enumerate(dataset)]
         indexed_results: dict[int, AnalysisSummary] = {}
-        with ThreadPoolExecutor(max_workers=self.parallel_workers) as executor:
+        with ThreadPoolExecutor(max_workers=self.config.num_workers) as executor:
             future_to_index = {
                 executor.submit(
                     self._run_and_analyze_one_wrapper, test_case_with_index
@@ -256,7 +238,7 @@ class SearchAnswerAnalyzer:
 
             # create labels for x-axis
             x_labels = [str(pos) for pos in positions[:-1]] + [
-                f"not found\n(>{self.max_results_to_check})"
+                f"not found\n(>{self.config.max_search_results})"
             ]
         else:
             x_labels = [str(pos) for pos in positions]
@@ -380,12 +362,12 @@ class SearchAnswerAnalyzer:
                 real_time=True,
                 filters=filters,
                 enable_auto_detect_filters=False,
-                limit=self.max_results_to_check,
+                limit=self.config.max_search_results,
             ),
             rerank_settings=self._rerank_settings,
             return_contexts=True,
             # TODO: this doesn't quite work, it always generates an answer
-            skip_gen_ai_answer_generation=self.search_only,
+            skip_gen_ai_answer_generation=self.config.search_only,
         )
 
         # send the request
@@ -395,10 +377,10 @@ class SearchAnswerAnalyzer:
 
             start_time = time.monotonic()
             response = requests.post(
-                url=f"{self.api_url}/query/answer-with-citation",
+                url=f"{self.config.api_url}/query/answer-with-citation",
                 json=request_data,
                 headers=GENERAL_HEADERS,
-                timeout=self.request_timeout,
+                timeout=self.config.request_timeout,
             )
             time_taken = time.monotonic() - start_time
             response.raise_for_status()
@@ -425,7 +407,7 @@ class SearchAnswerAnalyzer:
         result = self._perform_oneshot_qa(test_case.question)
 
         # compute rank
-        rank = self.max_results_to_check
+        rank = self.config.max_search_results
         found = False
         ground_truths = set(test_case.ground_truth_docids)
         for i, doc in enumerate(result.top_documents, 1):
@@ -472,7 +454,7 @@ class SearchAnswerAnalyzer:
             average_rank = 0.0
 
         top_k_accuracy: dict[int, float] = {}
-        for k in [1, 3, 5, 10]:
+        for k in TOP_K_LIST:
             hits = sum(1 for rank in found_ranks if rank <= k)
             top_k_accuracy[k] = (hits / total_queries * 100) if total_queries else 0.0
 
@@ -502,12 +484,12 @@ class SearchAnswerAnalyzer:
                 search_settings = get_current_search_settings(db_session)
                 if search_settings:
                     rerank_settings = RerankingDetails.from_db_model(search_settings)
-                    if not self.rerank_all:
+                    if not self.config.rerank_all:
                         return rerank_settings
 
                     # override the num_rerank to the eval limit
                     rerank_settings = rerank_settings.model_copy(
-                        update={"num_rerank": self.max_results_to_check}
+                        update={"num_rerank": self.config.max_search_results}
                     )
                     return rerank_settings
         except Exception as e:
@@ -517,12 +499,7 @@ class SearchAnswerAnalyzer:
 
 def run_search_eval(
     dataset_path: Path,
-    max_results_to_check: int,
-    parallel_workers: int,
-    request_timeout: int,
-    api_url: str,
-    search_only: bool,
-    rerank_all: bool,
+    config: EvalConfig,
     tenant_id: str | None,
 ) -> None:
     current_dir = Path(__file__).parent
@@ -534,15 +511,7 @@ def run_search_eval(
     logger.info("Created export folder: %s", export_path)
 
     # run the search eval
-    analyzer = SearchAnswerAnalyzer(
-        max_results_to_check=max_results_to_check,
-        parallel_workers=parallel_workers,
-        request_timeout=request_timeout,
-        api_url=api_url,
-        search_only=search_only,
-        rerank_all=rerank_all,
-        tenant_id=tenant_id,
-    )
+    analyzer = SearchAnswerAnalyzer(config=config, tenant_id=tenant_id)
     analyzer.run_analysis(dataset_path, export_path)
     analyzer.generate_summary()
     analyzer.generate_detailed_report(export_path)
@@ -558,35 +527,42 @@ if __name__ == "__main__":
         "-d",
         "--dataset",
         type=Path,
-        default=current_dir / DEFAULT_DATASET_FILENAME,
+        default=current_dir / "test_queries.json",
         help="Path to the test-set JSON file (default: %(default)s).",
     )
     parser.add_argument(
         "-n",
-        "--num_results",
+        "--num_search",
         type=int,
-        default=DEFAULT_MAX_RESULTS_TO_CHECK,
-        help="Maximum number of results to check for each query (default: %(default)s).",
+        default=50,
+        help="Maximum number of search results to check per query (default: %(default)s).",
+    )
+    parser.add_argument(
+        "-a",
+        "--num_answer",
+        type=int,
+        default=25,
+        help="Maximum number of search results to use for answer evaluation (default: %(default)s).",
     )
     parser.add_argument(
         "-w",
         "--workers",
         type=int,
-        default=DEFAULT_PARALLEL_WORKERS,
-        help="Number of parallel workers (default: %(default)s).",
+        default=10,
+        help="Number of parallel search requests (default: %(default)s).",
     )
     parser.add_argument(
-        "-t",
+        "-q",
         "--timeout",
         type=int,
-        default=DEFAULT_REQUEST_TIMEOUT,
+        default=120,
         help="Request timeout in seconds (default: %(default)s).",
     )
     parser.add_argument(
-        "-u",
-        "--api_url",
+        "-e",
+        "--api_endpoint",
         type=str,
-        default=DEFAULT_API_SERVER_URL,
+        default="http://127.0.0.1:8080",
         help="Base URL of the Onyx API server (default: %(default)s).",
     )
     parser.add_argument(
@@ -594,17 +570,17 @@ if __name__ == "__main__":
         "--search_only",
         action="store_true",
         default=False,
-        help="Only perform search and not answer generation (default: %(default)s).",
+        help="Only perform search and not answer evaluation (default: %(default)s).",
     )
     parser.add_argument(
         "-r",
         "--rerank_all",
         action="store_true",
         default=False,
-        help="Override the search settings to rerank all results (default: %(default)s).",
+        help="Always rerank all search results (default: %(default)s).",
     )
     parser.add_argument(
-        "-i",
+        "-t",
         "--tenant_id",
         type=str,
         default=None,
@@ -621,12 +597,15 @@ if __name__ == "__main__":
     try:
         run_search_eval(
             args.dataset,
-            args.num_results,
-            args.workers,
-            args.timeout,
-            args.api_url,
-            args.search_only,
-            args.rerank_all,
+            EvalConfig(
+                max_search_results=args.num_search,
+                max_answer_context=args.num_answer,
+                num_workers=args.workers,
+                request_timeout=args.timeout,
+                api_url=args.api_endpoint,
+                search_only=args.search_only,
+                rerank_all=args.rerank_all,
+            ),
             args.tenant_id,
         )
     except Exception as e:
