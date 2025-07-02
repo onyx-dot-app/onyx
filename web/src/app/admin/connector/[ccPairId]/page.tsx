@@ -154,16 +154,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
 
-  // // Debug logging
-  // useEffect(() => {
-  //   if (indexAttemptErrors) {
-  //     console.log('Parent: indexAttemptErrors changed:', {
-  //       itemsLength: indexAttemptErrors.items.length,
-  //       totalItems: indexAttemptErrors.total_items,
-  //       showModal: showIndexAttemptErrors
-  //     });
-  //   }
-  // }, [indexAttemptErrors?.items.length, indexAttemptErrors?.total_items, showIndexAttemptErrors]);
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);

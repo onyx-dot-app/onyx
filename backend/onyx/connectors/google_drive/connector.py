@@ -286,6 +286,10 @@ class GoogleDriveConnector(
             source=DocumentSource.GOOGLE_DRIVE,
         )
 
+        # Service account connectors don't have a specific setting determining whether
+        # to include "shared with me" for each user, so we default to true unless the connector
+        # is in specific folders/drives mode. Note that shared files are only picked up during
+        # the My Drive stage, so this does nothing if the connector is set to only index shared drives.
         if (
             isinstance(self._creds, ServiceAccountCredentials)
             and not self.specific_requests_made
