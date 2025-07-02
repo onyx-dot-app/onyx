@@ -8,8 +8,13 @@ from ragas.metrics import ResponseRelevancy  # type: ignore
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SavedSearchDoc
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Document
+from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.utils.logger import setup_logger
 from tests.regression.search_quality.models import CombinedMetrics
@@ -44,14 +49,47 @@ def find_document(ground_truth: GroundTruth, db_session: Session) -> Document | 
     return docs[0]
 
 
-def search_docs_to_doc_contexts(docs: list[SavedSearchDoc]) -> list[RetrievedDocument]:
+def get_doc_contents(
+    docs: list[SavedSearchDoc], tenant_id: str | None
+) -> dict[tuple[str, int], str]:
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        search_settings = get_current_search_settings(db_session)
+        document_index = get_default_document_index(search_settings, None)
+
+    filters = IndexFilters(access_control_list=None, tenant_id=tenant_id)
+
+    reqs: list[VespaChunkRequest] = [
+        VespaChunkRequest(
+            document_id=doc.document_id,
+            min_chunk_ind=doc.chunk_ind,
+            max_chunk_ind=doc.chunk_ind,
+        )
+        for doc in docs
+    ]
+
+    results = document_index.id_based_retrieval(chunk_requests=reqs, filters=filters)
+    return {(doc.document_id, doc.chunk_id): doc.content for doc in results}
+
+
+def search_docs_to_doc_contexts(
+    docs: list[SavedSearchDoc], tenant_id: str | None
+) -> list[RetrievedDocument]:
+    try:
+        doc_contents = get_doc_contents(docs, tenant_id)
+    except Exception as e:
+        logger.error("Error getting doc contents: %s", e)
+        doc_contents = {}
+
     return [
         RetrievedDocument(
             document_id=doc.document_id,
+            chunk_id=doc.chunk_ind,
             content=build_doc_context_str(
                 semantic_identifier=doc.semantic_identifier,
                 source_type=doc.source_type,
-                content=doc.blurb,  # getting the full content is painful
+                content=doc_contents.get(
+                    (doc.document_id, doc.chunk_ind), f"Blurb: {doc.blurb}"
+                ),
                 metadata_dict=doc.metadata,
                 updated_at=doc.updated_at,
                 ind=ind,

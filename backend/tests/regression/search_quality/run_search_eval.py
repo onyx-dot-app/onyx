@@ -107,7 +107,7 @@ class SearchAnswerAnalyzer:
                         self.stats[cat].append(result)
                 except Exception as e:
                     print(f"[{completed_count}/{dataset_size}] ✗ Error: {e}")
-                    continue
+                    raise  # change to continue if you want to simply skip
 
                 # print progress with query info
                 question = (
@@ -364,20 +364,9 @@ class SearchAnswerAnalyzer:
     @retry(tries=3, delay=1, backoff=2)
     def _perform_oneshot_qa(self, query: str) -> OneshotQAResult:
         """Perform a OneShot QA query against the Onyx API and time it."""
-        # create the thread message
-        messages = [ThreadMessage(message=query, sender=None, role=MessageType.USER)]
-
-        # create filters (empty to search all sources)
-        filters = IndexFilters(
-            source_type=None,
-            document_set=None,
-            time_cutoff=None,
-            tags=None,
-            access_control_list=None,
-            tenant_id=self.tenant_id,
-        )
-
         # create the OneShot QA request
+        messages = [ThreadMessage(message=query, sender=None, role=MessageType.USER)]
+        filters = IndexFilters(access_control_list=None, tenant_id=self.tenant_id)
         qa_request = OneShotQARequest(
             messages=messages,
             prompt_id=0,  # default prompt
@@ -441,7 +430,7 @@ class SearchAnswerAnalyzer:
                 break
 
         # get the search contents
-        retrieved = search_docs_to_doc_contexts(result.top_documents)
+        retrieved = search_docs_to_doc_contexts(result.top_documents, self.tenant_id)
 
         # do answer evaluation
         response_relevancy: float | None = None
