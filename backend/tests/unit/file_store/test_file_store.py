@@ -30,7 +30,7 @@ def db_session() -> Generator[Session, None, None]:
     # but uses SQLite-compatible types
     TestDBBase = declarative_base()
 
-    class FileRecord(TestDBBase):
+    class FileRecord(TestDBBase):  # type: ignore
         __tablename__: str = "file_record"
 
         # Internal file ID, must be unique across all files
