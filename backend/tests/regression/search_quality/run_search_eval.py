@@ -140,7 +140,8 @@ class SearchAnswerAnalyzer:
             f"Ground truth found: {found_count} "
             f"({found_count / total_queries * 100:.1f}%)\n"
             f"Ground truth not found: {total_queries - found_count} "
-            f"({(total_queries - found_count) / total_queries * 100:.1f}%)"
+            f"({(total_queries - found_count) / total_queries * 100:.1f}%)\n"
+            f"Average time taken: {metrics_all.average_time_taken:.2f}s"
         )
 
         if metrics_all.found_count > 0:
@@ -148,11 +149,10 @@ class SearchAnswerAnalyzer:
                 "\nRank statistics (for found results):\n"
                 f"  Average rank: {metrics_all.average_rank:.2f}\n"
                 f"  Best rank: {metrics_all.best_rank}\n"
-                f"  Worst rank: {metrics_all.worst_rank}\n"
+                f"  Worst rank: {metrics_all.worst_rank}"
             )
             for k, acc in metrics_all.top_k_accuracy.items():
                 print(f"  Top-{k} accuracy: {acc:.1f}%")
-            print(f"Average time taken: {metrics_all.average_time_taken:.2f}s")
 
         if not self.config.search_only:
             print(
@@ -346,7 +346,7 @@ class SearchAnswerAnalyzer:
             try:
                 test_query = TestQuery(**datum)
             except ValidationError as e:
-                logger.error("Incorrectly formatted query: %s", e)
+                logger.error("Incorrectly formatted query %s: %s", datum, e)
                 continue
 
             # in case the dataset was copied from the previous run export
@@ -385,6 +385,7 @@ class SearchAnswerAnalyzer:
             time_cutoff=None,
             tags=None,
             access_control_list=None,
+            tenant_id=self.tenant_id,
         )
 
         # create the OneShot QA request
