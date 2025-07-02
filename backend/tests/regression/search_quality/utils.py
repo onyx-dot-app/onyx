@@ -50,7 +50,7 @@ def find_document(ground_truth: GroundTruth, db_session: Session) -> Document | 
 
 
 def get_doc_contents(
-    docs: list[SavedSearchDoc], tenant_id: str | None
+    docs: list[SavedSearchDoc], tenant_id: str
 ) -> dict[tuple[str, int], str]:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         search_settings = get_current_search_settings(db_session)
@@ -72,7 +72,7 @@ def get_doc_contents(
 
 
 def search_docs_to_doc_contexts(
-    docs: list[SavedSearchDoc], tenant_id: str | None
+    docs: list[SavedSearchDoc], tenant_id: str
 ) -> list[RetrievedDocument]:
     try:
         doc_contents = get_doc_contents(docs, tenant_id)

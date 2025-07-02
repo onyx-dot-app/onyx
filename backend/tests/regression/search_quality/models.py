@@ -52,7 +52,7 @@ class AnalysisSummary(BaseModel):
     response_groundedness: float | None = None
     faithfulness: float | None = None
     retrieved: list[RetrievedDocument] = []
-    time_taken: float | None = None
+    time_taken: float
 
 
 class SearchMetrics(BaseModel):

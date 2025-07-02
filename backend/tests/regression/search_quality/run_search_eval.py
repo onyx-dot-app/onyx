@@ -420,7 +420,7 @@ class SearchAnswerAnalyzer:
         result = self._perform_oneshot_qa(test_case.question)
 
         # compute rank
-        rank = self.config.max_search_results
+        rank = None
         found = False
         ground_truths = set(test_case.ground_truth_docids)
         for i, doc in enumerate(result.top_documents, 1):
