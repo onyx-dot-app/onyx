@@ -265,7 +265,7 @@ def validate_indexing_fence(
         return
 
     found = celery_find_task(
-        payload.celery_task_id, OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+        payload.celery_task_id, OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
     if found:
         # the celery task exists in the redis queue
@@ -324,7 +324,7 @@ def validate_indexing_fences(
     indexing tasks sent to celery are still in flight.
     """
     reserved_indexing_tasks = celery_get_unacked_task_ids(
-        OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
 
     # Use replica for this because the worst thing that happens
@@ -516,7 +516,7 @@ def should_index(
     return True
 
 
-def try_creating_indexing_task(
+def try_creating_docfetching_task(
     celery_app: Celery,
     cc_pair: ConnectorCredentialPair,
     search_settings: SearchSettings,
@@ -591,7 +591,7 @@ def try_creating_indexing_task(
         custom_task_id = redis_connector_index.generate_generator_task_id()
 
         # Determine which queue to use based on whether this is a user file
-        # TODO: at the moment the second stage of the pipeline (indexing) is
+        # TODO: at the moment the indexing pipeline is
         # shared between user files and connectors
         queue = (
             OnyxCeleryQueues.USER_FILES_INDEXING

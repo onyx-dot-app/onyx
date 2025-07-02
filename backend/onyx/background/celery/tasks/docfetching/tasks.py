@@ -40,12 +40,64 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
+from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
+
+
+def _wait_for_fence_payload(
+    redis_connector: RedisConnector,
+    redis_connector_index: RedisConnectorIndex,
+    index_attempt_id: int,
+) -> RedisConnectorIndexPayload:
+    # this wait is needed to avoid a race condition where
+    # the primary worker sends the task and it is immediately executed
+    # before the primary worker can finalize the fence
+    start = time.monotonic()
+    while True:
+        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
+            raise SimpleJobException(
+                f"docfetching_task - timed out waiting for fence to be ready: "
+                f"fence={redis_connector.permissions.fence_key}",
+                code=IndexingWatchdogTerminalStatus.FENCE_READINESS_TIMEOUT.code,
+            )
+
+        if not redis_connector_index.fenced:  # The fence must exist
+            raise SimpleJobException(
+                f"docfetching_task - fence not found: fence={redis_connector_index.fence_key}",
+                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
+            )
+
+        payload = redis_connector_index.payload  # The payload must exist
+        if not payload:
+            raise SimpleJobException(
+                "docfetching_task: payload invalid or not found",
+                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
+            )
+
+        if payload.index_attempt_id is None or payload.celery_task_id is None:
+            logger.info(
+                f"docfetching_task - Waiting for fence: fence={redis_connector_index.fence_key}"
+            )
+            sleep(1)
+            continue
+
+        if payload.index_attempt_id != index_attempt_id:
+            raise SimpleJobException(
+                f"docfetching_task - id mismatch. Task may be left over from previous run.: "
+                f"task_index_attempt={index_attempt_id} "
+                f"payload_index_attempt={payload.index_attempt_id}",
+                code=IndexingWatchdogTerminalStatus.FENCE_MISMATCH.code,
+            )
+
+        logger.info(
+            f"docfetching_task - Fence found, continuing...: fence={redis_connector_index.fence_key}"
+        )
+        return payload
 
 
 def docfetching_task(
@@ -57,18 +109,8 @@ def docfetching_task(
     tenant_id: str,
 ) -> None:
     """
-    TODO: update docstring to reflect docfetching
-    Indexing task. For a cc pair, this task pulls all document IDs from the source
-    and compares those IDs to locally stored documents and deletes all locally stored IDs missing
-    from the most recently pulled document ID list
-
-    acks_late must be set to False. Otherwise, celery's visibility timeout will
-    cause any task that runs longer than the timeout to be redispatched by the broker.
-    There appears to be no good workaround for this, so we need to handle redispatching
-    manually.
-
-    Returns None if the task did not run (possibly due to a conflict).
-    Otherwise, returns an int >= 0 representing the number of indexed docs.
+    This function is run in a SimpleJob as a new process. It is responsible for validating
+    some stuff, but basically it just calls run_indexing_entrypoint.
 
     NOTE: if an exception is raised out of this task, the primary worker will detect
     that the task transitioned to a "READY" state but the generator_complete_key doesn't exist.
@@ -105,8 +147,6 @@ def docfetching_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     redis_connector_index = redis_connector.new_index(search_settings_id)
 
-    r = get_redis_client()
-
     if redis_connector.delete.fenced:
         raise SimpleJobException(
             f"Indexing will not start because connector deletion is in progress: "
@@ -125,51 +165,10 @@ def docfetching_task(
             code=IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL.code,
         )
 
-    # this wait is needed to avoid a race condition where
-    # the primary worker sends the task and it is immediately executed
-    # before the primary worker can finalize the fence
-    start = time.monotonic()
-    while True:
-        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise SimpleJobException(
-                f"connector_indexing_task - timed out waiting for fence to be ready: "
-                f"fence={redis_connector.permissions.fence_key}",
-                code=IndexingWatchdogTerminalStatus.FENCE_READINESS_TIMEOUT.code,
-            )
-
-        if not redis_connector_index.fenced:  # The fence must exist
-            raise SimpleJobException(
-                f"connector_indexing_task - fence not found: fence={redis_connector_index.fence_key}",
-                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
-            )
-
-        payload = redis_connector_index.payload  # The payload must exist
-        if not payload:
-            raise SimpleJobException(
-                "connector_indexing_task: payload invalid or not found",
-                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
-            )
-
-        if payload.index_attempt_id is None or payload.celery_task_id is None:
-            logger.info(
-                f"connector_indexing_task - Waiting for fence: fence={redis_connector_index.fence_key}"
-            )
-            sleep(1)
-            continue
-
-        if payload.index_attempt_id != index_attempt_id:
-            raise SimpleJobException(
-                f"connector_indexing_task - id mismatch. Task may be left over from previous run.: "
-                f"task_index_attempt={index_attempt_id} "
-                f"payload_index_attempt={payload.index_attempt_id}",
-                code=IndexingWatchdogTerminalStatus.FENCE_MISMATCH.code,
-            )
-
-        logger.info(
-            f"connector_indexing_task - Fence found, continuing...: fence={redis_connector_index.fence_key}"
-        )
-        break
-
+    payload = _wait_for_fence_payload(
+        redis_connector, redis_connector_index, index_attempt_id
+    )
+    r = get_redis_client()
     # set thread_local=False since we don't control what thread the indexing/pruning
     # might run our callback with
     lock: RedisLock = r.lock(
@@ -218,6 +217,7 @@ def docfetching_task(
                     code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
                 )
 
+            # TODO: pretty sure it's impossible for these to happen, should probably delete
             if not cc_pair.connector:
                 raise SimpleJobException(
                     f"Connector not found: cc_pair={cc_pair_id} connector={cc_pair.connector_id}",
@@ -351,21 +351,50 @@ def process_job_result(
     acks_late=False,
     track_started=True,
 )
-def connector_indexing_proxy_task(
+def docfetching_proxy_task(
     self: Task,
     index_attempt_id: int,
     cc_pair_id: int,
     search_settings_id: int,
     tenant_id: str,
 ) -> None:
-    """celery out of process task execution strategy is pool=prefork, but it uses fork,
-    and forking is inherently unstable.
+    """
+    This task is the entrypoint for the full indexing pipeline, which is composed of two tasks:
+    docfetching and docprocessing.
+    This task is spawned by "try_creating_indexing_task" which is called in the "check_for_indexing" task.
 
-    To work around this, we use pool=threads and proxy our work to a spawned task.
+    This task spawns a new process for a new scheduled index attempt. That
+    new process (which runs the docfetching_task function) does the following:
+
+    TODO: clen up
+    determines parameters of the indexing attempt (which connector indexing function to run,
+    start and end time, from prev checkpoint or not), then run that connector. Specifically,
+    connectors are responsible for reading data from an outside source and converting it to Onyx documents.
+    At the moment these two steps (reading external data and converting to an Onyx document)
+    are not parallelized in most connectors; that's a subject for future work.
+    upserts documents to postgres (index_doc_batch_prepare)
+    chunks each document (optionally adds context for contextual rag)
+    embeds chunks (embed_chunks_with_failure_handling) via a call to the model server
+    write chunks to vespa (write_chunks_to_vector_db_with_backoff)
+    update document and indexing metadata in postgres
+
+       pulls all document IDs from the source
+    and compares those IDs to locally stored documents and deletes all locally stored IDs missing
+    from the most recently pulled document ID list
 
     TODO(rkuo): refactor this so that there is a single return path where we canonically
     log the result of running this function.
 
+    Some more Richard notes:
+    celery out of process task execution strategy is pool=prefork, but it uses fork,
+    and forking is inherently unstable.
+
+    To work around this, we use pool=threads and proxy our work to a spawned task.
+
+    acks_late must be set to False. Otherwise, celery's visibility timeout will
+    cause any task that runs longer than the timeout to be redispatched by the broker.
+    There appears to be no good workaround for this, so we need to handle redispatching
+    manually.
     NOTE: we try/except all db access in this function because as a watchdog, this function
     needs to be extremely stable.
     """
@@ -393,7 +422,7 @@ def connector_indexing_proxy_task(
         task_logger.error("self.request.id is None!")
 
     client = SimpleJobClient()
-    task_logger.info(f"submitting connector_indexing_task with tenant_id={tenant_id}")
+    task_logger.info(f"submitting docfetching_task with tenant_id={tenant_id}")
 
     job = client.submit(
         docfetching_task,

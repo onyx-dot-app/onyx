@@ -69,7 +69,7 @@ def run_jobs() -> None:
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=indexing@%n",
-        "--queues=connector_indexing",
+        "--queues=docprocessing",
     ]
 
     cmd_worker_user_files_indexing = [
@@ -109,6 +109,19 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=kg_processing@%n",
         "--queues=kg_processing",
+    ]
+
+    cmd_worker_docfetching = [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.docfetching",
+        "worker",
+        "--pool=threads",
+        "--concurrency=1",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docfetching@%n",
+        "--queues=connector_doc_fetching,user_files_indexing",
     ]
 
     cmd_beat = [
@@ -157,6 +170,13 @@ def run_jobs() -> None:
         text=True,
     )
 
+    worker_docfetching_process = subprocess.Popen(
+        cmd_worker_docfetching,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
     beat_process = subprocess.Popen(
         cmd_beat, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
@@ -184,6 +204,9 @@ def run_jobs() -> None:
     worker_kg_processing_thread = threading.Thread(
         target=monitor_process, args=("KG_PROCESSING", worker_kg_processing_process)
     )
+    worker_docfetching_thread = threading.Thread(
+        target=monitor_process, args=("DOCFETCHING", worker_docfetching_process)
+    )
     beat_thread = threading.Thread(target=monitor_process, args=("BEAT", beat_process))
 
     worker_primary_thread.start()
@@ -193,6 +216,7 @@ def run_jobs() -> None:
     worker_user_files_indexing_thread.start()
     worker_monitoring_thread.start()
     worker_kg_processing_thread.start()
+    worker_docfetching_thread.start()
     beat_thread.start()
 
     worker_primary_thread.join()
@@ -202,6 +226,7 @@ def run_jobs() -> None:
     worker_user_files_indexing_thread.join()
     worker_monitoring_thread.join()
     worker_kg_processing_thread.join()
+    worker_docfetching_thread.join()
     beat_thread.join()
 
 

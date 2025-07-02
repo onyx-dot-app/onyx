@@ -25,7 +25,7 @@ from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attem
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
 from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.indexing.utils import should_index
-from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
+from onyx.background.celery.tasks.indexing.utils import try_creating_docfetching_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
 from onyx.background.celery.tasks.models import ConnectorIndexingContext
 from onyx.background.celery.tasks.models import IndexingWatchdogTerminalStatus
@@ -82,6 +82,7 @@ from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
+from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -310,8 +311,18 @@ def monitor_ccpair_indexing_taskset(
     bind=True,
 )
 def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
-    """a lightweight task used to kick off indexing tasks.
-    Occcasionally does some validation of existing state to clear up error conditions"""
+    """a lightweight task used to kick off the pipeline of indexing tasks.
+    Occcasionally does some validation of existing state to clear up error conditions.
+
+    This task is the entrypoint for the full "indexing pipeline", which is composed
+    of two tasks: "docfetching" and "docprocessing". More details in
+    the docfetching task (OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK).
+
+    For cc pairs that should be indexed (see should_index()), this task
+    calls try_creating_docfetching_task, which creates a docfetching task.
+    All the logic for determining what state the indexing pipeline is in
+    w.r.t previous failed attempt, checkpointing, etc is handled in the docfetching task.
+    """
 
     time_start = time.monotonic()
     task_logger.warning("check_for_indexing - Starting")
@@ -482,7 +493,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                     # using a task queue and only allowing one task per cc_pair/search_setting
                     # prevents us from starving out certain attempts
-                    attempt_id = try_creating_indexing_task(
+                    attempt_id = try_creating_docfetching_task(
                         self.app,
                         cc_pair,
                         search_settings_instance,
@@ -769,10 +780,10 @@ def _resolve_indexing_errors(
 
 
 @shared_task(
-    name=OnyxCeleryTask.DOCUMENT_INDEXING_PIPELINE_TASK,
+    name=OnyxCeleryTask.DOCPROCESSING_TASK,
     bind=True,
 )
-def document_indexing_pipeline_task(
+def docprocessing_task(
     self: Task,
     batch_id: str,
     index_attempt_id: int,
@@ -788,6 +799,9 @@ def document_indexing_pipeline_task(
 
     start_time = time.monotonic()
 
+    # set the indexing attempt ID so that all log messages from this process
+    # will have it added as a prefix
+    TaskAttemptSingleton.set_cc_and_index_id(index_attempt_id, cc_pair_id)
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 

@@ -1167,9 +1167,9 @@ def connector_document_extraction(
 
                 # Queue document processing task
                 app.send_task(
-                    OnyxCeleryTask.DOCUMENT_INDEXING_PIPELINE_TASK,
+                    OnyxCeleryTask.DOCPROCESSING_TASK,
                     kwargs=processing_batch_data,
-                    queue=OnyxCeleryQueues.DOCUMENT_INDEXING_PIPELINE,
+                    queue=OnyxCeleryQueues.DOCPROCESSING,
                     priority=OnyxCeleryPriority.MEDIUM,
                 )
 
