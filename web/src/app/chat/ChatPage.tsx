@@ -2021,12 +2021,14 @@ export function ChatPage({
         );
 
         // Add the successfully uploaded files
-        const newFileDescriptors: FileDescriptor[] = uploadedFiles.map((uploadedFile) => ({
-          id: uploadedFile.id,
-          type: uploadedFile.type,
-          name: uploadedFile.name,
-          isUploading: false,
-        }));
+        const newFileDescriptors: FileDescriptor[] = uploadedFiles
+          .filter((uploadedFile) => uploadedFile.id != null)
+          .map((uploadedFile) => ({
+            id: uploadedFile.id,
+            type: uploadedFile.type,
+            name: uploadedFile.name,
+            isUploading: false,
+          }));
 
         return [...withoutPlaceholders, ...newFileDescriptors];
       });
