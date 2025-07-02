@@ -178,16 +178,6 @@ export default function IndexAttemptErrorsModal({
     const endIndex = startIndex + pageSize;
     const currentPageItems = errors.items.slice(startIndex, endIndex);
 
-    console.log("Modal pagination recalculated:", {
-      totalItems: errors.items.length,
-      pageSize,
-      currentPage,
-      totalPages,
-      startIndex,
-      endIndex,
-      currentPageItemsLength: currentPageItems.length,
-    });
-
     return {
       totalPages,
       currentPageItems,
