@@ -120,7 +120,7 @@ export default function IndexAttemptErrorsModal({
   useEffect(() => {
     const calculatePageSize = () => {
       // Modal height is 75% of viewport height
-      const modalHeight = window.innerHeight * 0.75;
+      const modalHeight = window.innerHeight * 0.6;
 
       // Estimate heights (in pixels):
       // - Modal header (title + description): ~120px
@@ -213,7 +213,7 @@ export default function IndexAttemptErrorsModal({
       title="Indexing Errors"
       onOutsideClick={onClose}
       width="max-w-6xl"
-      heightOverride="[75vh]"
+      heightOverride="[60vh]"
       hideOverflow={true}
     >
       <div className="flex flex-col gap-4 h-full">

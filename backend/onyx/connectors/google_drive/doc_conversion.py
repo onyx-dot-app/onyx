@@ -436,6 +436,10 @@ def _convert_drive_item_to_document(
     doc_id = "unknown"
 
     try:
+        import random
+
+        if random.random() > 0.95:
+            raise RuntimeError("Random failure :P")
         # skip shortcuts or folders
         if file.get("mimeType") in [DRIVE_SHORTCUT_TYPE, DRIVE_FOLDER_TYPE]:
             logger.info("Skipping shortcut/folder.")
