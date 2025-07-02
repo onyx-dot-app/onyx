@@ -36,6 +36,7 @@ class OneshotQAResult(BaseModel):
 
 class RetrievedDocument(BaseModel):
     document_id: str
+    chunk_id: int
     content: str
 
 
