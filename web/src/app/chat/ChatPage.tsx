@@ -186,7 +186,6 @@ export function ChatPage({
     setSelectedFiles,
     folders: userFolders,
     files: allUserFiles,
-    uploadFile,
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
@@ -1987,34 +1986,59 @@ export function ChatPage({
 
     updateChatState("uploading", currentSessionId());
 
-    for (let file of acceptedFiles) {
-      const formData = new FormData();
-      formData.append("files", file);
-      const response: FileResponse[] = await uploadFile(formData, null);
+    // Create placeholder files to show upload progress
+    const placeholderFiles: FileDescriptor[] = acceptedFiles.map((file, index) => ({
+      id: `placeholder-${Date.now()}-${index}`,
+      type: ChatFileType.PLAIN_TEXT,
+      name: file.name,
+      isUploading: true,
+    }));
 
-      if (response.length > 0 && response[0] !== undefined) {
-        const uploadedFile = response[0];
+    // Add placeholder files to show upload progress
+    setCurrentMessageFiles((prev) => [...prev, ...placeholderFiles]);
 
-        const newFileDescriptor: FileDescriptor = {
-          // Use file_id (storage ID) if available, otherwise fallback to DB id
-          // Ensure it's a string as FileDescriptor expects
-          id: uploadedFile.file_id
-            ? String(uploadedFile.file_id)
-            : String(uploadedFile.id),
-          type: uploadedFile.chat_file_type
-            ? uploadedFile.chat_file_type
-            : ChatFileType.PLAIN_TEXT,
-          name: uploadedFile.name,
-          isUploading: false, // Mark as successfully uploaded
-        };
+    // Upload all files at once using the chat upload API
+    try {
+      const [uploadedFiles, uploadError] = await uploadFilesForChat(acceptedFiles);
 
-        setCurrentMessageFiles((prev) => [...prev, newFileDescriptor]);
-      } else {
+      if (uploadError) {
+        // Remove all placeholders and show error
+        setCurrentMessageFiles((prev) => 
+          prev.filter((f) => !placeholderFiles.some(p => p.id === f.id))
+        );
         setPopup({
           type: "error",
-          message: "Failed to upload file",
+          message: uploadError,
         });
+        return;
       }
+
+      // Replace all placeholders with actual uploaded files
+      setCurrentMessageFiles((prev) => {
+        // Remove all placeholders
+        const withoutPlaceholders = prev.filter((f) => 
+          !placeholderFiles.some(p => p.id === f.id)
+        );
+
+        // Add the successfully uploaded files
+        const newFileDescriptors: FileDescriptor[] = uploadedFiles.map((uploadedFile) => ({
+          id: uploadedFile.id,
+          type: uploadedFile.type,
+          name: uploadedFile.name,
+          isUploading: false,
+        }));
+
+        return [...withoutPlaceholders, ...newFileDescriptors];
+      });
+    } catch (error) {
+      // Remove all placeholders and show error
+      setCurrentMessageFiles((prev) => 
+        prev.filter((f) => !placeholderFiles.some(p => p.id === f.id))
+      );
+      setPopup({
+        type: "error",
+        message: `Failed to upload files. ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
     }
 
     updateChatState("input", currentSessionId());

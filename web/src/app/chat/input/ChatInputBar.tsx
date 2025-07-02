@@ -743,12 +743,16 @@ export function ChatInputBar({
                       <SourceChip
                         key={`${file.source}-${file.id}-${index}`}
                         icon={
-                          <FileIcon
-                            className={
-                              file.source === "current" ? "text-red-500" : ""
-                            }
-                            size={16}
-                          />
+                          file.isUploading ? (
+                            <FiLoader className="animate-spin" />
+                          ) : (
+                            <FileIcon
+                              className={
+                                file.source === "current" ? "text-red-500" : ""
+                              }
+                              size={16}
+                            />
+                          )
                         }
                         title={file.name}
                         onRemove={() => {
