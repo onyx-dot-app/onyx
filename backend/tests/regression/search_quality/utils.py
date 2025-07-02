@@ -12,6 +12,7 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.db.models import Document
 from onyx.prompts.prompt_utils import build_doc_context_str
 from onyx.utils.logger import setup_logger
+from tests.regression.search_quality.models import CombinedMetrics
 from tests.regression.search_quality.models import GroundTruth
 from tests.regression.search_quality.models import RetrievedDocument
 
@@ -76,3 +77,30 @@ def ragas_evaluate(question: str, answer: str, contexts: list[str]) -> Evaluatio
             Faithfulness(),
         ],
     )
+
+
+def compute_overall_scores(metrics: CombinedMetrics) -> tuple[float, float]:
+    """Compute the overall search and answer quality scores.
+    The scores are subjective and may require tuning."""
+    # search score
+    FOUND_RATIO_WEIGHT = 0.4
+    TOP_IMPORTANCE = 0.7  # 0-1, how important is it to be no. 1 over no. 5, etc.
+
+    found_ratio = metrics.found_count / metrics.total_queries
+    sum_k = sum(1.0 / pow(k, TOP_IMPORTANCE) for k in metrics.top_k_accuracy)
+    weighted_topk = sum(
+        acc / (pow(k, TOP_IMPORTANCE) * sum_k * 100)
+        for k, acc in metrics.top_k_accuracy.items()
+    )
+    search_score = 100 * (
+        FOUND_RATIO_WEIGHT * found_ratio + (1.0 - FOUND_RATIO_WEIGHT) * weighted_topk
+    )
+
+    # answer score
+    answer_score = (
+        metrics.average_response_relevancy
+        + metrics.average_response_groundedness
+        + metrics.average_faithfulness
+    ) / 0.03
+
+    return search_score, answer_score

@@ -37,6 +37,7 @@ from tests.regression.search_quality.models import CombinedMetrics
 from tests.regression.search_quality.models import EvalConfig
 from tests.regression.search_quality.models import OneshotQAResult
 from tests.regression.search_quality.models import TestQuery
+from tests.regression.search_quality.utils import compute_overall_scores
 from tests.regression.search_quality.utils import find_document
 from tests.regression.search_quality.utils import ragas_evaluate
 from tests.regression.search_quality.utils import search_docs_to_doc_contexts
@@ -124,44 +125,6 @@ class SearchAnswerAnalyzer:
         self.results = [indexed_results[i] for i in sorted(indexed_results.keys())]
         self._build_metrics()
 
-    def generate_summary(self) -> None:
-        logger.info("Generating summary...")
-
-        metrics_all = self.metrics.get("all")
-        if metrics_all is None:
-            logger.warning("Nothing to summarize")
-            return
-
-        total_queries = metrics_all.total_queries
-        found_count = metrics_all.found_count
-
-        print(
-            f"Total test queries: {total_queries}\n"
-            f"Ground truth found: {found_count} "
-            f"({found_count / total_queries * 100:.1f}%)\n"
-            f"Ground truth not found: {total_queries - found_count} "
-            f"({(total_queries - found_count) / total_queries * 100:.1f}%)\n"
-            f"Average time taken: {metrics_all.average_time_taken:.2f}s"
-        )
-
-        if metrics_all.found_count > 0:
-            print(
-                "\nRank statistics (for found results):\n"
-                f"  Average rank: {metrics_all.average_rank:.2f}\n"
-                f"  Best rank: {metrics_all.best_rank}\n"
-                f"  Worst rank: {metrics_all.worst_rank}"
-            )
-            for k, acc in metrics_all.top_k_accuracy.items():
-                print(f"  Top-{k} accuracy: {acc:.1f}%")
-
-        if not self.config.search_only:
-            print(
-                "\nAnswer evaluation metrics:\n"
-                f"  Average response relevancy: {metrics_all.average_response_relevancy:.2f}\n"
-                f"  Average response groundedness: {metrics_all.average_response_groundedness:.2f}\n"
-                f"  Average faithfulness: {metrics_all.average_faithfulness:.2f}"
-            )
-
     def generate_detailed_report(self, export_path: Path) -> None:
         logger.info("Generating detailed report...")
 
@@ -181,7 +144,10 @@ class SearchAnswerAnalyzer:
                     "total_queries",
                     "found",
                     "percent_found",
-                    "avg_rank_found",
+                    "best_rank",
+                    "worst_rank",
+                    "avg_rank",
+                    *[f"top_{k}_accuracy" for k in TOP_K_LIST],
                     *(
                         [
                             "avg_response_relevancy",
@@ -191,7 +157,9 @@ class SearchAnswerAnalyzer:
                         if not self.config.search_only
                         else []
                     ),
-                    "avg_time_taken_sec",
+                    "search_score",
+                    *(["answer_score"] if not self.config.search_only else []),
+                    "avg_time_taken",
                 ]
             )
 
@@ -209,15 +177,27 @@ class SearchAnswerAnalyzer:
                     f"  total queries: {total_count}\n"
                     f"  found: {found_count} ({accuracy:.1f}%)"
                 )
+                best_rank = metrics.best_rank if metrics.found_count > 0 else None
+                worst_rank = metrics.worst_rank if metrics.found_count > 0 else None
                 avg_rank = metrics.average_rank if metrics.found_count > 0 else None
-                if avg_rank is not None:
-                    print(f"  average rank (when found): {avg_rank:.2f}")
+                if metrics.found_count > 0:
+                    print(
+                        f"  average rank (for found results): {avg_rank:.2f}\n"
+                        f"  best rank (for found results): {best_rank:.2f}\n"
+                        f"  worst rank (for found results): {worst_rank:.2f}"
+                    )
+                    for k, acc in metrics.top_k_accuracy.items():
+                        print(f"  top-{k} accuracy: {acc:.1f}%")
                 if not self.config.search_only:
                     print(
                         f"  average response relevancy: {metrics.average_response_relevancy:.2f}\n"
                         f"  average response groundedness: {metrics.average_response_groundedness:.2f}\n"
                         f"  average faithfulness: {metrics.average_faithfulness:.2f}"
                     )
+                search_score, answer_score = compute_overall_scores(metrics)
+                print(f"  search score: {search_score:.1f}")
+                if not self.config.search_only:
+                    print(f"  answer score: {answer_score:.1f}")
                 print(f"  average time taken: {metrics.average_time_taken:.2f}s")
 
                 csv_writer.writerow(
@@ -226,13 +206,22 @@ class SearchAnswerAnalyzer:
                         total_count,
                         found_count,
                         f"{accuracy:.1f}",
+                        best_rank or "",
+                        worst_rank or "",
                         f"{avg_rank:.2f}" if avg_rank is not None else "",
+                        *[f"{acc:.1f}" for acc in metrics.top_k_accuracy.values()],
                         *(
                             [
                                 f"{metrics.average_response_relevancy:.2f}",
                                 f"{metrics.average_response_groundedness:.2f}",
                                 f"{metrics.average_faithfulness:.2f}",
                             ]
+                            if not self.config.search_only
+                            else []
+                        ),
+                        f"{search_score:.1f}",
+                        *(
+                            [f"{answer_score:.1f}"]
                             if not self.config.search_only
                             else []
                         ),
@@ -620,7 +609,6 @@ def run_search_eval(
     # run the search eval
     analyzer = SearchAnswerAnalyzer(config=config, tenant_id=tenant_id)
     analyzer.run_analysis(dataset_path, export_path)
-    analyzer.generate_summary()
     analyzer.generate_detailed_report(export_path)
     analyzer.generate_chart(export_path)
 
