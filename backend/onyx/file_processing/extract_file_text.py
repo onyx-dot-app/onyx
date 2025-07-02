@@ -534,7 +534,9 @@ def extract_text_and_images(
         if extension == ".pdf":
             file.seek(0)
             text_content, pdf_metadata, images = read_pdf_file(
-                file, pdf_pass, extract_images=get_image_extraction_and_analysis_enabled()
+                file,
+                pdf_pass,
+                extract_images=get_image_extraction_and_analysis_enabled(),
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
