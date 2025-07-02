@@ -9,6 +9,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
+from onyx.configs.app_configs import NUM_FEDERATED_SECTIONS
 from onyx.configs.app_configs import NUM_MAX_SLACK_QUERIES
 from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
 from onyx.configs.app_configs import SLACK_USER_TOKEN
@@ -284,4 +285,7 @@ def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceCh
                 updated_at=docid_to_message[document_id].timestamp,
             )
         )
+        if len(top_chunks) >= NUM_FEDERATED_SECTIONS:
+            break
+
     return top_chunks
