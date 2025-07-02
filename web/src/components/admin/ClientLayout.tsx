@@ -347,6 +347,29 @@ const collections = (
               : []),
           ],
         },
+        {
+          name: "Customize Layout",
+          items: [
+            {
+              name: (
+                <div className="flex">
+                  <CpuIconSkeleton size={18} />
+                  <div className="ml-1">Welcome message</div>
+                </div>
+              ),
+              link: "/admin/eea_config/welcome_message",
+            },
+            {
+              name: (
+                <div className="flex">
+                  <CpuIconSkeleton size={18} />
+                  <div className="ml-1">Pages</div>
+                </div>
+              ),
+              link: "/admin/eea_config/pages",
+            },
+          ]
+        },
       ]
     : []),
 ];
