@@ -28,7 +28,7 @@ def db_session() -> Generator[Session, None, None]:
     """Create an in-memory SQLite database for testing"""
     # Create test-specific base and model that matches the actual FileRecord structure
     # but uses SQLite-compatible types
-    TestDBBase = declarative_base()
+    TestDBBase = declarative_base()  # type: ignore
 
     class FileRecord(TestDBBase):  # type: ignore
         __tablename__: str = "file_record"
