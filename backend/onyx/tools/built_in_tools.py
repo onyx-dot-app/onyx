@@ -45,7 +45,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
     ),
-    # don't show the InternetSearchTool as an option if BING_API_KEY is not available
+    # Show internet search tool if either BING_API_KEY or EXA_API_KEY is available
     *(
         [
             InCodeToolInfo(
@@ -58,7 +58,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 display_name=InternetSearchTool._DISPLAY_NAME,
             )
         ]
-        if os.environ.get("BING_API_KEY")
+        if os.environ.get("BING_API_KEY") or os.environ.get("EXA_API_KEY")
         else []
     ),
 ]
