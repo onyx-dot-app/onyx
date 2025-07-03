@@ -441,6 +441,19 @@ def _convert_drive_item_to_document(
             logger.info("Skipping shortcut/folder.")
             return None
 
+        size_str = file.get("size")
+        if size_str:
+            try:
+                size_int = int(size_str)
+            except ValueError:
+                logger.warning(f"Parsing string to int failed: size_str={size_str}")
+            else:
+                if size_int > size_threshold:
+                    logger.warning(
+                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
+                    )
+                    return None
+
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
@@ -466,22 +479,8 @@ def _convert_drive_item_to_document(
                 logger.warning(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."
                 )
-
-        size_str = file.get("size")
-        if size_str:
-            try:
-                size_int = int(size_str)
-            except ValueError:
-                logger.warning(f"Parsing string to int failed: size_str={size_str}")
-            else:
-                if size_int > size_threshold:
-                    logger.warning(
-                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
-                    )
-                    return None
-
-        # If we don't have sections yet, use the basic extraction method
-        if not sections:
+        # Not Google Doc, attempt basic extraction
+        else:
             sections = _download_and_extract_sections_basic(
                 file, _get_drive_service(), allow_images
             )
