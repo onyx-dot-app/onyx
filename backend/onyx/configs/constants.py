@@ -186,6 +186,8 @@ class DocumentSource(str, Enum):
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
 
+    IMAP = "imap"
+
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
 
