@@ -854,27 +854,6 @@ export function ChatInputBar({
                   llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
-                  trigger={
-                    <button
-                      className="dark:text-white text-black focus:outline-none"
-                      data-testid="llm-popover-trigger"
-                    >
-                      <ChatInputOption
-                        minimize
-                        toggle
-                        flexPriority="stiff"
-                        name={getDisplayNameForModel(
-                          llmManager?.currentLlm.modelName || "Models"
-                        )}
-                        Icon={getProviderIcon(
-                          llmManager?.currentLlm.provider || "anthropic",
-                          llmManager?.currentLlm.modelName ||
-                            "claude-3-5-sonnet-20240620"
-                        )}
-                        tooltipContent="Switch models"
-                      />
-                    </button>
-                  }
                 />
 
                 {retrievalEnabled && (
