@@ -292,7 +292,7 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={{
-        ...createConnectorInitialValues(connector, currentCredential),
+        ...createConnectorInitialValues(connector),
         ...Object.fromEntries(
           connectorConfigs[connector].advanced_values.map((field) => [
             field.name,

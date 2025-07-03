@@ -501,3 +501,39 @@ def test_specific_user_emails_restricted_folder(
     )
     test_docs = load_all_docs(test_connector)
     assert len(test_docs) == 0
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_specific_user_email_shared_with_me(
+    mock_get_api_key: MagicMock,
+    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+) -> None:
+    print("\n\nRunning test_specific_user_email_shared_with_me")
+
+    # Test with admin email - should get 1 doc
+    connector = google_drive_service_acct_connector_factory(
+        primary_admin_email=ADMIN_EMAIL,
+        include_shared_drives=False,
+        include_my_drives=True,
+        include_files_shared_with_me=False,  # This is what is set in the UI unfortunately
+        shared_folder_urls=None,
+        shared_drive_urls=None,
+        my_drive_emails=None,
+        specific_user_emails=TEST_USER_1_EMAIL,
+    )
+    docs = load_all_docs(connector)
+    expected = [id_to_name(file_id) for file_id in TEST_USER_1_FILE_IDS]
+    expected += ["private_file", "shared_file"]  # in My Drive
+    expected += ["read only users can't download"]  # Shared with me
+
+    expected += [id_to_name(file_id) for file_id in [0, 1] + ADMIN_FOLDER_3_FILE_IDS]
+
+    # these are in shared drives
+    # expected += ['perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7']
+    # expected += ['file_22.txt'] # Shared drive
+
+    doc_titles = set(doc.semantic_identifier for doc in docs)
+    assert doc_titles == set(expected)

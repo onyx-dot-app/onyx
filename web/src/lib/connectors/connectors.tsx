@@ -1335,8 +1335,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
   },
 };
 export function createConnectorInitialValues(
-  connector: ConfigurableSources,
-  currentCredential: Credential<any> | null = null
+  connector: ConfigurableSources
 ): Record<string, any> & AccessTypeGroupSelectorFormType {
   const configuration = connectorConfigs[connector];
 
@@ -1353,16 +1352,7 @@ export function createConnectorInitialValues(
         } else if (field.type === "multiselect") {
           acc[field.name] = field.default || [];
         } else if (field.type === "checkbox") {
-          // Special case for include_files_shared_with_me when using service account
-          if (
-            field.name === "include_files_shared_with_me" &&
-            currentCredential &&
-            !currentCredential.credential_json?.google_tokens
-          ) {
-            acc[field.name] = true;
-          } else {
-            acc[field.name] = field.default || false;
-          }
+          acc[field.name] = field.default || false;
         } else if (field.default !== undefined) {
           acc[field.name] = field.default;
         }

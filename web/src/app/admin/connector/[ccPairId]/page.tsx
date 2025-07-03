@@ -121,16 +121,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const {
-    currentPageData: indexAttemptErrorsPage,
-    currentPage: errorsCurrentPage,
-    totalPages: errorsTotalPages,
-    goToPage: goToErrorsPage,
-  } = usePaginatedFetch<IndexAttemptError>({
-    itemsPerPage: 10,
-    pagesPerBatch: 1,
-    endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-  });
+  const { currentPageData: indexAttemptErrorsPage } =
+    usePaginatedFetch<IndexAttemptError>({
+      itemsPerPage: 10,
+      pagesPerBatch: 1,
+      endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    });
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
@@ -149,11 +145,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const indexAttemptErrors = indexAttemptErrorsPage
     ? {
         items: indexAttemptErrorsPage,
-        total_items:
-          errorsCurrentPage === errorsTotalPages &&
-          indexAttemptErrorsPage.length === 0
-            ? 0
-            : errorsTotalPages * 10,
+        total_items: indexAttemptErrorsPage.length,
       }
     : null;
 
@@ -161,6 +153,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
+
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -424,8 +417,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
             await triggerReIndex(true);
           }}
           isResolvingErrors={isResolvingErrors}
-          onPageChange={goToErrorsPage}
-          currentPage={errorsCurrentPage}
         />
       )}
 

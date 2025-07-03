@@ -387,20 +387,6 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
 
   const handleUpload = useCallback(
     async (files: File[]) => {
-      if (
-        folderDetails?.assistant_ids &&
-        folderDetails.assistant_ids.length > 0
-      ) {
-        setShowUploadWarning(true);
-      } else {
-        await performUpload(files);
-      }
-    },
-    [folderDetails]
-  );
-
-  const performUpload = useCallback(
-    async (files: File[]) => {
       try {
         const formData = new FormData();
         files.forEach((file) => {
