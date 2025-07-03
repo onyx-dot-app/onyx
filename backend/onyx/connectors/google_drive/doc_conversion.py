@@ -119,9 +119,34 @@ def _download_and_extract_sections_basic(
     mime_type = file["mimeType"]
     link = file.get(WEB_VIEW_LINK_KEY, "")
 
-    # skip images if not explicitly enabled
-    if not allow_images and is_gdrive_image_mime_type(mime_type):
-        return []
+    # For other file types, download the file
+    # Use the correct API call for downloading files
+    # lazy evaluation to only download the file if necessary
+    def response_call() -> bytes:
+        return download_request(service, file_id)
+
+    if is_gdrive_image_mime_type(mime_type):
+        # Skip images if not explicitly enabled
+        if not allow_images:
+            return []
+
+        # Store images for later processing
+        sections: list[TextSection | ImageSection] = []
+        try:
+            with get_session_with_current_tenant() as db_session:
+                section, embedded_id = store_image_and_create_section(
+                    db_session=db_session,
+                    image_data=response_call(),
+                    file_id=file_id,
+                    display_name=file_name,
+                    media_type=mime_type,
+                    file_origin=FileOrigin.CONNECTOR,
+                    link=link,
+                )
+                sections.append(section)
+        except Exception as e:
+            logger.error(f"Failed to process image {file_name}: {e}")
+        return sections
 
     # For Google Docs, Sheets, and Slides, export as plain text
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
@@ -143,12 +168,6 @@ def _download_and_extract_sections_basic(
 
         text = response.decode("utf-8")
         return [TextSection(link=link, text=text)]
-
-    # For other file types, download the file
-    # Use the correct API call for downloading files
-    # lazy evaluation to only download the file if necessary
-    def response_call() -> bytes:
-        return download_request(service, file_id)
 
     # Process based on mime type
     if mime_type == "text/plain":
@@ -179,25 +198,6 @@ def _download_and_extract_sections_basic(
         text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
         return [TextSection(link=link, text=text)] if text else []
 
-    elif is_gdrive_image_mime_type(mime_type):
-        # For images, store them for later processing
-        sections: list[TextSection | ImageSection] = []
-        try:
-            with get_session_with_current_tenant() as db_session:
-                section, embedded_id = store_image_and_create_section(
-                    db_session=db_session,
-                    image_data=response_call(),
-                    file_id=file_id,
-                    display_name=file_name,
-                    media_type=mime_type,
-                    file_origin=FileOrigin.CONNECTOR,
-                    link=link,
-                )
-                sections.append(section)
-        except Exception as e:
-            logger.error(f"Failed to process image {file_name}: {e}")
-        return sections
-
     elif mime_type == "application/pdf":
         text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))
         pdf_sections: list[TextSection | ImageSection] = [
@@ -220,27 +220,18 @@ def _download_and_extract_sections_basic(
             logger.error(f"Failed to process PDF images in {file_name}: {e}")
         return pdf_sections
 
-    else:
-        # For unsupported file types, try to extract text
-        if mime_type in [
-            "application/vnd.google-apps.video",
-            "application/vnd.google-apps.audio",
-            "application/zip",
-        ]:
-            return []
+    # Final attempt at extracting text
+    file_ext = get_file_ext(file.get("name", ""))
+    if file_ext not in ALL_ACCEPTED_FILE_EXTENSIONS:
+        logger.warning(f"Skipping file {file.get('name')} due to extension.")
+        return []
 
-        # don't download the file at all if it's an unhandled extension
-        file_ext = get_file_ext(file.get("name", ""))
-        if file_ext not in ALL_ACCEPTED_FILE_EXTENSIONS:
-            logger.warning(f"Skipping file {file.get('name')} due to extension.")
-            return []
-        # For unsupported file types, try to extract text
-        try:
-            text = extract_file_text(io.BytesIO(response_call()), file_name)
-            return [TextSection(link=link, text=text)]
-        except Exception as e:
-            logger.warning(f"Failed to extract text from {file_name}: {e}")
-            return []
+    try:
+        text = extract_file_text(io.BytesIO(response_call()), file_name)
+        return [TextSection(link=link, text=text)]
+    except Exception as e:
+        logger.warning(f"Failed to extract text from {file_name}: {e}")
+        return []
 
 
 def _find_nth(haystack: str, needle: str, n: int, start: int = 0) -> int:
