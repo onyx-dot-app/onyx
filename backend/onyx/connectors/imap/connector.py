@@ -16,6 +16,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
@@ -125,12 +127,14 @@ def _convert_email_headers_and_body_into_document(
         f"{sender_addr} to {recipient_addr} about {email_headers.subject}"
     )
 
+    sections = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
+
     return Document(
         id=semantic_identifier,
         semantic_identifier=semantic_identifier,
         metadata={},
         source=DocumentSource.IMAP,
-        sections=[],
+        sections=sections,
         primary_owners=[
             BasicExpertInfo(
                 display_name=recipient_name,
@@ -144,6 +148,11 @@ def _convert_email_headers_and_body_into_document(
         ),
     )
 
+
+def _parse_email_body(
+    email_msg: Message,
+    email_headers: EmailHeaders,
+) -> list[TextSection | ImageSection]:
     # _sender_name, sender_addr = parseaddr(email_headers.sender)
     # _recipient_name, recipient_addr = parseaddr(email_headers.recipient)
     # plain_text_body = ""
@@ -157,6 +166,8 @@ def _convert_email_headers_and_body_into_document(
     #     except (UnicodeDecodeError, AttributeError):
     #         plain_text_body = part.get_payload(decode=True).decode('latin-1', errors='ignore')
     #     break
+
+    raise NotImplementedError
 
 
 if __name__ == "__main__":
