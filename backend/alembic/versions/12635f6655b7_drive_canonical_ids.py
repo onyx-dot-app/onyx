@@ -109,9 +109,6 @@ def get_google_drive_documents_from_database() -> list[dict]:
     for row in result:
         documents.append({"document_id": row.id, "cc_pair_id": row.cc_pair_id})
 
-    print(
-        f"Found {len(documents)} Google Drive documents with query parameters in database"
-    )
     return documents
 
 
@@ -371,14 +368,7 @@ def update_document_id_in_vespa(
             hits = search_result.get("root", {}).get("children", [])
 
             if not hits:
-                print(
-                    f"{offset} chunks found for document {old_doc_id} -> {new_doc_id}"
-                )
                 break  # No more chunks to process
-
-            print(
-                f"Processing {len(hits)} chunks (offset {offset}) for document {old_doc_id} -> {new_doc_id}"
-            )
 
             # Update each chunk in this batch
             for hit in hits:
@@ -388,10 +378,6 @@ def update_document_id_in_vespa(
                     continue
                 vespa_doc_id = vespa_doc_id.split("::")[-1]  # get the UUID from the end
 
-                print(
-                    f"Updating chunk {vespa_doc_id} with new document ID {clean_new_doc_id}"
-                )
-
                 vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_doc_id}"
                 update_request = {
                     "fields": {"document_id": {"assign": clean_new_doc_id}}
@@ -400,7 +386,6 @@ def update_document_id_in_vespa(
                 try:
                     resp = http_client.put(vespa_url, json=update_request)
                     resp.raise_for_status()
-                    print("resp", resp.json())
                     total_updated += 1
                 except Exception as e:
                     print(f"Failed to update chunk {vespa_doc_id}: {e}")
@@ -412,10 +397,6 @@ def update_document_id_in_vespa(
             # If we got fewer hits than the limit, we're done
             if len(hits) < limit:
                 break
-
-    print(
-        f"Successfully updated {total_updated} chunks for document {old_doc_id} -> {new_doc_id}"
-    )
 
 
 def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
@@ -525,15 +506,10 @@ def upgrade() -> None:
         # Default index name if we can't get it from the document_index
         index_name = "danswer_index"
 
-    print(f"Starting Google Drive document ID migration for index: {index_name}")
-
     # Get all Google Drive documents from the database (this is faster and more reliable)
     gdrive_documents = get_google_drive_documents_from_database()
 
     if not gdrive_documents:
-        print(
-            "No Google Drive documents with query parameters found, migration complete"
-        )
         return
 
     # Track normalized document IDs to detect duplicates
