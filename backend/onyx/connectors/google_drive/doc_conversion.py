@@ -82,6 +82,10 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     link = file[WEB_VIEW_LINK_KEY]
     parsed_url = urlparse(link)
     parsed_url = parsed_url._replace(query="")
+    spl_path = parsed_url.path.split("/")
+    if spl_path and (spl_path[-1] in ["edit", "view", "preview"]):
+        spl_path.pop()
+        parsed_url = parsed_url._replace(path="/".join(spl_path))
     # Remove query parameters and reconstruct URL
     return urlunparse(parsed_url)
 
