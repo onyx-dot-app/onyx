@@ -100,12 +100,21 @@ export default function LLMPopover({
   const llmOptionsToChooseFrom = useMemo(
     () =>
       llmProviders.flatMap((llmProvider) =>
-        llmProvider.model_configurations.map((modelConfiguration) => ({
-          name: llmProvider.name,
-          provider: llmProvider.provider,
-          modelName: modelConfiguration.name,
-          icon: getProviderIcon(llmProvider.provider, modelConfiguration.name),
-        }))
+        llmProvider.model_configurations
+          .filter(
+            (modelConfiguration) =>
+              modelConfiguration.is_visible ||
+              modelConfiguration.name === currentModelName
+          )
+          .map((modelConfiguration) => ({
+            name: llmProvider.name,
+            provider: llmProvider.provider,
+            modelName: modelConfiguration.name,
+            icon: getProviderIcon(
+              llmProvider.provider,
+              modelConfiguration.name
+            ),
+          }))
       ),
     [llmProviders]
   );
@@ -150,7 +159,8 @@ export default function LLMPopover({
                     <TruncatedText text={modelName} />
                     {(() => {
                       if (
-                        currentAssistant?.llm_model_version_override === modelName
+                        currentAssistant?.llm_model_version_override ===
+                        modelName
                       ) {
                         return (
                           <span className="flex-none ml-auto text-xs">
@@ -160,7 +170,11 @@ export default function LLMPopover({
                       }
                     })()}
                     {llmManager.imageFilesPresent &&
-                      !modelSupportsImageInput(llmProviders, modelName, provider) && (
+                      !modelSupportsImageInput(
+                        llmProviders,
+                        modelName,
+                        provider
+                      ) && (
                         <TooltipProvider>
                           <Tooltip delayDuration={0}>
                             <TooltipTrigger className="my-auto flex items-center ml-auto">
