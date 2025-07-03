@@ -156,7 +156,7 @@ export default function LLMPopover({
                       size: 16,
                       className: "flex-none my-auto text-black",
                     })}
-                    <TruncatedText text={modelName} />
+                    <TruncatedText text={getDisplayNameForModel(modelName)} />
                     {(() => {
                       if (
                         currentAssistant?.llm_model_version_override ===
