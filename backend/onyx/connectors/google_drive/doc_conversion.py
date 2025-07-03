@@ -119,7 +119,7 @@ def _download_and_extract_sections_basic(
     mime_type = file["mimeType"]
     link = file.get(WEB_VIEW_LINK_KEY, "")
 
-    # For other file types, download the file
+    # For non-Google files, download the file
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
     def response_call() -> bytes:
