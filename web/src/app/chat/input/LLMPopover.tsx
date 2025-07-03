@@ -150,7 +150,7 @@ export default function LLMPopover({
                     <TruncatedText text={modelName} />
                     {(() => {
                       if (
-                        currentAssistant?.llm_model_version_override === name
+                        currentAssistant?.llm_model_version_override === modelName
                       ) {
                         return (
                           <span className="flex-none ml-auto text-xs">
