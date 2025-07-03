@@ -906,7 +906,6 @@ def stream_chat_message_objects(
             citation_config=CitationConfig(
                 all_docs_useful=selected_db_search_docs is not None
             ),
-            document_pruning_config=document_pruning_config,
             structured_response_format=new_msg_req.structured_response_format,
         )
 

@@ -179,7 +179,7 @@ def construct_tools(
                     prompt_config=prompt_config,
                     llm=llm,
                     fast_llm=fast_llm,
-                    pruning_config=search_tool_config.document_pruning_config,
+                    document_pruning_config=search_tool_config.document_pruning_config,
                     answer_style_config=search_tool_config.answer_style_config,
                     selected_sections=search_tool_config.selected_sections,
                     chunks_above=search_tool_config.chunks_above,
