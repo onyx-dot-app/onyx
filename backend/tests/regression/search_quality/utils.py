@@ -1,3 +1,9 @@
+import json
+from pathlib import Path
+from textwrap import indent
+from typing import Any
+from typing import TextIO
+
 from ragas import evaluate  # type: ignore
 from ragas import EvaluationDataset  # type: ignore
 from ragas import SingleTurnSample  # type: ignore
@@ -142,3 +148,27 @@ def compute_overall_scores(metrics: CombinedMetrics) -> tuple[float, float]:
     ) / 0.03
 
     return search_score, answer_score
+
+
+class LazyJsonWriter:
+    def __init__(self, filepath: Path, indent: int = 4) -> None:
+        self.filepath = filepath
+        self.file: TextIO | None = None
+        self.indent = indent
+
+    def append(self, serializable_item: dict[str, Any]) -> None:
+        if not self.file:
+            self.file = open(self.filepath, "a")
+            self.file.write("[\n")
+        else:
+            self.file.write(",\n")
+
+        data = json.dumps(serializable_item, indent=self.indent)
+        self.file.write(indent(data, " " * self.indent))
+
+    def close(self) -> None:
+        if not self.file:
+            return
+        self.file.write("\n]")
+        self.file.close()
+        self.file = None

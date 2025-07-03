@@ -7,6 +7,7 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import matplotlib.pyplot as plt  # type: ignore
 import requests
@@ -39,6 +40,7 @@ from tests.regression.search_quality.models import OneshotQAResult
 from tests.regression.search_quality.models import TestQuery
 from tests.regression.search_quality.utils import compute_overall_scores
 from tests.regression.search_quality.utils import find_document
+from tests.regression.search_quality.utils import LazyJsonWriter
 from tests.regression.search_quality.utils import ragas_evaluate
 from tests.regression.search_quality.utils import search_docs_to_doc_contexts
 
@@ -63,9 +65,21 @@ class SearchAnswerAnalyzer:
         self.config = config
         self.tenant_id = tenant_id
 
-        self.results: list[AnalysisSummary] = []
-        self.stats: dict[str, list[AnalysisSummary]] = defaultdict(list)
-        self.metrics: dict[str, CombinedMetrics] = {}
+        self.ranks: list[int | None] = []
+        self.metrics: dict[str, CombinedMetrics] = defaultdict(
+            lambda: CombinedMetrics(
+                total_queries=0,
+                found_count=0,
+                best_rank=config.max_search_results,
+                worst_rank=1,
+                average_rank=0.0,
+                top_k_accuracy={k: 0.0 for k in TOP_K_LIST},
+                average_response_relevancy=0.0,
+                average_response_groundedness=0.0,
+                average_faithfulness=0.0,
+                average_time_taken=0.0,
+            )
+        )
 
         # get search related settings
         self._rerank_settings = self._get_rerank_settings()
@@ -81,33 +95,33 @@ class SearchAnswerAnalyzer:
             dataset_serializable = [q.model_dump(mode="json") for q in dataset]
             json.dump(dataset_serializable, f, indent=4)
 
+        # create the result export file
+        result_export_path = export_path / "search_results.json"
+        result_writer = LazyJsonWriter(result_export_path)
+
         # run the analysis
         logger.info("Starting analysis of %d queries...", dataset_size)
         logger.info("Using %d parallel workers", self.config.num_workers)
+        logger.info("Exporting search results to %s", result_export_path)
 
-        indexed_test_cases = [(i, test_case) for i, test_case in enumerate(dataset)]
-        indexed_results: dict[int, AnalysisSummary] = {}
         with ThreadPoolExecutor(max_workers=self.config.num_workers) as executor:
-            future_to_index = {
-                executor.submit(
-                    self._run_and_analyze_one_wrapper, test_case_with_index
-                ): test_case_with_index[0]
-                for test_case_with_index in indexed_test_cases
-            }
+            futures = [
+                executor.submit(self._run_and_analyze_one, test_case)
+                for test_case in dataset
+            ]
 
             # process completed tasks as they finish
-            for completed_count, future in enumerate(as_completed(future_to_index), 1):
+            for completed_count, future in enumerate(as_completed(futures), 1):
                 try:
-                    index, result = future.result()
-                    indexed_results[index] = result
-
-                    # update category stats on the fly
-                    self.stats["all"].append(result)
-                    for cat in result.categories or ["uncategorized"]:
-                        self.stats[cat].append(result)
+                    result = future.result()
                 except Exception as e:
                     print(f"[{completed_count}/{dataset_size}] ✗ Error: {e}")
                     raise  # change to continue if you want to simply skip
+
+                # update metrics
+                self.ranks.append(result.rank)
+                result_writer.append(result.model_dump(mode="json"))
+                self._update_metrics(result)
 
                 # print progress with query info
                 question = (
@@ -118,23 +132,16 @@ class SearchAnswerAnalyzer:
                 status = "✓ Found" if result.found else "✗ Not found"
                 rank_info = f" (rank {result.rank})" if result.found else ""
                 print(
-                    f"[{completed_count}/{dataset_size}] {status}{rank_info}: {question}"
+                    f"[{completed_count}/{dataset_size}] "
+                    f"{status}{rank_info}: {question}"
                 )
 
-        # sort results by original order and build the metrics
-        self.results = [indexed_results[i] for i in sorted(indexed_results.keys())]
-        self._build_metrics()
+        result_writer.close()
+        self._aggregate_metrics()
 
     def generate_detailed_report(self, export_path: Path) -> None:
         logger.info("Generating detailed report...")
 
-        # save results for future inspection
-        results_json_path = export_path / "search_results.json"
-        with results_json_path.open("w") as f:
-            json.dump([r.model_dump(mode="json") for r in self.results], f, indent=4)
-        logger.info("Saved search results to %s", results_json_path)
-
-        # save results by category
         csv_path = export_path / "results_by_category.csv"
         with csv_path.open("w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
@@ -163,11 +170,7 @@ class SearchAnswerAnalyzer:
                 ]
             )
 
-            for category, results in sorted(self.stats.items()):
-                if not results:
-                    continue
-
-                metrics = self.metrics[category]
+            for category, metrics in sorted(self.metrics.items()):
                 found_count = metrics.found_count
                 total_count = metrics.total_queries
                 accuracy = found_count / total_count * 100 if total_count > 0 else 0
@@ -233,21 +236,22 @@ class SearchAnswerAnalyzer:
     def generate_chart(self, export_path: Path) -> None:
         logger.info("Generating search position chart...")
 
-        found_results = [r for r in self.results if r.found]
-        not_found_count = len([r for r in self.results if not r.found])
-
-        if not found_results and not_found_count == 0:
+        if len(self.ranks) == 0:
             logger.warning("No results to chart")
             return
 
-        # count occurrences at each rank position
+        found_count = 0
+        not_found_count = 0
         rank_counts: dict[int, int] = defaultdict(int)
-        for result in found_results:
-            if result.rank is not None:
-                rank_counts[result.rank] += 1
+        for rank in self.ranks:
+            if rank is None:
+                not_found_count += 1
+            else:
+                found_count += 1
+                rank_counts[rank] += 1
 
         # create the data for plotting
-        if found_results:
+        if found_count:
             max_rank = max(rank_counts.keys())
             positions = list(range(1, max_rank + 1))
             counts = [rank_counts.get(pos, 0) for pos in positions]
@@ -256,7 +260,7 @@ class SearchAnswerAnalyzer:
             counts = []
 
         # add the "not found" bar on the far right
-        if not_found_count > 0:
+        if not_found_count:
             # add some spacing between found positions and "not found"
             not_found_position = (max(positions) + 2) if positions else 1
             positions.append(not_found_position)
@@ -308,7 +312,7 @@ class SearchAnswerAnalyzer:
         plt.xticks(positions, x_labels, rotation=45 if not_found_count > 0 else 0)
 
         # add legend if we have both found and not found
-        if not_found_count > 0 and found_results:
+        if not_found_count and found_count:
             legend_elements = [
                 Patch(facecolor="#3498db", alpha=0.7, label="Found in Results"),
                 Patch(facecolor="#e74c3c", alpha=0.7, label="Not Found"),
@@ -317,11 +321,9 @@ class SearchAnswerAnalyzer:
 
         # make layout tight and save
         plt.tight_layout()
-
         chart_file = export_path / "search_position_chart.png"
         plt.savefig(chart_file, dpi=300, bbox_inches="tight")
         logger.info("Search position chart saved to: %s", chart_file)
-
         plt.show()
 
     def _load_dataset(self, dataset_path: Path) -> list[TestQuery]:
@@ -475,74 +477,45 @@ class SearchAnswerAnalyzer:
             time_taken=result.time_taken,
         )
 
-    def _run_and_analyze_one_wrapper(
-        self, test_case_with_index: tuple[int, TestQuery]
-    ) -> tuple[int, AnalysisSummary]:
-        index, test_case = test_case_with_index
-        return index, self._run_and_analyze_one(test_case)
+    def _update_metrics(self, result: AnalysisSummary) -> None:
+        for cat in result.categories + ["all"]:
+            self.metrics[cat].total_queries += 1
+            self.metrics[cat].average_time_taken += result.time_taken
 
-    def _compute_combined_metrics(
-        self, results: list[AnalysisSummary]
-    ) -> CombinedMetrics:
-        """Aggregate analysis summaries into CombinedMetrics."""
+            if result.found:
+                self.metrics[cat].found_count += 1
 
-        total_queries = len(results)
-        found_ranks = [r.rank for r in results if r.found and r.rank is not None]
-        found_count = len(found_ranks)
-        best_rank = 0
-        worst_rank = 0
-        average_rank = 0.0
-        response_relevancy = 0.0
-        response_groundedness = 0.0
-        faithfulness = 0.0
+                rank = cast(int, result.rank)
+                self.metrics[cat].best_rank = min(self.metrics[cat].best_rank, rank)
+                self.metrics[cat].worst_rank = max(self.metrics[cat].worst_rank, rank)
+                self.metrics[cat].average_rank += rank
+                for k in TOP_K_LIST:
+                    self.metrics[cat].top_k_accuracy[k] += int(rank <= k)
 
-        if found_ranks:
-            best_rank = min(found_ranks)
-            worst_rank = max(found_ranks)
-            average_rank = sum(found_ranks) / found_count
+            if not self.config.search_only:
+                self.metrics[cat].average_response_relevancy += (
+                    result.response_relevancy or 0.0
+                )
+                self.metrics[cat].average_response_groundedness += (
+                    result.response_groundedness or 0.0
+                )
+                self.metrics[cat].average_faithfulness += result.faithfulness or 0.0
 
-        if not self.config.search_only:
-            scores = [
-                r.response_relevancy
-                for r in results
-                if r.response_relevancy is not None
-            ]
-            response_relevancy = sum(scores) / len(scores)
-            scores = [
-                r.response_groundedness
-                for r in results
-                if r.response_groundedness is not None
-            ]
-            response_groundedness = sum(scores) / len(scores)
-            scores = [r.faithfulness for r in results if r.faithfulness is not None]
-            faithfulness = sum(scores) / len(scores)
+    def _aggregate_metrics(self) -> None:
+        for cat in self.metrics:
+            total = self.metrics[cat].total_queries
+            self.metrics[cat].average_time_taken /= total
 
-        top_k_accuracy: dict[int, float] = {}
-        for k in TOP_K_LIST:
-            hits = sum(1 for rank in found_ranks if rank <= k)
-            top_k_accuracy[k] = (hits / total_queries * 100) if total_queries else 0.0
+            if self.metrics[cat].found_count > 0:
+                self.metrics[cat].average_rank /= self.metrics[cat].found_count
+            for k in TOP_K_LIST:
+                self.metrics[cat].top_k_accuracy[k] /= total
+                self.metrics[cat].top_k_accuracy[k] *= 100
 
-        times = [r.time_taken for r in results if r.time_taken is not None]
-        avg_time_taken = sum(times) / len(times) if times else 0.0
-
-        return CombinedMetrics(
-            total_queries=total_queries,
-            found_count=found_count,
-            best_rank=best_rank,
-            worst_rank=worst_rank,
-            average_rank=average_rank,
-            top_k_accuracy=top_k_accuracy,
-            average_response_relevancy=response_relevancy,
-            average_response_groundedness=response_groundedness,
-            average_faithfulness=faithfulness,
-            average_time_taken=avg_time_taken,
-        )
-
-    def _build_metrics(self) -> None:
-        self.metrics = {
-            cat: self._compute_combined_metrics(res_list)
-            for cat, res_list in self.stats.items()
-        }
+            if not self.config.search_only:
+                self.metrics[cat].average_response_relevancy /= total
+                self.metrics[cat].average_response_groundedness /= total
+                self.metrics[cat].average_faithfulness /= total
 
     def _get_rerank_settings(self) -> RerankingDetails | None:
         """Fetch the tenant's reranking settings from the database."""
