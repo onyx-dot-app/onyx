@@ -517,14 +517,7 @@ export function useLlmManager(
 
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
-    const provider =
-      newLlm.provider || findProviderForModel(llmProviders, newLlm.modelName);
-    const structuredValue = structureValue(
-      newLlm.name,
-      provider,
-      newLlm.modelName
-    );
-    setCurrentLlm(getValidLlmDescriptor(structuredValue));
+    setCurrentLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
   };
 

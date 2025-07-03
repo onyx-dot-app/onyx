@@ -88,7 +88,7 @@ export default function LLMPopover({
               name={getDisplayNameForModel(llmManager.currentLlm.modelName)}
               Icon={getProviderIcon(
                 llmManager.currentLlm.provider,
-                llmManager.currentLlm.name
+                llmManager.currentLlm.modelName
               )}
               tooltipContent="Switch models"
             />
