@@ -129,7 +129,7 @@ export default function LLMPopover({
                     key={index}
                     className={`w-full flex items-center gap-x-2 px-3 py-2 text-sm text-left hover:bg-background-100 dark:hover:bg-neutral-800 transition-colors duration-150 ${
                       (currentModelName || llmManager.currentLlm.modelName) ===
-                      name
+                      modelName
                         ? "bg-background-100 dark:bg-neutral-900 text-text"
                         : "text-text-darker"
                     }`}
