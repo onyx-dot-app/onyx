@@ -16,7 +16,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { Label, SubLabel, TextFormField } from "@/components/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { LLMProviderView } from "./interfaces";
+import { LLMProviderView, NativeOrCustom } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -150,6 +150,7 @@ export function CustomLLMProviderUpdateForm({
             body: JSON.stringify({
               custom_config: customConfigProcessing(values.custom_config_list),
               ...values,
+              native_or_custom: "CUSTOM" as NativeOrCustom,
             }),
           });
           setIsTesting(false);
@@ -173,6 +174,7 @@ export function CustomLLMProviderUpdateForm({
             body: JSON.stringify({
               ...values,
               custom_config: customConfigProcessing(values.custom_config_list),
+              native_or_custom: "CUSTOM" as NativeOrCustom,
             }),
           }
         );
