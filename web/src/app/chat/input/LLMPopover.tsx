@@ -160,7 +160,7 @@ export default function LLMPopover({
                       }
                     })()}
                     {llmManager.imageFilesPresent &&
-                      !modelSupportsImageInput(llmProviders, name) && (
+                      !modelSupportsImageInput(llmProviders, modelName, provider) && (
                         <TooltipProvider>
                           <Tooltip delayDuration={0}>
                             <TooltipTrigger className="my-auto flex items-center ml-auto">
