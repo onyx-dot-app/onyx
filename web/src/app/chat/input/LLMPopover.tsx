@@ -139,7 +139,7 @@ export default function LLMPopover({
                         provider,
                         name,
                       } as LlmDescriptor);
-                      onSelect?.(name);
+                      onSelect?.(modelName);
                       setIsOpen(false);
                     }}
                   >
