@@ -22,6 +22,7 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
@@ -332,6 +333,7 @@ def get_personas_for_user(
     joinedload_all: bool = False,
     # a bit jank
     include_prompt: bool = True,
+    minimal_load: bool = False,
 ) -> Sequence[Persona]:
     stmt = select(Persona)
     stmt = _add_user_filters(stmt, user, get_editable)
@@ -343,10 +345,25 @@ def get_personas_for_user(
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))
 
-    if joinedload_all:
+    # Always load the owner/user relationship for the owner field
+    stmt = stmt.options(selectinload(Persona.user))
+
+    if minimal_load:
+        # For list views, only load tools (needed for filtering)
         stmt = stmt.options(
             selectinload(Persona.tools),
-            selectinload(Persona.document_sets),
+        )
+    elif joinedload_all:
+        stmt = stmt.options(
+            selectinload(Persona.tools),
+            selectinload(Persona.document_sets)
+            .selectinload(DocumentSet.connector_credential_pairs)
+            .selectinload(ConnectorCredentialPair.connector),
+            selectinload(Persona.document_sets)
+            .selectinload(DocumentSet.connector_credential_pairs)
+            .selectinload(ConnectorCredentialPair.credential),
+            selectinload(Persona.document_sets).selectinload(DocumentSet.users),
+            selectinload(Persona.document_sets).selectinload(DocumentSet.groups),
             selectinload(Persona.groups),
             selectinload(Persona.users),
             selectinload(Persona.labels),
