@@ -11,7 +11,7 @@ import {
   TextFormField,
 } from "@/components/Field";
 import { Button } from "@/components/ui/button";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
@@ -48,8 +48,8 @@ export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
   isDefault: boolean;
   documentSets: DocumentSet[];
-  searchEnabledAssistants: Persona[];
-  nonSearchAssistants: Persona[];
+  searchEnabledAssistants: MinimalPersonaSnapshot[];
+  nonSearchAssistants: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   setPopup: (popup: {
     message: string;
@@ -82,8 +82,8 @@ export function SlackChannelConfigFormFields({
     );
 
   const [syncEnabledAssistants, availableAssistants] = useMemo(() => {
-    const sync: Persona[] = [];
-    const available: Persona[] = [];
+    const sync: MinimalPersonaSnapshot[] = [];
+    const available: MinimalPersonaSnapshot[] = [];
 
     searchEnabledAssistants.forEach((persona) => {
       const hasSyncSet = persona.document_sets.some(documentSetContainsSync);
@@ -461,23 +461,25 @@ export function SlackChannelConfigFormFields({
                   Un-selectable assistants:
                 </p>
                 <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                  {syncEnabledAssistants.map((persona: Persona) => (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        router.push(`/admin/assistants/${persona.id}`)
-                      }
-                      key={persona.id}
-                      className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
-                    >
-                      <AssistantIcon
-                        assistant={persona}
-                        size={16}
-                        className="flex-none"
-                      />
-                      {persona.name}
-                    </button>
-                  ))}
+                  {syncEnabledAssistants.map(
+                    (persona: MinimalPersonaSnapshot) => (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          router.push(`/admin/assistants/${persona.id}`)
+                        }
+                        key={persona.id}
+                        className="p-2 bg-background-100 cursor-pointer rounded-md flex items-center gap-2"
+                      >
+                        <AssistantIcon
+                          assistant={persona}
+                          size={16}
+                          className="flex-none"
+                        />
+                        {persona.name}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             )}

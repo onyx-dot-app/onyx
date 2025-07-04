@@ -251,8 +251,8 @@ function closerToZeroNegativesFirstComparator(a: number, b: number) {
 }
 
 export function personaComparator(
-  a: MinimalPersonaSnapshot,
-  b: MinimalPersonaSnapshot
+  a: MinimalPersonaSnapshot | Persona,
+  b: MinimalPersonaSnapshot | Persona
 ) {
   if (a.display_priority === null && b.display_priority === null) {
     return closerToZeroNegativesFirstComparator(a.id, b.id);

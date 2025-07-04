@@ -20,7 +20,6 @@ import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import {
   MinimalPersonaSnapshot,
-  Persona,
   PersonaLabel,
 } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";

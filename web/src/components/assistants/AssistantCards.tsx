@@ -1,4 +1,7 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+} from "@/app/admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { useSortable } from "@dnd-kit/sortable";
 import React from "react";
@@ -14,9 +17,9 @@ export const AssistantCard = ({
   isSelected,
   onSelect,
 }: {
-  assistant: Persona;
+  assistant: MinimalPersonaSnapshot;
   isSelected: boolean;
-  onSelect: (assistant: Persona) => void;
+  onSelect: (assistant: MinimalPersonaSnapshot) => void;
 }) => {
   const renderBadgeContent = (tool: { name: string }) => {
     switch (tool.name) {
@@ -73,9 +76,9 @@ export const AssistantCard = ({
 };
 
 export function DraggableAssistantCard(props: {
-  assistant: Persona;
+  assistant: MinimalPersonaSnapshot;
   isSelected: boolean;
-  onSelect: (assistant: Persona) => void;
+  onSelect: (assistant: MinimalPersonaSnapshot) => void;
   llmName: string;
 }) {
   const {
