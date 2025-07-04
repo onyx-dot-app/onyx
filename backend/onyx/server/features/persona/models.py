@@ -174,7 +174,6 @@ class PersonaSnapshot(BaseModel):
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
-        # Safely handle potentially unloaded relationships
         return PersonaSnapshot(
             id=persona.id,
             name=persona.name,
@@ -184,21 +183,14 @@ class PersonaSnapshot(BaseModel):
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
             uploaded_image_id=persona.uploaded_image_id,
-            user_file_ids=[file.id for file in getattr(persona, "user_files", [])],
-            user_folder_ids=[
-                folder.id for folder in getattr(persona, "user_folders", [])
-            ],
+            user_file_ids=[file.id for file in persona.user_files],
+            user_folder_ids=[folder.id for folder in persona.user_folders],
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
-            tools=[
-                ToolSnapshot.from_model(tool) for tool in getattr(persona, "tools", [])
-            ],
-            labels=[
-                PersonaLabelSnapshot.from_model(label)
-                for label in getattr(persona, "labels", [])
-            ],
+            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
                 if persona.user
@@ -206,12 +198,12 @@ class PersonaSnapshot(BaseModel):
             ),
             users=[
                 MinimalUserSnapshot(id=user.id, email=user.email)
-                for user in getattr(persona, "users", [])
+                for user in persona.users
             ],
-            groups=[user_group.id for user_group in getattr(persona, "groups", [])],
+            groups=[user_group.id for user_group in persona.groups],
             document_sets=[
                 DocumentSet.from_model(document_set_model)
-                for document_set_model in getattr(persona, "document_sets", [])
+                for document_set_model in persona.document_sets
             ],
             llm_model_provider_override=persona.llm_model_provider_override,
             llm_model_version_override=persona.llm_model_version_override,
