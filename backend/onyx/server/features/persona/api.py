@@ -1,4 +1,3 @@
-import time
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -30,6 +29,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.persona import PersonaLoadType
 from onyx.db.persona import update_all_personas_display_priority
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
@@ -46,6 +46,7 @@ from onyx.secondary_llm_flows.starter_message_creation import (
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import ImageGenerationToolStatus
+from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -155,7 +156,7 @@ def list_personas_admin(
             user=user,
             get_editable=get_editable,
             include_deleted=include_deleted,
-            joinedload_all=True,
+            load_type=PersonaLoadType.FULL,
         )
     ]
 
@@ -394,30 +395,19 @@ def list_personas(
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
-    lightweight: bool = Query(
-        True, description="Return lightweight response for better performance"
-    ),
-) -> list[PersonaSnapshot]:
-    start_time = time.time()
-
-    # Use minimal loading for better performance
-    db_start = time.time()
+) -> list[MinimalPersonaSnapshot]:
     personas = get_personas_for_user(
+        load_type=PersonaLoadType.MINIMAL,
         user=user,
         include_deleted=include_deleted,
         db_session=db_session,
         get_editable=False,
-        joinedload_all=not lightweight,  # Only load all data if not lightweight
-        minimal_load=lightweight,
-        include_prompt=False,
     )
-    db_time = time.time() - db_start
 
     if persona_ids:
         personas = [p for p in personas if p.id in persona_ids]
 
     # Filter out personas with unavailable tools
-    filter_start = time.time()
     personas = [
         p
         for p in personas
@@ -426,21 +416,8 @@ def list_personas(
             and not is_image_generation_available(db_session=db_session)
         )
     ]
-    filter_time = time.time() - filter_start
 
-    serialization_start = time.time()
-    result = [PersonaSnapshot.from_model(p) for p in personas]
-    serialization_time = time.time() - serialization_start
-
-    total_time = time.time() - start_time
-
-    logger.info(
-        f"list_personas performance - Total: {total_time:.3f}s, "
-        f"DB: {db_time:.3f}s, Filter: {filter_time:.3f}s, "
-        f"Serialization: {serialization_time:.3f}s, "
-        f"Count: {len(result)}, Lightweight: {lightweight}"
-    )
-
+    result = [MinimalPersonaSnapshot.from_model(p) for p in personas]
     return result
 
 

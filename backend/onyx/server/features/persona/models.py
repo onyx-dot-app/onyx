@@ -18,65 +18,61 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class PersonaListSnapshot(BaseModel):
-    """Lightweight persona model for list views - minimal data for performance"""
+class MinimalPersonaSnapshot(BaseModel):
+    """Minimal persona model optimized for ChatPage.tsx - only includes fields actually used"""
 
+    # Core fields used by ChatPage
     id: int
     name: str
     description: str
-    is_public: bool
-    is_visible: bool
+    tools: list[ToolSnapshot]
+    starter_messages: list[StarterMessage] | None
+    document_sets: list[DocumentSet]
+    llm_model_version_override: str | None
+    llm_model_provider_override: str | None
+
+    uploaded_image_id: str | None
     icon_shape: int | None
     icon_color: str | None
-    uploaded_image_id: str | None
+
+    is_public: bool
+    is_visible: bool
     display_priority: int | None
     is_default_persona: bool
     builtin_persona: bool
+
+    labels: list["PersonaLabelSnapshot"]
     owner: MinimalUserSnapshot | None
-    # Empty arrays to maintain compatibility with frontend
-    tools: list[ToolSnapshot] = Field(default_factory=list)
-    document_sets: list[DocumentSet] = Field(default_factory=list)
-    users: list[MinimalUserSnapshot] = Field(default_factory=list)
-    groups: list[int] = Field(default_factory=list)
-    user_file_ids: list[int] = Field(default_factory=list)
-    user_folder_ids: list[int] = Field(default_factory=list)
-    labels: list["PersonaLabelSnapshot"] = Field(default_factory=list)
-    starter_messages: list[StarterMessage] | None = None
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
-    num_chunks: float | None = None
 
     @classmethod
-    def from_model(cls, persona: Persona) -> "PersonaListSnapshot":
-        return PersonaListSnapshot(
+    def from_model(cls, persona: Persona) -> "MinimalPersonaSnapshot":
+        return MinimalPersonaSnapshot(
+            # Core fields actually used by ChatPage
             id=persona.id,
             name=persona.name,
             description=persona.description,
-            is_public=persona.is_public,
-            is_visible=persona.is_visible,
+            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            starter_messages=persona.starter_messages,
+            document_sets=[
+                DocumentSet.from_model(document_set)
+                for document_set in persona.document_sets
+            ],
+            llm_model_version_override=persona.llm_model_version_override,
+            llm_model_provider_override=persona.llm_model_provider_override,
+            uploaded_image_id=persona.uploaded_image_id,
             icon_shape=persona.icon_shape,
             icon_color=persona.icon_color,
-            uploaded_image_id=persona.uploaded_image_id,
+            is_public=persona.is_public,
+            is_visible=persona.is_visible,
             display_priority=persona.display_priority,
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
+            labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
                 MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
                 if persona.user
                 else None
             ),
-            starter_messages=persona.starter_messages,
-            llm_model_provider_override=persona.llm_model_provider_override,
-            llm_model_version_override=persona.llm_model_version_override,
-            num_chunks=persona.num_chunks,
-            # Return empty arrays for list view - these aren't loaded
-            tools=[],
-            document_sets=[],
-            users=[],
-            groups=[],
-            user_file_ids=[],
-            user_folder_ids=[],
-            labels=[],
         )
 
 

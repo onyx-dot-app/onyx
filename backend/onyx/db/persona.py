@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -11,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
-from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
@@ -44,6 +44,12 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
+
+
+class PersonaLoadType(Enum):
+    NONE = "none"
+    MINIMAL = "minimal"
+    FULL = "full"
 
 
 def _add_user_filters(
@@ -324,16 +330,13 @@ def update_persona_public_status(
 
 def get_personas_for_user(
     # if user is `None` assume the user is an admin or auth is disabled
+    load_type: PersonaLoadType,  # defines how much of the persona to pre-load
     user: User | None,
     db_session: Session,
     get_editable: bool = True,
     include_default: bool = True,
     include_slack_bot_personas: bool = False,
     include_deleted: bool = False,
-    joinedload_all: bool = False,
-    # a bit jank
-    include_prompt: bool = True,
-    minimal_load: bool = False,
 ) -> Sequence[Persona]:
     stmt = select(Persona)
     stmt = _add_user_filters(stmt, user, get_editable)
@@ -345,35 +348,37 @@ def get_personas_for_user(
     if not include_deleted:
         stmt = stmt.where(Persona.deleted.is_(False))
 
-    # Always load the owner/user relationship for the owner field
-    stmt = stmt.options(selectinload(Persona.user))
-
-    if minimal_load:
-        # For list views, only load tools (needed for filtering)
+    if load_type == PersonaLoadType.MINIMAL:
+        # For ChatPage, only load essential relationships
         stmt = stmt.options(
-            selectinload(Persona.tools),
+            # Used for retrieval capability checking
+            joinedload(Persona.tools),
+            # Used for filtering
+            joinedload(Persona.labels),
+            # only show document sets in the UI that the assistant has access to
+            joinedload(Persona.document_sets),
         )
-    elif joinedload_all:
+    elif load_type == PersonaLoadType.FULL:
         stmt = stmt.options(
-            selectinload(Persona.tools),
-            selectinload(Persona.document_sets)
-            .selectinload(DocumentSet.connector_credential_pairs)
-            .selectinload(ConnectorCredentialPair.connector),
-            selectinload(Persona.document_sets)
-            .selectinload(DocumentSet.connector_credential_pairs)
-            .selectinload(ConnectorCredentialPair.credential),
-            selectinload(Persona.document_sets).selectinload(DocumentSet.users),
-            selectinload(Persona.document_sets).selectinload(DocumentSet.groups),
-            selectinload(Persona.groups),
-            selectinload(Persona.users),
-            selectinload(Persona.labels),
-            selectinload(Persona.user_files),
-            selectinload(Persona.user_folders),
+            joinedload(Persona.user),
+            joinedload(Persona.tools),
+            joinedload(Persona.document_sets)
+            .joinedload(DocumentSet.connector_credential_pairs)
+            .joinedload(ConnectorCredentialPair.connector),
+            joinedload(Persona.document_sets)
+            .joinedload(DocumentSet.connector_credential_pairs)
+            .joinedload(ConnectorCredentialPair.credential),
+            joinedload(Persona.document_sets).joinedload(DocumentSet.users),
+            joinedload(Persona.document_sets).joinedload(DocumentSet.groups),
+            joinedload(Persona.groups),
+            joinedload(Persona.users),
+            joinedload(Persona.labels),
+            joinedload(Persona.user_files),
+            joinedload(Persona.user_folders),
+            joinedload(Persona.prompts),
         )
-        if include_prompt:
-            stmt = stmt.options(selectinload(Persona.prompts))
 
-    results = db_session.execute(stmt).scalars().all()
+    results = db_session.execute(stmt).unique().scalars().all()
     return results
 
 

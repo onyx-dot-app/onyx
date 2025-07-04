@@ -28,7 +28,10 @@ import {
   AgenticMessageResponseIDInfo,
   UserKnowledgeFilePacket,
 } from "./interfaces";
-import { Persona } from "../admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+} from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Settings } from "../admin/settings/interfaces";
@@ -631,8 +634,8 @@ export function removeMessage(
 
 export function checkAnyAssistantHasSearch(
   messageHistory: Message[],
-  availableAssistants: Persona[],
-  livePersona: Persona
+  availableAssistants: MinimalPersonaSnapshot[],
+  livePersona: MinimalPersonaSnapshot
 ): boolean {
   const response =
     messageHistory.some((message) => {
@@ -653,19 +656,17 @@ export function checkAnyAssistantHasSearch(
   return response;
 }
 
-export function personaIncludesRetrieval(selectedPersona: Persona) {
+export function personaIncludesRetrieval(
+  selectedPersona: MinimalPersonaSnapshot
+) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(
-        tool.in_code_tool_id
-      ) &&
-      selectedPersona.user_file_ids?.length === 0 &&
-      selectedPersona.user_folder_ids?.length === 0
+      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
   );
 }
 
-export function personaIncludesImage(selectedPersona: Persona) {
+export function personaIncludesImage(selectedPersona: MinimalPersonaSnapshot) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id && tool.in_code_tool_id == IIMAGE_GENERATION_TOOL_ID

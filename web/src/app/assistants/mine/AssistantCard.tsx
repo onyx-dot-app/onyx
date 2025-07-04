@@ -15,7 +15,10 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+} from "@/app/admin/assistants/interfaces";
 import { useUser } from "@/components/user/UserProvider";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { checkUserOwnsAssistant } from "@/lib/assistants/utils";
@@ -54,7 +57,7 @@ export const AssistantBadge = ({
 };
 
 const AssistantCard: React.FC<{
-  persona: Persona;
+  persona: MinimalPersonaSnapshot;
   pinned: boolean;
   closeModal: () => void;
 }> = ({ persona, pinned, closeModal }) => {

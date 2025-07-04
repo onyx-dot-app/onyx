@@ -12,7 +12,10 @@ import {
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+} from "@/app/admin/assistants/interfaces";
 import { LlmManager } from "@/lib/hooks";
 
 import {
@@ -32,7 +35,7 @@ interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
-  currentAssistant?: Persona;
+  currentAssistant?: MinimalPersonaSnapshot;
   trigger?: React.ReactElement;
   onSelect?: (value: string) => void;
   currentModelName?: string;
