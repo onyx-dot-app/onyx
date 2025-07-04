@@ -18,6 +18,31 @@ export interface Prompt {
   datetime_aware: boolean;
   default_prompt: boolean;
 }
+
+export interface MinimalPersonaSnapshot {
+  id: number;
+  name: string;
+  description: string;
+  tools: ToolSnapshot[];
+  starter_messages: StarterMessage[] | null;
+  document_sets: DocumentSet[];
+  llm_model_version_override?: string;
+  llm_model_provider_override?: string;
+
+  uploaded_image_id?: string;
+  icon_shape?: number;
+  icon_color?: string;
+
+  is_public: boolean;
+  is_visible: boolean;
+  display_priority: number | null;
+  is_default_persona: boolean;
+  builtin_persona: boolean;
+
+  labels: PersonaLabel[];
+  owner: MinimalUserSnapshot | null;
+}
+
 export interface Persona {
   id: number;
   name: string;
