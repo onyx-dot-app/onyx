@@ -680,37 +680,7 @@ class GithubConnector(
             # if we found any issues on the page, and we're not done, return the checkpoint.
             # don't return if we're using cursor-based pagination to avoid infinite loops
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
-                if start is not None and start == datetime.fromtimestamp(
-                    0, tz=timezone.utc
-                ):
-                    # For epoch start time, check if there are more issues before returning
-                    try:
-                        next_issue_batch = list(
-                            _get_batch_rate_limited(
-                                self._issues_func(repo),
-                                checkpoint.curr_page,
-                                checkpoint.cursor_url,
-                                checkpoint.num_retrieved,
-                                cursor_url_callback,
-                                self.github_client,
-                            )
-                        )
-                        logger.info(
-                            f"Fetched {len(next_issue_batch)} issues for repo: {repo.name}"
-                        )
-                        if next_issue_batch:
-                            logger.info(
-                                f"Returning checkpoint with {num_issues} issues for repo: {repo.name}"
-                            )
-                            return checkpoint
-                    except Exception as e:
-                        logger.warning(f"Failed to check for additional issues: {e}")
-                        return checkpoint
-                else:
-                    logger.info(
-                        f"Returning checkpoint with {num_issues} issues for repo: {repo.name}"
-                    )
-                    return checkpoint
+                return checkpoint
 
             # if we went past the start date during the loop or there are no more
             # issues to get, we move on to the next repo
@@ -749,7 +719,9 @@ class GithubConnector(
         # add a day for timezone safety
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc) + ONE_DAY
 
-        # Move start time back to include all relevant PRs and Issues
+        # Move start time back by 3 hours, since some Issues/PRs are getting dropped
+        # Could be due to delayed processing on GitHub side
+        # The non-updated issues since last poll will be shortcut-ed and not embedded
         adjusted_start_datetime = start_datetime - timedelta(hours=3)
 
         epoch = datetime.fromtimestamp(0, tz=timezone.utc)
