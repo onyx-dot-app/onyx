@@ -232,6 +232,8 @@ def _migrate_files_to_external_storage() -> None:
     files_to_migrate = [row[0] for row in result.fetchall()]
     total_files = len(files_to_migrate)
 
+    external_store.initialize()
+
     if total_files == 0:
         print("No files found in PostgreSQL storage to migrate.")
         return
@@ -240,8 +242,6 @@ def _migrate_files_to_external_storage() -> None:
 
     _set_tenant_contextvar(session)
     migrated_count = 0
-
-    external_store.initialize()
 
     for i, file_id in enumerate(files_to_migrate, 1):
         print(f"Migrating file {i}/{total_files}: {file_id}")
