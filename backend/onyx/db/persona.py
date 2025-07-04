@@ -329,8 +329,9 @@ def update_persona_public_status(
 
 
 def get_personas_for_user(
+    # defines how much of the persona to pre-load
+    load_type: PersonaLoadType,
     # if user is `None` assume the user is an admin or auth is disabled
-    load_type: PersonaLoadType,  # defines how much of the persona to pre-load
     user: User | None,
     db_session: Session,
     get_editable: bool = True,
