@@ -5,12 +5,8 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSet, ValidSources } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
 import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
-import {
-  getStandardAnswerCategoriesIfEE,
-  StandardAnswerCategoryResponse,
-} from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
+import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { redirect } from "next/navigation";
-import { Persona } from "../../../../assistants/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 
 async function NewChannelConfigPage(props: {

@@ -28,10 +28,7 @@ import {
   AgenticMessageResponseIDInfo,
   UserKnowledgeFilePacket,
 } from "./interfaces";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "../admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Settings } from "../admin/settings/interfaces";

@@ -1,8 +1,5 @@
 import { fetchSS } from "@/lib/utilsSS";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { modelSupportsImageInput } from "../llm/utils";
