@@ -37,13 +37,11 @@ def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
         )
     )
     search_settings_fetch = result.fetchall()
-    print(search_settings_fetch)
     search_settings = (
         SearchSettings(**search_settings_fetch[0]._asdict())
         if search_settings_fetch
         else None
     )
-    print(search_settings)
 
     result2 = op.get_bind().execute(
         sa.text(
@@ -303,10 +301,6 @@ def delete_document_chunks_from_vespa(index_name: str, doc_id: str) -> None:
             if not hits:
                 break  # No more chunks to process
 
-            print(
-                f"Deleting {len(hits)} chunks (offset {offset}) for duplicate document {doc_id}"
-            )
-
             # Delete each chunk in this batch
             for hit in hits:
                 vespa_doc_id = hit.get("id")  # This is the internal Vespa document ID
@@ -333,8 +327,6 @@ def delete_document_chunks_from_vespa(index_name: str, doc_id: str) -> None:
             # If we got fewer hits than the limit, we're done
             if len(hits) < limit:
                 break
-
-    print(f"Successfully deleted {total_deleted} chunks for document {doc_id}")
 
 
 def update_document_id_in_vespa(
@@ -485,8 +477,6 @@ def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
         # Delete chunks from vespa
         delete_document_chunks_from_vespa(index_name, current_doc_id)
 
-        print(f"Successfully deleted duplicate document: {current_doc_id}")
-
     except Exception as e:
         print(f"Failed to delete duplicate document {current_doc_id}: {e}")
         # Continue with other documents instead of failing the entire migration
@@ -522,9 +512,6 @@ def upgrade() -> None:
 
         # Check for duplicates
         if normalized_doc_id in all_normalized_doc_ids:
-            print(f"Found duplicate document with normalized ID: {normalized_doc_id}")
-            print(f"Deleting duplicate document: {current_doc_id}")
-
             delete_document_from_db(current_doc_id, index_name)
             continue
 
@@ -532,18 +519,12 @@ def upgrade() -> None:
 
         # If the document ID already doesn't have query parameters, skip it
         if current_doc_id == normalized_doc_id:
-            print(
-                f"Skipping document {current_doc_id} -> {normalized_doc_id} because it already has no query parameters"
-            )
             continue
-
-        # print(f"Updating document ID: {current_doc_id} -> {normalized_doc_id}")
 
         try:
             # Update both database and Vespa in order
             # Database first to ensure consistency
             update_document_id_in_database(current_doc_id, normalized_doc_id)
-            print(f"Updated database for {current_doc_id} -> {normalized_doc_id}")
 
             # For Vespa, we can now use the original document IDs since we're using contains matching
             update_document_id_in_vespa(index_name, current_doc_id, normalized_doc_id)

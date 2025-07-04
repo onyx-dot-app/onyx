@@ -80,17 +80,13 @@ class PermissionSyncContext(BaseModel):
 
 def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     link = file[WEB_VIEW_LINK_KEY]
-    # TODO: remove after mig testing
     parsed_url = urlparse(link)
-    import random
-
-    num = random.randint(0, 1000000)
-    parsed_url = parsed_url._replace(query=f"boop={num}")
-    # spl_path = parsed_url.path.split("/")
-    # if spl_path and (spl_path[-1] in ["edit", "view", "preview"]):
-    #     spl_path.pop()
-    #     parsed_url = parsed_url._replace(path="/".join(spl_path))
-    # # Remove query parameters and reconstruct URL
+    parsed_url = parsed_url._replace(query="")  # remove query parameters
+    spl_path = parsed_url.path.split("/")
+    if spl_path and (spl_path[-1] in ["edit", "view", "preview"]):
+        spl_path.pop()
+        parsed_url = parsed_url._replace(path="/".join(spl_path))
+    # Remove query parameters and reconstruct URL
     return urlunparse(parsed_url)
 
 
