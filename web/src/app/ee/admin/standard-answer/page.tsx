@@ -25,7 +25,6 @@ import { deleteStandardAnswer } from "./lib";
 import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
-import { CustomCheckbox } from "@/components/CustomCheckbox";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
 import CreateButton from "@/components/ui/createButton";

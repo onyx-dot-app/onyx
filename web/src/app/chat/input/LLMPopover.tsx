@@ -12,10 +12,7 @@ import {
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LlmManager } from "@/lib/hooks";
 
 import {

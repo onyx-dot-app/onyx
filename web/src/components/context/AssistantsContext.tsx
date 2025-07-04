@@ -8,10 +8,7 @@ import React, {
   SetStateAction,
   Dispatch,
 } from "react";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   classifyAssistants,
   orderAssistantsForUser,
@@ -42,7 +39,14 @@ const AssistantsContext = createContext<AssistantsContextProps | undefined>(
 export const AssistantsProvider: React.FC<{
   children: React.ReactNode;
   initialAssistants: MinimalPersonaSnapshot[];
-}> = ({ children, initialAssistants }) => {
+  hasAnyConnectors?: boolean;
+  hasImageCompatibleModel?: boolean;
+}> = ({
+  children,
+  initialAssistants,
+  hasAnyConnectors,
+  hasImageCompatibleModel,
+}) => {
   const [assistants, setAssistants] = useState<MinimalPersonaSnapshot[]>(
     initialAssistants || []
   );

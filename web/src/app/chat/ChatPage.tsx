@@ -49,7 +49,6 @@ import {
   setMessageAsLatest,
   updateLlmOverrideForChatSession,
   updateParentChildren,
-  uploadFilesForChat,
   useScrollonStream,
 } from "./lib";
 import {

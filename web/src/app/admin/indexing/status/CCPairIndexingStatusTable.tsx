@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
+import { CCPairStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
   ConnectorIndexingStatus,
@@ -26,7 +26,6 @@ import {
   FiLock,
   FiUnlock,
   FiRefreshCw,
-  FiPauseCircle,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -36,7 +35,6 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
-import { Warning } from "@phosphor-icons/react";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";

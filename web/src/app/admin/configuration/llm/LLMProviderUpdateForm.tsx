@@ -16,7 +16,6 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
-  ModelConfiguration,
   ModelConfigurationUpsertRequest,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";

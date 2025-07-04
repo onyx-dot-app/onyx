@@ -35,7 +35,7 @@ import { CheckedState } from "@radix-ui/react-checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
-import { DatePicker, DatePickerProps } from "./ui/datePicker";
+import { DatePicker } from "./ui/datePicker";
 import { Textarea, TextareaProps } from "./ui/textarea";
 
 export function SectionHeader({
