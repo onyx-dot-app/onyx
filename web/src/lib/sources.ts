@@ -301,6 +301,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.CustomerSupport,
     docs: "https://docs.onyx.app/connectors/freshdesk",
   },
+  freshdesk_kb: {
+    icon: FreshdeskIcon,
+    displayName: "Freshdesk KB",
+    category: SourceCategory.CustomerSupport,
+    docs: "https://docs.onyx.app/connectors/freshdesk",
+  },
   fireflies: {
     icon: FirefliesIcon,
     displayName: "Fireflies",
