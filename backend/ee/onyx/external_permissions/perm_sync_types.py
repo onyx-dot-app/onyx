@@ -1,8 +1,12 @@
 from collections.abc import Callable
 from collections.abc import Generator
+from typing import Any
 from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
+
+from sqlalchemy import ColumnElement
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from onyx.context.search.models import InferenceChunk
 
@@ -15,14 +19,31 @@ if TYPE_CHECKING:
 
 
 class FetchAllDocumentsFunction(Protocol):
-    """Protocol for a function that fetches all document IDs for a connector credential pair."""
+    """Protocol for a function that fetches documents for a connector credential pair.
 
-    def __call__(self) -> list[str]:
+    This protocol defines the interface for functions that retrieve documents
+    from the database, typically used in permission synchronization workflows.
+    """
+
+    def __call__(
+        self,
+        columns: list[InstrumentedAttribute] | None = None,
+        where_clause: ColumnElement[bool] | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         """
-        Returns a list of document IDs for a connector credential pair.
+        Fetches documents for a connector credential pair with optional filtering.
 
-        This is typically used to determine which documents should no longer be
-        accessible during the document sync process.
+        Args:
+            columns: List of column attributes to select.
+                    If None, implementation should default to all columns.
+            where_clause: Optional SQLAlchemy where clause for filtering documents.
+                         If None, no additional filtering is applied.
+            limit: Optional limit on the number of documents to return.
+                  If None, all matching documents are returned.
+
+        Returns:
+            List of dicts matching the specified criteria.
         """
         ...
 

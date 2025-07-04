@@ -6,8 +6,10 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Any
 
 from sqlalchemy import and_
+from sqlalchemy import ColumnElement
 from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
@@ -20,6 +22,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.expression import null
 
 from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
@@ -159,6 +162,74 @@ def get_document_ids_for_connector_credential_pair(
         )
     )
     return list(db_session.execute(doc_ids_stmt).scalars().all())
+
+
+def get_documents_for_connector_credential_pair_filtered(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    where_clause: ColumnElement[bool] | None = None,
+    limit: int | None = None,
+    columns: list[InstrumentedAttribute] | None = None,
+) -> Sequence[dict[str, Any]]:
+    """Get documents for a connector credential pair with optional filtering and column selection.
+
+    Args:
+        db_session: Database session
+        connector_id: ID of the connector
+        credential_id: ID of the credential
+        where_clause: Optional SQLAlchemy where clause for additional filtering
+        limit: Optional limit on number of results
+        columns: Optional list of specific columns to select (if None, selects all document columns)
+
+    Returns:
+        Sequence of Document objects matching the criteria
+    """
+    # First, get the document IDs for the connector credential pair
+    initial_doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+
+    # If limit is 1, order by last_modified ASC to get the oldest record
+    if limit and limit == 1 and where_clause is not None:
+        # Join with Document table to get access to last_modified for ordering
+        initial_doc_ids_stmt = (
+            select(DocumentByConnectorCredentialPair.id)
+            .join(DbDocument, DocumentByConnectorCredentialPair.id == DbDocument.id)
+            .where(
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id == connector_id,
+                    DocumentByConnectorCredentialPair.credential_id == credential_id,
+                )
+            )
+            .order_by(DbDocument.last_modified.asc())
+            .limit(limit)
+            .where(where_clause)
+        )
+    elif limit:
+        # Apply limit to the first query for better performance
+        initial_doc_ids_stmt = initial_doc_ids_stmt.limit(limit)
+    # Build the main query based on columns requested
+    if columns:
+        stmt = select(*columns)
+    else:
+        stmt = select(DbDocument)
+
+    # Filter documents by the IDs from the first query
+    stmt = stmt.where(DbDocument.id.in_(initial_doc_ids_stmt))
+
+    # Apply additional filtering if provided
+    if where_clause is not None:
+        logger.info(f"Where clause: {where_clause}")
+        stmt = stmt.where(where_clause)
+
+    # Make results distinct
+    stmt = stmt.distinct()
+
+    return [dict(row) for row in db_session.execute(stmt).mappings().all()]
 
 
 def get_documents_for_connector_credential_pair(

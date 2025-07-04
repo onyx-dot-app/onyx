@@ -16,8 +16,6 @@ from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
-from github.Requester import Requester
-from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -28,7 +26,9 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
+from onyx.connectors.github.utils import deserialize_repository
 from onyx.connectors.github.utils import get_external_access_permission
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointedSlimConnector
@@ -345,18 +345,6 @@ def _convert_issue_to_document(
     )
 
 
-class SerializedRepository(BaseModel):
-    # id is part of the raw_data as well, just pulled out for convenience
-    id: int
-    headers: dict[str, str | int]
-    raw_data: dict[str, Any]
-
-    def to_Repository(self, requester: Requester) -> Repository.Repository:
-        return Repository.Repository(
-            requester, self.headers, self.raw_data, completed=True
-        )
-
-
 class GithubConnectorStage(Enum):
     START = "start"
     PRS = "prs"
@@ -428,7 +416,7 @@ class GithubConnector(
         )
         return None
 
-    def _get_github_repo(
+    def get_github_repo(
         self, github_client: Github, attempt_num: int = 0
     ) -> Repository.Repository:
         if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
@@ -440,9 +428,9 @@ class GithubConnector(
             return github_client.get_repo(f"{self.repo_owner}/{self.repositories}")
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(github_client)
-            return self._get_github_repo(github_client, attempt_num + 1)
+            return self.get_github_repo(github_client, attempt_num + 1)
 
-    def _get_github_repos(
+    def get_github_repos(
         self, github_client: Github, attempt_num: int = 0
     ) -> list[Repository.Repository]:
         """Get specific repositories based on comma-separated repo_name string."""
@@ -471,9 +459,9 @@ class GithubConnector(
             return repos
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(github_client)
-            return self._get_github_repos(github_client, attempt_num + 1)
+            return self.get_github_repos(github_client, attempt_num + 1)
 
-    def _get_all_repos(
+    def get_all_repos(
         self, github_client: Github, attempt_num: int = 0
     ) -> list[Repository.Repository]:
         if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
@@ -493,7 +481,7 @@ class GithubConnector(
                 return list(user.get_repos())
         except RateLimitExceededException:
             sleep_after_rate_limit_exception(github_client)
-            return self._get_all_repos(github_client, attempt_num + 1)
+            return self.get_all_repos(github_client, attempt_num + 1)
 
     def _pull_requests_func(
         self, repo: Repository.Repository
@@ -527,13 +515,13 @@ class GithubConnector(
             if self.repositories:
                 if "," in self.repositories:
                     # Multiple repositories specified
-                    repos = self._get_github_repos(self.github_client)
+                    repos = self.get_github_repos(self.github_client)
                 else:
                     # Single repository (backward compatibility)
-                    repos = [self._get_github_repo(self.github_client)]
+                    repos = [self.get_github_repo(self.github_client)]
             else:
                 # All repositories
-                repos = self._get_all_repos(self.github_client)
+                repos = self.get_all_repos(self.github_client)
             if not repos:
                 checkpoint.has_more = False
                 return checkpoint
@@ -553,25 +541,8 @@ class GithubConnector(
         if checkpoint.cached_repo is None:
             raise ValueError("No repo saved in checkpoint")
 
-        # Try to access the requester - different PyGithub versions may use different attribute names
-        try:
-            # Try direct access to a known attribute name first
-            if hasattr(self.github_client, "_requester"):
-                requester = self.github_client._requester
-            elif hasattr(self.github_client, "_Github__requester"):
-                requester = self.github_client._Github__requester
-            else:
-                # If we can't find the requester attribute, we need to fall back to recreating the repo
-                raise AttributeError("Could not find requester attribute")
-
-            repo = checkpoint.cached_repo.to_Repository(requester)
-        except Exception as e:
-            # If all else fails, re-fetch the repo directly
-            logger.warning(
-                f"Failed to deserialize repository: {e}. Attempting to re-fetch."
-            )
-            repo_id = checkpoint.cached_repo.id
-            repo = self.github_client.get_repo(repo_id)
+        # Deserialize the repository from the checkpoint
+        repo = deserialize_repository(checkpoint.cached_repo, self.github_client)
 
         cursor_url_callback = make_cursor_url_callback(checkpoint)
         repo_external_access: ExternalAccess | None = None
@@ -758,7 +729,12 @@ class GithubConnector(
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
 
-        logger.info(f"{len(checkpoint.cached_repo_ids)} repos remaining")
+        if checkpoint.cached_repo_ids:
+            logger.info(
+                f"{len(checkpoint.cached_repo_ids)} repos remaining (IDs: {checkpoint.cached_repo_ids})"
+            )
+        else:
+            logger.info("No more repos remaining")
 
         return checkpoint
 
@@ -816,16 +792,64 @@ class GithubConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: GithubConnectorCheckpoint,
     ) -> SlimCheckpointOutput[GithubConnectorCheckpoint]:
+        """
+        Retrieve slim documents from GitHub with checkpointing support.
+
+        Processes all pages and stages within the current repository, yielding documents
+        and returning checkpoints only for repository transitions.
+
+        Args:
+            start: Start timestamp (Unix epoch seconds)
+            end: End timestamp (Unix epoch seconds)
+            checkpoint: Current checkpoint state
+
+        Yields:
+            SlimDocument: Documents with ID and external access
+
+        Returns:
+            GithubConnectorCheckpoint: Updated checkpoint for next iteration
+        """
+        logger.info(
+            f"Starting slim document retrieval for GitHub connector. "
+            f"Repo owner: {self.repo_owner}, "
+            f"Repositories: {self.repositories}, "
+            f"Time range: {start} to {end}, "
+            f"Checkpoint stage: {checkpoint.stage}, "
+            f"Current page: {checkpoint.curr_page}, "
+            f"Objects retrieved so far: {checkpoint.num_retrieved}"
+        )
+
+        # Convert timestamps to datetime objects for processing
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
-        # add a day for timezone safety
+        # Add a day for timezone safety to ensure we don't miss documents
+        # due to timezone differences between GitHub and our system
         end_datetime = datetime.fromtimestamp(end, tz=timezone.utc) + ONE_DAY
 
-        # Move start time back to include all relevant PRs and Issues
+        logger.info(
+            f"Converted time range - Start: {start_datetime}, End: {end_datetime}"
+        )
+
+        # Move start time back by 3 hours to include all relevant PRs and Issues
+        # This accounts for GitHub's internal processing delays and ensures
+        # we capture documents that might have been created slightly before
+        # the specified start time
         adjusted_start_datetime = start_datetime - timedelta(hours=3)
 
+        logger.info(f"Adjusted start time: {adjusted_start_datetime}")
+
+        # Ensure we don't go before the Unix epoch (1970-01-01)
         epoch = datetime.fromtimestamp(0, tz=timezone.utc)
         if adjusted_start_datetime < epoch:
+            logger.warning(
+                f"Adjusted start time {adjusted_start_datetime} is before Unix epoch. "
+                f"Setting to epoch start: {epoch}"
+            )
             adjusted_start_datetime = epoch
+
+        logger.info(
+            f"Fetching documents from GitHub with time range: "
+            f"{adjusted_start_datetime} to {end_datetime}"
+        )
 
         checkpoint_connector_generator = self._fetch_from_github(
             checkpoint,
@@ -834,24 +858,81 @@ class GithubConnector(
             include_permissions=True,
         )
 
-        for document, failure, next_checkpoint in CheckpointOutputWrapper[
-            GithubConnectorCheckpoint
-        ]()(checkpoint_connector_generator):
-            if next_checkpoint:
-                if (
-                    checkpoint.cached_repo
-                    and checkpoint.cached_repo.id != next_checkpoint.cached_repo.id
-                ):
-                    return next_checkpoint
+        while checkpoint.has_more:
+            logger.info(
+                f"Processing batch - Stage: {checkpoint.stage}, "
+                f"Page: {checkpoint.curr_page}, "
+            )
 
-                checkpoint = next_checkpoint
-                continue
+            checkpoint_connector_generator = self._fetch_from_github(
+                checkpoint,
+                start=adjusted_start_datetime,
+                end=end_datetime,
+                include_permissions=True,
+            )
 
-            if document and isinstance(document, Document):
-                slim_doc = SlimDocument(
-                    id=document.id, external_access=document.external_access
-                )
-                yield slim_doc
+            logger.info("Starting document processing loop")
+
+            for document, failure, next_checkpoint in CheckpointOutputWrapper[
+                GithubConnectorCheckpoint
+            ]()(checkpoint_connector_generator):
+
+                if next_checkpoint:
+                    logger.info(
+                        f"Received checkpoint update - Stage: {next_checkpoint.stage}, "
+                        f"Page: {next_checkpoint.curr_page}, "
+                    )
+
+                    # Check if we've moved to a different repository
+                    if (
+                        checkpoint.cached_repo
+                        and next_checkpoint.cached_repo
+                        and checkpoint.cached_repo.id != next_checkpoint.cached_repo.id
+                    ) or (
+                        checkpoint.cached_repo is None
+                        and next_checkpoint.cached_repo is not None
+                    ):
+                        logger.info(
+                            f"Repository changed from {checkpoint.cached_repo.id if checkpoint.cached_repo else 'None'} "
+                            f"to {next_checkpoint.cached_repo.id}. "
+                            f"Returning checkpoint to allow caller to handle repository transition."
+                        )
+                        return next_checkpoint
+
+                    # For page-level and stage transitions within the same repository,
+                    # continue processing internally by updating the checkpoint and restarting the loop
+                    logger.info(
+                        f"Continuing with page-level processing - Stage: {next_checkpoint.stage}, "
+                        f"Page: {next_checkpoint.curr_page}, "
+                    )
+                    checkpoint = next_checkpoint
+                    break
+
+                if failure:
+                    logger.error(f"Document retrieval failure: {failure}")
+                    continue
+
+                if document is not None and isinstance(document, Document):
+                    doc = cast(Document, document)
+                    slim_doc = SlimDocument(
+                        id=doc.id, external_access=doc.external_access
+                    )
+
+                    yield slim_doc
+                else:
+                    logger.warning(
+                        f"Received unexpected document type: {type(document)}. "
+                        f"Expected Document instance or None."
+                    )
+            else:
+                break
+
+        logger.info(
+            f"Slim document retrieval completed for current repository. "
+            f"Final checkpoint stage: {checkpoint.stage}, "
+            f"Final page: {checkpoint.curr_page}, "
+            f"Has more: {checkpoint.has_more}"
+        )
 
         return checkpoint
 
@@ -885,6 +966,9 @@ class GithubConnector(
                         try:
                             test_repo = self.github_client.get_repo(
                                 f"{self.repo_owner}/{repo_name}"
+                            )
+                            logger.info(
+                                f"Successfully accessed repository: {self.repo_owner}/{repo_name}"
                             )
                             test_repo.get_contents("")
                             valid_repos = True
@@ -1003,10 +1087,11 @@ if __name__ == "__main__":
         {"github_access_token": os.environ["ACCESS_TOKEN_GITHUB"]}
     )
     logger.info(f"Token: {os.environ['ACCESS_TOKEN_GITHUB']}")
-    get_external_access_permission(
-        connector._get_github_repos(connector.github_client).pop(),
-        connector.github_client,
-    )
+    if connector.github_client:
+        get_external_access_permission(
+            connector.get_github_repos(connector.github_client).pop(),
+            connector.github_client,
+        )
 
     # # Create a time range from epoch to now
     # end_time = datetime.now(timezone.utc)

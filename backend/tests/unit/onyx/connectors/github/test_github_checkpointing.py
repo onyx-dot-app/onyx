@@ -18,13 +18,17 @@ from github.RateLimit import RateLimit
 from github.Repository import Repository
 from github.Requester import Requester
 
+from onyx.access.models import ExternalAccess
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github.connector import GithubConnectorCheckpoint
 from onyx.connectors.github.connector import GithubConnectorStage
-from onyx.connectors.github.connector import SerializedRepository
+from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import Document
+from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
@@ -265,7 +269,7 @@ def test_load_from_checkpoint_with_rate_limit(
         # Call load_from_checkpoint
         end_time = time.time()
         with patch(
-            "onyx.connectors.github.connector._sleep_after_rate_limit_exception"
+            "onyx.connectors.github.connector.sleep_after_rate_limit_exception"
         ) as mock_sleep:
             outputs = load_everything_from_checkpoint_connector(
                 github_connector, 0, end_time
@@ -797,7 +801,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     mock_repo1.get_issues.return_value = mock_empty_issues_list
     mock_repo2.get_issues.return_value = mock_empty_issues_list
     with patch.object(
-        github_connector, "_get_all_repos", return_value=[mock_repo1, mock_repo2]
+        github_connector, "get_all_repos", return_value=[mock_repo1, mock_repo2]
     ), patch.object(
         github_connector,
         "_pull_requests_func",
@@ -914,3 +918,346 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     assert (
         pull_requests_func_invocation_count == 3
     )  # twice for repo2 PRs, once for repo1 PRs
+
+
+def test_checkpointed_retrieve_all_slim_documents_single_repo(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+    create_mock_pr: Callable[..., MagicMock],
+    create_mock_issue: Callable[..., MagicMock],
+) -> None:
+    """Test checkpointed_retrieve_all_slim_documents with a single repository"""
+    # Set up mocked repo
+    github_connector = build_github_connector()
+    mock_repo = create_mock_repo()
+    github_connector.github_client = mock_github_client
+    mock_github_client.get_repo.return_value = mock_repo
+
+    # Set up mocked PRs and issues
+    mock_pr1 = create_mock_pr(number=1, title="PR 1")
+    mock_pr2 = create_mock_pr(number=2, title="PR 2")
+    mock_issue1 = create_mock_issue(number=1, title="Issue 1")
+    mock_issue2 = create_mock_issue(number=2, title="Issue 2")
+
+    # Mock get_pulls and get_issues methods
+    mock_repo.get_pulls.return_value = MagicMock()
+    mock_repo.get_pulls.return_value.get_page.side_effect = [
+        [mock_pr1, mock_pr2],
+        [],
+    ]
+    mock_repo.get_issues.return_value = MagicMock()
+    mock_repo.get_issues.return_value.get_page.side_effect = [
+        [mock_issue1, mock_issue2],
+        [],
+    ]
+
+    # Mock SerializedRepository.to_Repository to return our mock repo
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        end_time = time.time()
+        checkpoint = github_connector.build_dummy_checkpoint()
+        slim_docs = []
+
+        # Process documents using CheckpointOutputWrapper like in doc_sync
+        while checkpoint.has_more:
+            slim_doc_generator = (
+                github_connector.checkpointed_retrieve_all_slim_documents(
+                    start=0, end=end_time, checkpoint=checkpoint
+                )
+            )
+
+            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+                GithubConnectorCheckpoint
+            ]()(slim_doc_generator):
+                # New checkpoint means we've moved to a different repository
+                if new_checkpoint:
+                    if (
+                        new_checkpoint.has_more
+                        and new_checkpoint.cached_repo is not None
+                        and checkpoint.cached_repo is not None
+                    ):
+                        assert (
+                            new_checkpoint.cached_repo.id != checkpoint.cached_repo.id
+                        )
+                    checkpoint = new_checkpoint
+                    continue
+
+                # Handle failures
+                if failure:
+                    continue
+
+                # Collect slim documents
+                if slim_doc and isinstance(slim_doc, SlimDocument):
+                    slim_docs.append(slim_doc)
+
+        # Check that we got all slim documents
+        assert len(slim_docs) == 4
+        # Check PR documents
+        pr_docs = [doc for doc in slim_docs if "pull" in doc.id]
+        assert len(pr_docs) == 2
+        assert pr_docs[0].id == "https://github.com/test-org/test-repo/pull/1"
+        assert pr_docs[1].id == "https://github.com/test-org/test-repo/pull/2"
+        # Check issue documents
+        issue_docs = [doc for doc in slim_docs if "issues" in doc.id]
+        assert len(issue_docs) == 2
+        assert issue_docs[0].id == "https://github.com/test-org/test-repo/issues/1"
+        assert issue_docs[1].id == "https://github.com/test-org/test-repo/issues/2"
+        # All documents should be SlimDocument instances
+        assert all(isinstance(doc, SlimDocument) for doc in slim_docs)
+
+
+def test_checkpointed_retrieve_all_slim_documents_multiple_repos(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+    create_mock_pr: Callable[..., MagicMock],
+    create_mock_issue: Callable[..., MagicMock],
+) -> None:
+    """Test checkpointed_retrieve_all_slim_documents with multiple repositories"""
+    # Set up two repositories
+    mock_repo1 = create_mock_repo(name="repo1", id=1)
+    mock_repo2 = create_mock_repo(name="repo2", id=2)
+
+    # Initialize connector with no specific repositories, so _get_all_repos is used
+    github_connector = build_github_connector(repositories="")
+    github_connector.github_client = mock_github_client
+
+    # Set up mocked PRs and issues for both repos
+    mock_pr1_repo1 = create_mock_pr(
+        number=1,
+        title="PR 1 Repo 1",
+        html_url="https://github.com/test-org/repo1/pull/1",
+    )
+    mock_pr2_repo1 = create_mock_pr(
+        number=2,
+        title="PR 2 Repo 1",
+        html_url="https://github.com/test-org/repo1/pull/2",
+    )
+    mock_pr1_repo2 = create_mock_pr(
+        number=1,
+        title="PR 1 Repo 2",
+        html_url="https://github.com/test-org/repo2/pull/1",
+    )
+    mock_pr2_repo2 = create_mock_pr(
+        number=2,
+        title="PR 2 Repo 2",
+        html_url="https://github.com/test-org/repo2/pull/2",
+    )
+
+    # Mock get_pulls for both repos
+    mock_repo1.get_pulls.return_value = MagicMock()
+    mock_repo1.get_pulls.return_value.get_page.side_effect = [
+        [mock_pr1_repo1, mock_pr2_repo1],
+        [],
+    ]
+    mock_repo2.get_pulls.return_value = MagicMock()
+    mock_repo2.get_pulls.return_value.get_page.side_effect = [
+        [mock_pr1_repo2, mock_pr2_repo2],
+        [],
+    ]
+
+    # Mock get_issues for both repos (empty)
+    mock_repo1.get_issues.return_value = MagicMock()
+    mock_repo1.get_issues.return_value.get_page.return_value = []
+    mock_repo2.get_issues.return_value = MagicMock()
+    mock_repo2.get_issues.return_value.get_page.return_value = []
+
+    # Mock get_repo to return different repos based on ID
+    def get_repo_side_effect(repo_id: int) -> MagicMock:
+        if repo_id == 1:
+            return mock_repo1
+        elif repo_id == 2:
+            return mock_repo2
+        else:
+            raise ValueError(f"Unexpected repo ID: {repo_id}")
+
+    mock_github_client.get_repo.side_effect = get_repo_side_effect
+
+    # Mock get_all_repos to return our mock repos
+    with patch.object(
+        github_connector, "get_all_repos", return_value=[mock_repo1, mock_repo2]
+    ), patch.object(
+        SerializedRepository, "to_Repository", side_effect=lambda repo, requester: repo
+    ):
+        # Call checkpointed_retrieve_all_slim_documents
+        end_time = time.time()
+        checkpoint = github_connector.build_dummy_checkpoint()
+        slim_docs = []
+
+        # Process documents using CheckpointOutputWrapper like in doc_sync
+        while checkpoint.has_more:
+            slim_doc_generator = (
+                github_connector.checkpointed_retrieve_all_slim_documents(
+                    start=0, end=end_time, checkpoint=checkpoint
+                )
+            )
+
+            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+                GithubConnectorCheckpoint
+            ]()(slim_doc_generator):
+                # New checkpoint means we've moved to a different repository or stage
+                if new_checkpoint:
+                    if (
+                        new_checkpoint.has_more
+                        and new_checkpoint.cached_repo is not None
+                        and checkpoint.cached_repo is not None
+                    ):
+                        assert (
+                            new_checkpoint.cached_repo.id != checkpoint.cached_repo.id
+                        )
+                    checkpoint = new_checkpoint
+                    continue
+
+                # Handle failures
+                if failure:
+                    continue
+
+                # Collect slim documents
+                if slim_doc and isinstance(slim_doc, SlimDocument):
+                    slim_docs.append(slim_doc)
+
+        # Check that we got all slim documents from both repos
+        assert len(slim_docs) == 4
+
+        # Check repo1 documents
+        repo1_docs = [doc for doc in slim_docs if "repo1" in doc.id]
+        assert len(repo1_docs) == 2
+        assert repo1_docs[0].id == "https://github.com/test-org/repo1/pull/1"
+        assert repo1_docs[1].id == "https://github.com/test-org/repo1/pull/2"
+
+        # Check repo2 documents
+        repo2_docs = [doc for doc in slim_docs if "repo2" in doc.id]
+        assert len(repo2_docs) == 2
+        assert repo2_docs[0].id == "https://github.com/test-org/repo2/pull/1"
+        assert repo2_docs[1].id == "https://github.com/test-org/repo2/pull/2"
+
+
+def test_checkpointed_retrieve_all_slim_documents_empty_repo(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """Test checkpointed_retrieve_all_slim_documents with an empty repository"""
+    # Set up mocked repo
+    github_connector = build_github_connector()
+    mock_repo = create_mock_repo()
+    github_connector.github_client = mock_github_client
+    mock_github_client.get_repo.return_value = mock_repo
+
+    # Mock get_pulls and get_issues to return empty lists
+    mock_repo.get_pulls.return_value = MagicMock()
+    mock_repo.get_pulls.return_value.get_page.return_value = []
+    mock_repo.get_issues.return_value = MagicMock()
+    mock_repo.get_issues.return_value.get_page.return_value = []
+
+    # Mock SerializedRepository.to_Repository to return our mock repo
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        # Call checkpointed_retrieve_all_slim_documents
+        end_time = time.time()
+        checkpoint = github_connector.build_dummy_checkpoint()
+        slim_docs = []
+
+        # Process documents using CheckpointOutputWrapper like in doc_sync
+        while checkpoint.has_more:
+            slim_doc_generator = (
+                github_connector.checkpointed_retrieve_all_slim_documents(
+                    start=0, end=end_time, checkpoint=checkpoint
+                )
+            )
+
+            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+                GithubConnectorCheckpoint
+            ]()(slim_doc_generator):
+                # New checkpoint means we've moved to a different repository or stage
+                if new_checkpoint:
+                    checkpoint = new_checkpoint
+                    continue
+
+                # Handle failures
+                if failure:
+                    continue
+
+                # Collect slim documents
+                if slim_doc and isinstance(slim_doc, SlimDocument):
+                    slim_docs.append(slim_doc)
+
+        # Check that we got no documents
+        assert len(slim_docs) == 0
+
+
+def test_checkpointed_retrieve_all_slim_documents_with_external_access(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+    create_mock_pr: Callable[..., MagicMock],
+) -> None:
+    """Test that SlimDocuments include external_access information"""
+    # Set up mocked repo
+    github_connector = build_github_connector()
+    mock_repo = create_mock_repo()
+    github_connector.github_client = mock_github_client
+    mock_github_client.get_repo.return_value = mock_repo
+
+    # Set up mocked PR
+    mock_pr = create_mock_pr(number=1, title="PR 1")
+
+    # Mock get_pulls to return PR
+    mock_repo.get_pulls.return_value = MagicMock()
+    mock_repo.get_pulls.return_value.get_page.side_effect = [
+        [mock_pr],
+        [],
+    ]
+
+    # Mock get_issues to return empty
+    mock_repo.get_issues.return_value = MagicMock()
+    mock_repo.get_issues.return_value.get_page.return_value = []
+
+    # Mock get_external_access_permission to return mock external access
+    mock_external_access = ExternalAccess(
+        external_user_emails={"user@example.com"},
+        external_user_group_ids={"group1"},
+        is_public=False,
+    )
+
+    # Mock SerializedRepository.to_Repository to return our mock repo
+    with patch.object(
+        SerializedRepository, "to_Repository", return_value=mock_repo
+    ), patch(
+        "onyx.connectors.github.connector.get_external_access_permission",
+        return_value=mock_external_access,
+    ):
+        # Call checkpointed_retrieve_all_slim_documents
+        end_time = time.time()
+        checkpoint = github_connector.build_dummy_checkpoint()
+        slim_docs = []
+
+        # Process documents using CheckpointOutputWrapper like in doc_sync
+        while checkpoint.has_more:
+            slim_doc_generator = (
+                github_connector.checkpointed_retrieve_all_slim_documents(
+                    start=0, end=end_time, checkpoint=checkpoint
+                )
+            )
+
+            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+                GithubConnectorCheckpoint
+            ]()(slim_doc_generator):
+                # New checkpoint means we've moved to a different repository or stage
+                if new_checkpoint:
+                    checkpoint = new_checkpoint
+                    continue
+
+                # Handle failures
+                if failure:
+                    continue
+
+                # Collect slim documents
+                if slim_doc and isinstance(slim_doc, SlimDocument):
+                    slim_docs.append(slim_doc)
+
+        # Check that we got the document with external access
+        assert len(slim_docs) == 1
+        assert slim_docs[0].id == "https://github.com/test-org/test-repo/pull/1"
+        assert slim_docs[0].external_access is not None
+        assert slim_docs[0].external_access.external_user_group_ids == {"group1"}
+        assert slim_docs[0].external_access.is_public is False

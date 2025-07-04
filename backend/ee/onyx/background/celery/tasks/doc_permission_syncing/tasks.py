@@ -15,7 +15,9 @@ from pydantic import ValidationError
 from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
+from sqlalchemy import ColumnElement
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import InstrumentedAttribute
 from tenacity import retry
 from tenacity import retry_if_exception
 from tenacity import stop_after_delay
@@ -46,7 +48,7 @@ from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.document import get_document_ids_for_connector_credential_pair
+from onyx.db.document import get_documents_for_connector_credential_pair_filtered
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -498,11 +500,18 @@ def connector_permission_sync_generator_task(
             # this is can be used to determine documents that are "missing" and thus
             # should no longer be accessible. The decision as to whether we should find
             # every document during the doc sync process is connector-specific.
-            def fetch_all_existing_docs_fn() -> list[str]:
-                return get_document_ids_for_connector_credential_pair(
+            def fetch_all_existing_docs_fn(
+                columns: list[InstrumentedAttribute] | None = None,
+                where_clause: ColumnElement[bool] | None = None,
+                limit: int | None = None,
+            ) -> list[dict[str, Any]]:
+                return get_documents_for_connector_credential_pair_filtered(
                     db_session=db_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
+                    where_clause=where_clause,
+                    limit=limit,
+                    columns=columns,
                 )
 
             doc_sync_func = sync_config.doc_sync_config.doc_sync_func
