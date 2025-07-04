@@ -40,16 +40,18 @@ function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
 }
 
-export function PersonasTable() {
+export function PersonasTable({
+  personas,
+  refreshPersonas,
+}: {
+  personas: Persona[];
+  refreshPersonas: () => void;
+}) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const { refreshUser, isAdmin } = useUser();
-  const {
-    allAssistants: assistants,
-    refreshAssistants,
-    editablePersonas,
-  } = useAssistants();
 
+  const editablePersonas = personas.filter((p) => !p.builtin_persona);
   const editablePersonaIds = useMemo(() => {
     return new Set(editablePersonas.map((p) => p.id.toString()));
   }, [editablePersonas]);
@@ -63,18 +65,18 @@ export function PersonasTable() {
 
   useEffect(() => {
     const editable = editablePersonas.sort(personaComparator);
-    const nonEditable = assistants
+    const nonEditable = personas
       .filter((p) => !editablePersonaIds.has(p.id.toString()))
       .sort(personaComparator);
     setFinalPersonas([...editable, ...nonEditable]);
-  }, [editablePersonas, assistants, editablePersonaIds]);
+  }, [editablePersonas, personas, editablePersonaIds]);
 
   const updatePersonaOrder = async (orderedPersonaIds: UniqueIdentifier[]) => {
-    const reorderedAssistants = orderedPersonaIds.map(
-      (id) => assistants.find((assistant) => assistant.id.toString() === id)!
+    const reorderedPersonas = orderedPersonaIds.map(
+      (id) => personas.find((persona) => persona.id.toString() === id)!
     );
 
-    setFinalPersonas(reorderedAssistants);
+    setFinalPersonas(reorderedPersonas);
 
     const displayPriorityMap = new Map<UniqueIdentifier, number>();
     orderedPersonaIds.forEach((personaId, ind) => {
@@ -96,12 +98,12 @@ export function PersonasTable() {
         type: "error",
         message: `Failed to update persona order - ${await response.text()}`,
       });
-      setFinalPersonas(assistants);
-      await refreshAssistants();
+      setFinalPersonas(personas);
+      await refreshPersonas();
       return;
     }
 
-    await refreshAssistants();
+    await refreshPersonas();
     await refreshUser();
   };
 
@@ -119,7 +121,7 @@ export function PersonasTable() {
     if (personaToDelete) {
       const response = await deletePersona(personaToDelete.id);
       if (response.ok) {
-        await refreshAssistants();
+        refreshPersonas();
         closeDeleteModal();
       } else {
         setPopup({
@@ -147,7 +149,7 @@ export function PersonasTable() {
         personaToToggleDefault.is_default_persona
       );
       if (response.ok) {
-        await refreshAssistants();
+        refreshPersonas();
         closeDefaultModal();
       } else {
         setPopup({
@@ -267,7 +269,7 @@ export function PersonasTable() {
                       persona.is_visible
                     );
                     if (response.ok) {
-                      await refreshAssistants();
+                      refreshPersonas();
                     } else {
                       setPopup({
                         type: "error",

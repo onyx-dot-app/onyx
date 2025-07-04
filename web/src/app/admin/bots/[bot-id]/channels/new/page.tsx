@@ -32,8 +32,8 @@ async function NewChannelConfigPage(props: {
     standardAnswerCategoryResponse,
   ] = await Promise.all([
     fetchSS("/manage/document-set") as Promise<Response>,
-    fetchAssistantsSS() as Promise<[Persona[], string | null]>,
-    getStandardAnswerCategoriesIfEE() as Promise<StandardAnswerCategoryResponse>,
+    fetchAssistantsSS(),
+    getStandardAnswerCategoriesIfEE(),
   ]);
 
   if (!documentSetsResponse.ok) {

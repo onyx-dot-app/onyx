@@ -39,33 +39,15 @@ export interface MinimalPersonaSnapshot {
   is_default_persona: boolean;
   builtin_persona: boolean;
 
-  labels: PersonaLabel[];
+  labels?: PersonaLabel[];
   owner: MinimalUserSnapshot | null;
 }
 
-export interface Persona {
-  id: number;
-  name: string;
-  description: string;
-  is_public: boolean;
-  is_visible: boolean;
-  icon_shape?: number;
-  icon_color?: string;
-  uploaded_image_id?: string;
+export interface Persona extends MinimalPersonaSnapshot {
   user_file_ids: number[];
   user_folder_ids: number[];
-  display_priority: number | null;
-  is_default_persona: boolean;
-  builtin_persona: boolean;
-  starter_messages: StarterMessage[] | null;
-  tools: ToolSnapshot[];
-  labels?: PersonaLabel[];
-  owner: MinimalUserSnapshot | null;
   users: MinimalUserSnapshot[];
   groups: number[];
-  document_sets: DocumentSet[];
-  llm_model_provider_override?: string;
-  llm_model_version_override?: string;
   num_chunks?: number;
 }
 
