@@ -39,11 +39,14 @@ from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
-#from onyx.utils.sitemap_eea import list_pages_for_site_eea
+
+# from onyx.utils.sitemap_eea import list_pages_for_site_eea
 from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea, list_pages_for_protected_site_eea, soer_login
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+eea_global_auth = {}
 
 
 class ScrapeSessionContext:
@@ -91,8 +94,7 @@ JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
 
 # Define common headers that mimic a real browser
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 )
 DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
@@ -158,7 +160,8 @@ def protected_url_check(url: str) -> None:
         # such as large distributed systems of CDNs
         info = socket.getaddrinfo(parse.hostname, None)
     except socket.gaierror as e:
-        raise ConnectionError(f"DNS resolution failed for {parse.hostname}: {e}")
+        raise ConnectionError(
+            f"DNS resolution failed for {parse.hostname}: {e}")
 
     for address in info:
         ip = address[4][0]
@@ -189,8 +192,7 @@ def check_internet_connection(url: str) -> None:
         # around this.
         if status_code == 403:
             logger.warning(
-                f"Received 403 Forbidden for {url}, will retry with browser automation"
-            )
+                f"Received 403 Forbidden for {url}, will retry with browser automation")
             return
 
         error_msg = {
@@ -205,14 +207,12 @@ def check_internet_connection(url: str) -> None:
         }.get(status_code, "HTTP Error")
         raise Exception(f"{error_msg} ({status_code}) for {url} - {e}")
     except requests.exceptions.SSLError as e:
-        cause = (
-            e.args[0].reason
-            if isinstance(e.args, tuple) and isinstance(e.args[0], MaxRetryError)
-            else e.args
-        )
+        cause = e.args[0].reason if isinstance(e.args, tuple) and isinstance(
+            e.args[0], MaxRetryError) else e.args
         raise Exception(f"SSL error {str(cause)}")
     except (requests.RequestException, ValueError) as e:
-        raise Exception(f"Unable to reach {url} - check your internet connection: {e}")
+        raise Exception(
+            f"Unable to reach {url} - check your internet connection: {e}")
 
 
 def is_valid_url(url: str) -> bool:
@@ -223,9 +223,7 @@ def is_valid_url(url: str) -> bool:
         return False
 
 
-def get_internal_links(
-    base_url: str, url: str, soup: BeautifulSoup, should_ignore_pound: bool = True
-) -> set[str]:
+def get_internal_links(base_url: str, url: str, soup: BeautifulSoup, should_ignore_pound: bool = True) -> set[str]:
     internal_links = set()
     for link in cast(list[dict[str, Any]], soup.find_all("a")):
         href = cast(str | None, link.get("href"))
@@ -314,12 +312,9 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     """
     )
 
-    if (
-        WEB_CONNECTOR_OAUTH_CLIENT_ID
-        and WEB_CONNECTOR_OAUTH_CLIENT_SECRET
-        and WEB_CONNECTOR_OAUTH_TOKEN_URL
-    ):
-        client = BackendApplicationClient(client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID)
+    if WEB_CONNECTOR_OAUTH_CLIENT_ID and WEB_CONNECTOR_OAUTH_CLIENT_SECRET and WEB_CONNECTOR_OAUTH_TOKEN_URL:
+        client = BackendApplicationClient(
+            client_id=WEB_CONNECTOR_OAUTH_CLIENT_ID)
         oauth = OAuth2Session(client=client)
         token = oauth.fetch_token(
             token_url=WEB_CONNECTOR_OAUTH_TOKEN_URL,
@@ -327,27 +322,24 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             client_secret=WEB_CONNECTOR_OAUTH_CLIENT_SECRET,
         )
         context.set_extra_http_headers(
-            {"Authorization": "Bearer {}".format(token["access_token"])}
-        )
+            {"Authorization": "Bearer {}".format(token["access_token"])})
 
     return playwright, context
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
-        response = requests.get(sitemap_url, verify=False, headers=DEFAULT_HEADERS)
+        response = requests.get(
+            sitemap_url, verify=False, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, "html.parser")
-        urls = [
-            _ensure_absolute_url(sitemap_url, loc_tag.text)
-            for loc_tag in soup.find_all("loc")
-        ]
+        urls = [_ensure_absolute_url(sitemap_url, loc_tag.text)
+                for loc_tag in soup.find_all("loc")]
 
         if sitemap_url.endswith("protected=true"):
             eea_auth = soer_login()
-            global eea_global_auth
-            eea_global_auth = eea_auth
+            eea_global_auth["login"] = eea_auth
             urls = list_pages_for_protected_site_eea(sitemap_url, eea_auth)
 
         if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
@@ -369,8 +361,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         raise RuntimeError(f"Error processing sitemap {sitemap_url}: {e}")
     except Exception as e:
         raise RuntimeError(
-            f"Unexpected error while processing sitemap {sitemap_url}: {e}"
-        )
+            f"Unexpected error while processing sitemap {sitemap_url}: {e}")
 
 
 def _ensure_absolute_url(source_url: str, maybe_relative_url: str) -> str:
@@ -393,9 +384,7 @@ def _read_urls_file(location: str) -> list[str]:
 
 def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | None:
     try:
-        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(
-            tzinfo=timezone.utc
-        )
+        return datetime.strptime(last_modified, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
     except (ValueError, TypeError):
         return None
 
@@ -428,19 +417,21 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
                 "path": "/",
             },
         ]
-        if eea_global_auth is not None:
-            cookies.append({
+        if eea_global_auth.get("login") is not None:
+            cookies.append(
+                {
                     "name": "__ac__eea",
-                    "value": eea_global_auth['__ac__eea'],
+                    "value": eea_global_auth["login"]["__ac__eea"],
                     "domain": "www.eea.europa.eu",
                     "path": "/",
                 },
             )
-            cookies.append({
-                "name": "auth_token",
-                "value": eea_global_auth['auth_token'],
-                "domain": "www.eea.europa.eu",
-                "path": "/",
+            cookies.append(
+                {
+                    "name": "auth_token",
+                    "value": eea_global_auth["login"]["auth_token"],
+                    "domain": "www.eea.europa.eu",
+                    "path": "/",
                 }
             )
         # Add cookies to the context
@@ -448,11 +439,11 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
             try:
                 context.add_cookies([cookie])  # type: ignore
             except Exception as e:
-                logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
+                logger.debug(
+                    f"Failed to add cookie {cookie['name']} for {domain}: {e}")
     except Exception:
         logger.exception(
-            f"Unexpected error while handling cookies for Web Connector with URL {url}"
-        )
+            f"Unexpected error while handling cookies for Web Connector with URL {url}")
 
 
 class WebConnector(LoadConnector):
@@ -481,25 +472,22 @@ class WebConnector(LoadConnector):
             self.to_visit_list = [_ensure_valid_url(base_url)]
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
-            self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
+            self.to_visit_list = extract_urls_from_sitemap(
+                _ensure_valid_url(base_url))
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
             # Explicitly check if running in multi-tenant mode to prevent potential security risks
             if MULTI_TENANT:
                 raise ValueError(
-                    "Upload input for web connector is not supported in cloud environments"
-                )
+                    "Upload input for web connector is not supported in cloud environments")
 
             logger.warning(
-                "This is not a UI supported Web Connector flow, "
-                "are you sure you want to do this?"
-            )
+                "This is not a UI supported Web Connector flow, are you sure you want to do this?")
             self.to_visit_list = _read_urls_file(base_url)
 
         else:
             raise ValueError(
-                "Invalid Web Connector Config, must choose a valid type between: " ""
-            )
+                "Invalid Web Connector Config, must choose a valid type between: ")
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         if credentials:
@@ -527,16 +515,14 @@ class WebConnector(LoadConnector):
 
         # First do a HEAD request to check content type without downloading the entire content
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
-        )
+            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True)
         is_pdf = is_pdf_content(head_response)
 
         if is_pdf or initial_url.lower().endswith(".pdf"):
             # PDF files are not checked for links
             response = requests.get(initial_url, headers=DEFAULT_HEADERS)
             page_text, metadata, images = read_pdf_file(
-                file=io.BytesIO(response.content)
-            )
+                file=io.BytesIO(response.content))
             last_modified = response.headers.get("Last-Modified")
 
             result.doc = Document(
@@ -545,11 +531,8 @@ class WebConnector(LoadConnector):
                 source=DocumentSource.WEB,
                 semantic_identifier=initial_url.split("/")[-1],
                 metadata=metadata,
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
+                doc_updated_at=(_get_datetime_from_last_modified_header(
+                    last_modified) if last_modified else None),
             )
 
             return result
@@ -563,21 +546,20 @@ class WebConnector(LoadConnector):
                 wait_until="domcontentloaded",  # Wait for DOM to be ready
             )
 
-            last_modified = (
-                page_response.header_value("Last-Modified") if page_response else None
-            )
+            last_modified = page_response.header_value(
+                "Last-Modified") if page_response else None
             final_url = page.url
             if final_url != initial_url:
                 protected_url_check(final_url)
                 initial_url = final_url
                 if initial_url in session_ctx.visited_links:
                     logger.info(
-                        f"{index}: {initial_url} redirected to {final_url} - already indexed"
-                    )
+                        f"{index}: {initial_url} redirected to {final_url} - already indexed")
                     page.close()
                     return result
 
-                logger.info(f"{index}: {initial_url} redirected to {final_url}")
+                logger.info(
+                    f"{index}: {initial_url} redirected to {final_url}")
                 session_ctx.visited_links.add(initial_url)
 
             # If we got here, the request was successful
@@ -585,7 +567,8 @@ class WebConnector(LoadConnector):
                 scroll_attempts = 0
                 previous_height = page.evaluate("document.body.scrollHeight")
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    page.evaluate(
+                        "window.scrollTo(0, document.body.scrollHeight)")
                     # wait for the content to load if we scrolled
                     page.wait_for_load_state("networkidle", timeout=30000)
                     time.sleep(0.5)  # let javascript run
@@ -601,8 +584,7 @@ class WebConnector(LoadConnector):
 
             if self.recursive:
                 internal_links = get_internal_links(
-                    session_ctx.base_url, initial_url, soup
-                )
+                    session_ctx.base_url, initial_url, soup)
                 for link in internal_links:
                     if link not in session_ctx.visited_links:
                         session_ctx.to_visit.append(link)
@@ -620,14 +602,13 @@ class WebConnector(LoadConnector):
             the code below can extract text from within these iframes.
             """
             logger.debug(
-                f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
-            )
+                f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}")
             if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
-                iframe_count = page.frame_locator("iframe").locator("html").count()
+                iframe_count = page.frame_locator(
+                    "iframe").locator("html").count()
                 if iframe_count > 0:
-                    iframe_texts = (
-                        page.frame_locator("iframe").locator("html").all_inner_texts()
-                    )
+                    iframe_texts = page.frame_locator(
+                        "iframe").locator("html").all_inner_texts()
                     document_text = "\n".join(iframe_texts)
                     """ 700 is the threshold value for the length of the text extracted
                     from the iframe based on the issue faced """
@@ -641,23 +622,20 @@ class WebConnector(LoadConnector):
             hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
             if hashed_text in session_ctx.content_hashes:
                 logger.info(
-                    f"{index}: Skipping duplicate title + content for {initial_url}"
-                )
+                    f"{index}: Skipping duplicate title + content for {initial_url}")
                 return result
 
             session_ctx.content_hashes.add(hashed_text)
 
             result.doc = Document(
                 id=initial_url,
-                sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
+                sections=[TextSection(
+                    link=initial_url, text=parsed_html.cleaned_text)],
                 source=DocumentSource.WEB,
                 semantic_identifier=parsed_html.title or initial_url,
                 metadata={},
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
+                doc_updated_at=(_get_datetime_from_last_modified_header(
+                    last_modified) if last_modified else None),
             )
         finally:
             page.close()
@@ -672,7 +650,8 @@ class WebConnector(LoadConnector):
             raise ValueError("No URLs to visit")
 
         base_url = self.to_visit_list[0]  # For the recursive case
-        check_internet_connection(base_url)  # make sure we can connect to the base url
+        # make sure we can connect to the base url
+        check_internet_connection(base_url)
 
         session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
         session_ctx.initialize()
@@ -700,8 +679,7 @@ class WebConnector(LoadConnector):
                     # Add a random delay between retries (exponential backoff)
                     delay = min(2**retry_count + random.uniform(0, 1), 10)
                     logger.info(
-                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
-                    )
+                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay")
                     time.sleep(delay)
 
                 try:
@@ -721,9 +699,12 @@ class WebConnector(LoadConnector):
 
                 break  # success / don't retry
 
-            logger.info("---------------------------------------------doc added to batch")
-            logger.info(f"---------------------------------------------batch_size={len(session_ctx.doc_batch)}")
-            logger.info(f"---------------------------------------------self.batch_size={self.batch_size}")
+            logger.info(
+                "---------------------------------------------doc added to batch")
+            logger.info(
+                f"---------------------------------------------batch_size={len(session_ctx.doc_batch)}")
+            logger.info(
+                f"---------------------------------------------self.batch_size={self.batch_size}")
 
             if len(session_ctx.doc_batch) >= self.batch_size:
                 session_ctx.initialize()
@@ -747,8 +728,7 @@ class WebConnector(LoadConnector):
         # Make sure we have at least one valid URL to check
         if not self.to_visit_list:
             raise ConnectorValidationError(
-                "No URL configured. Please provide at least one valid URL."
-            )
+                "No URL configured. Please provide at least one valid URL.")
 
         if (
             self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
@@ -764,8 +744,7 @@ class WebConnector(LoadConnector):
             protected_url_check(test_url)
         except ValueError as e:
             raise ConnectorValidationError(
-                f"Protected URL check failed for '{test_url}': {e}"
-            )
+                f"Protected URL check failed for '{test_url}': {e}")
         except ConnectionError as e:
             # Typically DNS or other network issues
             raise ConnectorValidationError(str(e))
@@ -777,14 +756,13 @@ class WebConnector(LoadConnector):
             err_str = str(e)
             if "401" in err_str:
                 raise CredentialExpiredError(
-                    f"Unauthorized access to '{test_url}': {e}"
-                )
+                    f"Unauthorized access to '{test_url}': {e}")
             elif "403" in err_str:
                 raise InsufficientPermissionsError(
-                    f"Forbidden access to '{test_url}': {e}"
-                )
+                    f"Forbidden access to '{test_url}': {e}")
             elif "404" in err_str:
-                raise ConnectorValidationError(f"Page not found for '{test_url}': {e}")
+                raise ConnectorValidationError(
+                    f"Page not found for '{test_url}': {e}")
             elif "Max retries exceeded" in err_str and "NameResolutionError" in err_str:
                 raise ConnectorValidationError(
                     f"Unable to resolve hostname for '{test_url}'. Please check the URL and your internet connection."
@@ -792,8 +770,7 @@ class WebConnector(LoadConnector):
             else:
                 # Could be a 5xx or another error, treat as unexpected
                 raise UnexpectedValidationError(
-                    f"Unexpected error validating '{test_url}': {e}"
-                )
+                    f"Unexpected error validating '{test_url}': {e}")
 
 
 if __name__ == "__main__":
