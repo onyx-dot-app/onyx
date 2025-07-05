@@ -96,6 +96,8 @@ import {
 } from "@/lib/llm/utils";
 import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
+import { useTokenCounter } from "@/hooks/useTokenCounter";
+import { TokenCounter } from "@/components/chat/TokenCounter";
 import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
@@ -190,6 +192,8 @@ export function ChatPage({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
+
+  const { sessionUsage, updateTokenUsage, resetTokenCounter } = useTokenCounter();
 
   const defaultAssistantIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.PERSONA_ID
@@ -448,6 +452,8 @@ export function ChatPage({
     const isChatSessionSwitch = existingChatSessionId !== priorChatSessionId;
     if (isChatSessionSwitch) {
       // de-select documents
+      // reset token counter when switching sessions
+      resetTokenCounter();
 
       // reset all filters
       filterManager.setSelectedDocumentSets([]);
@@ -518,6 +524,14 @@ export function ChatPage({
 
         updateCompleteMessageDetail(chatSession.chat_session_id, newMessageMap);
       }
+
+      // Initialize token counter with existing message token usage
+      // Note: Only messages created after token usage implementation will have usage data
+      newMessageHistory.forEach((message) => {
+        if (message.type === "assistant" && message.token_usage) {
+          updateTokenUsage(message.token_usage);
+        }
+      });
 
       setChatSessionSharedStatus(chatSession.shared_status);
 
@@ -1921,6 +1935,12 @@ export function ChatPage({
         }
       }
     }
+    
+    // Handle token usage from final message for all cases (new session and existing session)
+    if (finalMessage?.token_usage) {
+      updateTokenUsage(finalMessage.token_usage);
+    }
+    
     if (
       finalMessage?.context_docs &&
       finalMessage.context_docs.top_documents.length > 0 &&
@@ -3334,6 +3354,8 @@ export function ChatPage({
                               setFiles={setCurrentMessageFiles}
                               handleFileUpload={handleMessageSpecificFileUpload}
                               textAreaRef={textAreaRef}
+                              sessionUsage={sessionUsage}
+                              availableLlmProviders={llmProviders}
                             />
                             {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (

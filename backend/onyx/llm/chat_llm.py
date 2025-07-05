@@ -40,6 +40,7 @@ from onyx.llm.llm_provider_options import CREDENTIALS_FILE_CUSTOM_CONFIG_KEY
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
+from onyx.chat.token_usage_tracker import token_usage_tracker
 from onyx.utils.long_term_log import LongTermLogger
 
 
@@ -404,6 +405,8 @@ class DefaultMultiLLM(LLM):
                 max_tokens=max_tokens,
                 # streaming choice
                 stream=stream,
+                # Enable usage tracking for streaming
+                **({"stream_options": {"include_usage": True}} if stream else {}),
                 # model params
                 temperature=self._temperature,
                 timeout=timeout_override or self._timeout,
@@ -488,8 +491,20 @@ class DefaultMultiLLM(LLM):
             ),
         )
         choice = response.choices[0]
-        if hasattr(choice, "message"):
-            output = _convert_litellm_message_to_langchain_message(choice.message)
+        message = getattr(choice, "message", None)
+        
+        # Capture token usage from non-streaming response
+        if hasattr(response, 'usage') and response.usage:
+            # Convert usage to dict format if needed
+            usage_data = response.usage
+            if hasattr(usage_data, 'model_dump'):
+                usage_data = usage_data.model_dump()
+            elif hasattr(usage_data, '__dict__'):
+                usage_data = usage_data.__dict__
+            token_usage_tracker.set_usage(usage_data)
+        
+        if message:
+            output = _convert_litellm_message_to_langchain_message(message)
             if output:
                 self._record_result(prompt, output)
             return output
@@ -543,6 +558,19 @@ class DefaultMultiLLM(LLM):
                     output,
                     stop_reason=choice["finish_reason"],
                 )
+
+                # Capture token usage information when available
+                if "usage" in part and part["usage"]:
+                    # Convert usage to dict format if needed
+                    usage_data = part["usage"]
+                    if hasattr(usage_data, 'model_dump'):
+                        usage_data = usage_data.model_dump()
+                    elif hasattr(usage_data, 'dict'):
+                        usage_data = usage_data.dict()
+                    elif hasattr(usage_data, '__dict__'):
+                        usage_data = usage_data.__dict__
+                    # Store in thread-local tracker for access by chat processing
+                    token_usage_tracker.set_usage(usage_data)
 
                 if output is None:
                     output = message_chunk

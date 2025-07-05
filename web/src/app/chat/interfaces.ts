@@ -110,6 +110,14 @@ export interface Message {
   stopReason?: StreamStopReason | null;
   sub_questions?: SubQuestionDetail[] | null;
   is_agentic?: boolean | null;
+  token_usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    completion_tokens_details?: {
+      reasoning_tokens?: number;
+    };
+  } | null;
 
   // Streaming only
   second_level_generating?: boolean;
@@ -157,6 +165,14 @@ export interface BackendMessage {
   parentMessageId: number | null;
   refined_answer_improvement: boolean | null;
   is_agentic: boolean | null;
+  token_usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    completion_tokens_details?: {
+      reasoning_tokens?: number;
+    };
+  } | null;
 }
 
 export interface MessageResponseIDInfo {

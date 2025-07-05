@@ -1988,6 +1988,8 @@ class ChatMessage(Base):
 
     is_agentic: Mapped[bool] = mapped_column(Boolean, default=False)
     refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
+    # Token usage information from LLM API responses
+    token_usage: Mapped[dict[str, Any] | None] = mapped_column(postgresql.JSONB(), nullable=True)
 
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
     prompt: Mapped[Optional["Prompt"]] = relationship("Prompt")

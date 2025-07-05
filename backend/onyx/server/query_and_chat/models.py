@@ -246,6 +246,7 @@ class ChatMessageDetail(BaseModel):
     refined_answer_improvement: bool | None = None
     is_agentic: bool | None = None
     error: str | None = None
+    token_usage: dict[str, Any] | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
