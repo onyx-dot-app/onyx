@@ -157,9 +157,7 @@ class Answer:
         else:
             run_langgraph = run_basic_graph
 
-        stream = run_langgraph(
-            self.graph_config,
-        )
+        stream = run_langgraph(self.graph_config)
 
         processed_stream = []
         for packet in stream:
