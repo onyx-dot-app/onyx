@@ -1,5 +1,6 @@
 import string
 from collections.abc import Callable
+from uuid import UUID
 
 import nltk  # type:ignore
 from sqlalchemy.orm import Session
@@ -21,12 +22,14 @@ from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
 from onyx.context.search.utils import get_query_embedding
 from onyx.context.search.utils import get_query_embeddings
 from onyx.context.search.utils import inference_section_from_chunks
-from onyx.db.connector import fetch_unique_document_sources
 from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
+)
+from onyx.federated_connectors.federated_retrieval import (
+    get_federated_retrieval_functions,
 )
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
@@ -321,6 +324,7 @@ def _simplify_text(text: str) -> str:
 
 def retrieve_chunks(
     query: SearchQuery,
+    user_id: UUID | None,
     document_index: DocumentIndex,
     db_session: Session,
     retrieval_metrics_callback: (
@@ -377,13 +381,11 @@ def retrieve_chunks(
             )
 
     # Federated retrieval
-    connector_sources = set(fetch_unique_document_sources(db_session))
-    for source, retrieval_func in FEDERATED_SEARCH_FUNCTIONS.items():
-        # TODO: checking connector logic may change with new federated connectors
-        if source in connector_sources and (
-            source_filters is None or source in source_filters
-        ):
-            run_queries.append((retrieval_func, (query, db_session)))
+    retrieval_functions = get_federated_retrieval_functions(
+        db_session, user_id, query.filters.document_set
+    )
+    for retrieval_function in retrieval_functions:
+        run_queries.append((retrieval_function, (query,)))
 
     parallel_search_results = run_functions_tuples_in_parallel(run_queries)
     top_chunks = combine_retrieval_results(parallel_search_results)

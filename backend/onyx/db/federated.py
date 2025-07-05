@@ -3,10 +3,12 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
+from onyx.db.models import DocumentSet
 from onyx.db.models import FederatedConnector
 from onyx.db.models import FederatedConnector__DocumentSet
 from onyx.db.models import FederatedConnectorOAuthToken
@@ -120,6 +122,24 @@ def get_federated_connector_oauth_token(
     return result.scalar_one_or_none()
 
 
+def list_federated_connector_oauth_tokens(
+    db_session: Session,
+    user_id: UUID,
+) -> list[FederatedConnectorOAuthToken]:
+    """List all OAuth tokens for all federated connectors."""
+    stmt = (
+        select(FederatedConnectorOAuthToken)
+        .where(
+            FederatedConnectorOAuthToken.user_id == user_id,
+        )
+        .options(
+            joinedload(FederatedConnectorOAuthToken.federated_connector),
+        )
+    )
+    result = db_session.scalars(stmt)
+    return list(result)
+
+
 def create_federated_connector_document_set_mapping(
     db_session: Session,
     federated_connector_id: int,
@@ -190,6 +210,23 @@ def delete_federated_connector_document_set_mapping(
         return True
 
     return False
+
+
+def get_federated_connector_document_set_mappings_by_document_set_names(
+    db_session: Session,
+    document_set_names: list[str],
+) -> list[FederatedConnector__DocumentSet]:
+    """Get all document set mappings for a federated connector by document set names."""
+    stmt = (
+        select(FederatedConnector__DocumentSet)
+        .join(
+            DocumentSet,
+            FederatedConnector__DocumentSet.document_set_id == DocumentSet.id,
+        )
+        .where(DocumentSet.name.in_(document_set_names))
+    )
+    result = db_session.scalars(stmt)
+    return list(result)
 
 
 def update_federated_connector(

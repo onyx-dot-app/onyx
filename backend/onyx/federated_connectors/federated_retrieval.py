@@ -1,0 +1,74 @@
+from collections import defaultdict
+from typing import Protocol
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import SearchQuery
+from onyx.db.federated import (
+    get_federated_connector_document_set_mappings_by_document_set_names,
+)
+from onyx.db.federated import list_federated_connector_oauth_tokens
+from onyx.db.models import FederatedConnector__DocumentSet
+from onyx.federated_connectors.factory import get_federated_connector
+from onyx.utils.logger import setup_logger
+
+
+logger = setup_logger()
+
+
+class RetrievalFunction(Protocol):
+    def __call__(self, query: SearchQuery) -> list[InferenceChunk]: ...
+
+
+def get_federated_retrieval_functions(
+    db_session: Session,
+    user_id: UUID | None,
+    document_set_names: list[str] | None,
+) -> list[RetrievalFunction]:
+    if user_id is None:
+        logger.warning(
+            "No user ID provided, skipping federated retrieval. Federated retrieval not "
+            "supported with AUTH_TYPE=disabled."
+        )
+        return []
+
+    federated_connector__document_set_pairs = (
+        (
+            get_federated_connector_document_set_mappings_by_document_set_names(
+                db_session, document_set_names
+            )
+        )
+        if document_set_names
+        else []
+    )
+    federated_connector_id_to_document_sets: dict[
+        int, list[FederatedConnector__DocumentSet]
+    ] = defaultdict(list)
+    for pair in federated_connector__document_set_pairs:
+        federated_connector_id_to_document_sets[pair.federated_connector_id].append(
+            pair
+        )
+
+    retrieval_functions: list[RetrievalFunction] = []
+    federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
+    for oauth_token in federated_oauth_tokens:
+        document_set_associations = federated_connector_id_to_document_sets[
+            oauth_token.federated_connector_id
+        ]
+        if document_set_associations:
+            entities = document_set_associations[0].entities
+        else:
+            entities = {}
+
+        connector = get_federated_connector(
+            oauth_token.federated_connector.source,
+            oauth_token.federated_connector.credentials,
+        )
+        retrieval_functions.append(
+            lambda query: connector.search(
+                query, entities, access_token=oauth_token.token
+            )
+        )
+    return retrieval_functions

@@ -90,13 +90,6 @@ class SlackFederatedConnector(FederatedConnector):
                 example="1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p",
                 secret=True,
             ),
-            "redirect_uri": CredentialField(
-                type="str",
-                description="OAuth redirect URI (should be https://your-domain.com/api/federated/callback)",
-                required=False,
-                example="https://your-domain.com/api/federated/callback",
-                secret=False,
-            ),
         }
 
     @override
@@ -215,9 +208,8 @@ class SlackFederatedConnector(FederatedConnector):
     def search(
         self,
         query: SearchQuery,
-        entities: SlackEntities,  # type: ignore
+        entities: dict[str, Any],
         access_token: str,
-        limit: int = 10,
     ) -> list[InferenceChunk]:
         """Perform a federated search on Slack.
 
@@ -231,4 +223,4 @@ class SlackFederatedConnector(FederatedConnector):
             Search results in SlackSearchResponse format
         """
         with get_session_with_current_tenant() as db_session:
-            return slack_retrieval(query, db_session)
+            return slack_retrieval(query, access_token, db_session)

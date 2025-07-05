@@ -12,7 +12,6 @@ from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import NUM_FEDERATED_SECTIONS
 from onyx.configs.app_configs import NUM_MAX_SLACK_QUERIES
 from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
-from onyx.configs.app_configs import SLACK_USER_TOKEN
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
@@ -66,9 +65,11 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
     ]
 
 
-def query_slack(query_string: str, original_query: SearchQuery) -> list[SlackMessage]:
+def query_slack(
+    query_string: str, original_query: SearchQuery, access_token: str
+) -> list[SlackMessage]:
     # query slack
-    slack_client = WebClient(token=SLACK_USER_TOKEN)
+    slack_client = WebClient(token=access_token)
     try:
         response = slack_client.search_messages(
             query=query_string, count=NUM_SLACK_SEARCH_DOCS, highlight=True
@@ -179,13 +180,18 @@ def merge_slack_messages(
 
 
 @log_function_time(print_only=True)
-def slack_retrieval(query: SearchQuery, db_session: Session) -> list[InferenceChunk]:
+def slack_retrieval(
+    query: SearchQuery, access_token: str, db_session: Session
+) -> list[InferenceChunk]:
     # query slack
-    llm, fast_llm = get_default_llms()
+    _, fast_llm = get_default_llms()
     query_strings = build_slack_queries(query, fast_llm)
 
     results: list[list[SlackMessage]] = run_functions_tuples_in_parallel(
-        [(query_slack, (query_string, query)) for query_string in query_strings]
+        [
+            (query_slack, (query_string, query, access_token))
+            for query_string in query_strings
+        ]
     )
     slack_messages, docid_to_message = merge_slack_messages(results)
     if not slack_messages:

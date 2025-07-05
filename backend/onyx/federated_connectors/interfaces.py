@@ -3,8 +3,6 @@ from abc import abstractmethod
 from typing import Any
 from typing import Dict
 
-from pydantic import BaseModel
-
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
 from onyx.federated_connectors.models import CredentialField
@@ -84,9 +82,8 @@ class FederatedConnector(ABC):
     def search(
         self,
         query: SearchQuery,
-        entities: BaseModel,  # some pydantic model, defined on a per-connector basis
+        entities: dict[str, Any],
         access_token: str,
-        limit: int = 10,
     ) -> list[InferenceChunk]:
         """
         Perform a federated search using the provided query and entities.

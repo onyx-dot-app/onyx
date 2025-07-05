@@ -1463,7 +1463,7 @@ class FederatedConnector__DocumentSet(Base):
         ForeignKey("document_set.id"), nullable=False
     )
     # unique per source type. Validated before insertion.
-    entities: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=False)
+    entities: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB(), nullable=False)
 
     federated_connector: Mapped["FederatedConnector"] = relationship(
         "FederatedConnector", back_populates="document_sets"
