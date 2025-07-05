@@ -14,8 +14,6 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.chat_configs import BING_API_KEY
-from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
@@ -125,6 +123,9 @@ class InternetSearchToolConfig(BaseModel):
             citation_config=CitationConfig(all_docs_useful=True)
         )
     )
+    document_pruning_config: DocumentPruningConfig = Field(
+        default_factory=DocumentPruningConfig
+    )
 
 
 class ImageGenerationToolConfig(BaseModel):
@@ -220,17 +221,24 @@ def construct_tools(
                 if not internet_search_tool_config:
                     internet_search_tool_config = InternetSearchToolConfig()
 
-                if not (BING_API_KEY or EXA_API_KEY):
+                try:
+                    tool_dict[db_tool_model.id] = [
+                        InternetSearchTool(
+                            db_session=db_session,
+                            persona=persona,
+                            prompt_config=prompt_config,
+                            llm=llm,
+                            document_pruning_config=internet_search_tool_config.document_pruning_config,
+                            answer_style_config=internet_search_tool_config.answer_style_config,
+                            provider=None,  # Will use default provider
+                            num_results=10,
+                        )
+                    ]
+                except ValueError as e:
+                    logger.error(f"Failed to initialize Internet Search Tool: {e}")
                     raise ValueError(
                         "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
                     )
-                tool_dict[db_tool_model.id] = [
-                    InternetSearchTool(
-                        api_key=BING_API_KEY or EXA_API_KEY,
-                        answer_style_config=internet_search_tool_config.answer_style_config,
-                        prompt_config=prompt_config,
-                    )
-                ]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
@@ -273,6 +281,22 @@ def construct_tools(
             )
         )
         search_tool_config.document_pruning_config.using_tool_message = (
+            explicit_tool_calling_supported(
+                llm.config.model_provider, llm.config.model_name
+            )
+        )
+
+    if internet_search_tool_config:
+        internet_search_tool_config.document_pruning_config.tool_num_tokens = (
+            compute_all_tool_tokens(
+                tools,
+                get_tokenizer(
+                    model_name=llm.config.model_name,
+                    provider_type=llm.config.model_provider,
+                ),
+            )
+        )
+        internet_search_tool_config.document_pruning_config.using_tool_message = (
             explicit_tool_calling_supported(
                 llm.config.model_provider, llm.config.model_name
             )

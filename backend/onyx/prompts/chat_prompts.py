@@ -75,6 +75,28 @@ Follow Up Input:
 {{final_query}}
 """.strip()
 
+AGGRESSIVE_INTERNET_SEARCH_TEMPLATE = f"""
+Given the conversation history and a follow up query, determine if the system should call \
+an external internet search tool to better answer the latest user input.
+Your default response is {YES_SEARCH}.
+
+Respond "{SKIP_SEARCH}" if either:
+- There is sufficient information in chat history to FULLY and ACCURATELY answer the query AND \
+additional information or details would provide little or no value.
+- The query is some form of request that does not require additional information to handle.
+
+Conversation History:
+{GENERAL_SEP_PAT}
+{{chat_history}}
+{GENERAL_SEP_PAT}
+
+If you are at all unsure, respond with {YES_SEARCH}.
+Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
+
+Follow Up Input:
+{{final_query}}
+""".strip()
+
 
 # TODO, templatize this so users don't need to make code changes to use this
 AGGRESSIVE_SEARCH_TEMPLATE_LLAMA2 = f"""
