@@ -37,9 +37,6 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({
   // Calculate percentage based on context tokens (context window usage)
   const maxTokens = currentModel?.maxTokens || 200000; // Default fallback
   const tokenPercentage = (sessionUsage.contextTotalTokens / maxTokens) * 100;
-  
-  // Calculate total billed tokens
-  const totalBilledTokens = sessionUsage.billedPromptTokens + sessionUsage.billedCompletionTokens + sessionUsage.billedReasoningTokens;
 
   return (
     <TooltipProvider>
