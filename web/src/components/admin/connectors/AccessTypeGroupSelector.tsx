@@ -50,9 +50,12 @@ export function AccessTypeGroupSelector({
         access_type_helpers.setValue("public");
         return;
       }
-      if (!isUserAdmin && !isAutoSyncSupported) {
+
+      // Only set default access type if it's not already set, to avoid overriding user selections
+      if (!access_type.value && !isUserAdmin && !isAutoSyncSupported) {
         access_type_helpers.setValue("private");
       }
+
       if (
         access_type.value === "private" &&
         userGroups.length === 1 &&
@@ -76,6 +79,7 @@ export function AccessTypeGroupSelector({
     access_type_helpers,
     groups_helpers,
     isPaidEnterpriseFeaturesEnabled,
+    isAutoSyncSupported,
   ]);
 
   if (userGroupsIsLoading) {

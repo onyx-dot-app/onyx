@@ -73,6 +73,9 @@ from onyx.db.connector import get_connector_credential_ids
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.connector_credential_pair import (
+    fetch_connector_credential_pair_for_connector,
+)
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids_parallel
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -890,6 +893,7 @@ def create_connector_from_model(
             target_group_ids=connector_data.groups,
             object_is_public=connector_data.access_type == AccessType.PUBLIC,
             object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
+            object_is_new=True,
         )
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1002,6 +1006,7 @@ def update_connector_from_model(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
+    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     try:
         _validate_connector_allowed(connector_data.source)
         fetch_ee_implementation_or_noop(
@@ -1012,6 +1017,7 @@ def update_connector_from_model(
             target_group_ids=connector_data.groups,
             object_is_public=connector_data.access_type == AccessType.PUBLIC,
             object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
+            object_is_owned_by_user=cc_pair and user and cc_pair.creator_id == user.id,
         )
         connector_base = connector_data.to_connector_base()
     except ValueError as e:

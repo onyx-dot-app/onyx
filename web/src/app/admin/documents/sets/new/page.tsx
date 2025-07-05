@@ -26,7 +26,11 @@ function Main() {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
 
   if (isCCPairsLoading || userGroupsIsLoading) {
-    return <ThreeDotsLoader />;
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <ThreeDotsLoader />
+      </div>
+    );
   }
 
   if (ccPairsError || !ccPairs) {
