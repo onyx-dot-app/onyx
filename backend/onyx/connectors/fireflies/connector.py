@@ -103,7 +103,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
         source=DocumentSource.FIREFLIES,
         semantic_identifier=meeting_title,
         metadata={
-            k: v
+            k: str(v)
             for k, v in {
                 "meeting_date": meeting_date,
                 "duration_min": transcript.get("duration"),
