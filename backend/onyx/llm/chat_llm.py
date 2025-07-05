@@ -565,8 +565,6 @@ class DefaultMultiLLM(LLM):
                     usage_data = part["usage"]
                     if hasattr(usage_data, 'model_dump'):
                         usage_data = usage_data.model_dump()
-                    elif hasattr(usage_data, 'dict'):
-                        usage_data = usage_data.dict()
                     elif hasattr(usage_data, '__dict__'):
                         usage_data = usage_data.__dict__
                     # Store in thread-local tracker for access by chat processing
