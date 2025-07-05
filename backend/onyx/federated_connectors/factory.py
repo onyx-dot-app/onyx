@@ -1,10 +1,9 @@
 """Factory for creating federated connector instances."""
 
 from typing import Any
-from typing import Dict
 
 from onyx.configs.constants import FederatedConnectorSource
-from onyx.federated_connectors.interfaces import FederatedConnectorBase
+from onyx.federated_connectors.interfaces import FederatedConnector
 from onyx.federated_connectors.slack.federated_connector import SlackFederatedConnector
 from onyx.utils.logger import setup_logger
 
@@ -12,26 +11,19 @@ logger = setup_logger()
 
 
 def get_federated_connector(
-    source: FederatedConnectorSource, credentials: Dict[str, Any] | None = None
-) -> FederatedConnectorBase:
-    """
-    Factory function to get the appropriate federated connector instance.
+    source: FederatedConnectorSource,
+    credentials: dict[str, Any],
+) -> FederatedConnector:
+    """Get an instance of the appropriate federated connector."""
+    connector_cls = get_federated_connector_cls(source)
+    return connector_cls(credentials)
 
-    Args:
-        source: The federated connector source type
-        credentials: Optional credentials to initialize the connector with
 
-    Returns:
-        An instance of the appropriate federated connector
-
-    Raises:
-        ValueError: If the source is not supported
-    """
-    logger.info(f"Creating federated connector instance for source: {source}")
-
+def get_federated_connector_cls(
+    source: FederatedConnectorSource,
+) -> type[FederatedConnector]:
+    """Get the class of the appropriate federated connector."""
     if source == FederatedConnectorSource.FEDERATED_SLACK:
-        if credentials is None:
-            credentials = {}
-        return SlackFederatedConnector(credentials=credentials)
+        return SlackFederatedConnector
     else:
         raise ValueError(f"Unsupported federated connector source: {source}")

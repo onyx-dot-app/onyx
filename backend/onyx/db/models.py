@@ -1442,7 +1442,9 @@ class FederatedConnectorOAuthToken(Base):
         ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
     token: Mapped[str] = mapped_column(String, nullable=False)
-    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
     federated_connector: Mapped["FederatedConnector"] = relationship(
         "FederatedConnector", back_populates="oauth_tokens"

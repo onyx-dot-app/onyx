@@ -62,6 +62,56 @@ export async function handleOAuthAuthorizationResponse(
   return;
 }
 
+// Handler for federated connector OAuth callbacks
+export async function handleFederatedOAuthCallback(
+  federatedConnectorId: string,
+  code: string,
+  state: string
+): Promise<OAuthBaseCallbackResponse> {
+  // Use the generic callback endpoint - the connector ID will be extracted from the state parameter
+  const url = `/api/federated/callback?code=${encodeURIComponent(
+    code
+  )}&state=${encodeURIComponent(state)}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    let errorDetails = `Failed to handle federated OAuth callback: ${response.status}`;
+
+    try {
+      const responseBody = await response.text();
+      errorDetails += `\nResponse Body: ${responseBody}`;
+    } catch (err) {
+      if (err instanceof Error) {
+        errorDetails += `\nUnable to read response body: ${err.message}`;
+      } else {
+        errorDetails += `\nUnable to read response body: Unknown error type`;
+      }
+    }
+
+    throw new Error(errorDetails);
+  }
+
+  // Parse the JSON response and extract the data field
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.message || "OAuth callback failed");
+  }
+
+  return {
+    success: true,
+    message: result.message || "OAuth authorization successful",
+    redirect_on_success: `/admin/federated/${federatedConnectorId}`,
+    finalize_url: null,
+  };
+}
+
 // server side handler to process the oauth redirect callback
 // https://api.slack.com/authentication/oauth-v2#exchanging
 export async function handleOAuthSlackAuthorizationResponse(

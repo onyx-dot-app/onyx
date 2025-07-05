@@ -180,23 +180,8 @@ export function UserSettingsModal({
   };
 
   const handleConnectOAuth = (authorizeUrl: string) => {
-    // Open OAuth URL in a popup window
-    const popup = window.open(
-      authorizeUrl,
-      "oauth",
-      "width=600,height=700,scrollbars=yes,resizable=yes"
-    );
-
-    // Listen for the popup to close (OAuth completion)
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        // Refresh the connectors list
-        if (refetchFederatedConnectors) {
-          refetchFederatedConnectors();
-        }
-      }
-    }, 1000);
+    // Redirect to OAuth URL in the same window
+    window.location.href = authorizeUrl;
   };
 
   const handleDisconnectOAuth = async (connectorId: number) => {
@@ -660,7 +645,7 @@ export function UserSettingsModal({
                   {federatedConnectors && federatedConnectors.length > 0 && (
                     <div className="space-y-3">
                       <h4 className="text-md font-medium text-muted-foreground">
-                        Federated Search
+                        Federated Connectors
                       </h4>
                       {(() => {
                         // Helper function to format source names

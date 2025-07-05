@@ -32,9 +32,6 @@ class SlackCredentials(BaseModel):
 
     client_id: str = Field(..., description="Slack app client ID")
     client_secret: str = Field(..., description="Slack app client secret")
-    redirect_uri: Optional[str] = Field(
-        default=None, description="OAuth redirect URI (optional)"
-    )
 
     @field_validator("client_id")
     @classmethod
@@ -66,17 +63,6 @@ class SlackUserInfo(BaseModel):
     team_id: Optional[str] = Field(default=None, description="Team ID")
     name: Optional[str] = Field(default=None, description="User name")
     email: Optional[str] = Field(default=None, description="User email")
-
-
-class SlackOAuthConfig(BaseModel):
-    """Configuration for Slack OAuth."""
-
-    client_id: str = Field(..., description="Slack app client ID")
-    client_secret: str = Field(..., description="Slack app client secret")
-    redirect_uri: str = Field(..., description="OAuth redirect URI")
-    state: Optional[str] = Field(
-        default=None, description="OAuth state parameter for security"
-    )
 
 
 class SlackSearchResult(BaseModel):

@@ -12,11 +12,21 @@ from onyx.federated_connectors.models import EntityField
 from onyx.federated_connectors.models import OAuthResult
 
 
-class FederatedConnectorBase(ABC):
+class FederatedConnector(ABC):
     """Base interface that all federated connectors must implement."""
 
     @abstractmethod
-    def validate(self, entities: Dict[str, Any]) -> bool:
+    def __init__(self, credentials: dict[str, Any]):
+        """
+        Initialize the connector with credentials + validate their structure.
+
+        Args:
+            credentials: Dictionary of credentials to initialize the connector with
+        """
+        self.credentials = credentials
+
+    @abstractmethod
+    def validate_entities(self, entities: Dict[str, Any]) -> bool:
         """
         Validate that the provided entities match the expected structure.
 
@@ -27,8 +37,9 @@ class FederatedConnectorBase(ABC):
             True if entities are valid, False otherwise
         """
 
+    @classmethod
     @abstractmethod
-    def entities(self) -> Dict[str, EntityField]:
+    def entities_schema(cls) -> Dict[str, EntityField]:
         """
         Return the specification of what entities are available for this connector.
 
@@ -37,8 +48,9 @@ class FederatedConnectorBase(ABC):
             describing the expected structure and constraints.
         """
 
+    @classmethod
     @abstractmethod
-    def credentials_schema(self) -> Dict[str, CredentialField]:
+    def credentials_schema(cls) -> Dict[str, CredentialField]:
         """
         Return the specification of what credentials are required for this connector.
 
@@ -48,19 +60,7 @@ class FederatedConnectorBase(ABC):
         """
 
     @abstractmethod
-    def validate_credentials(self, credentials: Dict[str, Any]) -> bool:
-        """
-        Validate that the provided credentials match the expected structure and constraints.
-
-        Args:
-            credentials: Dictionary of credentials to validate
-
-        Returns:
-            True if credentials are valid, False otherwise
-        """
-
-    @abstractmethod
-    def authorize(self) -> str:
+    def authorize(self, redirect_uri: str) -> str:
         """
         Generate the OAuth authorization URL.
 
@@ -69,7 +69,7 @@ class FederatedConnectorBase(ABC):
         """
 
     @abstractmethod
-    def callback(self, callback_data: Dict[str, Any]) -> OAuthResult:
+    def callback(self, callback_data: Dict[str, Any], redirect_uri: str) -> OAuthResult:
         """
         Handle the OAuth callback and exchange the authorization code for tokens.
 

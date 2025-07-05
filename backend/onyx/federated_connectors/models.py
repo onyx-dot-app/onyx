@@ -39,7 +39,6 @@ class CredentialField(FieldSpec):
 class OAuthResult(BaseModel):
     """Standardized OAuth result that all federated connectors should return from callback."""
 
-    success: bool = Field(..., description="Whether the OAuth flow was successful")
     access_token: Optional[str] = Field(
         default=None, description="The access token received"
     )
@@ -52,10 +51,6 @@ class OAuthResult(BaseModel):
     )
     refresh_token: Optional[str] = Field(
         default=None, description="Refresh token if applicable"
-    )
-    error: Optional[str] = Field(default=None, description="Error code if failed")
-    error_description: Optional[str] = Field(
-        default=None, description="Human-readable error description"
     )
 
     # Additional fields that might be useful

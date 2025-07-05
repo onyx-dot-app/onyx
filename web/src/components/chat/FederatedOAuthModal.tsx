@@ -35,21 +35,8 @@ export function FederatedOAuthModal({
   }
 
   const handleAuthorize = (authorizeUrl: string) => {
-    // Open OAuth URL in a popup window
-    const popup = window.open(
-      authorizeUrl,
-      "oauth",
-      "width=600,height=700,scrollbars=yes,resizable=yes"
-    );
-
-    // Listen for the popup to close (OAuth completion)
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        // Reload the page to refresh OAuth status
-        window.location.reload();
-      }
-    }, 1000);
+    // Redirect to OAuth URL in the same window
+    window.location.href = authorizeUrl;
   };
 
   const applicationName =

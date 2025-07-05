@@ -1,4 +1,6 @@
-import secrets
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from typing import Any
 from urllib.parse import urlencode
 
@@ -6,28 +8,27 @@ import requests
 from pydantic import ValidationError
 from typing_extensions import override
 
-from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.federated_connectors.interfaces import FederatedConnectorBase
+from onyx.federated_connectors.interfaces import FederatedConnector
 from onyx.federated_connectors.models import CredentialField
 from onyx.federated_connectors.models import EntityField
 from onyx.federated_connectors.models import OAuthResult
 from onyx.federated_connectors.slack.models import SlackCredentials
 from onyx.federated_connectors.slack.models import SlackEntities
-from onyx.federated_connectors.slack.models import SlackOAuthConfig
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-class SlackFederatedConnector(FederatedConnectorBase):
-    """Federated connector implementation for Slack."""
+class SlackFederatedConnector(FederatedConnector):
+    def __init__(self, credentials: dict[str, Any]):
+        self.slack_credentials = SlackCredentials(**credentials)
 
     @override
-    def validate(self, entities: dict[str, Any]) -> bool:
+    def validate_entities(self, entities: dict[str, Any]) -> bool:
         """Check the entities and verify that they match the expected structure/all values are valid.
 
         For Slack federated search, we expect:
@@ -45,8 +46,9 @@ class SlackFederatedConnector(FederatedConnectorBase):
             logger.error(f"Error validating Slack entities: {e}")
             return False
 
+    @classmethod
     @override
-    def entities(self) -> dict[str, EntityField]:
+    def entities_schema(cls) -> dict[str, EntityField]:
         """Return the specifications of what entities are available for this federated search type.
 
         Returns a specification that tells the caller:
@@ -69,8 +71,9 @@ class SlackFederatedConnector(FederatedConnectorBase):
             ),
         }
 
+    @classmethod
     @override
-    def credentials_schema(self) -> dict[str, CredentialField]:
+    def credentials_schema(cls) -> dict[str, CredentialField]:
         """Return the specification of what credentials are required for Slack connector."""
         return {
             "client_id": CredentialField(
@@ -89,59 +92,25 @@ class SlackFederatedConnector(FederatedConnectorBase):
             ),
             "redirect_uri": CredentialField(
                 type="str",
-                description="OAuth redirect URI (optional - will use default if not provided)",
+                description="OAuth redirect URI (should be https://your-domain.com/api/federated/callback)",
                 required=False,
-                example="https://your-domain.com/api/federated/slack/callback",
+                example="https://your-domain.com/api/federated/callback",
                 secret=False,
             ),
         }
 
     @override
-    def validate_credentials(self, credentials: dict[str, Any]) -> bool:
-        """Validate that the provided credentials match the expected structure."""
-        try:
-            # Use Pydantic model for validation
-            SlackCredentials(**credentials)
-            return True
-        except ValidationError as e:
-            logger.warning(f"Validation error for Slack credentials: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error validating Slack credentials: {e}")
-            return False
-
-    def __init__(self, credentials: dict[str, Any]):
-        """Initialize with credentials.
-
-        Args:
-            credentials: Credentials from the federated connector. If not provided, will use defaults or env vars.
-        """
-        self.oauth_config = SlackOAuthConfig(
-            client_id=credentials.get("client_id", ""),
-            client_secret=credentials.get("client_secret", ""),
-            redirect_uri=credentials.get("redirect_uri")
-            or self._get_default_redirect_uri(),
-        )
-
-    def _get_default_redirect_uri(self) -> str:
-        """Get default redirect URI."""
-        return f"{WEB_DOMAIN}/api/federated/slack/callback"
-
-    @override
-    def authorize(self) -> str:
+    def authorize(self, redirect_uri: str) -> str:
         """Get back the OAuth URL for Slack authorization.
 
         Returns the URL where users should be redirected to authorize the application.
+        Note: State parameter will be added by the API layer.
         """
-        # Generate a secure state parameter (in production, store this for verification)
-        state = secrets.token_urlsafe(32)
-
-        # Build OAuth URL with proper parameters
+        # Build OAuth URL with proper parameters (no state - handled by API layer)
         params = {
-            "client_id": self.oauth_config.client_id,
+            "client_id": self.slack_credentials.client_id,
             "user_scope": " ".join(["search:read"]),
-            "redirect_uri": self.oauth_config.redirect_uri,
-            "state": state,
+            "redirect_uri": redirect_uri,
         }
 
         # Build query string
@@ -151,88 +120,77 @@ class SlackFederatedConnector(FederatedConnectorBase):
         return oauth_url
 
     @override
-    def callback(self, callback_data: dict[str, Any]) -> OAuthResult:
+    def callback(self, callback_data: dict[str, Any], redirect_uri: str) -> OAuthResult:
         """Handle the response from the OAuth flow and return it in a standard format.
 
         Args:
-            callback_data: The data received from the OAuth callback
+            callback_data: The data received from the OAuth callback (state already validated by API layer)
 
         Returns:
             Standardized OAuthResult
         """
-        try:
-            # Extract authorization code from callback
-            auth_code = callback_data.get("code")
-            callback_data.get("state")
-            error = callback_data.get("error")
+        # Extract authorization code from callback
+        auth_code = callback_data.get("code")
+        error = callback_data.get("error")
 
-            if error:
-                logger.error(f"OAuth error received: {error}")
-                return OAuthResult(
-                    success=False,
-                    error=error,
-                    error_description=callback_data.get(
-                        "error_description", "OAuth authorization failed"
-                    ),
-                )
+        if error:
+            raise RuntimeError(f"OAuth error received: {error}")
 
-            if not auth_code:
-                logger.error("No authorization code received")
-                return OAuthResult(
-                    success=False,
-                    error="missing_code",
-                    error_description="Authorization code not received",
-                )
+        if not auth_code:
+            raise ValueError("No authorization code received")
 
-            # Exchange authorization code for access token
-            token_response = self._exchange_code_for_token(auth_code)
+        # Exchange authorization code for access token
+        token_response = self._exchange_code_for_token(auth_code, redirect_uri)
 
-            if not token_response.get("ok"):
-                return OAuthResult(
-                    success=False,
-                    error=token_response.get("error", "token_exchange_failed"),
-                    error_description="Failed to exchange authorization code for token",
-                )
-
-            # Build team info
-            team_info = None
-            if "team" in token_response:
-                team_info = {
-                    "id": token_response["team"]["id"],
-                    "name": token_response["team"]["name"],
-                }
-
-            # Build user info
-            user_info = None
-            if "authed_user" in token_response:
-                user_info = {
-                    "id": token_response["authed_user"]["id"],
-                    "scope": token_response["authed_user"].get("scope"),
-                    "token_type": token_response["authed_user"].get("token_type"),
-                }
-
-            # Slack tokens don't expire by default
-            return OAuthResult(
-                success=True,
-                access_token=token_response.get("access_token"),
-                token_type=token_response.get("token_type", "bearer"),
-                scope=token_response.get("scope"),
-                expires_at=None,  # Slack tokens don't expire
-                refresh_token=None,  # Slack doesn't use refresh tokens
-                team=team_info,
-                user=user_info,
-                raw_response=token_response,
+        if not token_response.get("ok"):
+            raise RuntimeError(
+                f"Failed to exchange authorization code for token: {token_response.get('error')}"
             )
 
-        except Exception as e:
-            logger.error(f"Error processing Slack OAuth callback: {e}")
-            return OAuthResult(
-                success=False,
-                error="processing_error",
-                error_description=f"Error processing OAuth callback: {str(e)}",
+        # Build team info
+        team_info = None
+        if "team" in token_response:
+            team_info = {
+                "id": token_response["team"]["id"],
+                "name": token_response["team"]["name"],
+            }
+
+        # Build user info and extract OAuth tokens
+        if "authed_user" not in token_response:
+            raise RuntimeError("Missing authed_user in OAuth response from Slack")
+
+        authed_user = token_response["authed_user"]
+        user_info = {
+            "id": authed_user["id"],
+            "scope": authed_user.get("scope"),
+            "token_type": authed_user.get("token_type"),
+        }
+
+        # Extract OAuth tokens from authed_user
+        access_token = authed_user.get("access_token")
+        refresh_token = authed_user.get("refresh_token")
+        token_type = authed_user.get("token_type", "bearer")
+        scope = authed_user.get("scope")
+
+        # Calculate expires_at from expires_in if present
+        expires_at = None
+        if "expires_in" in authed_user:
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                seconds=authed_user["expires_in"]
             )
 
-    def _exchange_code_for_token(self, code: str) -> dict[str, Any]:
+        return OAuthResult(
+            access_token=access_token,
+            token_type=token_type,
+            scope=scope,
+            expires_at=expires_at,
+            refresh_token=refresh_token,
+            team=team_info,
+            user=user_info,
+            raw_response=token_response,
+        )
+
+    def _exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange authorization code for access token.
 
         Args:
@@ -241,21 +199,17 @@ class SlackFederatedConnector(FederatedConnectorBase):
         Returns:
             Token response from Slack API
         """
-        try:
-            response = requests.post(
-                "https://slack.com/api/oauth.v2.access",
-                data={
-                    "client_id": self.oauth_config.client_id,
-                    "client_secret": self.oauth_config.client_secret,
-                    "code": code,
-                    "redirect_uri": self.oauth_config.redirect_uri,
-                },
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f"Error exchanging code for token: {e}")
-            return {"ok": False, "error": str(e)}
+        response = requests.post(
+            "https://slack.com/api/oauth.v2.access",
+            data={
+                "client_id": self.slack_credentials.client_id,
+                "client_secret": self.slack_credentials.client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+        )
+        response.raise_for_status()
+        return response.json()
 
     @override
     def search(

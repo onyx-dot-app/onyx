@@ -43,8 +43,9 @@ def validate_federated_connector_credentials(
 ) -> bool:
     """Validate credentials for a federated connector using the connector's validation logic."""
     try:
-        connector_instance = get_federated_connector(source)
-        return connector_instance.validate_credentials(credentials)
+        # the initialization will fail if the credentials are invalid
+        get_federated_connector(source, credentials)
+        return True
     except Exception as e:
         logger.error(f"Error validating credentials for source {source}: {e}")
         return False
@@ -76,7 +77,7 @@ def update_federated_connector_oauth_token(
     federated_connector_id: int,
     user_id: UUID,
     token: str,
-    expires_at: datetime,
+    expires_at: datetime | None = None,
 ) -> FederatedConnectorOAuthToken:
     """Update or create OAuth token for a federated connector and user."""
     # First, try to find existing token for this user and connector
