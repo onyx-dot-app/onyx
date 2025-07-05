@@ -81,8 +81,8 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({
             </div>
             <div className="border-t pt-1 mt-2">
               <div className="text-neutral-600 dark:text-neutral-300 font-medium">Context Usage:</div>
-              <div>Current: {sessionUsage.contextTotalTokens.toLocaleString()}</div>
-              <div>Max: {maxTokens.toLocaleString()} ({tokenPercentage.toFixed(1)}% used)</div>
+              <div>Current: {formatNumber(sessionUsage.contextTotalTokens)}</div>
+              <div>Max: {formatNumber(maxTokens)} ({tokenPercentage.toFixed(1)}% used)</div>
             </div>
             {currentModel && (
               <div className="text-neutral-400 mt-1">
