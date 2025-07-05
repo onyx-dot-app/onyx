@@ -587,28 +587,72 @@ export function UserSettingsModal({
                       <h4 className="text-md font-medium text-muted-foreground">
                         Indexed Connectors
                       </h4>
-                      {ccPairs.map((ccPair) => (
-                        <div
-                          key={ccPair.source}
-                          className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
-                        >
-                          <div className="flex items-center gap-3">
-                            <SourceIcon
-                              sourceType={ccPair.source}
-                              iconSize={24}
-                            />
-                            <div>
-                              <p className="font-medium">{ccPair.source}</p>
-                              <p className="text-sm text-muted-foreground">
-                                Connected
-                              </p>
+                      {(() => {
+                        // Group connectors by source
+                        const groupedConnectors = ccPairs.reduce(
+                          (acc, ccPair) => {
+                            const source = ccPair.source;
+                            if (!acc[source]) {
+                              acc[source] = {
+                                source,
+                                count: 0,
+                                hasSuccessfulRun: false,
+                              };
+                            }
+                            acc[source].count++;
+                            if (ccPair.has_successful_run) {
+                              acc[source].hasSuccessfulRun = true;
+                            }
+                            return acc;
+                          },
+                          {} as Record<
+                            string,
+                            {
+                              source: ValidSources;
+                              count: number;
+                              hasSuccessfulRun: boolean;
+                            }
+                          >
+                        );
+
+                        // Helper function to format source names
+                        const formatSourceName = (source: string) => {
+                          return source
+                            .split("_")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        return Object.values(groupedConnectors).map((group) => (
+                          <div
+                            key={group.source}
+                            className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
+                          >
+                            <div className="flex items-center gap-3">
+                              <SourceIcon
+                                sourceType={group.source}
+                                iconSize={24}
+                              />
+                              <div>
+                                <p className="font-medium">
+                                  {formatSourceName(group.source)}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {group.count > 1
+                                    ? `${group.count} connectors`
+                                    : "Connected"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-sm text-muted-foreground font-medium">
+                              Active
                             </div>
                           </div>
-                          <div className="text-sm text-muted-foreground font-medium">
-                            Active
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   )}
 
@@ -618,66 +662,83 @@ export function UserSettingsModal({
                       <h4 className="text-md font-medium text-muted-foreground">
                         Federated Search
                       </h4>
-                      {federatedConnectors.map((connector) => (
-                        <div
-                          key={connector.federated_connector_id}
-                          className="flex items-center justify-between p-4 rounded-lg border border-border"
-                        >
-                          <div className="flex items-center gap-3">
-                            <SourceIcon
-                              sourceType={
-                                connector.source
-                                  .toLowerCase()
-                                  .replace("federated_", "") as ValidSources
-                              }
-                              iconSize={24}
-                            />
+                      {(() => {
+                        // Helper function to format source names
+                        const formatSourceName = (source: string) => {
+                          return source
+                            .split("_")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        return federatedConnectors.map((connector) => (
+                          <div
+                            key={connector.federated_connector_id}
+                            className="flex items-center justify-between p-4 rounded-lg border border-border"
+                          >
+                            <div className="flex items-center gap-3">
+                              <SourceIcon
+                                sourceType={
+                                  connector.source
+                                    .toLowerCase()
+                                    .replace("federated_", "") as ValidSources
+                                }
+                                iconSize={24}
+                              />
+                              <div>
+                                <p className="font-medium">
+                                  {formatSourceName(connector.name)}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {connector.has_oauth_token
+                                    ? "Connected"
+                                    : "Not connected"}
+                                </p>
+                              </div>
+                            </div>
                             <div>
-                              <p className="font-medium">{connector.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {connector.has_oauth_token
-                                  ? "Connected"
-                                  : "Not connected"}
-                              </p>
+                              {connector.has_oauth_token ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleDisconnectOAuth(
+                                      connector.federated_connector_id
+                                    )
+                                  }
+                                  disabled={
+                                    isDisconnecting ===
+                                    connector.federated_connector_id
+                                  }
+                                >
+                                  {isDisconnecting ===
+                                  connector.federated_connector_id
+                                    ? "Disconnecting..."
+                                    : "Disconnect"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    if (connector.authorize_url) {
+                                      handleConnectOAuth(
+                                        connector.authorize_url
+                                      );
+                                    }
+                                  }}
+                                  disabled={!connector.authorize_url}
+                                >
+                                  <FiExternalLink className="mr-2" size={14} />
+                                  Connect
+                                </Button>
+                              )}
                             </div>
                           </div>
-                          <div>
-                            {connector.has_oauth_token ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleDisconnectOAuth(
-                                    connector.federated_connector_id
-                                  )
-                                }
-                                disabled={
-                                  isDisconnecting ===
-                                  connector.federated_connector_id
-                                }
-                              >
-                                {isDisconnecting ===
-                                connector.federated_connector_id
-                                  ? "Disconnecting..."
-                                  : "Disconnect"}
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  if (connector.authorize_url) {
-                                    handleConnectOAuth(connector.authorize_url);
-                                  }
-                                }}
-                                disabled={!connector.authorize_url}
-                              >
-                                <FiExternalLink className="mr-2" size={14} />
-                                Connect
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   )}
 
