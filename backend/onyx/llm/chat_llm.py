@@ -502,6 +502,9 @@ class DefaultMultiLLM(LLM):
             elif hasattr(usage_data, '__dict__'):
                 usage_data = usage_data.__dict__
             token_usage_tracker.set_usage(usage_data)
+
+        choice = response.choices[0]
+        message = getattr(choice, "message", None)
         
         if message:
             output = _convert_litellm_message_to_langchain_message(message)
