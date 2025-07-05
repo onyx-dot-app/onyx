@@ -528,7 +528,7 @@ export function ChatPage({
       // Initialize token counter with existing message token usage
       // Note: Only messages created after token usage implementation will have usage data
       newMessageHistory.forEach((message) => {
-        if (message.type === "assistant" && message.token_usage) {
+        if (message.type === "assistant" && message.token_usage.total_tokens > 0) {
           updateTokenUsage(message.token_usage);
         }
       });
@@ -1937,7 +1937,7 @@ export function ChatPage({
     }
     
     // Handle token usage from final message for all cases (new session and existing session)
-    if (finalMessage?.token_usage) {
+    if (finalMessage && finalMessage.token_usage.total_tokens > 0) {
       updateTokenUsage(finalMessage.token_usage);
     }
     

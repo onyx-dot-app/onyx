@@ -524,7 +524,11 @@ export function processRawChatHistory(
       isImprovement:
         (messageInfo.refined_answer_improvement as unknown as boolean) || false,
       is_agentic: messageInfo.is_agentic,
-      token_usage: messageInfo.token_usage,
+      token_usage: messageInfo.token_usage || {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
     };
 
     messages.set(messageInfo.message_id, message);
