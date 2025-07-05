@@ -131,6 +131,11 @@ class UserKnowledgeFilePacket(BaseModel):
     user_files: list[FileDescriptor]
 
 
+class TokenUsagePacket(BaseModel):
+    """Packet containing token usage information from LLM responses"""
+    token_usage: dict[str, Any]
+
+
 class LLMRelevanceFilterResponse(BaseModel):
     llm_selected_doc_indices: list[int]
 
@@ -260,6 +265,13 @@ class PersonaOverrideConfig(BaseModel):
     custom_tools_openapi: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class TokenUsageResponse(BaseModel):
+    """Token usage information for LLM API responses"""
+    usage: dict[str, Union[int, dict[str, int]]] = Field(
+        description="Token usage data with prompt_tokens, completion_tokens, total_tokens, and optional completion_tokens_details"
+    )
+
+
 AnswerQuestionPossibleReturn = (
     OnyxAnswerPiece
     | CitationInfo
@@ -267,6 +279,7 @@ AnswerQuestionPossibleReturn = (
     | CustomToolResponse
     | StreamingError
     | StreamStopInfo
+    | TokenUsageResponse
 )
 
 

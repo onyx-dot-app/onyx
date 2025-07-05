@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from collections.abc import Generator
 from collections.abc import Iterator
+from typing import Any
 from typing import cast
 from typing import Protocol
 from uuid import UUID
@@ -40,7 +41,9 @@ from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
+from onyx.chat.models import TokenUsagePacket
 from onyx.chat.models import UserKnowledgeFilePacket
+from onyx.chat.token_usage_tracker import token_usage_tracker
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
@@ -409,6 +412,7 @@ ChatPacket = (
     | StreamStopInfo
     | AgentSearchPacket
     | UserKnowledgeFilePacket
+    | TokenUsagePacket
 )
 ChatPacketStream = Iterator[ChatPacket]
 
@@ -847,6 +851,10 @@ def stream_chat_message_objects(
             error: str | None,
             tool_call: ToolCall | None,
         ) -> ChatMessage:
+            # Get current token usage at time of message creation
+            usage_data = token_usage_tracker.get_usage()
+            logger.info(f"Token usage in create_new_chat_message: {usage_data}")
+            
             return create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=(
@@ -870,6 +878,7 @@ def stream_chat_message_objects(
                 commit=False,
                 reserved_message_id=reserved_message_id,
                 is_agentic=new_msg_req.use_agentic_search,
+                token_usage=usage_data,
             )
 
         partial_response = create_response
@@ -1018,6 +1027,10 @@ def stream_chat_message_objects(
             lambda: AnswerPostInfo(ai_message_files=[])
         )
         refined_answer_improvement = True
+        
+        # Variable to store token usage captured during streaming
+        streaming_captured_token_usage = None
+        
         for packet in answer.processed_streamed_output:
             if isinstance(packet, ToolResponse):
                 info_by_subq = yield from _process_tool_response(
@@ -1049,6 +1062,14 @@ def stream_chat_message_objects(
                     ]
                     info.tool_result = packet
                 yield cast(ChatPacket, packet)
+            
+            # Capture token usage during streaming - check after each packet
+            # Try thread-local first, then fall back to latest global usage
+            current_usage = token_usage_tracker.get_usage() or token_usage_tracker.get_latest_usage()
+            if current_usage is not None and streaming_captured_token_usage is None:
+                streaming_captured_token_usage = current_usage
+                logger.info(f"Token usage captured during streaming: {streaming_captured_token_usage}")
+                # Don't yield TokenUsagePacket - token usage will only be in the final message
 
     except ValueError as e:
         logger.exception("Failed to process chat message.")
@@ -1084,6 +1105,17 @@ def stream_chat_message_objects(
         db_session.rollback()
         return
 
+    # Capture token usage immediately after streaming is complete
+    immediate_token_usage = token_usage_tracker.get_usage() or token_usage_tracker.get_latest_usage()
+    logger.info(f"Token usage captured immediately after streaming: {immediate_token_usage}")
+    
+    # Use the best available token usage (streaming capture takes precedence)
+    final_token_usage = streaming_captured_token_usage or immediate_token_usage
+    logger.info(f"Final token usage to use: {final_token_usage}")
+
+    # Use the token usage captured during or after streaming
+    logger.info(f"Passing final token usage to post-processing: {final_token_usage}")
+
     yield from _post_llm_answer_processing(
         answer=answer,
         info_by_subq=info_by_subq,
@@ -1093,6 +1125,7 @@ def stream_chat_message_objects(
         db_session=db_session,
         chat_session_id=chat_session_id,
         refined_answer_improvement=refined_answer_improvement,
+        captured_token_usage=final_token_usage,
     )
 
 
@@ -1105,6 +1138,7 @@ def _post_llm_answer_processing(
     db_session: Session,
     chat_session_id: UUID,
     refined_answer_improvement: bool | None,
+    captured_token_usage: dict[str, Any] | None = None,
 ) -> Generator[ChatPacket, None, None]:
     """
     Stores messages in the db and yields some final packets to the frontend
@@ -1143,7 +1177,40 @@ def _post_llm_answer_processing(
                 )
             ]
         )
-        gen_ai_response_message = partial_response(
+        
+        # Create a wrapper function that overrides token usage for the final message
+        def create_final_message_with_captured_usage(
+            message: str,
+            rephrased_query: str | None,
+            reference_docs: list[DbSearchDoc] | None,
+            files: list[FileDescriptor],
+            token_count: int,
+            citations: dict[int, int] | None,
+            error: str | None,
+            tool_call: ToolCall | None,
+        ) -> ChatMessage:
+            # Call the original partial_response function but override the stored usage
+            msg = partial_response(
+                message=message,
+                rephrased_query=rephrased_query,
+                reference_docs=reference_docs,
+                files=files,
+                token_count=token_count,
+                citations=citations,
+                error=error,
+                tool_call=tool_call,
+            )
+            
+            # Override the token_usage with our captured value
+            if captured_token_usage is not None:
+                logger.info(f"Overriding token_usage in final message with captured value: {captured_token_usage}")
+                msg.token_usage = captured_token_usage
+            else:
+                logger.warning("No captured token usage available for final message")
+            
+            return msg
+            
+        gen_ai_response_message = create_final_message_with_captured_usage(
             message=answer.llm_answer,
             rephrased_query=(
                 info.qa_docs_response.rephrased_query if info.qa_docs_response else None
@@ -1206,9 +1273,17 @@ def _post_llm_answer_processing(
                     else None
                 ),
                 error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
+                token_usage=token_usage_tracker.get_usage(),
                 refined_answer_improvement=refined_answer_improvement,
                 is_agentic=True,
             )
+            
+            # Debug logging
+            usage_data = token_usage_tracker.get_usage()
+            logger.info(f"Token usage being stored in message: {usage_data}")
+            
+            # Clear token usage after storing it in the message
+            token_usage_tracker.clear_usage()
             agentic_message_ids.append(
                 AgentMessageIDInfo(level=next_level, message_id=next_answer_message.id)
             )
@@ -1222,6 +1297,7 @@ def _post_llm_answer_processing(
 
         yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)
 
+        logger.info(f"Final message before yield - token_usage: {gen_ai_response_message.token_usage}")
         yield translate_db_message_to_chat_message_detail(gen_ai_response_message)
     except Exception as e:
         error_msg = str(e)
@@ -1229,6 +1305,10 @@ def _post_llm_answer_processing(
 
         # Frontend will erase whatever answer and show this instead
         yield StreamingError(error="Failed to parse LLM output")
+    
+    finally:
+        # Clean up token usage tracker for this request
+        token_usage_tracker.clear_usage()
 
 
 @log_generator_function_time()

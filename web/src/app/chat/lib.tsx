@@ -137,7 +137,8 @@ export const isPacketType = (data: any): data is PacketType => {
     data.hasOwnProperty("message_id") ||
     data.hasOwnProperty("stop_reason") ||
     data.hasOwnProperty("user_message_id") ||
-    data.hasOwnProperty("reserved_assistant_message_id")
+    data.hasOwnProperty("reserved_assistant_message_id") ||
+    data.hasOwnProperty("usage")
   );
 };
 
@@ -523,6 +524,11 @@ export function processRawChatHistory(
       isImprovement:
         (messageInfo.refined_answer_improvement as unknown as boolean) || false,
       is_agentic: messageInfo.is_agentic,
+      token_usage: messageInfo.token_usage || {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
     };
 
     messages.set(messageInfo.message_id, message);
