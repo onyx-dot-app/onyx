@@ -1,14 +1,20 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  Persona,
+} from "@/app/admin/assistants/interfaces";
 import { User } from "../types";
 import { checkUserIsNoAuthUser } from "../user";
 
-export function checkUserOwnsAssistant(user: User | null, assistant: Persona) {
+export function checkUserOwnsAssistant(
+  user: User | null,
+  assistant: MinimalPersonaSnapshot | Persona
+) {
   return checkUserIdOwnsAssistant(user?.id, assistant);
 }
 
 export function checkUserIdOwnsAssistant(
   userId: string | undefined,
-  assistant: Persona
+  assistant: MinimalPersonaSnapshot | Persona
 ) {
   return (
     (!userId ||

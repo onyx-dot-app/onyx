@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiX, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
@@ -39,7 +39,6 @@ import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
-import { UploadIntent } from "../ChatPage";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -182,10 +181,12 @@ interface ChatInputBarProps {
   onSubmit: () => void;
   llmManager: LlmManager;
   chatState: ChatState;
-  alternativeAssistant: Persona | null;
+  alternativeAssistant: MinimalPersonaSnapshot | null;
   // assistants
-  selectedAssistant: Persona;
-  setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
+  selectedAssistant: MinimalPersonaSnapshot;
+  setAlternativeAssistant: (
+    alternativeAssistant: MinimalPersonaSnapshot | null
+  ) => void;
   toggleDocumentSidebar: () => void;
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
@@ -306,7 +307,7 @@ export function ChatInputBar({
     };
   }, []);
 
-  const updatedTaggedAssistant = (assistant: Persona) => {
+  const updatedTaggedAssistant = (assistant: MinimalPersonaSnapshot) => {
     setAlternativeAssistant(
       assistant.id == selectedAssistant.id ? null : assistant
     );
