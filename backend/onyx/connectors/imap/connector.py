@@ -4,6 +4,8 @@ from email.message import Message
 from email.utils import parseaddr
 from typing import Any
 
+import bs4
+
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -16,9 +18,11 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.utils.logger import setup_logger
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+
+logger = setup_logger()
 
 
 DEFAULT_IMAP_PORT_NUMBER = 993
@@ -122,19 +126,16 @@ def _convert_email_headers_and_body_into_document(
 ) -> Document:
     _sender_name, sender_addr = parseaddr(addr=email_headers.sender)
     recipient_name, recipient_addr = parseaddr(addr=email_headers.recipient)
-
-    semantic_identifier = (
-        f"{sender_addr} to {recipient_addr} about {email_headers.subject}"
-    )
-
-    sections = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
+    title = f"{sender_addr} to {recipient_addr} about {email_headers.subject}"
+    email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
 
     return Document(
-        id=semantic_identifier,
-        semantic_identifier=semantic_identifier,
+        id=email_headers.id,
+        title=title,
+        semantic_identifier=email_headers.subject,
         metadata={},
         source=DocumentSource.IMAP,
-        sections=sections,
+        sections=[TextSection(text=email_body)],
         primary_owners=[
             BasicExpertInfo(
                 display_name=recipient_name,
@@ -152,22 +153,37 @@ def _convert_email_headers_and_body_into_document(
 def _parse_email_body(
     email_msg: Message,
     email_headers: EmailHeaders,
-) -> list[TextSection | ImageSection]:
-    # _sender_name, sender_addr = parseaddr(email_headers.sender)
-    # _recipient_name, recipient_addr = parseaddr(email_headers.recipient)
-    # plain_text_body = ""
-    # for part in msg.walk():
-    #     email_headers = EmailHeaders.from_email_msg()
-    # ctype = part.get_content_type()
-    # cdisp = str(part.get('Content-Disposition'))
-    # if ctype == 'text/plain' and 'attachment' not in cdisp:
-    #     try:
-    #         plain_text_body = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8')
-    #     except (UnicodeDecodeError, AttributeError):
-    #         plain_text_body = part.get_payload(decode=True).decode('latin-1', errors='ignore')
-    #     break
+) -> str:
+    body = None
+    for part in email_msg.walk():
+        if part.is_multipart():
+            continue
 
-    raise NotImplementedError
+        charset = part.get_content_charset() or "utf-8"
+
+        try:
+            raw_payload = part.get_payload(decode=True)
+            if not isinstance(raw_payload, bytes):
+                logger.warn(
+                    "Payload section from email was expected to be an array of bytes, instead got "
+                    f"{type(raw_payload)=}, {raw_payload=}"
+                )
+                continue
+            body = raw_payload.decode(charset)
+            break
+        except (UnicodeDecodeError, LookupError) as e:
+            print(f"Warning: Could not decode part with charset {charset}. Error: {e}")
+            continue
+
+    if not body:
+        logger.warn(
+            f"Email with {email_headers.id=} has an empty body; returning an empty string"
+        )
+        return ""
+
+    soup = bs4.BeautifulSoup(markup=body, features="html.parser")
+
+    return "".join(str_section for str_section in soup.stripped_strings)
 
 
 if __name__ == "__main__":
