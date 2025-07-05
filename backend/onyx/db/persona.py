@@ -19,6 +19,7 @@ from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -695,9 +696,9 @@ def update_persona_visibility(
 
 def validate_persona_tools(tools: list[Tool]) -> None:
     for tool in tools:
-        if tool.name == "InternetSearchTool" and not BING_API_KEY:
+        if tool.name == "InternetSearchTool" and not (BING_API_KEY or EXA_API_KEY):
             raise ValueError(
-                "Bing API key not found, please contact your Onyx admin to get it added!"
+                "Internet Search API key not found, please contact your Onyx admin to get it added!"
             )
 
 

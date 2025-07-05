@@ -309,7 +309,10 @@ class ContextualPruningConfig(DocumentPruningConfig):
     def from_doc_pruning_config(
         cls, num_chunk_multiple: int, doc_pruning_config: DocumentPruningConfig
     ) -> "ContextualPruningConfig":
-        return cls(num_chunk_multiple=num_chunk_multiple, **doc_pruning_config.dict())
+        return cls(
+            num_chunk_multiple=num_chunk_multiple,
+            **doc_pruning_config.model_dump(),
+        )
 
 
 class CitationConfig(BaseModel):
@@ -318,9 +321,6 @@ class CitationConfig(BaseModel):
 
 class AnswerStyleConfig(BaseModel):
     citation_config: CitationConfig
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
     # forces the LLM to return a structured response, see
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     # right now, only used by the simple chat API

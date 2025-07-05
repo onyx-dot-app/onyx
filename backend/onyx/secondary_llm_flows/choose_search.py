@@ -11,6 +11,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
 from onyx.llm.utils import message_to_string
+from onyx.prompts.chat_prompts import AGGRESSIVE_INTERNET_SEARCH_TEMPLATE
 from onyx.prompts.chat_prompts import AGGRESSIVE_SEARCH_TEMPLATE
 from onyx.prompts.chat_prompts import NO_SEARCH
 from onyx.prompts.chat_prompts import REQUIRE_SEARCH_HINT
@@ -46,25 +47,27 @@ def check_if_need_search_multi_message(
     return True
 
 
+def _get_search_messages(
+    query: str,
+    history_str: str,
+    template: str,
+) -> list[dict[str, str]]:
+    messages = [
+        {
+            "role": "user",
+            "content": template.format(
+                final_query=query, chat_history=history_str
+            ).strip(),
+        },
+    ]
+    return messages
+
+
 def check_if_need_search(
     query: str,
     history: list[PreviousMessage],
     llm: LLM,
 ) -> bool:
-    def _get_search_messages(
-        question: str,
-        history_str: str,
-    ) -> list[dict[str, str]]:
-        messages = [
-            {
-                "role": "user",
-                "content": AGGRESSIVE_SEARCH_TEMPLATE.format(
-                    final_query=question, chat_history=history_str
-                ).strip(),
-            },
-        ]
-
-        return messages
 
     # Choosing is globally disabled, use search
     if DISABLE_LLM_CHOOSE_SEARCH:
@@ -74,7 +77,9 @@ def check_if_need_search(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
 
-    prompt_msgs = _get_search_messages(question=query, history_str=history_str)
+    prompt_msgs = _get_search_messages(
+        query=query, history_str=history_str, template=AGGRESSIVE_SEARCH_TEMPLATE
+    )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
     require_search_output = message_to_string(llm.invoke(filled_llm_prompt))
@@ -82,3 +87,29 @@ def check_if_need_search(
     logger.debug(f"Run search prediction: {require_search_output}")
 
     return (SKIP_SEARCH.split()[0]).lower() not in require_search_output.lower()
+
+
+def check_if_need_internet_search(
+    query: str,
+    history: list[PreviousMessage],
+    llm: LLM,
+) -> bool:
+
+    history_str = combine_message_chain(
+        messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
+    )
+
+    prompt_msgs = _get_search_messages(
+        query=query,
+        history_str=history_str,
+        template=AGGRESSIVE_INTERNET_SEARCH_TEMPLATE,
+    )
+
+    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
+    require_internet_search_output = message_to_string(llm.invoke(filled_llm_prompt))
+
+    logger.debug(f"Run internet search prediction: {require_internet_search_output}")
+
+    return (
+        SKIP_SEARCH.split()[0]
+    ).lower() not in require_internet_search_output.lower()
