@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Add token_usage column to chat_message table
-    op.add_column('chat_message', sa.Column('token_usage', postgresql.JSONB(), nullable=True))
+    op.add_column('chat_message', sa.Column('token_usage', postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'")))
 
 
 def downgrade() -> None:
