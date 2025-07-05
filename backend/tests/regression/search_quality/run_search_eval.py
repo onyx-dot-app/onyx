@@ -170,7 +170,9 @@ class SearchAnswerAnalyzer:
                 ]
             )
 
-            for category, metrics in sorted(self.metrics.items()):
+            for category, metrics in sorted(
+                self.metrics.items(), key=lambda c: (0 if c == "all" else 1, c)
+            ):
                 found_count = metrics.found_count
                 total_count = metrics.total_queries
                 accuracy = found_count / total_count * 100 if total_count > 0 else 0
