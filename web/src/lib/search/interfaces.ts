@@ -180,6 +180,8 @@ export interface SourceMetadata {
   internalName: ValidSources;
   adminUrl: string;
   oauthSupported?: boolean;
+  federated?: boolean;
+  federatedTooltip?: string;
 }
 
 export interface SearchDefaultOverrides {

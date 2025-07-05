@@ -44,7 +44,11 @@ from sqlalchemy import PrimaryKeyConstraint
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
-from onyx.configs.constants import DEFAULT_BOOST, MilestoneRecordType
+from onyx.configs.constants import (
+    DEFAULT_BOOST,
+    FederatedConnectorSource,
+    MilestoneRecordType,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
@@ -1407,6 +1411,70 @@ class Credential(Base):
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
 
 
+class FederatedConnector(Base):
+    __tablename__ = "federated_connector"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[FederatedConnectorSource] = mapped_column(
+        Enum(FederatedConnectorSource, native_enum=False)
+    )
+    credentials: Mapped[dict[str, str]] = mapped_column(EncryptedJson(), nullable=False)
+
+    oauth_tokens: Mapped[list["FederatedConnectorOAuthToken"]] = relationship(
+        "FederatedConnectorOAuthToken", back_populates="federated_connector"
+    )
+    document_sets: Mapped[list["FederatedConnector__DocumentSet"]] = relationship(
+        "FederatedConnector__DocumentSet", back_populates="federated_connector"
+    )
+
+
+class FederatedConnectorOAuthToken(Base):
+    """NOTE: in the future, can be made more general to support OAuth tokens
+    for actions."""
+
+    __tablename__ = "federated_connector_oauth_token"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    federated_connector_id: Mapped[int] = mapped_column(
+        ForeignKey("federated_connector.id"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+
+    federated_connector: Mapped["FederatedConnector"] = relationship(
+        "FederatedConnector", back_populates="oauth_tokens"
+    )
+
+
+class FederatedConnector__DocumentSet(Base):
+    __tablename__ = "federated_connector__document_set"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    federated_connector_id: Mapped[int] = mapped_column(
+        ForeignKey("federated_connector.id"), nullable=False
+    )
+    document_set_id: Mapped[int] = mapped_column(
+        ForeignKey("document_set.id"), nullable=False
+    )
+    # unique per source type. Validated before insertion.
+    entities: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=False)
+
+    federated_connector: Mapped["FederatedConnector"] = relationship(
+        "FederatedConnector", back_populates="document_sets"
+    )
+    document_set: Mapped["DocumentSet"] = relationship(
+        "DocumentSet", back_populates="federated_connectors"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "federated_connector_id",
+            "document_set_id",
+            name="uq_federated_connector_document_set",
+        ),
+    )
+
+
 class SearchSettings(Base):
     __tablename__ = "search_settings"
 
@@ -2311,6 +2379,9 @@ class DocumentSet(Base):
         "UserGroup",
         secondary="document_set__user_group",
         viewonly=True,
+    )
+    federated_connectors: Mapped[list["FederatedConnector__DocumentSet"]] = (
+        relationship("FederatedConnector__DocumentSet", back_populates="document_set")
     )
 
 
