@@ -394,7 +394,7 @@ def test_shared_with_me(
         expected_file_ids=expected_file_ids,
     )
 
-    retrieved_ids = {urlparse(doc.id).path.split("/")[-2] for doc in retrieved_docs}
+    retrieved_ids = {urlparse(doc.id).path.split("/")[-1] for doc in retrieved_docs}
     for id in retrieved_ids:
         print(id)
 
