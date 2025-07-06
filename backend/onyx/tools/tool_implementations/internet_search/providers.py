@@ -116,13 +116,6 @@ class InternetSearchProvider(BaseModel):
             current = current[key]
         return current
 
-    def _extract_field_value(self, source: dict[str, Any], field_key: str) -> str:
-        """Safely extract a field value from a source dictionary"""
-        if not source or not field_key:
-            return ""
-
-        return source.get(field_key, "")
-
     def _navigate_to_results(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         """Navigate to results list using the configured path"""
         current = data
@@ -155,17 +148,25 @@ class InternetSearchProvider(BaseModel):
                 continue
 
             # Extract field values using the mapping
-            title = self._extract_field_value(
-                web_source, self.config.result_mapping.get("title", "")
+            title_key = self.config.result_mapping.get("title", "")
+            title = web_source.get(title_key, "") if title_key else ""
+
+            link_key = self.config.result_mapping.get("link", "")
+            link = web_source.get(link_key, "") if link_key else ""
+
+            full_content_key = self.config.result_mapping.get("full_content", "")
+            full_content = (
+                web_source.get(full_content_key, "") if full_content_key else ""
             )
-            link = self._extract_field_value(
-                web_source, self.config.result_mapping.get("link", "")
-            )
-            published_date_str = self._extract_field_value(
-                web_source, self.config.result_mapping.get("published_date", "")
-            )
-            full_content = self._extract_field_value(
-                web_source, self.config.result_mapping.get("full_content", "")
+
+            # Skip result if any required fields are missing (published_date is optional)
+            if not title or not link or not full_content:
+                logger.warning("Skipping result with missing required fields")
+                continue
+
+            published_date_key = self.config.result_mapping.get("published_date", "")
+            published_date_str = (
+                web_source.get(published_date_key, "") if published_date_key else ""
             )
 
             # Parse published_date string to datetime object
