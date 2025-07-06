@@ -74,9 +74,12 @@ class SearchAnswerAnalyzer:
                 worst_rank=1,
                 average_rank=0.0,
                 top_k_accuracy={k: 0.0 for k in TOP_K_LIST},
-                average_response_relevancy=0.0,
-                average_response_groundedness=0.0,
-                average_faithfulness=0.0,
+                response_relevancy=0.0,
+                faithfulness=0.0,
+                factual_correctness=0.0,
+                n_response_relevancy=0,
+                n_faithfulness=0,
+                n_factual_correctness=0,
                 average_time_taken=0.0,
             )
         )
@@ -158,8 +161,8 @@ class SearchAnswerAnalyzer:
                     *(
                         [
                             "avg_response_relevancy",
-                            "avg_response_groundedness",
                             "avg_faithfulness",
+                            "avg_factual_correctness",
                         ]
                         if not self.config.search_only
                         else []
@@ -171,7 +174,7 @@ class SearchAnswerAnalyzer:
             )
 
             for category, metrics in sorted(
-                self.metrics.items(), key=lambda c: (0 if c == "all" else 1, c)
+                self.metrics.items(), key=lambda c: (0 if c[0] == "all" else 1, c[0])
             ):
                 found_count = metrics.found_count
                 total_count = metrics.total_queries
@@ -194,11 +197,16 @@ class SearchAnswerAnalyzer:
                     for k, acc in metrics.top_k_accuracy.items():
                         print(f"  top-{k} accuracy: {acc:.1f}%")
                 if not self.config.search_only:
-                    print(
-                        f"  average response relevancy: {metrics.average_response_relevancy:.2f}\n"
-                        f"  average response groundedness: {metrics.average_response_groundedness:.2f}\n"
-                        f"  average faithfulness: {metrics.average_faithfulness:.2f}"
-                    )
+                    if metrics.n_response_relevancy > 0:
+                        print(
+                            f"  average response relevancy: {metrics.response_relevancy:.2f}"
+                        )
+                    if metrics.n_faithfulness > 0:
+                        print(f"  average faithfulness: {metrics.faithfulness:.2f}")
+                    if metrics.n_factual_correctness > 0:
+                        print(
+                            f"  average factual correctness: {metrics.factual_correctness:.2f}"
+                        )
                 search_score, answer_score = compute_overall_scores(metrics)
                 print(f"  search score: {search_score:.1f}")
                 if not self.config.search_only:
@@ -217,9 +225,21 @@ class SearchAnswerAnalyzer:
                         *[f"{acc:.1f}" for acc in metrics.top_k_accuracy.values()],
                         *(
                             [
-                                f"{metrics.average_response_relevancy:.2f}",
-                                f"{metrics.average_response_groundedness:.2f}",
-                                f"{metrics.average_faithfulness:.2f}",
+                                (
+                                    f"{metrics.response_relevancy:.2f}"
+                                    if metrics.n_response_relevancy > 0
+                                    else ""
+                                ),
+                                (
+                                    f"{metrics.faithfulness:.2f}"
+                                    if metrics.n_faithfulness > 0
+                                    else ""
+                                ),
+                                (
+                                    f"{metrics.factual_correctness:.2f}"
+                                    if metrics.n_factual_correctness > 0
+                                    else ""
+                                ),
                             ]
                             if not self.config.search_only
                             else []
@@ -438,8 +458,8 @@ class SearchAnswerAnalyzer:
 
         # do answer evaluation
         response_relevancy: float | None = None
-        response_groundedness: float | None = None
         faithfulness: float | None = None
+        factual_correctness: float | None = None
         contexts = [c.content for c in retrieved[: self.config.max_answer_context]]
         if not self.config.search_only:
             if result.answer is None:
@@ -453,10 +473,13 @@ class SearchAnswerAnalyzer:
                         question=test_case.question,
                         answer=result.answer,
                         contexts=contexts,
+                        reference_answer=test_case.ground_truth_response,
                     ).scores[0]
                     response_relevancy = ragas_result["answer_relevancy"]
-                    response_groundedness = ragas_result["nv_response_groundedness"]
                     faithfulness = ragas_result["faithfulness"]
+                    factual_correctness = ragas_result.get(
+                        "factual_correctness(mode=recall)"
+                    )
                 except Exception as e:
                     logger.error(
                         "Error evaluating answer for query %s: %s",
@@ -473,8 +496,8 @@ class SearchAnswerAnalyzer:
             ground_truth_count=len(test_case.ground_truth_docids),
             answer=result.answer,
             response_relevancy=response_relevancy,
-            response_groundedness=response_groundedness,
             faithfulness=faithfulness,
+            factual_correctness=factual_correctness,
             retrieved=retrieved,
             time_taken=result.time_taken,
         )
@@ -495,13 +518,15 @@ class SearchAnswerAnalyzer:
                     self.metrics[cat].top_k_accuracy[k] += int(rank <= k)
 
             if not self.config.search_only:
-                self.metrics[cat].average_response_relevancy += (
-                    result.response_relevancy or 0.0
-                )
-                self.metrics[cat].average_response_groundedness += (
-                    result.response_groundedness or 0.0
-                )
-                self.metrics[cat].average_faithfulness += result.faithfulness or 0.0
+                if result.response_relevancy is not None:
+                    self.metrics[cat].response_relevancy += result.response_relevancy
+                    self.metrics[cat].n_response_relevancy += 1
+                if result.faithfulness is not None:
+                    self.metrics[cat].faithfulness += result.faithfulness
+                    self.metrics[cat].n_faithfulness += 1
+                if result.factual_correctness is not None:
+                    self.metrics[cat].factual_correctness += result.factual_correctness
+                    self.metrics[cat].n_factual_correctness += 1
 
     def _aggregate_metrics(self) -> None:
         for cat in self.metrics:
@@ -515,9 +540,12 @@ class SearchAnswerAnalyzer:
                 self.metrics[cat].top_k_accuracy[k] *= 100
 
             if not self.config.search_only:
-                self.metrics[cat].average_response_relevancy /= total
-                self.metrics[cat].average_response_groundedness /= total
-                self.metrics[cat].average_faithfulness /= total
+                if (n := self.metrics[cat].n_response_relevancy) > 0:
+                    self.metrics[cat].response_relevancy /= n
+                if (n := self.metrics[cat].n_faithfulness) > 0:
+                    self.metrics[cat].faithfulness /= n
+                if (n := self.metrics[cat].n_factual_correctness) > 0:
+                    self.metrics[cat].factual_correctness /= n
 
     def _get_rerank_settings(self) -> RerankingDetails | None:
         """Fetch the tenant's reranking settings from the database."""

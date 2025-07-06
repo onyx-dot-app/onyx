@@ -8,8 +8,8 @@ from ragas import evaluate  # type: ignore
 from ragas import EvaluationDataset  # type: ignore
 from ragas import SingleTurnSample  # type: ignore
 from ragas.dataset_schema import EvaluationResult  # type: ignore
+from ragas.metrics import FactualCorrectness  # type: ignore
 from ragas.metrics import Faithfulness  # type: ignore
-from ragas.metrics import ResponseGroundedness  # type: ignore
 from ragas.metrics import ResponseRelevancy  # type: ignore
 from sqlalchemy.orm import Session
 
@@ -106,19 +106,26 @@ def search_docs_to_doc_contexts(
     ]
 
 
-def ragas_evaluate(question: str, answer: str, contexts: list[str]) -> EvaluationResult:
+def ragas_evaluate(
+    question: str, answer: str, contexts: list[str], reference_answer: str | None = None
+) -> EvaluationResult:
     sample = SingleTurnSample(
         user_input=question,
         retrieved_contexts=contexts,
         response=answer,
+        reference=reference_answer,
     )
     dataset = EvaluationDataset([sample])
     return evaluate(
         dataset,
         metrics=[
             ResponseRelevancy(),
-            ResponseGroundedness(),
             Faithfulness(),
+            *(
+                [FactualCorrectness(mode="recall")]
+                if reference_answer is not None
+                else []
+            ),
         ],
     )
 
@@ -128,7 +135,7 @@ def compute_overall_scores(metrics: CombinedMetrics) -> tuple[float, float]:
     The scores are subjective and may require tuning."""
     # search score
     FOUND_RATIO_WEIGHT = 0.4
-    TOP_IMPORTANCE = 0.7  # 0-1, how important is it to be no. 1 over no. 5, etc.
+    TOP_IMPORTANCE = 0.7  # 0-inf, how important is it to be no. 1 over other ranks
 
     found_ratio = metrics.found_count / metrics.total_queries
     sum_k = sum(1.0 / pow(k, TOP_IMPORTANCE) for k in metrics.top_k_accuracy)
@@ -141,11 +148,12 @@ def compute_overall_scores(metrics: CombinedMetrics) -> tuple[float, float]:
     )
 
     # answer score
-    answer_score = (
-        metrics.average_response_relevancy
-        + metrics.average_response_groundedness
-        + metrics.average_faithfulness
-    ) / 0.03
+    mets = [
+        *([metrics.response_relevancy] if metrics.n_response_relevancy > 0 else []),
+        *([metrics.faithfulness] if metrics.n_faithfulness > 0 else []),
+        *([metrics.factual_correctness] if metrics.n_factual_correctness > 0 else []),
+    ]
+    answer_score = 100 * sum(mets) / len(mets) if mets else 0.0
 
     return search_score, answer_score
 
