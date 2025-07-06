@@ -14,15 +14,11 @@ def internet_search_response_to_search_docs(
     if not internet_search_response.top_sections:
         return []
 
-    search_docs = [
-        SearchDoc(
-            document_id=(
-                chunk := (
-                    section.center_chunk
-                    if hasattr(section, "center_chunk")
-                    else section
-                )
-            ).document_id,
+    search_docs = []
+    for section in internet_search_response.top_sections:
+        chunk = section.center_chunk
+        search_doc = SearchDoc(
+            document_id=chunk.document_id,
             chunk_ind=chunk.chunk_id,
             semantic_identifier=chunk.semantic_identifier or "Unknown",
             link=chunk.source_links[0] if chunk.source_links else None,
@@ -38,7 +34,6 @@ def internet_search_response_to_search_docs(
             secondary_owners=chunk.secondary_owners,
             is_internet=True,
         )
-        for section in internet_search_response.top_sections
-    ]
+        search_docs.append(search_doc)
 
     return search_docs

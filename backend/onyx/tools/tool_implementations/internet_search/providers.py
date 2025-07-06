@@ -1,5 +1,3 @@
-import random
-import time
 from typing import Any
 
 import requests
@@ -10,6 +8,7 @@ from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.tools.tool_implementations.internet_search.models import InternetSearchResult
 from onyx.tools.tool_implementations.internet_search.models import ProviderConfig
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -67,6 +66,7 @@ class InternetSearchProvider(BaseModel):
     config: ProviderConfig
     num_results: int = 10
 
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _search_get(self, query: str, token_budget: int) -> requests.Response:
         params = {
             self.config.query_param_name: query,
@@ -77,38 +77,16 @@ class InternetSearchProvider(BaseModel):
         if self.config.num_results_param:
             params[self.config.num_results_param] = self.num_results
 
-        max_retries = 3
-        base_delay = 1.0
+        response = requests.get(
+            self.config.api_base,
+            headers=self.config.headers,
+            params=params,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response
 
-        for attempt in range(max_retries + 1):
-            try:
-                response = requests.get(
-                    f"{self.config.api_base}",
-                    headers=self.config.headers,
-                    params=params,
-                    timeout=30,
-                )
-                response.raise_for_status()
-                return response
-
-            except (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout,
-                requests.exceptions.HTTPError,
-            ) as e:
-
-                if attempt == max_retries:
-                    logger.error(
-                        f"Max retries ({max_retries}) reached for GET request: {e}"
-                    )
-                    raise
-
-                delay = base_delay * (2**attempt) + random.uniform(0, 1)
-                logger.warning(
-                    f"GET request failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f}s..."
-                )
-                time.sleep(delay)
-
+    @retry_builder(tries=3, delay=1, backoff=2)
     def _search_post(self, query: str, token_budget: int) -> requests.Response:
         payload = {
             self.config.query_param_name: query,
@@ -119,37 +97,14 @@ class InternetSearchProvider(BaseModel):
         if self.config.num_results_param:
             payload[self.config.num_results_param] = self.num_results
 
-        max_retries = 3
-        base_delay = 1.0
-
-        for attempt in range(max_retries + 1):
-            try:
-                response = requests.post(
-                    f"{self.config.api_base}",
-                    headers=self.config.headers,
-                    json=payload,
-                    timeout=30,
-                )
-                response.raise_for_status()
-                return response
-
-            except (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout,
-                requests.exceptions.HTTPError,
-            ) as e:
-
-                if attempt == max_retries:
-                    logger.error(
-                        f"Max retries ({max_retries}) reached for POST request: {e}"
-                    )
-                    raise
-
-                delay = base_delay * (2**attempt) + random.uniform(0, 1)
-                logger.warning(
-                    f"POST request failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {delay:.2f}s..."
-                )
-                time.sleep(delay)
+        response = requests.post(
+            self.config.api_base,
+            headers=self.config.headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response
 
     def _extract_global_field(self, data: dict[str, Any], field_path: list[str]) -> Any:
         """Extract a global field from the API response using a path"""
@@ -165,34 +120,65 @@ class InternetSearchProvider(BaseModel):
                 return None
         return current_data
 
+    def _extract_field_value(self, source: dict[str, Any], field_key: str) -> str:
+        """Safely extract a field value from a source dictionary"""
+        if not source or not field_key:
+            return ""
+
+        return source.get(field_key, "")
+
+    def _navigate_to_results(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Navigate to results list using the configured path"""
+        current_data = data
+
+        for path_key in self.config.results_path:
+            if not current_data:
+                logger.error(f"Path '{path_key}' not found in data")
+                return []
+            current_data = current_data.get(path_key)
+
+        # API responses should return a list of results
+        return current_data or []
+
     def _extract_results(self, data: dict[str, Any]) -> list[InternetSearchResult]:
         """Extract results from API response based on provider configuration"""
         results = []
 
         # Extract global fields that apply to all results (e.g. rag_context)
-        global_values = {}
+        global_values: dict[str, Any] = {}
         for field_name, field_path in self.config.global_fields.items():
             global_values[field_name] = self._extract_global_field(data, field_path)
 
         # Navigate to final results list using the configured path
-        current_data = data
-        for path_key in self.config.results_path:
-            try:
-                current_data = current_data[path_key]
-            except Exception as e:
-                logger.error(f"Error extracting results: {e}")
-                return []
+        results_list = self._navigate_to_results(data)
+        if not results_list:
+            return []
 
-        for web_source in current_data:
+        for web_source in results_list:
+            # Skip invalid entries
+            if not web_source or not hasattr(web_source, "get"):
+                logger.warning(f"Skipping invalid result entry: {type(web_source)}")
+                continue
+
+            # Extract field values using the mapping
+            title = self._extract_field_value(
+                web_source, self.config.result_mapping.get("title", "")
+            )
+            link = self._extract_field_value(
+                web_source, self.config.result_mapping.get("link", "")
+            )
+            published_date = self._extract_field_value(
+                web_source, self.config.result_mapping.get("published_date", "")
+            )
+            full_content = self._extract_field_value(
+                web_source, self.config.result_mapping.get("full_content", "")
+            )
+
             internet_search_result = InternetSearchResult(
-                title=web_source.get(self.config.result_mapping.get("title"), ""),
-                link=web_source.get(self.config.result_mapping.get("link"), ""),
-                published_date=web_source.get(
-                    self.config.result_mapping.get("published_date"), ""
-                ),
-                full_content=web_source.get(
-                    self.config.result_mapping.get("full_content"), ""
-                ),
+                title=title,
+                link=link,
+                published_date=published_date or None,
+                full_content=full_content,
                 rag_context=global_values.get("rag_context", ""),
             )
             results.append(internet_search_result)

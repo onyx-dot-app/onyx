@@ -50,6 +50,9 @@ from onyx.tools.tool_implementations.internet_search.providers import (
 from onyx.tools.tool_implementations.internet_search.providers import (
     get_provider_by_name,
 )
+from onyx.tools.tool_implementations.internet_search.providers import (
+    InternetSearchProvider,
+)
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     build_next_prompt_for_search_like_tool,
@@ -78,6 +81,7 @@ class InternetSearchTool(Tool[None]):
     _NAME = "run_internet_search"
     _DISPLAY_NAME = "Internet Search"
     _DESCRIPTION = INTERNET_SEARCH_TOOL_DESCRIPTION
+    provider: InternetSearchProvider
 
     def __init__(
         self,
@@ -107,13 +111,13 @@ class InternetSearchTool(Tool[None]):
             else CONTEXT_CHUNKS_BELOW
         )
 
-        if provider:
-            self.provider = get_provider_by_name(provider)
-        else:
-            self.provider = get_default_provider()
+        self.provider = (
+            get_provider_by_name(provider) if provider else get_default_provider()
+        )
 
         if not self.provider:
             raise ValueError("No internet search providers are configured")
+
         self.provider.num_results = num_results
 
         max_input_tokens = compute_max_llm_input_tokens(
@@ -312,22 +316,22 @@ class InternetSearchTool(Tool[None]):
         inference_chunks: list[InferenceChunk] = []
 
         # Convert IndexChunk to InferenceChunk
-        for chunk in chunks:
-            # Get the actual cosine similarity score for this chunk
-            chunk_key = f"{chunk.source_document.id}_{chunk.chunk_id}"
+        for index_chunk in chunks:
+
+            chunk_key = f"{index_chunk.source_document.id}_{index_chunk.chunk_id}"
             score = similarity_scores.get(chunk_key, 0.0)
 
             inference_chunk = self._create_inference_chunk_from_index_chunk(
-                chunk, score
+                index_chunk, score
             )
             inference_chunks.append(inference_chunk)
 
         # Group chunks by document ID
         doc_chunks_map: dict[str, list[InferenceChunk]] = {}
-        for chunk in inference_chunks:
-            if chunk.document_id not in doc_chunks_map:
-                doc_chunks_map[chunk.document_id] = []
-            doc_chunks_map[chunk.document_id].append(chunk)
+        for inference_chunk in inference_chunks:
+            if inference_chunk.document_id not in doc_chunks_map:
+                doc_chunks_map[inference_chunk.document_id] = []
+            doc_chunks_map[inference_chunk.document_id].append(inference_chunk)
 
         # Create sections for each document
         sections: list[InferenceSection] = []
