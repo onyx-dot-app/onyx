@@ -1,5 +1,6 @@
 import os
 import time
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -101,7 +102,16 @@ def test_confluence_connector_restriction_handling(
     mock_cc_pair.credential_id = 1
 
     # Call the confluence_doc_sync function directly with the mock cc_pair
-    doc_access_generator = confluence_doc_sync(mock_cc_pair, lambda: [], None)
+    def mock_fetch_all_docs_fn(
+        columns: list[Any] | None = None,
+        where_clause: Any = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return []
+
+    doc_access_generator = confluence_doc_sync(
+        mock_cc_pair, mock_fetch_all_docs_fn, None
+    )
     doc_access_list = list(doc_access_generator)
     assert len(doc_access_list) == 7
     assert all(

@@ -3,6 +3,7 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Callable
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -71,7 +72,16 @@ def test_gdrive_perm_sync_with_real_data(
         return_value=_build_connector(google_drive_service_acct_connector_factory),
     ):
         # Call the function under test
-        doc_access_generator = gdrive_doc_sync(mock_cc_pair, lambda: [], mock_heartbeat)
+        def mock_fetch_all_docs_fn(
+            columns: list[Any] | None = None,
+            where_clause: Any = None,
+            limit: int | None = None,
+        ) -> list[dict[str, Any]]:
+            return []
+
+        doc_access_generator = gdrive_doc_sync(
+            mock_cc_pair, mock_fetch_all_docs_fn, mock_heartbeat
+        )
         doc_access_list = list(doc_access_generator)
 
     # Verify we got some results
