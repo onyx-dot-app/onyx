@@ -19,7 +19,7 @@ from github.Repository import Repository
 from github.Requester import Requester
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.connector_runner import CheckpointOutputWrapper
+from onyx.connectors.connector_runner import SlimCheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -956,9 +956,9 @@ def test_checkpointed_retrieve_all_slim_documents_single_repo(
     with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
         end_time = time.time()
         checkpoint = github_connector.build_dummy_checkpoint()
-        slim_docs = []
+        slim_docs: list[SlimDocument] = []
 
-        # Process documents using CheckpointOutputWrapper like in doc_sync
+        # Process documents using SlimCheckpointOutputWrapper like in doc_sync
         while checkpoint.has_more:
             slim_doc_generator = (
                 github_connector.checkpointed_retrieve_all_slim_documents(
@@ -966,7 +966,7 @@ def test_checkpointed_retrieve_all_slim_documents_single_repo(
                 )
             )
 
-            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+            for slim_doc, failure, new_checkpoint in SlimCheckpointOutputWrapper[
                 GithubConnectorCheckpoint
             ]()(slim_doc_generator):
                 # New checkpoint means we've moved to a different repository
@@ -1082,9 +1082,9 @@ def test_checkpointed_retrieve_all_slim_documents_multiple_repos(
         # Call checkpointed_retrieve_all_slim_documents
         end_time = time.time()
         checkpoint = github_connector.build_dummy_checkpoint()
-        slim_docs = []
+        slim_docs: list[SlimDocument] = []
 
-        # Process documents using CheckpointOutputWrapper like in doc_sync
+        # Process documents using SlimCheckpointOutputWrapper like in doc_sync
         while checkpoint.has_more:
             slim_doc_generator = (
                 github_connector.checkpointed_retrieve_all_slim_documents(
@@ -1092,7 +1092,7 @@ def test_checkpointed_retrieve_all_slim_documents_multiple_repos(
                 )
             )
 
-            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+            for slim_doc, failure, new_checkpoint in SlimCheckpointOutputWrapper[
                 GithubConnectorCheckpoint
             ]()(slim_doc_generator):
                 # New checkpoint means we've moved to a different repository or stage
@@ -1155,9 +1155,9 @@ def test_checkpointed_retrieve_all_slim_documents_empty_repo(
         # Call checkpointed_retrieve_all_slim_documents
         end_time = time.time()
         checkpoint = github_connector.build_dummy_checkpoint()
-        slim_docs = []
+        slim_docs: list[SlimDocument] = []
 
-        # Process documents using CheckpointOutputWrapper like in doc_sync
+        # Process documents using SlimCheckpointOutputWrapper like in doc_sync
         while checkpoint.has_more:
             slim_doc_generator = (
                 github_connector.checkpointed_retrieve_all_slim_documents(
@@ -1165,7 +1165,7 @@ def test_checkpointed_retrieve_all_slim_documents_empty_repo(
                 )
             )
 
-            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+            for slim_doc, failure, new_checkpoint in SlimCheckpointOutputWrapper[
                 GithubConnectorCheckpoint
             ]()(slim_doc_generator):
                 # New checkpoint means we've moved to a different repository or stage
@@ -1229,9 +1229,9 @@ def test_checkpointed_retrieve_all_slim_documents_with_external_access(
         # Call checkpointed_retrieve_all_slim_documents
         end_time = time.time()
         checkpoint = github_connector.build_dummy_checkpoint()
-        slim_docs = []
+        slim_docs: list[SlimDocument] = []
 
-        # Process documents using CheckpointOutputWrapper like in doc_sync
+        # Process documents using SlimCheckpointOutputWrapper like in doc_sync
         while checkpoint.has_more:
             slim_doc_generator = (
                 github_connector.checkpointed_retrieve_all_slim_documents(
@@ -1239,7 +1239,7 @@ def test_checkpointed_retrieve_all_slim_documents_with_external_access(
                 )
             )
 
-            for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+            for slim_doc, failure, new_checkpoint in SlimCheckpointOutputWrapper[
                 GithubConnectorCheckpoint
             ]()(slim_doc_generator):
                 # New checkpoint means we've moved to a different repository or stage

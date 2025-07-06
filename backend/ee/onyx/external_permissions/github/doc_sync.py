@@ -16,7 +16,7 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFuncti
 from onyx.access.models import DocExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.connector_runner import CheckpointOutputWrapper
+from onyx.connectors.connector_runner import SlimCheckpointOutputWrapper
 from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.github.connector import GithubConnectorCheckpoint
 from onyx.connectors.github.models import SerializedRepository
@@ -86,7 +86,7 @@ def github_doc_sync(
             checkpoint=checkpoint,
         )
 
-        for slim_doc, failure, new_checkpoint in CheckpointOutputWrapper[
+        for slim_doc, failure, new_checkpoint in SlimCheckpointOutputWrapper[
             GithubConnectorCheckpoint
         ]()(slim_doc_generator):
             # New checkpoint means we've moved to a different repository
@@ -309,7 +309,6 @@ def is_repo_visibility_changed(
                 [onyx_organization_group_id]
             ),
         )
-        logger.info(f"Organization group ID: {onyx_organization_group_id}  ")
         logger.info(f"Found {len(existing_docs)} existing docs with organization group")
 
         if existing_docs:

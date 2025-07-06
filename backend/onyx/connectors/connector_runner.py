@@ -14,6 +14,7 @@ from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import SlimCheckpointOutput
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -45,7 +46,7 @@ class CheckpointOutputWrapper(Generic[CT]):
         self,
         checkpoint_connector_generator: CheckpointOutput[CT],
     ) -> Generator[
-        tuple[Document | SlimDocument | None, ConnectorFailure | None, CT | None],
+        tuple[Document | None, ConnectorFailure | None, CT | None],
         None,
         None,
     ]:
@@ -59,7 +60,50 @@ class CheckpointOutputWrapper(Generic[CT]):
         for document_or_failure in _inner_wrapper(checkpoint_connector_generator):
             if isinstance(document_or_failure, Document):
                 yield document_or_failure, None, None
-            elif isinstance(document_or_failure, SlimDocument):
+            elif isinstance(document_or_failure, ConnectorFailure):
+                yield None, document_or_failure, None
+            else:
+                raise ValueError(
+                    f"Invalid document_or_failure type: {type(document_or_failure)}"
+                )
+
+        if self.next_checkpoint is None:
+            raise RuntimeError(
+                "Checkpoint is None. This should never happen - the connector should always return a checkpoint."
+            )
+
+        yield None, None, self.next_checkpoint
+
+
+class SlimCheckpointOutputWrapper(Generic[CT]):
+    """
+    Wraps a SlimCheckpointOutput generator to give things back in a more digestible format,
+    specifically for SlimDocument outputs.
+    The connector format is easier for the connector implementor (e.g. it enforces exactly
+    one new checkpoint is returned AND that the checkpoint is at the end), thus the different
+    formats.
+    """
+
+    def __init__(self) -> None:
+        self.next_checkpoint: CT | None = None
+
+    def __call__(
+        self,
+        checkpoint_connector_generator: SlimCheckpointOutput[CT],
+    ) -> Generator[
+        tuple[SlimDocument | None, ConnectorFailure | None, CT | None],
+        None,
+        None,
+    ]:
+        # grabs the final return value and stores it in the `next_checkpoint` variable
+        def _inner_wrapper(
+            checkpoint_connector_generator: SlimCheckpointOutput[CT],
+        ) -> SlimCheckpointOutput[CT]:
+            self.next_checkpoint = yield from checkpoint_connector_generator
+            return self.next_checkpoint  # not used
+
+        for document_or_failure in _inner_wrapper(checkpoint_connector_generator):
+            if isinstance(document_or_failure, SlimDocument):
                 yield document_or_failure, None, None
             elif isinstance(document_or_failure, ConnectorFailure):
                 yield None, document_or_failure, None

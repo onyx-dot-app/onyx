@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import GITHUB_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import JIRA_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
@@ -14,6 +16,7 @@ from ee.onyx.configs.app_configs import TEAMS_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from ee.onyx.external_permissions.github.doc_sync import github_doc_sync
+from ee.onyx.external_permissions.github.group_sync import github_group_sync
 from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
@@ -120,15 +123,15 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
     ),
     DocumentSource.GITHUB: SyncConfig(
         doc_sync_config=DocSyncConfig(
-            doc_sync_frequency=2 * 60,
+            doc_sync_frequency=GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=github_doc_sync,
             initial_index_should_sync=True,
         ),
-        # group_sync_config=GroupSyncConfig(
-        #     group_sync_frequency= 2 * 60,
-        #     group_sync_func=github_group_sync,
-        #     group_sync_is_cc_pair_agnostic=False,
-        # ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=github_group_sync,
+            group_sync_is_cc_pair_agnostic=False,
+        ),
     ),
     DocumentSource.SALESFORCE: SyncConfig(
         censoring_config=CensoringConfig(

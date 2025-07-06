@@ -505,7 +505,7 @@ def connector_permission_sync_generator_task(
                 where_clause: ColumnElement[bool] | None = None,
                 limit: int | None = None,
             ) -> list[dict[str, Any]]:
-                return get_documents_for_connector_credential_pair_filtered(
+                result = get_documents_for_connector_credential_pair_filtered(
                     db_session=db_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
@@ -513,6 +513,7 @@ def connector_permission_sync_generator_task(
                     limit=limit,
                     columns=columns,
                 )
+                return list(result)
 
             doc_sync_func = sync_config.doc_sync_config.doc_sync_func
             document_external_accesses = doc_sync_func(

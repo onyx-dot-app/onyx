@@ -760,9 +760,9 @@ class GithubConnector(
     @override
     def checkpointed_retrieve_all_slim_documents(
         self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: GithubConnectorCheckpoint,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        checkpoint: GithubConnectorCheckpoint | None = None,
     ) -> SlimCheckpointOutput[GithubConnectorCheckpoint]:
         """
         Retrieve slim documents from GitHub with checkpointing support.
@@ -781,6 +781,16 @@ class GithubConnector(
         Returns:
             GithubConnectorCheckpoint: Updated checkpoint for next iteration
         """
+        # Set default values for optional parameters
+        if checkpoint is None:
+            checkpoint = self.build_dummy_checkpoint()
+
+        if start is None:
+            start = 0.0
+
+        if end is None:
+            end = datetime.now(timezone.utc).timestamp()
+
         logger.info(
             f"Starting slim document retrieval for GitHub connector. "
             f"Repo owner: {self.repo_owner}, "

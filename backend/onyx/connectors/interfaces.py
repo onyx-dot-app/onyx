@@ -273,6 +273,6 @@ class CheckpointedSlimConnector(CheckpointedConnector[CT]):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         checkpoint: CT | None = None,
-    ) -> CheckpointOutput[CT]:
+    ) -> SlimCheckpointOutput[CT]:
         """Retrieve all slim documents with checkpointing support."""
         raise NotImplementedError

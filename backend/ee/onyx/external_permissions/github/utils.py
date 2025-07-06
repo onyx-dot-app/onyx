@@ -8,8 +8,11 @@ from typing import TypeVar
 from github import Github
 from github import RateLimitExceededException
 from github.GithubException import GithubException
+from github.NamedUser import NamedUser
 from github.Organization import Organization
+from github.PaginatedList import PaginatedList
 from github.Repository import Repository
+from github.Team import Team
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
@@ -55,7 +58,7 @@ def _run_with_retry(
         logger.warning(f"GitHub API error during {description}: {e}")
         return None
     except Exception as e:
-        logger.error(f"Unexpected error during {description}: {e}")
+        logger.exception(f"Unexpected error during {description}: {e}")
         return None
 
 
@@ -93,7 +96,7 @@ def _fetch_organization_members(
         logger.warning(f"Failed to fetch organization {org_name}")
         return org_members
 
-    member_objs = (
+    member_objs: PaginatedList[NamedUser] | list[NamedUser] = (
         _run_with_retry(
             lambda: org.get_members(filter_="all"),
             f"get members for organization {org_name}",
@@ -117,7 +120,7 @@ def _fetch_repository_teams_detailed(
     teams_data: List[TeamInfo] = []
     logger.info(f"Fetching teams for repository {repo.full_name}")
 
-    team_objs = (
+    team_objs: PaginatedList[Team] | list[Team] = (
         _run_with_retry(
             lambda: repo.get_teams(),
             f"get teams for repository {repo.full_name}",
@@ -131,7 +134,7 @@ def _fetch_repository_teams_detailed(
             f"Processing team {team.name} (slug: {team.slug}) for repository {repo.full_name}"
         )
 
-        members = (
+        members: PaginatedList[NamedUser] | list[NamedUser] = (
             _run_with_retry(
                 lambda: team.get_members(),
                 f"get members for team {team.name}",
@@ -147,7 +150,7 @@ def _fetch_repository_teams_detailed(
 
         team_info = TeamInfo(name=team.name, slug=team.slug, members=team_members)
         teams_data.append(team_info)
-        logger.debug(f"Team {team.name} has {len(team_members)} members")
+        logger.info(f"Team {team.name} has {len(team_members)} members")
 
     logger.info(f"Fetched {len(teams_data)} teams for repository {repo.full_name}")
     return teams_data
@@ -160,7 +163,7 @@ def fetch_repository_team_slugs(
     logger.info(f"Fetching team slugs for repository {repo.full_name}")
     teams_data: List[str] = []
 
-    team_objs = (
+    team_objs: PaginatedList[Team] | list[Team] = (
         _run_with_retry(
             lambda: repo.get_teams(),
             f"get teams for repository {repo.full_name}",
@@ -185,7 +188,7 @@ def _get_collaborators_and_outside_collaborators(
     outside_collaborators: List[UserInfo] = []
     logger.info(f"Fetching collaborators for repository {repo.full_name}")
 
-    repo_collaborators = (
+    repo_collaborators: PaginatedList[NamedUser] | list[NamedUser] = (
         _run_with_retry(
             lambda: repo.get_collaborators(),
             f"get collaborators for repository {repo.full_name}",
@@ -231,7 +234,7 @@ def _get_collaborators_and_outside_collaborators(
 def form_collaborators_group_id(repository_id: int) -> str:
     """Generate group ID for repository collaborators."""
     if not repository_id:
-        logger.error("Repository ID is required to generate collaborators group ID")
+        logger.exception("Repository ID is required to generate collaborators group ID")
         raise ValueError("Repository ID must be set to generate group ID.")
     group_id = f"{repository_id}_collaborators"
     return group_id
@@ -240,7 +243,9 @@ def form_collaborators_group_id(repository_id: int) -> str:
 def form_organization_group_id(organization_id: int) -> str:
     """Generate group ID for organization using organization ID."""
     if not organization_id:
-        logger.error("Organization ID is required to generate organization group ID")
+        logger.exception(
+            "Organization ID is required to generate organization group ID"
+        )
         raise ValueError("Organization ID must be set to generate group ID.")
     group_id = f"{organization_id}_organization"
     return group_id
@@ -249,7 +254,7 @@ def form_organization_group_id(organization_id: int) -> str:
 def form_outside_collaborators_group_id(repository_id: int) -> str:
     """Generate group ID for outside collaborators."""
     if not repository_id:
-        logger.error(
+        logger.exception(
             "Repository ID is required to generate outside collaborators group ID"
         )
         raise ValueError("Repository ID must be set to generate group ID.")
@@ -264,17 +269,17 @@ def get_repository_visibility(repo: Repository) -> str:
     """
     if hasattr(repo, "visibility"):
         visibility = repo.visibility
-        logger.debug(
+        logger.info(
             f"Repository {repo.full_name} visibility from attribute: {visibility}"
         )
         return visibility
 
     # Fallback to private field for older GitHub API versions
     if not repo.private:
-        logger.debug(f"Repository {repo.full_name} is public")
+        logger.info(f"Repository {repo.full_name} is public")
         return "public"
 
-    logger.debug(f"Repository {repo.full_name} is private")
+    logger.info(f"Repository {repo.full_name} is private")
     return "private"
 
 
@@ -322,7 +327,7 @@ def get_external_access_permission(
         team_slugs = fetch_repository_team_slugs(repo, github_client)
         group_ids.update(team_slugs)
 
-        logger.debug(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
+        logger.info(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
         return ExternalAccess(
             external_user_emails=user_emails,
             external_user_group_ids=group_ids,
@@ -336,7 +341,7 @@ def get_external_access_permission(
         org_group_id = form_organization_group_id(repo.organization.id)
         group_ids.add(org_group_id)
 
-        logger.debug(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
+        logger.info(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
         return ExternalAccess(
             external_user_emails=user_emails,
             external_user_group_ids=group_ids,
