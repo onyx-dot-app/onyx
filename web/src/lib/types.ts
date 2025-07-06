@@ -429,6 +429,9 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+
+  // Federated Connectors
+  FederatedSlack = "federated_slack",
 }
 
 export const validAutoSyncSources = [

@@ -129,7 +129,7 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import { ValidSources, FederatedConnectorInfo } from "@/lib/types";
 import {
   FileResponse,
   FolderResponse,
@@ -139,6 +139,7 @@ import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
+import { useFederatedConnectors } from "@/lib/hooks";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -200,6 +201,9 @@ export function ChatPage({
     loading: oauthLoading,
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
+
+  // Also fetch federated connectors for the sources list
+  const { data: federatedConnectorsData } = useFederatedConnectors();
 
   // Check localStorage for previous skip preference
   const [oAuthModalHidden, setOAuthModalHidden] = useState(() => {
@@ -300,7 +304,7 @@ export function ChatPage({
 
     filterManager.buildFiltersFromQueryString(
       newSearchParams.toString(),
-      availableSources,
+      sources,
       documentSets.map((ds) => ds.name),
       tags
     );
@@ -398,8 +402,18 @@ export function ChatPage({
 
   const sources: SourceMetadata[] = useMemo(() => {
     const uniqueSources = Array.from(new Set(availableSources));
-    return uniqueSources.map((source) => getSourceMetadata(source));
-  }, [availableSources]);
+    const regularSources = uniqueSources.map((source) =>
+      getSourceMetadata(source)
+    );
+
+    // Add federated connectors as sources
+    const federatedSources =
+      federatedConnectorsData?.map((connector: FederatedConnectorInfo) => {
+        return getSourceMetadata(connector.source as ValidSources);
+      }) || [];
+
+    return [...regularSources, ...federatedSources];
+  }, [availableSources, federatedConnectorsData]);
 
   const stopGenerating = () => {
     const currentSession = currentSessionId();

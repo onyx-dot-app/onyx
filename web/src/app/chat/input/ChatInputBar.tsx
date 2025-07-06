@@ -483,6 +483,8 @@ export function ChatInputBar({
     return combined;
   }, [selectedFiles, currentMessageFiles, currentMessageFileIds]);
 
+  console.log("filterManager.selectedSources", filterManager.selectedSources);
+  console.log("availableSources", availableSources);
   return (
     <div id="onyx-chat-input">
       <div className="flex  justify-center mx-auto">
@@ -867,15 +869,11 @@ export function ChatInputBar({
                     }
                     availableTags={availableTags}
                     filterManager={filterManager}
-                    trigger={
-                      <ChatInputOption
-                        flexPriority="stiff"
-                        name="Filters"
-                        Icon={FiFilter}
-                        toggle
-                        tooltipContent="Filter your search"
-                      />
-                    }
+                    trigger={{
+                      name: "Filters",
+                      Icon: FiFilter,
+                      tooltipContent: "Filter your search",
+                    }}
                   />
                 )}
               </div>
