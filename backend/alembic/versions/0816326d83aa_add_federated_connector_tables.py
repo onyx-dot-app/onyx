@@ -36,7 +36,9 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("token", sa.String(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=True),
-        sa.ForeignKeyConstraint(["federated_connector_id"], ["federated_connector.id"]),
+        sa.ForeignKeyConstraint(
+            ["federated_connector_id"], ["federated_connector.id"], ondelete="CASCADE"
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["user.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -48,8 +50,12 @@ def upgrade() -> None:
         sa.Column("federated_connector_id", sa.Integer(), nullable=False),
         sa.Column("document_set_id", sa.Integer(), nullable=False),
         sa.Column("entities", postgresql.JSONB(), nullable=False),
-        sa.ForeignKeyConstraint(["federated_connector_id"], ["federated_connector.id"]),
-        sa.ForeignKeyConstraint(["document_set_id"], ["document_set.id"]),
+        sa.ForeignKeyConstraint(
+            ["federated_connector_id"], ["federated_connector.id"], ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_set_id"], ["document_set.id"], ondelete="CASCADE"
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "federated_connector_id",

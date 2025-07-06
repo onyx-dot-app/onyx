@@ -1421,10 +1421,14 @@ class FederatedConnector(Base):
     credentials: Mapped[dict[str, str]] = mapped_column(EncryptedJson(), nullable=False)
 
     oauth_tokens: Mapped[list["FederatedConnectorOAuthToken"]] = relationship(
-        "FederatedConnectorOAuthToken", back_populates="federated_connector"
+        "FederatedConnectorOAuthToken",
+        back_populates="federated_connector",
+        cascade="all, delete-orphan",
     )
     document_sets: Mapped[list["FederatedConnector__DocumentSet"]] = relationship(
-        "FederatedConnector__DocumentSet", back_populates="federated_connector"
+        "FederatedConnector__DocumentSet",
+        back_populates="federated_connector",
+        cascade="all, delete-orphan",
     )
 
 
@@ -1436,7 +1440,7 @@ class FederatedConnectorOAuthToken(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     federated_connector_id: Mapped[int] = mapped_column(
-        ForeignKey("federated_connector.id"), nullable=False
+        ForeignKey("federated_connector.id", ondelete="CASCADE"), nullable=False
     )
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=False
@@ -1457,10 +1461,10 @@ class FederatedConnector__DocumentSet(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     federated_connector_id: Mapped[int] = mapped_column(
-        ForeignKey("federated_connector.id"), nullable=False
+        ForeignKey("federated_connector.id", ondelete="CASCADE"), nullable=False
     )
     document_set_id: Mapped[int] = mapped_column(
-        ForeignKey("document_set.id"), nullable=False
+        ForeignKey("document_set.id", ondelete="CASCADE"), nullable=False
     )
     # unique per source type. Validated before insertion.
     entities: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB(), nullable=False)
