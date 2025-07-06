@@ -88,6 +88,7 @@ class OAuthCallbackResult(BaseModel):
     refresh_token: Optional[str] = None
     token_type: Optional[str] = None
     scope: Optional[str] = None
+    source: Optional[FederatedConnectorSource] = None
 
     class Config:
         extra = "allow"  # Allow additional fields from different OAuth providers
@@ -460,6 +461,9 @@ def handle_oauth_callback_generic(
     # Convert OAuthResult to OAuthCallbackResult for API response
     oauth_result_dict = oauth_result.model_dump()
     oauth_callback_result = OAuthCallbackResult(**oauth_result_dict)
+
+    # Add source information to the response
+    oauth_callback_result.source = federated_connector.source
 
     # Store OAuth token in database if we have an access token
     if oauth_result.access_token:

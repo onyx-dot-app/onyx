@@ -2,14 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AdminPageTitle } from "@/components/admin/Title";
-import {
-  KeyIcon,
-  CheckmarkIcon,
-  TriangleAlertIcon,
-} from "@/components/icons/icons";
+import { CheckmarkIcon, TriangleAlertIcon } from "@/components/icons/icons";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@/components/ui/button";
+import { getSourceDisplayName } from "@/lib/sources";
 
 export default function FederatedOAuthCallbackPage() {
   const router = useRouter();
@@ -22,7 +18,6 @@ export default function FederatedOAuthCallbackPage() {
   const [isError, setIsError] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [redirectCountdown, setRedirectCountdown] = useState(3);
 
   // Extract query parameters
   const code = searchParams?.get("code");
@@ -30,17 +25,15 @@ export default function FederatedOAuthCallbackPage() {
   const error = searchParams?.get("error");
   const errorDescription = searchParams?.get("error_description");
 
-  // Auto-redirect countdown for success cases
+  // Auto-redirect for success cases
   useEffect(() => {
-    if (isSuccess && redirectCountdown > 0) {
+    if (isSuccess) {
       const timer = setTimeout(() => {
-        setRedirectCountdown(redirectCountdown - 1);
-      }, 1000);
+        router.push("/chat");
+      }, 2000);
       return () => clearTimeout(timer);
-    } else if (isSuccess && redirectCountdown === 0) {
-      router.push("/chat");
     }
-  }, [isSuccess, redirectCountdown, router]);
+  }, [isSuccess, router]);
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
@@ -104,10 +97,14 @@ export default function FederatedOAuthCallbackPage() {
           throw new Error(errorMessage);
         }
 
+        // Parse the response to get source information
+        const responseData = await response.json();
+        const source = responseData.source;
+        const displayName = source ? getSourceDisplayName(source) : "connector";
+
         setStatusMessage("Success!");
         setStatusDetails(
-          "Your authorization completed successfully. You can now use this " +
-            "federated connector for search. Redirecting you to chat..."
+          `Your ${displayName} authorization completed successfully. You can now use this connector for search.`
         );
         setIsSuccess(true);
         setIsError(false);
@@ -131,32 +128,38 @@ export default function FederatedOAuthCallbackPage() {
   const getStatusIcon = () => {
     if (isLoading) {
       return (
-        <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+        <div className="w-16 h-16 border-4 border-blue-200 dark:border-blue-800 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin mx-auto mb-4"></div>
       );
     }
     if (isSuccess) {
       return (
-        <CheckmarkIcon size={64} className="text-green-500 mx-auto mb-4" />
+        <CheckmarkIcon
+          size={64}
+          className="text-green-500 dark:text-green-400 mx-auto mb-4"
+        />
       );
     }
     if (isError) {
       return (
-        <TriangleAlertIcon size={64} className="text-red-500 mx-auto mb-4" />
+        <TriangleAlertIcon
+          size={64}
+          className="text-red-500 dark:text-red-400 mx-auto mb-4"
+        />
       );
     }
     return null;
   };
 
   const getStatusColor = () => {
-    if (isSuccess) return "text-green-600";
-    if (isError) return "text-red-600";
-    return "text-gray-600";
+    if (isSuccess) return "text-green-600 dark:text-green-400";
+    if (isError) return "text-red-600 dark:text-red-400";
+    return "text-gray-600 dark:text-gray-300";
   };
 
   return (
     <div className="min-h-screen flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center p-4">
-        <CardSection className="max-w-md w-full mx-auto p-8 shadow-lg bg-white rounded-lg">
+        <CardSection className="max-w-md w-full mx-auto p-8 shadow-lg bg-white dark:bg-gray-800 rounded-lg">
           <div className="text-center">
             {getStatusIcon()}
 
@@ -164,21 +167,15 @@ export default function FederatedOAuthCallbackPage() {
               {statusMessage}
             </h1>
 
-            <p className="text-gray-600 mb-6 leading-relaxed">
+            <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
               {statusDetails}
             </p>
 
             {isSuccess && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-                <p className="text-green-800 text-sm">
-                  Redirecting to chat in {redirectCountdown} seconds...
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+                <p className="text-green-800 dark:text-green-200 text-sm">
+                  Redirecting to chat in 2 seconds...
                 </p>
-                <div className="w-full bg-green-200 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full transition-all duration-1000"
-                    style={{ width: `${((3 - redirectCountdown) / 3) * 100}%` }}
-                  ></div>
-                </div>
               </div>
             )}
 
@@ -196,7 +193,7 @@ export default function FederatedOAuthCallbackPage() {
               )}
 
               {isLoading && (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   This may take a few moments...
                 </p>
               )}
