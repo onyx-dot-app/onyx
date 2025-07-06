@@ -7,7 +7,7 @@ import Sidebar from "./Sidebar";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Button } from "@/components/ui/button";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
-import FederatedConnectorForm from "./FederatedConnectorForm";
+import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 
 export default function ConnectorWrapper({
   connector,

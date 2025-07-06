@@ -185,6 +185,20 @@ export interface FederatedConnectorInfo {
   entities_count: number;
 }
 
+export interface FederatedConnectorDetail {
+  id: number;
+  source: string;
+  name: string;
+  credentials: Record<string, any>;
+  oauth_token_exists: boolean;
+  oauth_token_expires_at: string | null;
+  document_sets: Array<{
+    id: number;
+    name: string;
+    entities: Record<string, any>;
+  }>;
+}
+
 export interface OAuthPrepareAuthorizationResponse {
   url: string;
 }

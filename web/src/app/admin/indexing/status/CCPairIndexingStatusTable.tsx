@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
+import { CCPairStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
   ConnectorIndexingStatus,
@@ -27,7 +27,6 @@ import {
   FiLock,
   FiUnlock,
   FiRefreshCw,
-  FiPauseCircle,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -37,7 +36,6 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
-import { Warning } from "@phosphor-icons/react";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -247,19 +245,9 @@ border border-border dark:border-neutral-700
           {federatedConnector.name}
         </p>
       </TableCell>
+      <TableCell>n/a</TableCell>
       <TableCell>
-        {federatedConnector.last_success
-          ? timeAgo(federatedConnector.last_success)
-          : "-"}
-      </TableCell>
-      <TableCell>
-        <Badge
-          variant={
-            federatedConnector.status === "active" ? "success" : "destructive"
-          }
-        >
-          {federatedConnector.status === "active" ? "Active" : "Inactive"}
-        </Badge>
+        <Badge variant="success">Indexed</Badge>
       </TableCell>
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
@@ -268,7 +256,7 @@ border border-border dark:border-neutral-700
           </Badge>
         </TableCell>
       )}
-      <TableCell>{federatedConnector.entities_count} entities</TableCell>
+      <TableCell>n/a</TableCell>
       <TableCell>
         <TooltipProvider>
           <Tooltip>
@@ -285,125 +273,6 @@ border border-border dark:border-neutral-700
         </TooltipProvider>
       </TableCell>
     </TableRow>
-  );
-}
-
-function FederatedSection({
-  federatedConnectors,
-  searchTerm,
-  isOpen,
-  onToggle,
-}: {
-  federatedConnectors: FederatedConnectorInfo[];
-  searchTerm: string;
-  isOpen: boolean;
-  onToggle: () => void;
-}) {
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
-  // Debug logging
-  console.log("FederatedSection called with:", {
-    federatedConnectors,
-    searchTerm,
-    isOpen,
-    federatedConnectorsLength: federatedConnectors.length,
-  });
-
-  // Filter federated connectors based on search term
-  const filteredConnectors = federatedConnectors.filter((connector) =>
-    connector.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  console.log("Filtered connectors:", filteredConnectors);
-
-  if (filteredConnectors.length === 0) {
-    console.log("No filtered connectors, returning null");
-    return null;
-  }
-
-  return (
-    <>
-      <br className="mt-4" />
-      <TableRow
-        onClick={onToggle}
-        className="border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
-      >
-        <TableCell>
-          <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
-            <div className="cursor-pointer">
-              {isOpen ? (
-                <FiChevronDown size={20} />
-              ) : (
-                <FiChevronRight size={20} />
-              )}
-            </div>
-            <FiRefreshCw size={20} />
-            Federated Connectors
-          </div>
-        </TableCell>
-
-        <TableCell>
-          <div className="text-sm text-neutral-500 dark:text-neutral-300">
-            Total Connectors
-          </div>
-          <div className="text-xl font-semibold">
-            {filteredConnectors.length}
-          </div>
-        </TableCell>
-
-        <TableCell>
-          <div className="text-sm text-neutral-500 dark:text-neutral-300">
-            Active Connectors
-          </div>
-          <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-            {filteredConnectors.filter((fc) => fc.status === "active").length}/
-            {filteredConnectors.length}
-          </p>
-        </TableCell>
-
-        {isPaidEnterpriseFeaturesEnabled && (
-          <TableCell>
-            <div className="text-sm text-neutral-500 dark:text-neutral-300">
-              Federated Access
-            </div>
-            <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-              {filteredConnectors.length}/{filteredConnectors.length}
-            </p>
-          </TableCell>
-        )}
-
-        <TableCell>
-          <div className="text-sm text-neutral-500 dark:text-neutral-300">
-            Total Entities
-          </div>
-          <div className="text-xl font-semibold">
-            {filteredConnectors.reduce((sum, fc) => sum + fc.entities_count, 0)}
-          </div>
-        </TableCell>
-
-        <TableCell />
-      </TableRow>
-      {isOpen && (
-        <>
-          <TableRow className="border border-border dark:border-neutral-700">
-            <TableHead>Name</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead>Status</TableHead>
-            {isPaidEnterpriseFeaturesEnabled && (
-              <TableHead>Access Type</TableHead>
-            )}
-            <TableHead>Entities</TableHead>
-            <TableHead></TableHead>
-          </TableRow>
-          {filteredConnectors.map((federatedConnector) => (
-            <FederatedConnectorRow
-              key={federatedConnector.id}
-              federatedConnector={federatedConnector}
-            />
-          ))}
-        </>
-      )}
-    </>
   );
 }
 
@@ -432,11 +301,6 @@ export function CCPairIndexingStatusTable({
   >(() => {
     const savedState = Cookies.get(TOGGLED_CONNECTORS_COOKIE_NAME);
     return savedState ? JSON.parse(savedState) : {};
-  });
-
-  const [federatedToggled, setFederatedToggled] = useState<boolean>(() => {
-    const savedState = Cookies.get("TOGGLED_FEDERATED_COOKIE");
-    return savedState ? JSON.parse(savedState) : false;
   });
 
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
@@ -492,12 +356,17 @@ export function CCPairIndexingStatusTable({
       {} as GroupedConnectorSummaries;
     sorted.forEach((source) => {
       const statuses = grouped[source];
+      const federatedForSource = federatedConnectors.filter(
+        (fc) => fc.source.replace(/^federated_/, "") === source
+      );
+
       summaries[source] = {
-        count: statuses.length,
-        active: statuses.filter(
-          (status) =>
-            status.cc_pair_status === ConnectorCredentialPairStatus.ACTIVE
-        ).length,
+        count: statuses.length + federatedForSource.length,
+        active:
+          statuses.filter(
+            (status) =>
+              status.cc_pair_status === ConnectorCredentialPairStatus.ACTIVE
+          ).length + federatedForSource.length, // All federated connectors are considered active
         public: statuses.filter((status) => status.access_type === "public")
           .length,
         totalDocsIndexed: statuses.reduce(
@@ -573,6 +442,25 @@ export function CCPairIndexingStatusTable({
     };
   }, [ccPairsIndexingStatuses, editableCcPairsIndexingStatuses, filterOptions]);
 
+  // Combine regular connector sources with sources that only have federated connectors
+  const allSourcesWithFederated = useMemo(() => {
+    const federatedSources = Array.from(
+      new Set(
+        federatedConnectors.map((fc) => fc.source.replace(/^federated_/, ""))
+      )
+    ) as ValidSources[];
+
+    // Ensure we keep original ordering for existing sources, then append any new ones
+    const combined = [...sortedSources];
+    federatedSources.forEach((src) => {
+      if (!combined.includes(src)) {
+        combined.push(src);
+      }
+    });
+
+    return combined;
+  }, [sortedSources, federatedConnectors]);
+
   // Determine which sources to display based on filters and search
   const displaySources = useMemo(() => {
     const hasActiveFilters =
@@ -584,8 +472,8 @@ export function CCPairIndexingStatusTable({
       return Object.keys(filteredGroupedStatuses) as ValidSources[];
     }
 
-    return sortedSources;
-  }, [sortedSources, filteredGroupedStatuses, filterOptions]);
+    return allSourcesWithFederated;
+  }, [allSourcesWithFederated, filteredGroupedStatuses, filterOptions]);
 
   const handleFilterChange = (newFilters: FilterOptions) => {
     setFilterOptions(newFilters);
@@ -638,15 +526,6 @@ export function CCPairIndexingStatusTable({
     Cookies.set(
       TOGGLED_CONNECTORS_COOKIE_NAME,
       JSON.stringify(newConnectorsToggled)
-    );
-  };
-
-  const toggleFederated = () => {
-    const newFederatedToggled = !federatedToggled;
-    setFederatedToggled(newFederatedToggled);
-    Cookies.set(
-      "TOGGLED_FEDERATED_COOKIE",
-      JSON.stringify(newFederatedToggled)
     );
   };
 
@@ -806,7 +685,9 @@ export function CCPairIndexingStatusTable({
                 .includes(searchTerm.toLowerCase());
 
               const statuses =
-                filteredGroupedStatuses[source] || groupedStatuses[source];
+                filteredGroupedStatuses[source] ??
+                groupedStatuses[source] ??
+                [];
 
               const matchingConnectors = statuses.filter((status) =>
                 (status.name || "")
@@ -814,13 +695,35 @@ export function CCPairIndexingStatusTable({
                   .includes(searchTerm.toLowerCase())
               );
 
-              if (sourceMatches || matchingConnectors.length > 0) {
+              const federatedForSource = federatedConnectors.filter(
+                (fc) => fc.source.replace(/^federated_/, "") === source
+              );
+
+              const hasFederatedMatches = federatedForSource.some((fc) =>
+                fc.name.toLowerCase().includes(searchTerm.toLowerCase())
+              );
+
+              if (
+                sourceMatches ||
+                matchingConnectors.length > 0 ||
+                hasFederatedMatches
+              ) {
+                const summaryForSource = groupSummaries[source] ?? {
+                  count: federatedForSource.length,
+                  active: federatedForSource.length, // All federated connectors are considered active
+                  public: 0,
+                  totalDocsIndexed: federatedForSource.reduce(
+                    (sum, fc) => sum + (fc.docs_indexed ?? 0),
+                    0
+                  ),
+                  errors: 0,
+                };
                 return (
                   <React.Fragment key={ind}>
                     <br className="mt-4" />
                     <SummaryRow
                       source={source}
-                      summary={groupSummaries[source]}
+                      summary={summaryForSource}
                       isOpen={connectorsToggled[source] || false}
                       onToggle={() => toggleSource(source)}
                     />
@@ -831,7 +734,7 @@ export function CCPairIndexingStatusTable({
                           <TableHead>Last Indexed</TableHead>
                           <TableHead>Status</TableHead>
                           {isPaidEnterpriseFeaturesEnabled && (
-                            <TableHead>Permissions</TableHead>
+                            <TableHead>Permissions / Access</TableHead>
                           )}
                           <TableHead>Total Docs</TableHead>
                           <TableHead></TableHead>
@@ -849,6 +752,21 @@ export function CCPairIndexingStatusTable({
                             />
                           )
                         )}
+
+                        {/* Add federated connectors belonging to this source */}
+                        {(sourceMatches
+                          ? federatedForSource
+                          : federatedForSource.filter((fc) =>
+                              fc.name
+                                .toLowerCase()
+                                .includes(searchTerm.toLowerCase())
+                            )
+                        ).map((federatedConnector) => (
+                          <FederatedConnectorRow
+                            key={`federated-${federatedConnector.id}`}
+                            federatedConnector={federatedConnector}
+                          />
+                        ))}
                       </>
                     )}
                   </React.Fragment>
@@ -856,14 +774,6 @@ export function CCPairIndexingStatusTable({
               }
               return null;
             })}
-          {federatedConnectors.length > 0 && (
-            <FederatedSection
-              federatedConnectors={federatedConnectors}
-              searchTerm={searchTerm}
-              isOpen={federatedToggled}
-              onToggle={toggleFederated}
-            />
-          )}
         </TableBody>
       </Table>
     </>

@@ -371,6 +371,10 @@ def get_authorize_url(
     db_session: Session = Depends(get_session),
 ) -> AuthorizeUrlResponse:
     """Get URL to send the user for OAuth"""
+    # Validate that the ID is not None or invalid
+    if id is None or id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid federated connector ID")
+
     federated_connector = fetch_federated_connector_by_id(id, db_session)
     if not federated_connector:
         raise HTTPException(status_code=404, detail="Federated connector not found")
@@ -389,6 +393,9 @@ def get_authorize_url(
     base_authorize_url = connector_instance.authorize(get_oauth_callback_uri())
 
     # Generate state parameter and store session info
+    logger.info(
+        f"Generating OAuth state for federated_connector_id={id}, user_id={user.id}"
+    )
     state = generate_oauth_state(
         federated_connector_id=id,
         user_id=str(user.id),
@@ -396,6 +403,7 @@ def get_authorize_url(
 
     # Add state to the OAuth URL
     authorize_url = add_state_to_oauth_url(base_authorize_url, state)
+    logger.info(f"Generated OAuth authorize URL with state for connector {id}")
     return AuthorizeUrlResponse(authorize_url=authorize_url)
 
 
@@ -430,6 +438,14 @@ def handle_oauth_callback_generic(
     # Get federated connector ID from the state
     federated_connector_id = oauth_session.federated_connector_id
 
+    # Validate federated_connector_id is not None
+    if federated_connector_id is None:
+        logger.error("OAuth session has null federated_connector_id")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OAuth session: missing federated connector ID",
+        )
+
     federated_connector = fetch_federated_connector_by_id(
         federated_connector_id, db_session
     )
@@ -447,6 +463,10 @@ def handle_oauth_callback_generic(
 
     # Store OAuth token in database if we have an access token
     if oauth_result.access_token:
+        logger.info(
+            f"Storing OAuth token for federated_connector_id={federated_connector_id}, "
+            f"user_id={oauth_session.user_id}"
+        )
         update_federated_connector_oauth_token(
             db_session=db_session,
             federated_connector_id=federated_connector_id,
