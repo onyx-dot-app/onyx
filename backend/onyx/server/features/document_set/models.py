@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -9,6 +10,22 @@ from onyx.server.documents.models import ConnectorSnapshot
 from onyx.server.documents.models import CredentialSnapshot
 
 
+class FederatedConnectorConfig(BaseModel):
+    """Configuration for adding a federated connector to a document set"""
+
+    federated_connector_id: int
+    entities: dict[str, Any]
+
+
+class FederatedConnectorDescriptor(BaseModel):
+    """Descriptor for a federated connector in a document set"""
+
+    id: int
+    name: str
+    source: str
+    entities: dict[str, Any]
+
+
 class DocumentSetCreationRequest(BaseModel):
     name: str
     description: str
@@ -17,6 +34,8 @@ class DocumentSetCreationRequest(BaseModel):
     # For Private Document Sets, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
     groups: list[int] = Field(default_factory=list)
+    # Federated connectors to include in the document set
+    federated_connectors: list[FederatedConnectorConfig] = Field(default_factory=list)
 
 
 class DocumentSetUpdateRequest(BaseModel):
@@ -27,6 +46,8 @@ class DocumentSetUpdateRequest(BaseModel):
     # For Private Document Sets, who should be able to access these
     users: list[UUID]
     groups: list[int]
+    # Federated connectors to include in the document set
+    federated_connectors: list[FederatedConnectorConfig] = Field(default_factory=list)
 
 
 class CheckDocSetPublicRequest(BaseModel):
@@ -51,6 +72,10 @@ class DocumentSet(BaseModel):
     # For Private Document Sets, who should be able to access these
     users: list[UUID]
     groups: list[int]
+    # Federated connectors in the document set
+    federated_connectors: list[FederatedConnectorDescriptor] = Field(
+        default_factory=list
+    )
 
     @classmethod
     def from_model(cls, document_set_model: DocumentSetDBModel) -> "DocumentSet":
@@ -76,4 +101,21 @@ class DocumentSet(BaseModel):
             is_public=document_set_model.is_public,
             users=[user.id for user in document_set_model.users],
             groups=[group.id for group in document_set_model.groups],
+            federated_connectors=[
+                FederatedConnectorDescriptor(
+                    id=fc_mapping.federated_connector_id,
+                    name=(
+                        f"{fc_mapping.federated_connector.source.replace('_', ' ').title()}"
+                        if fc_mapping.federated_connector
+                        else "Unknown"
+                    ),
+                    source=(
+                        fc_mapping.federated_connector.source
+                        if fc_mapping.federated_connector
+                        else "unknown"
+                    ),
+                    entities=fc_mapping.entities,
+                )
+                for fc_mapping in document_set_model.federated_connectors
+            ],
         )

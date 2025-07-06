@@ -2391,7 +2391,11 @@ class DocumentSet(Base):
         viewonly=True,
     )
     federated_connectors: Mapped[list["FederatedConnector__DocumentSet"]] = (
-        relationship("FederatedConnector__DocumentSet", back_populates="document_set")
+        relationship(
+            "FederatedConnector__DocumentSet",
+            back_populates="document_set",
+            cascade="all, delete-orphan",
+        )
     )
 
 

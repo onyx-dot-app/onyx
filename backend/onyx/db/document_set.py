@@ -10,6 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
@@ -122,7 +123,11 @@ def get_document_set_by_id_for_user(
     user: User | None,
     get_editable: bool = True,
 ) -> DocumentSetDBModel | None:
-    stmt = select(DocumentSetDBModel).distinct()
+    stmt = (
+        select(DocumentSetDBModel)
+        .distinct()
+        .options(selectinload(DocumentSetDBModel.federated_connectors))
+    )
     stmt = stmt.where(DocumentSetDBModel.id == document_set_id)
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     return db_session.scalar(stmt)
@@ -220,9 +225,12 @@ def insert_document_set(
     user_id: UUID | None,
     db_session: Session,
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
-    if not document_set_creation_request.cc_pair_ids:
-        # It's cc-pairs in actuality but the UI displays this error
-        raise ValueError("Cannot create a document set with no Connectors")
+    # Check if we have either CC pairs or federated connectors (or both)
+    if (
+        not document_set_creation_request.cc_pair_ids
+        and not document_set_creation_request.federated_connectors
+    ):
+        raise ValueError("Cannot create a document set with no connectors")
 
     if not document_set_creation_request.is_public:
         _check_if_cc_pairs_are_owned_by_groups(
@@ -244,6 +252,7 @@ def insert_document_set(
         db_session.add(new_document_set_row)
         db_session.flush()  # ensure the new document set gets assigned an ID
 
+        # Create CC pair mappings
         ds_cc_pairs = [
             DocumentSet__ConnectorCredentialPair(
                 document_set_id=new_document_set_row.id,
@@ -253,6 +262,17 @@ def insert_document_set(
             for cc_pair_id in document_set_creation_request.cc_pair_ids
         ]
         db_session.add_all(ds_cc_pairs)
+
+        # Create federated connector mappings
+        from onyx.db.federated import create_federated_connector_document_set_mapping
+
+        for fc_config in document_set_creation_request.federated_connectors:
+            create_federated_connector_document_set_mapping(
+                db_session=db_session,
+                federated_connector_id=fc_config.federated_connector_id,
+                document_set_id=new_document_set_row.id,
+                entities=fc_config.entities,
+            )
 
         versioned_private_doc_set_fn = fetch_versioned_implementation(
             "onyx.db.document_set", "make_doc_set_private"
@@ -270,6 +290,7 @@ def insert_document_set(
     except Exception as e:
         db_session.rollback()
         logger.error(f"Error creating document set: {e}")
+        raise
 
     return new_document_set_row, ds_cc_pairs
 
@@ -283,9 +304,12 @@ def update_document_set(
     That will be processed via Celery in check_for_vespa_sync_task
     and trigger a long running background sync to Vespa.
     """
-    if not document_set_update_request.cc_pair_ids:
-        # It's cc-pairs in actuality but the UI displays this error
-        raise ValueError("Cannot create a document set with no Connectors")
+    # Check if we have either CC pairs or federated connectors (or both)
+    if (
+        not document_set_update_request.cc_pair_ids
+        and not document_set_update_request.federated_connectors
+    ):
+        raise ValueError("Cannot update a document set with no connectors")
 
     if not document_set_update_request.is_public:
         _check_if_cc_pairs_are_owned_by_groups(
@@ -343,6 +367,27 @@ def update_document_set(
             for cc_pair_id in document_set_update_request.cc_pair_ids
         ]
         db_session.add_all(ds_cc_pairs)
+
+        # Update federated connector mappings
+        from onyx.db.federated import create_federated_connector_document_set_mapping
+        from onyx.db.models import FederatedConnector__DocumentSet
+        from sqlalchemy import delete
+
+        # Delete existing federated connector mappings for this document set
+        delete_stmt = delete(FederatedConnector__DocumentSet).where(
+            FederatedConnector__DocumentSet.document_set_id == document_set_row.id
+        )
+        db_session.execute(delete_stmt)
+
+        # Create new federated connector mappings
+        for fc_config in document_set_update_request.federated_connectors:
+            create_federated_connector_document_set_mapping(
+                db_session=db_session,
+                federated_connector_id=fc_config.federated_connector_id,
+                document_set_id=document_set_row.id,
+                entities=fc_config.entities,
+            )
+
         db_session.commit()
     except:
         db_session.rollback()
@@ -502,7 +547,11 @@ def fetch_all_document_sets_for_user(
     user: User | None,
     get_editable: bool = True,
 ) -> Sequence[DocumentSetDBModel]:
-    stmt = select(DocumentSetDBModel).distinct()
+    stmt = (
+        select(DocumentSetDBModel)
+        .distinct()
+        .options(selectinload(DocumentSetDBModel.federated_connectors))
+    )
     stmt = _add_user_filters(stmt, user, get_editable=get_editable)
     return db_session.scalars(stmt).all()
 

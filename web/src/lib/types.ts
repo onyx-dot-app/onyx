@@ -267,6 +267,18 @@ export interface CCPairDescriptor<ConnectorType, CredentialType> {
   access_type: AccessType;
 }
 
+export interface FederatedConnectorConfig {
+  federated_connector_id: number;
+  entities: Record<string, any>;
+}
+
+export interface FederatedConnectorDescriptor {
+  id: number;
+  name: string;
+  source: string;
+  entities: Record<string, any>;
+}
+
 export interface DocumentSet {
   id: number;
   name: string;
@@ -276,6 +288,7 @@ export interface DocumentSet {
   is_public: boolean;
   users: string[];
   groups: number[];
+  federated_connectors: FederatedConnectorDescriptor[];
 }
 
 export interface Tag {
