@@ -30,6 +30,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+GITHUB_DOC_SYNC_LABEL = "github_doc_sync"
+
 
 def github_doc_sync(
     cc_pair: ConnectorCredentialPair,
@@ -79,6 +81,11 @@ def github_doc_sync(
 
     # Process documents in batches using checkpointing
     while checkpoint.has_more:
+        # Check for stop signal before processing each batch
+        if callback:
+            if callback.should_stop():
+                raise RuntimeError(f"{GITHUB_DOC_SYNC_LABEL}: Stop signal detected")
+
         logger.info(f"Processing checkpoint batch, has_more: {checkpoint.has_more}")
         slim_doc_generator = github_connector.checkpointed_retrieve_all_slim_documents(
             start=start_time,
@@ -89,6 +96,11 @@ def github_doc_sync(
         for slim_doc, failure, new_checkpoint in SlimCheckpointOutputWrapper[
             GithubConnectorCheckpoint
         ]()(slim_doc_generator):
+            # Check for stop signal before processing each document
+            if callback:
+                if callback.should_stop():
+                    raise RuntimeError(f"{GITHUB_DOC_SYNC_LABEL}: Stop signal detected")
+
             # New checkpoint means we've moved to a different repository
             if new_checkpoint:
                 logger.info(f"Received new checkpoint: {new_checkpoint}")
@@ -108,6 +120,7 @@ def github_doc_sync(
                         github_client=github_connector.github_client,
                         fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
                         checkpoint=checkpoint,
+                        callback=callback,
                     )
                     continue
                 else:
@@ -117,6 +130,10 @@ def github_doc_sync(
             # Yield document external access records
             if slim_doc and slim_doc.external_access:
                 if isinstance(slim_doc, SlimDocument):
+                    # Report progress for each document processed
+                    if callback:
+                        callback.progress(GITHUB_DOC_SYNC_LABEL, 1)
+
                     yield DocExternalAccess(
                         doc_id=slim_doc.id,
                         external_access=slim_doc.external_access,
@@ -128,6 +145,7 @@ def _check_repo_permission_changes(
     github_client: Github,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     checkpoint: GithubConnectorCheckpoint,
+    callback: IndexingHeartbeatInterface | None = None,
 ) -> GithubConnectorCheckpoint:
     """
     Check if repository has any permission changes (visibility or team updates).
@@ -135,6 +153,11 @@ def _check_repo_permission_changes(
     Returns:
         Updated checkpoint with next repository to process
     """
+    # Check for stop signal before processing repository
+    if callback:
+        if callback.should_stop():
+            raise RuntimeError(f"{GITHUB_DOC_SYNC_LABEL}: Stop signal detected")
+
     # Check for repository visibility changes, if it's changed,
     # we need to re-sync the repository permissions for all documents in the repository
     if is_repo_visibility_changed(
@@ -174,6 +197,7 @@ def _check_repo_permission_changes(
             github_client=github_client,
             fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
             checkpoint=checkpoint,
+            callback=callback,
         )
 
     # If no more repositories to process, return the checkpoint
