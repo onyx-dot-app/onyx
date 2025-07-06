@@ -67,49 +67,43 @@ def check_if_need_search(
     query: str,
     history: list[PreviousMessage],
     llm: LLM,
+    search_type: str = "internal",
 ) -> bool:
+    """
+    Determines if search is needed based on query and history.
 
-    # Choosing is globally disabled, use search
-    if DISABLE_LLM_CHOOSE_SEARCH:
+    Args:
+        query: The user's query
+        history: List of previous messages
+        llm: The language model to use for prediction
+        search_type: Type of search - "internal" for internal search, "internet" for internet search
+
+    Returns:
+        True if search is needed, False otherwise
+    """
+    # Choosing is globally disabled, use search (only for internal search)
+    if search_type == "internal" and DISABLE_LLM_CHOOSE_SEARCH:
         return True
 
-    history_str = combine_message_chain(
-        messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
-    )
-
-    prompt_msgs = _get_search_messages(
-        query=query, history_str=history_str, template=AGGRESSIVE_SEARCH_TEMPLATE
-    )
-
-    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    require_search_output = message_to_string(llm.invoke(filled_llm_prompt))
-
-    logger.debug(f"Run search prediction: {require_search_output}")
-
-    return (SKIP_SEARCH.split()[0]).lower() not in require_search_output.lower()
-
-
-def check_if_need_internet_search(
-    query: str,
-    history: list[PreviousMessage],
-    llm: LLM,
-) -> bool:
+    # Select template and log message based on search type
+    if search_type == "internet":
+        template = AGGRESSIVE_INTERNET_SEARCH_TEMPLATE
+        log_message = "Run internet search prediction"
+    else:
+        template = AGGRESSIVE_SEARCH_TEMPLATE
+        log_message = "Run search prediction"
 
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
 
     prompt_msgs = _get_search_messages(
-        query=query,
-        history_str=history_str,
-        template=AGGRESSIVE_INTERNET_SEARCH_TEMPLATE,
+        query=query, history_str=history_str, template=template
     )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    require_internet_search_output = message_to_string(llm.invoke(filled_llm_prompt))
+    search_output = message_to_string(llm.invoke(filled_llm_prompt))
 
-    logger.debug(f"Run internet search prediction: {require_internet_search_output}")
+    logger.debug(f"{log_message}: {search_output}")
 
-    return (
-        SKIP_SEARCH.split()[0]
-    ).lower() not in require_internet_search_output.lower()
+    return (SKIP_SEARCH.split()[0]).lower() not in search_output.lower()

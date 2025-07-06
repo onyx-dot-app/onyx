@@ -48,6 +48,45 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class SearchToolConfig(BaseModel):
+    answer_style_config: AnswerStyleConfig = Field(
+        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
+    )
+    document_pruning_config: DocumentPruningConfig = Field(
+        default_factory=DocumentPruningConfig
+    )
+    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    rerank_settings: RerankingDetails | None = None
+    selected_sections: list[InferenceSection] | None = None
+    chunks_above: int = 0
+    chunks_below: int = 0
+    full_doc: bool = False
+    latest_query_files: list[InMemoryChatFile] | None = None
+    # Use with care, should only be used for OnyxBot in channels with multiple users
+    bypass_acl: bool = False
+
+
+class InternetSearchToolConfig(BaseModel):
+    answer_style_config: AnswerStyleConfig = Field(
+        default_factory=lambda: AnswerStyleConfig(
+            citation_config=CitationConfig(all_docs_useful=True)
+        )
+    )
+    document_pruning_config: DocumentPruningConfig = Field(
+        default_factory=DocumentPruningConfig
+    )
+
+
+class ImageGenerationToolConfig(BaseModel):
+    additional_headers: dict[str, str] | None = None
+
+
+class CustomToolConfig(BaseModel):
+    chat_session_id: UUID | None = None
+    message_id: int | None = None
+    additional_headers: dict[str, str] | None = None
+
+
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     """Helper function to get image generation LLM config based on available providers"""
     if llm and llm.config.api_key and llm.config.model_provider == "openai":
@@ -99,43 +138,24 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
-class SearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
+def _configure_document_pruning_for_tool_config(
+    tool_config: SearchToolConfig | InternetSearchToolConfig,
+    tools: list[Tool],
+    llm: LLM,
+) -> None:
+    """Helper function to configure document pruning settings for tool configs"""
+    tool_config.document_pruning_config.tool_num_tokens = compute_all_tool_tokens(
+        tools,
+        get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        ),
     )
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
-    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
-    rerank_settings: RerankingDetails | None = None
-    selected_sections: list[InferenceSection] | None = None
-    chunks_above: int = 0
-    chunks_below: int = 0
-    full_doc: bool = False
-    latest_query_files: list[InMemoryChatFile] | None = None
-    # Use with care, should only be used for OnyxBot in channels with multiple users
-    bypass_acl: bool = False
-
-
-class InternetSearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(
-            citation_config=CitationConfig(all_docs_useful=True)
+    tool_config.document_pruning_config.using_tool_message = (
+        explicit_tool_calling_supported(
+            llm.config.model_provider, llm.config.model_name
         )
     )
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
-
-
-class ImageGenerationToolConfig(BaseModel):
-    additional_headers: dict[str, str] | None = None
-
-
-class CustomToolConfig(BaseModel):
-    chat_session_id: UUID | None = None
-    message_id: int | None = None
-    additional_headers: dict[str, str] | None = None
 
 
 def construct_tools(
@@ -271,35 +291,11 @@ def construct_tools(
 
     # factor in tool definition size when pruning
     if search_tool_config:
-        search_tool_config.document_pruning_config.tool_num_tokens = (
-            compute_all_tool_tokens(
-                tools,
-                get_tokenizer(
-                    model_name=llm.config.model_name,
-                    provider_type=llm.config.model_provider,
-                ),
-            )
-        )
-        search_tool_config.document_pruning_config.using_tool_message = (
-            explicit_tool_calling_supported(
-                llm.config.model_provider, llm.config.model_name
-            )
-        )
+        _configure_document_pruning_for_tool_config(search_tool_config, tools, llm)
 
     if internet_search_tool_config:
-        internet_search_tool_config.document_pruning_config.tool_num_tokens = (
-            compute_all_tool_tokens(
-                tools,
-                get_tokenizer(
-                    model_name=llm.config.model_name,
-                    provider_type=llm.config.model_provider,
-                ),
-            )
-        )
-        internet_search_tool_config.document_pruning_config.using_tool_message = (
-            explicit_tool_calling_supported(
-                llm.config.model_provider, llm.config.model_name
-            )
+        _configure_document_pruning_for_tool_config(
+            internet_search_tool_config, tools, llm
         )
 
     return tool_dict

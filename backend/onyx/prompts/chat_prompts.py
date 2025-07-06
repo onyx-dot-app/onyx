@@ -53,9 +53,12 @@ CHAT_USER_CONTEXT_FREE_PROMPT = f"""
 SKIP_SEARCH = "Skip Search"
 YES_SEARCH = "Yes Search"
 
-AGGRESSIVE_SEARCH_TEMPLATE = f"""
+
+def _create_aggressive_search_template(search_tool_type: str) -> str:
+    """Create an aggressive search template with parameterized search tool type."""
+    return f"""
 Given the conversation history and a follow up query, determine if the system should call \
-an external search tool to better answer the latest user input.
+an external {search_tool_type} search tool to better answer the latest user input.
 Your default response is {YES_SEARCH}.
 
 Respond "{SKIP_SEARCH}" if either:
@@ -75,27 +78,10 @@ Follow Up Input:
 {{final_query}}
 """.strip()
 
-AGGRESSIVE_INTERNET_SEARCH_TEMPLATE = f"""
-Given the conversation history and a follow up query, determine if the system should call \
-an external internet search tool to better answer the latest user input.
-Your default response is {YES_SEARCH}.
 
-Respond "{SKIP_SEARCH}" if either:
-- There is sufficient information in chat history to FULLY and ACCURATELY answer the query AND \
-additional information or details would provide little or no value.
-- The query is some form of request that does not require additional information to handle.
+AGGRESSIVE_SEARCH_TEMPLATE = _create_aggressive_search_template("")
 
-Conversation History:
-{GENERAL_SEP_PAT}
-{{chat_history}}
-{GENERAL_SEP_PAT}
-
-If you are at all unsure, respond with {YES_SEARCH}.
-Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
-
-Follow Up Input:
-{{final_query}}
-""".strip()
+AGGRESSIVE_INTERNET_SEARCH_TEMPLATE = _create_aggressive_search_template("internet")
 
 
 # TODO, templatize this so users don't need to make code changes to use this

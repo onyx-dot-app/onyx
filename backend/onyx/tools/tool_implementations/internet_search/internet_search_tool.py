@@ -36,7 +36,7 @@ from onyx.indexing.models import IndexChunk
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.prompts.chat_prompts import INTERNET_SEARCH_QUERY_REPHRASE
-from onyx.secondary_llm_flows.choose_search import check_if_need_internet_search
+from onyx.secondary_llm_flows.choose_search import check_if_need_search
 from onyx.secondary_llm_flows.query_expansion import history_based_query_rephrase
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
@@ -196,7 +196,9 @@ class InternetSearchTool(Tool[None]):
         llm: LLM,
         force_run: bool = False,
     ) -> dict[str, Any] | None:
-        if not force_run and not check_if_need_internet_search(query, history, llm):
+        if not force_run and not check_if_need_search(
+            query, history, llm, search_type="internet"
+        ):
             return None
 
         rephrased_query = history_based_query_rephrase(
@@ -224,7 +226,7 @@ class InternetSearchTool(Tool[None]):
                 semantic_identifier=result.title,
                 source=DocumentSource.WEB,
                 doc_updated_at=(
-                    datetime.fromisoformat(result.published_date)
+                    result.published_date
                     if result.published_date
                     else datetime.now(timezone.utc)
                 ),
@@ -335,12 +337,16 @@ class InternetSearchTool(Tool[None]):
 
         # Create sections for each document
         sections: list[InferenceSection] = []
-        for doc_id, doc_chunks in doc_chunks_map.items():
+        for _, doc_chunks in doc_chunks_map.items():
             # Sort chunks by chunk_id to maintain order
             sorted_chunks = sorted(doc_chunks, key=lambda x: x.chunk_id)
 
             # Use the chunk with highest score as the center chunk
-            center_chunk = max(doc_chunks, key=lambda x: x.score or 0)
+            if all(chunk.score is None for chunk in doc_chunks):
+                # If all scores are None, use the first chunk as center
+                center_chunk = doc_chunks[0]
+            else:
+                center_chunk = max(doc_chunks, key=lambda x: x.score or 0)
 
             # Create section using the utility function
             section = inference_section_from_chunks(

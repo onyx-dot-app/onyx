@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import EXA_API_KEY
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.tools.tool_implementations.internet_search.models import InternetSearchResult
 from onyx.tools.tool_implementations.internet_search.models import ProviderConfig
 from onyx.utils.logger import setup_logger
@@ -146,8 +147,9 @@ class InternetSearchProvider(BaseModel):
 
         # Extract global fields that apply to all results (e.g. rag_context)
         global_values: dict[str, Any] = {}
-        for field_name, field_path in self.config.global_fields.items():
-            global_values[field_name] = self._extract_global_field(data, field_path)
+        if hasattr(self.config, "global_fields") and self.config.global_fields:
+            for field_name, field_path in self.config.global_fields.items():
+                global_values[field_name] = self._extract_global_field(data, field_path)
 
         # Navigate to final results list using the configured path
         results_list = self._navigate_to_results(data)
@@ -167,17 +169,27 @@ class InternetSearchProvider(BaseModel):
             link = self._extract_field_value(
                 web_source, self.config.result_mapping.get("link", "")
             )
-            published_date = self._extract_field_value(
+            published_date_str = self._extract_field_value(
                 web_source, self.config.result_mapping.get("published_date", "")
             )
             full_content = self._extract_field_value(
                 web_source, self.config.result_mapping.get("full_content", "")
             )
 
+            # Parse published_date string to datetime object
+            published_date = None
+            if published_date_str:
+                try:
+                    published_date = time_str_to_utc(published_date_str)
+                except ValueError:
+                    logger.warning(
+                        f"Failed to parse published_date: {published_date_str}"
+                    )
+
             internet_search_result = InternetSearchResult(
                 title=title,
                 link=link,
-                published_date=published_date or None,
+                published_date=published_date,
                 full_content=full_content,
                 rag_context=global_values.get("rag_context", ""),
             )

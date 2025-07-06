@@ -60,7 +60,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 display_name=InternetSearchTool._DISPLAY_NAME,
             )
         ]
-        if get_available_providers() is not None
+        if (bool(get_available_providers()))
         else []
     ),
 ]

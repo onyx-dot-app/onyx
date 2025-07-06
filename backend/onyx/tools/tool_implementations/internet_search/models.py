@@ -1,9 +1,13 @@
+from datetime import datetime
 from typing import Any
 from typing import Literal
 
 from pydantic import BaseModel
+from pydantic import field_validator
 
 from onyx.context.search.models import InferenceSection
+
+MAX_CONTENT_LENGTH = 1_048_576
 
 
 class InternetSearchResponseSummary(BaseModel):
@@ -15,8 +19,16 @@ class InternetSearchResult(BaseModel):
     title: str
     link: str
     full_content: str
-    published_date: str | None = None
+    published_date: datetime | None = None
     rag_context: str | None = None
+
+    @field_validator("full_content")
+    @classmethod
+    def validate_content_length(cls, v: str) -> str:
+        """Truncate content if it exceeds maximum length to prevent memory issues."""
+        if len(v) > MAX_CONTENT_LENGTH:
+            return v[:MAX_CONTENT_LENGTH] + "... [Content truncated due to length]"
+        return v
 
 
 class ProviderConfig(BaseModel):
