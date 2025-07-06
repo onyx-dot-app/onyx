@@ -81,7 +81,7 @@ class InternetSearchTool(Tool[None]):
     _NAME = "run_internet_search"
     _DISPLAY_NAME = "Internet Search"
     _DESCRIPTION = INTERNET_SEARCH_TOOL_DESCRIPTION
-    provider: InternetSearchProvider
+    provider: InternetSearchProvider | None
 
     def __init__(
         self,
@@ -111,13 +111,14 @@ class InternetSearchTool(Tool[None]):
             else CONTEXT_CHUNKS_BELOW
         )
 
-        # mypy complains about the assignment to self.provider, but it's fine
         self.provider = (
             get_provider_by_name(provider) if provider else get_default_provider()
-        )  # type: ignore[assignment]
+        )
 
         if not self.provider:
             raise ValueError("No internet search providers are configured")
+        # For mypy
+        assert self.provider is not None
 
         self.provider.num_results = num_results
 
