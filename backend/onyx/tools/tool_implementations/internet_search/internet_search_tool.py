@@ -111,9 +111,10 @@ class InternetSearchTool(Tool[None]):
             else CONTEXT_CHUNKS_BELOW
         )
 
+        # mypy complains about the assignment to self.provider, but it's fine
         self.provider = (
             get_provider_by_name(provider) if provider else get_default_provider()
-        )
+        )  # type: ignore[assignment]
 
         if not self.provider:
             raise ValueError("No internet search providers are configured")

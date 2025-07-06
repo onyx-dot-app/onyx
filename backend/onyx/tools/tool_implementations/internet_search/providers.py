@@ -109,17 +109,12 @@ class InternetSearchProvider(BaseModel):
 
     def _extract_global_field(self, data: dict[str, Any], field_path: list[str]) -> Any:
         """Extract a global field from the API response using a path"""
-        current_data = data
-        for path_key in field_path:
-            try:
-                if isinstance(current_data, dict):
-                    current_data = current_data.get(path_key)
-                else:
-                    return None
-            except Exception as e:
-                logger.error(f"Error extracting global field: {e}")
+        current = data
+        for key in field_path:
+            if not isinstance(current, dict) or key not in current:
                 return None
-        return current_data
+            current = current[key]
+        return current
 
     def _extract_field_value(self, source: dict[str, Any], field_key: str) -> str:
         """Safely extract a field value from a source dictionary"""
@@ -130,16 +125,13 @@ class InternetSearchProvider(BaseModel):
 
     def _navigate_to_results(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         """Navigate to results list using the configured path"""
-        current_data = data
-
-        for path_key in self.config.results_path:
-            if not current_data:
-                logger.error(f"Path '{path_key}' not found in data")
+        current = data
+        for key in self.config.results_path:
+            if not isinstance(current, dict) or key not in current:
                 return []
-            current_data = current_data.get(path_key)
+            current = current[key]
 
-        # API responses should return a list of results
-        return current_data or []
+        return current if isinstance(current, list) else []
 
     def _extract_results(self, data: dict[str, Any]) -> list[InternetSearchResult]:
         """Extract results from API response based on provider configuration"""
