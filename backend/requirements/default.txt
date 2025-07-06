@@ -9,7 +9,7 @@ celery==5.5.1
 chardet==5.2.0
 chonkie==1.0.10
 dask==2023.8.1
-ddtrace==2.6.5
+ddtrace==3.10.0
 discord.py==2.4.0
 distributed==2023.8.1
 fastapi==0.115.12

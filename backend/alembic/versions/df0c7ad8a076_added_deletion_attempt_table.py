@@ -18,11 +18,13 @@ depends_on: None = None
 
 
 def upgrade() -> None:
+    op.execute("DROP TABLE IF EXISTS document CASCADE")
     op.create_table(
         "document",
         sa.Column("id", sa.String(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.execute("DROP TABLE IF EXISTS chunk CASCADE")
     op.create_table(
         "chunk",
         sa.Column("id", sa.String(), nullable=False),
@@ -43,6 +45,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", "document_store_type"),
     )
+    op.execute("DROP TABLE IF EXISTS deletion_attempt CASCADE")
     op.create_table(
         "deletion_attempt",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -84,6 +87,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.execute("DROP TABLE IF EXISTS document_by_connector_credential_pair CASCADE")
     op.create_table(
         "document_by_connector_credential_pair",
         sa.Column("id", sa.String(), nullable=False),
@@ -106,7 +110,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # upstream tables first
     op.drop_table("document_by_connector_credential_pair")
     op.drop_table("deletion_attempt")
     op.drop_table("chunk")
-    op.drop_table("document")
+
+    # Alembic op.drop_table() has no "cascade" flag – issue raw SQL
+    op.execute("DROP TABLE IF EXISTS document CASCADE")
