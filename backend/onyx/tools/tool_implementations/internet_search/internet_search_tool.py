@@ -81,7 +81,7 @@ class InternetSearchTool(Tool[None]):
     _NAME = "run_internet_search"
     _DISPLAY_NAME = "Internet Search"
     _DESCRIPTION = INTERNET_SEARCH_TOOL_DESCRIPTION
-    provider: InternetSearchProvider
+    provider: InternetSearchProvider | None
 
     def __init__(
         self,
@@ -212,6 +212,9 @@ class InternetSearchTool(Tool[None]):
         }
 
     def _perform_search(self, query: str, token_budget: int) -> list[Document]:
+        if not self.provider:
+            raise RuntimeError("Internet search provider is not configured")
+
         logger.info(
             f"Performing internet search with {self.provider.name} provider: {query}"
         )
