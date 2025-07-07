@@ -241,8 +241,8 @@ def _convert_email_headers_and_body_into_document(
 
     return Document(
         id=email_headers.id,
-        title=title,
-        semantic_identifier=email_headers.subject,
+        title=email_headers.subject,
+        semantic_identifier=title,
         metadata={},
         source=DocumentSource.IMAP,
         sections=[TextSection(text=email_body)],
