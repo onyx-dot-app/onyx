@@ -53,6 +53,12 @@ env:
   # Hubspot
   HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
 
+  # IMAP
+  IMAP_HOST: ${{ secrets.IMAP_HOST }}
+  IMAP_USERNAME: ${{ secrets.IMAP_USERNAME }}
+  IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+  IMAP_MAILBOXES: ${{ secrets.IMAP_MAILBOXES }}
+
   # Airtable
   AIRTABLE_TEST_BASE_ID: ${{ secrets.AIRTABLE_TEST_BASE_ID }}
   AIRTABLE_TEST_TABLE_ID: ${{ secrets.AIRTABLE_TEST_TABLE_ID }}
