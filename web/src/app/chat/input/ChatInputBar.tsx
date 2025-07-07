@@ -483,8 +483,6 @@ export function ChatInputBar({
     return combined;
   }, [selectedFiles, currentMessageFiles, currentMessageFileIds]);
 
-  console.log("filterManager.selectedSources", filterManager.selectedSources);
-  console.log("availableSources", availableSources);
   return (
     <div id="onyx-chat-input">
       <div className="flex  justify-center mx-auto">

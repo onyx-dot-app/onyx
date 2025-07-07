@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Loader2, Trash2Icon } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
 import { BackButton } from "@/components/BackButton";
 import Title from "@/components/ui/title";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
@@ -27,6 +27,12 @@ import {
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { FiSettings } from "react-icons/fi";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -464,17 +470,19 @@ export function FederatedConnectorForm({
               {isEditMode ? "Edit" : "Setup"} {sourceMetadata.displayName}{" "}
               (Federated)
             </span>
-            <div className="relative group">
-              <AlertTriangle
-                className="text-orange-500 cursor-help"
-                size={20}
-              />
-              <div className="absolute left-1/2 transform -translate-x-1/2 top-full mt-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                {sourceMetadata.federatedTooltip ||
-                  "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-900"></div>
-              </div>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="cursor-help" size={16} />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-sm">
+                  <p className="text-xs">
+                    {sourceMetadata.federatedTooltip ||
+                      "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 

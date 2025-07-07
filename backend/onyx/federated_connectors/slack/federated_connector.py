@@ -23,6 +23,15 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+SCOPES = [
+    "search:read",
+    "channels:history",
+    "groups:history",
+    "im:history",
+    "mpim:history",
+]
+
+
 class SlackFederatedConnector(FederatedConnector):
     def __init__(self, credentials: dict[str, Any]):
         self.slack_credentials = SlackCredentials(**credentials)
@@ -102,7 +111,7 @@ class SlackFederatedConnector(FederatedConnector):
         # Build OAuth URL with proper parameters (no state - handled by API layer)
         params = {
             "client_id": self.slack_credentials.client_id,
-            "user_scope": " ".join(["search:read"]),
+            "user_scope": " ".join(SCOPES),
             "redirect_uri": redirect_uri,
         }
 

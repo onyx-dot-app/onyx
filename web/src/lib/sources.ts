@@ -389,7 +389,9 @@ export function listSourceMetadata(): SourceMetadata[] {
       ([source, _]) =>
         source !== "not_applicable" &&
         source !== "ingestion_api" &&
-        source !== "mock_connector"
+        source !== "mock_connector" &&
+        // use the "regular" slack connector when listing
+        source !== "federated_slack"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

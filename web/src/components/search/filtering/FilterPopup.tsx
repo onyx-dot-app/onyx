@@ -259,7 +259,6 @@ export function FilterPopup({
         : [...prev, docSet.name]
     );
   };
-  console.log("availableSources", availableSources);
 
   return (
     <Popover>

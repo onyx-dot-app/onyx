@@ -15,16 +15,22 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFederatedConnectors } from "@/lib/hooks";
-import { FederatedConnectorInfo } from "@/lib/types";
+import { FederatedConnectorInfo, ValidSources } from "@/lib/types";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
+import { Credential } from "@/lib/connectors/credentials";
 
 function SourceTile({
   sourceMetadata,
   preSelect,
   federatedConnectors,
+  slackCredentials,
 }: {
   sourceMetadata: SourceMetadata;
   preSelect?: boolean;
   federatedConnectors?: FederatedConnectorInfo[];
+  slackCredentials?: Credential<any>[];
 }) {
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {
@@ -38,13 +44,30 @@ function SourceTile({
     );
   }, [sourceMetadata, federatedConnectors]);
 
+  // For Slack specifically, check if there are existing non-federated credentials
+  const isSlackTile = sourceMetadata.internalName === ValidSources.Slack;
+  const hasExistingSlackCredentials = useMemo(() => {
+    return isSlackTile && slackCredentials && slackCredentials.length > 0;
+  }, [isSlackTile, slackCredentials]);
+
   // Determine the URL to navigate to
   const navigationUrl = useMemo(() => {
+    // Special logic for Slack: if there are existing credentials, use the old flow
+    if (isSlackTile && hasExistingSlackCredentials) {
+      return "/admin/connectors/slack";
+    }
+
+    // Otherwise, use the existing logic
     if (existingFederatedConnector) {
       return `/admin/federated/${existingFederatedConnector.id}`;
     }
     return sourceMetadata.adminUrl;
-  }, [existingFederatedConnector, sourceMetadata.adminUrl]);
+  }, [
+    isSlackTile,
+    hasExistingSlackCredentials,
+    existingFederatedConnector,
+    sourceMetadata.adminUrl,
+  ]);
 
   return (
     <TooltipProvider>
@@ -70,7 +93,7 @@ function SourceTile({
             `}
             href={navigationUrl}
           >
-            {sourceMetadata.federated && (
+            {sourceMetadata.federated && !hasExistingSlackCredentials && (
               <div className="absolute -top-2 -left-2 z-10 bg-white rounded-full p-1 shadow-md border border-orange-200">
                 <AlertIcon
                   size={18}
@@ -88,10 +111,15 @@ function SourceTile({
           </Link>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm">
-          {existingFederatedConnector ? (
+          {existingFederatedConnector && !hasExistingSlackCredentials ? (
             <p className="text-xs">
               <strong>Federated connector already configured.</strong> Click to
               edit the existing connector.
+            </p>
+          ) : hasExistingSlackCredentials ? (
+            <p className="text-xs">
+              <strong>Existing Slack credentials found.</strong> Click to manage
+              the traditional Slack connector.
             </p>
           ) : sourceMetadata.federated ? (
             <p className="text-xs">
@@ -115,6 +143,12 @@ export default function Page() {
   const sources = useMemo(() => listSourceMetadata(), []);
   const [searchTerm, setSearchTerm] = useState("");
   const { data: federatedConnectors } = useFederatedConnectors();
+
+  // Fetch Slack credentials to determine navigation behavior
+  const { data: slackCredentials } = useSWR<Credential<any>[]>(
+    buildSimilarCredentialInfoURL(ValidSources.Slack),
+    errorHandlingFetcher
+  );
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -222,6 +256,7 @@ export default function Page() {
                   key={source.internalName}
                   sourceMetadata={source}
                   federatedConnectors={federatedConnectors}
+                  slackCredentials={slackCredentials}
                 />
               ))}
             </div>

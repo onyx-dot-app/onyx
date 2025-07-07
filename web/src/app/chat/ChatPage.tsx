@@ -140,6 +140,7 @@ import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
 import { useFederatedConnectors } from "@/lib/hooks";
+import { Button } from "@/components/ui/button";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -205,19 +206,90 @@ export function ChatPage({
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
-  // Check localStorage for previous skip preference
-  const [oAuthModalHidden, setOAuthModalHidden] = useState(() => {
+  const MAX_SKIP_COUNT = 1;
+
+  // Check localStorage for previous skip preference and count
+  const [oAuthModalState, setOAuthModalState] = useState<{
+    hidden: boolean;
+    skipCount: number;
+  }>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("federatedOAuthModalSkipped") === "true";
+      const skipData = localStorage.getItem("federatedOAuthModalSkipData");
+      if (skipData) {
+        try {
+          const parsed = JSON.parse(skipData);
+          // Check if we're still within the hide duration (1 hour)
+          const now = Date.now();
+          const hideUntil = parsed.hideUntil || 0;
+          const isWithinHideDuration = now < hideUntil;
+
+          return {
+            hidden: parsed.permanentlyHidden || isWithinHideDuration,
+            skipCount: parsed.skipCount || 0,
+          };
+        } catch {
+          return { hidden: false, skipCount: 0 };
+        }
+      }
     }
-    return false;
+    return { hidden: false, skipCount: 0 };
   });
 
   const handleOAuthModalSkip = () => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("federatedOAuthModalSkipped", "true");
+      const newSkipCount = oAuthModalState.skipCount + 1;
+
+      // If we've reached the max skip count, show the "No problem!" modal first
+      if (newSkipCount >= MAX_SKIP_COUNT) {
+        // Don't hide immediately - let the "No problem!" modal show
+        setOAuthModalState({
+          hidden: false,
+          skipCount: newSkipCount,
+        });
+      } else {
+        // For first skip, hide after a delay to show "No problem!" modal
+        const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+
+        const skipData = {
+          skipCount: newSkipCount,
+          hideUntil: oneHourFromNow,
+          permanentlyHidden: false,
+        };
+
+        localStorage.setItem(
+          "federatedOAuthModalSkipData",
+          JSON.stringify(skipData)
+        );
+
+        setOAuthModalState({
+          hidden: true,
+          skipCount: newSkipCount,
+        });
+      }
     }
-    setOAuthModalHidden(true);
+  };
+
+  // Handle the final dismissal of the "No problem!" modal
+  const handleOAuthModalFinalDismiss = () => {
+    if (typeof window !== "undefined") {
+      const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+
+      const skipData = {
+        skipCount: oAuthModalState.skipCount,
+        hideUntil: oneHourFromNow,
+        permanentlyHidden: false,
+      };
+
+      localStorage.setItem(
+        "federatedOAuthModalSkipData",
+        JSON.stringify(skipData)
+      );
+
+      setOAuthModalState({
+        hidden: true,
+        skipCount: oAuthModalState.skipCount,
+      });
+    }
   };
 
   const defaultAssistantIdRaw = searchParams?.get(
@@ -2369,11 +2441,15 @@ export function ChatPage({
 
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 
-      {isReady && !oAuthModalHidden && hasUnauthenticatedConnectors && (
+      {isReady && !oAuthModalState.hidden && hasUnauthenticatedConnectors && (
         <FederatedOAuthModal
           connectors={federatedConnectors}
-          onClose={() => setOAuthModalHidden(true)}
-          onSkip={handleOAuthModalSkip}
+          onSkip={
+            oAuthModalState.skipCount >= MAX_SKIP_COUNT
+              ? handleOAuthModalFinalDismiss
+              : handleOAuthModalSkip
+          }
+          skipCount={oAuthModalState.skipCount}
         />
       )}
 

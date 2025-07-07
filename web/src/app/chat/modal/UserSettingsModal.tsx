@@ -30,6 +30,7 @@ import { useChatContext } from "@/components/context/ChatContext";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources, CCPairBasicInfo } from "@/lib/types";
+import { getSourceMetadata } from "@/lib/sources";
 
 type SettingsSection = "settings" | "password" | "connectors";
 
@@ -659,70 +660,76 @@ export function UserSettingsModal({
                             .join(" ");
                         };
 
-                        return federatedConnectors.map((connector) => (
-                          <div
-                            key={connector.federated_connector_id}
-                            className="flex items-center justify-between p-4 rounded-lg border border-border"
-                          >
-                            <div className="flex items-center gap-3">
-                              <SourceIcon
-                                sourceType={
-                                  connector.source
-                                    .toLowerCase()
-                                    .replace("federated_", "") as ValidSources
-                                }
-                                iconSize={24}
-                              />
+                        return federatedConnectors.map((connector) => {
+                          const sourceMetadata = getSourceMetadata(
+                            connector.source as ValidSources
+                          );
+                          return (
+                            <div
+                              key={connector.federated_connector_id}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border"
+                            >
+                              <div className="flex items-center gap-3">
+                                <SourceIcon
+                                  sourceType={sourceMetadata.internalName}
+                                  iconSize={24}
+                                />
+                                <div>
+                                  <p className="font-medium">
+                                    {formatSourceName(
+                                      sourceMetadata.displayName
+                                    )}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {connector.has_oauth_token
+                                      ? "Connected"
+                                      : "Not connected"}
+                                  </p>
+                                </div>
+                              </div>
                               <div>
-                                <p className="font-medium">
-                                  {formatSourceName(connector.name)}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  {connector.has_oauth_token
-                                    ? "Connected"
-                                    : "Not connected"}
-                                </p>
+                                {connector.has_oauth_token ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleDisconnectOAuth(
+                                        connector.federated_connector_id
+                                      )
+                                    }
+                                    disabled={
+                                      isDisconnecting ===
+                                      connector.federated_connector_id
+                                    }
+                                  >
+                                    {isDisconnecting ===
+                                    connector.federated_connector_id
+                                      ? "Disconnecting..."
+                                      : "Disconnect"}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      if (connector.authorize_url) {
+                                        handleConnectOAuth(
+                                          connector.authorize_url
+                                        );
+                                      }
+                                    }}
+                                    disabled={!connector.authorize_url}
+                                  >
+                                    <FiExternalLink
+                                      className="mr-2"
+                                      size={14}
+                                    />
+                                    Connect
+                                  </Button>
+                                )}
                               </div>
                             </div>
-                            <div>
-                              {connector.has_oauth_token ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    handleDisconnectOAuth(
-                                      connector.federated_connector_id
-                                    )
-                                  }
-                                  disabled={
-                                    isDisconnecting ===
-                                    connector.federated_connector_id
-                                  }
-                                >
-                                  {isDisconnecting ===
-                                  connector.federated_connector_id
-                                    ? "Disconnecting..."
-                                    : "Disconnect"}
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    if (connector.authorize_url) {
-                                      handleConnectOAuth(
-                                        connector.authorize_url
-                                      );
-                                    }
-                                  }}
-                                  disabled={!connector.authorize_url}
-                                >
-                                  <FiExternalLink className="mr-2" size={14} />
-                                  Connect
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ));
+                          );
+                        });
                       })()}
                     </div>
                   )}
