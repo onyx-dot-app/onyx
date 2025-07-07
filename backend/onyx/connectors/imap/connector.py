@@ -111,7 +111,7 @@ class ImapConnector(
             # This is the dummy checkpoint.
             # Fill it with mailboxes first.
             if self._mailboxes:
-                checkpoint.todo_mailboxes = self._mailboxes
+                checkpoint.todo_mailboxes = _sanitize_mailbox_names(self._mailboxes)
             else:
                 fetched_mailboxes = _fetch_all_mailboxes_for_email_account(
                     mail_client=self._mail_client
@@ -120,7 +120,7 @@ class ImapConnector(
                     raise RuntimeError(
                         "Failed to find any mailboxes for this email account"
                     )
-                checkpoint.todo_mailboxes = fetched_mailboxes
+                checkpoint.todo_mailboxes = _sanitize_mailbox_names(fetched_mailboxes)
 
             return checkpoint
 
@@ -161,12 +161,6 @@ class ImapConnector(
 
 
 def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> list[str]:
-    """
-    Fetches all the mailboxes for this email account.
-
-    Returns a list of mailboxes. If the query fails, returns `None`.
-    """
-
     status, mailboxes_data = mail_client.list(directory="*", pattern="*")
     if status != _IMAP_OKAY_STATUS:
         raise RuntimeError(f"Failed to fetch mailboxes; {status=}")
@@ -192,10 +186,6 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
             continue
 
         mailbox = match.group(2)
-
-        # In order to comply with the IMAP protocol, all identifiers should be enclosed by double-quotes.
-        mailbox = f'"{mailbox}"'
-
         mailboxes.append(mailbox)
 
     return mailboxes
@@ -296,7 +286,11 @@ def _parse_email_body(
 
     soup = bs4.BeautifulSoup(markup=body, features="html.parser")
 
-    return "".join(str_section for str_section in soup.stripped_strings)
+    return " ".join(str_section for str_section in soup.stripped_strings)
+
+
+def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
+    return [f'"{mailbox}"' for mailbox in mailboxes if mailbox]
 
 
 if __name__ == "__main__":
