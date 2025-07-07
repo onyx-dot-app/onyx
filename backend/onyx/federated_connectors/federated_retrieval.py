@@ -2,8 +2,10 @@ from collections import defaultdict
 from typing import Protocol
 from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
 from onyx.db.federated import (
@@ -22,11 +24,16 @@ class RetrievalFunction(Protocol):
     def __call__(self, query: SearchQuery) -> list[InferenceChunk]: ...
 
 
+class FederatedRetrievalInfo(BaseModel):
+    retrieval_function: RetrievalFunction
+    source: FederatedConnectorSource
+
+
 def get_federated_retrieval_functions(
     db_session: Session,
     user_id: UUID | None,
     document_set_names: list[str] | None,
-) -> list[RetrievalFunction]:
+) -> list[FederatedRetrievalInfo]:
     if user_id is None:
         logger.warning(
             "No user ID provided, skipping federated retrieval. Federated retrieval not "
@@ -51,7 +58,7 @@ def get_federated_retrieval_functions(
             pair
         )
 
-    retrieval_functions: list[RetrievalFunction] = []
+    federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
         document_set_associations = federated_connector_id_to_document_sets[
@@ -66,9 +73,12 @@ def get_federated_retrieval_functions(
             oauth_token.federated_connector.source,
             oauth_token.federated_connector.credentials,
         )
-        retrieval_functions.append(
-            lambda query: connector.search(
-                query, entities, access_token=oauth_token.token
+        federated_retrieval_infos.append(
+            FederatedRetrievalInfo(
+                retrieval_function=lambda query: connector.search(
+                    query, entities, access_token=oauth_token.token
+                ),
+                source=oauth_token.federated_connector.source,
             )
         )
-    return retrieval_functions
+    return federated_retrieval_infos

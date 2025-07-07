@@ -289,6 +289,7 @@ def slack_retrieval(
                 doc_summary="",
                 chunk_context="",
                 updated_at=docid_to_message[document_id].timestamp,
+                is_federated=True,
             )
         )
         if len(top_chunks) >= NUM_FEDERATED_SECTIONS:

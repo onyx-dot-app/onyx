@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.context.search.enums import SearchType
-from onyx.context.search.federated import FEDERATED_SEARCH_FUNCTIONS
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -339,11 +338,22 @@ def retrieve_chunks(
     source_filters = (
         set(query.filters.source_type) if query.filters.source_type else None
     )
-    normal_search_enabled = (source_filters is None) or (
-        len(set(source_filters) - FEDERATED_SEARCH_FUNCTIONS.keys()) > 0
+
+    # Federated retrieval
+    federated_retrieval_infos = get_federated_retrieval_functions(
+        db_session, user_id, query.filters.document_set
     )
+    federated_sources = set(
+        federated_retrieval_info.source.to_non_federated_source()
+        for federated_retrieval_info in federated_retrieval_infos
+    )
+    for federated_retrieval_info in federated_retrieval_infos:
+        run_queries.append((federated_retrieval_info.retrieval_function, (query,)))
 
     # Normal retrieval
+    normal_search_enabled = (source_filters is None) or (
+        len(set(source_filters) - federated_sources) > 0
+    )
     if normal_search_enabled and (
         not multilingual_expansion or "\n" in query.query or "\r" in query.query
     ):
@@ -379,13 +389,6 @@ def retrieve_chunks(
             run_queries.append(
                 (doc_index_retrieval, (q_copy, document_index, db_session))
             )
-
-    # Federated retrieval
-    retrieval_functions = get_federated_retrieval_functions(
-        db_session, user_id, query.filters.document_set
-    )
-    for retrieval_function in retrieval_functions:
-        run_queries.append((retrieval_function, (query,)))
 
     parallel_search_results = run_functions_tuples_in_parallel(run_queries)
     top_chunks = combine_retrieval_results(parallel_search_results)
