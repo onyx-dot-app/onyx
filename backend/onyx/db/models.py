@@ -1445,7 +1445,7 @@ class FederatedConnectorOAuthToken(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
-    token: Mapped[str] = mapped_column(String, nullable=False)
+    token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
     expires_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime, nullable=True
     )

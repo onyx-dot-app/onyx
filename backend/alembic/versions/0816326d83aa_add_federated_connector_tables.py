@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("federated_connector_id", sa.Integer(), nullable=False),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("token", sa.String(), nullable=False),
+        sa.Column("token", sa.LargeBinary(), nullable=False),
         sa.Column("expires_at", sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(
             ["federated_connector_id"], ["federated_connector.id"], ondelete="CASCADE"
