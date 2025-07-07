@@ -481,10 +481,6 @@ LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
 # Slack specific configs
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
-# TODO: move elsewhere, maybe user settings > connector settings
-SLACK_USER_TOKEN = os.environ.get(
-    "SLACK_USER_TOKEN", ""
-)  # should have search:read scope (and maybe channels:read, users:read)
 NUM_SLACK_SEARCH_DOCS = int(
     os.environ.get("NUM_SLACK_SEARCH_DOCS", "5")
 )  # how many messages (docs) to search. Total chunks count be greater than this.

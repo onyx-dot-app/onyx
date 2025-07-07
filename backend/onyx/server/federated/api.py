@@ -157,10 +157,15 @@ def create_federated_connector(
     """Create a new federated connector"""
     tenant_id = get_current_tenant_id()
 
+    if user is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Federated retrieval not supported with AUTH_TYPE=disabled.",
+        )
+
     logger.info(
         f"Creating federated connector: source={federated_connector_data.source}, "
-        f"user={user.email if user else 'unknown'}, "
-        f"tenant_id={tenant_id}"
+        f"user={user.email}, tenant_id={tenant_id}"
     )
 
     try:
