@@ -349,6 +349,9 @@ if __name__ == "__main__":
     #             checkpoint = cast(ImapCheckpoint, copy.deepcopy(e.value))
     #             break
 
+    #     if not checkpoint.has_more:
+    #         break
+
     for doc in load_all_docs_from_checkpoint_connector(
         connector=imap_connector,
         start=0,
