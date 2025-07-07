@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import MAX_FEDERATED_CHUNKS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.models import InferenceChunk
@@ -84,7 +85,10 @@ def get_federated_retrieval_functions(
         federated_retrieval_infos.append(
             FederatedRetrievalInfo(
                 retrieval_function=lambda query: connector.search(
-                    query, entities, access_token=oauth_token.token
+                    query,
+                    entities,
+                    access_token=oauth_token.token,
+                    limit=MAX_FEDERATED_CHUNKS,
                 ),
                 source=oauth_token.federated_connector.source,
             )

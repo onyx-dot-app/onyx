@@ -219,6 +219,7 @@ class SlackFederatedConnector(FederatedConnector):
         query: SearchQuery,
         entities: dict[str, Any],
         access_token: str,
+        limit: int | None = None,
     ) -> list[InferenceChunk]:
         """Perform a federated search on Slack.
 
@@ -232,4 +233,4 @@ class SlackFederatedConnector(FederatedConnector):
             Search results in SlackSearchResponse format
         """
         with get_session_with_current_tenant() as db_session:
-            return slack_retrieval(query, access_token, db_session)
+            return slack_retrieval(query, access_token, db_session, limit)

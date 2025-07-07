@@ -23,7 +23,7 @@ export default function ConnectorWrapper({
           <div className="mt-12 w-full max-w-3xl mx-auto">
             <div className="mx-auto flex flex-col gap-y-2">
               <HeaderTitle>
-                <p>&lsquo;{connector}&lsquo; is not a valid Connector Type!</p>
+                <p>&lsquo;{connector}&rsquo; is not a valid Connector Type!</p>
               </HeaderTitle>
               <Button
                 onClick={() => window.open("/admin/indexing/status", "_self")}

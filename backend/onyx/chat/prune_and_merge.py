@@ -11,7 +11,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.citations_prompt import compute_max_document_tokens
-from onyx.configs.app_configs import NUM_FEDERATED_SECTIONS
+from onyx.configs.app_configs import MAX_FEDERATED_SECTIONS
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.context.search.models import InferenceChunk
@@ -84,7 +84,7 @@ def _separate_federated_sections(
 
     for i, section in enumerate(sections):
         if (
-            len(federated_sections) < NUM_FEDERATED_SECTIONS
+            len(federated_sections) < MAX_FEDERATED_SECTIONS
             and section.center_chunk.is_federated
         ):
             federated_sections.append(section)
@@ -94,7 +94,7 @@ def _separate_federated_sections(
             normal_section_relevance_list.append(section_relevance_list[i])
 
     return (
-        federated_sections[:NUM_FEDERATED_SECTIONS],
+        federated_sections[:MAX_FEDERATED_SECTIONS],
         normal_sections,
         normal_section_relevance_list if section_relevance_list is not None else None,
     )

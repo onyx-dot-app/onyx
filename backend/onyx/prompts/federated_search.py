@@ -1,8 +1,8 @@
-from onyx.configs.app_configs import NUM_MAX_SLACK_QUERIES
+from onyx.configs.app_configs import MAX_SLACK_QUERIES
 
 # TODO: maybe ask it to generate in and from filters, and fuzzy match them later
 SLACK_QUERY_EXPANSION_PROMPT = f"""
-Rewrite the user's query and, if helpful, split it into at most {NUM_MAX_SLACK_QUERIES} \
+Rewrite the user's query and, if helpful, split it into at most {MAX_SLACK_QUERIES} \
 keyword-only queries, so that Slack's keyword search yields the best matches.
 
 Keep in mind the Slack's search behavior:
@@ -23,5 +23,5 @@ never explode into single-word queries.
 Here is the original query:
 {{query}}
 
-Return EXACTLY the new query(ies), one per line, at most {NUM_MAX_SLACK_QUERIES}. Nothing else.
+Return EXACTLY the new query(ies), one per line, at most {MAX_SLACK_QUERIES}. Nothing else.
 """

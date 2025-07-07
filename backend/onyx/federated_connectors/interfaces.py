@@ -73,6 +73,7 @@ class FederatedConnector(ABC):
 
         Args:
             callback_data: The data received from the OAuth callback (query params, etc.)
+            redirect_uri: The OAuth redirect URI used in the authorization request
 
         Returns:
             Standardized OAuthResult containing tokens and metadata
@@ -84,6 +85,7 @@ class FederatedConnector(ABC):
         query: SearchQuery,
         entities: dict[str, Any],
         access_token: str,
+        limit: int | None = None,
     ) -> list[InferenceChunk]:
         """
         Perform a federated search using the provided query and entities.

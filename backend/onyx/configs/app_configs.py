@@ -484,7 +484,7 @@ SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 NUM_SLACK_SEARCH_DOCS = int(
     os.environ.get("NUM_SLACK_SEARCH_DOCS", "5")
 )  # how many messages (docs) to search. Total chunks count be greater than this.
-NUM_MAX_SLACK_QUERIES = int(os.environ.get("NUM_MAX_SLACK_QUERIES", "5"))
+MAX_SLACK_QUERIES = int(os.environ.get("MAX_SLACK_QUERIES", "5"))
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
@@ -659,7 +659,12 @@ except json.JSONDecodeError:
 LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 
 # Federated Search Configs
-NUM_FEDERATED_SECTIONS = int(os.environ.get("NUM_FEDERATED_SECTIONS", "5"))
+MAX_FEDERATED_SECTIONS = int(
+    os.environ.get("MAX_FEDERATED_SECTIONS", "5")
+)  # max no. of federated sections to always keep
+MAX_FEDERATED_CHUNKS = int(
+    os.environ.get("MAX_FEDERATED_CHUNKS", "5")
+)  # max no. of chunks to retrieve per federated connector
 
 #####
 # Enterprise Edition Configs

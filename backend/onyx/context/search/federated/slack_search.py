@@ -9,8 +9,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import NUM_FEDERATED_SECTIONS
-from onyx.configs.app_configs import NUM_MAX_SLACK_QUERIES
+from onyx.configs.app_configs import MAX_SLACK_QUERIES
 from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.connectors.models import IndexingDocument
@@ -61,7 +60,7 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
 
     return [
         rephrased_query.strip() + time_filter
-        for rephrased_query in rephrased_queries[:NUM_MAX_SLACK_QUERIES]
+        for rephrased_query in rephrased_queries[:MAX_SLACK_QUERIES]
     ]
 
 
@@ -181,7 +180,10 @@ def merge_slack_messages(
 
 @log_function_time(print_only=True)
 def slack_retrieval(
-    query: SearchQuery, access_token: str, db_session: Session
+    query: SearchQuery,
+    access_token: str,
+    db_session: Session,
+    limit: int | None = None,
 ) -> list[InferenceChunk]:
     # query slack
     _, fast_llm = get_default_llms()
@@ -292,7 +294,7 @@ def slack_retrieval(
                 is_federated=True,
             )
         )
-        if len(top_chunks) >= NUM_FEDERATED_SECTIONS:
+        if limit and len(top_chunks) >= limit:
             break
 
     return top_chunks
