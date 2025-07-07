@@ -227,10 +227,17 @@ def _convert_email_headers_and_body_into_document(
     email_msg: Message,
     email_headers: EmailHeaders,
 ) -> Document:
-    _sender_name, sender_addr = parseaddr(addr=email_headers.sender)
-    recipient_name, recipient_addr = parseaddr(addr=email_headers.recipient)
-    title = f"{sender_addr} to {recipient_addr} about {email_headers.subject}"
+    _sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
+    parsed_recipients = _parse_addrs(raw_header=email_headers.recipients)
+
+    recipient_emails = set(addr for _name, addr in parsed_recipients)
+
+    title = f"{sender_addr} to {recipient_emails} about {email_headers.subject}"
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
+    primary_owners = [
+        BasicExpertInfo(display_name=recipient_name, email=recipient_addr)
+        for recipient_name, recipient_addr in parsed_recipients
+    ]
 
     return Document(
         id=email_headers.id,
@@ -239,14 +246,9 @@ def _convert_email_headers_and_body_into_document(
         metadata={},
         source=DocumentSource.IMAP,
         sections=[TextSection(text=email_body)],
-        primary_owners=[
-            BasicExpertInfo(
-                display_name=recipient_name,
-                email=recipient_addr,
-            )
-        ],
+        primary_owners=primary_owners,
         external_access=ExternalAccess(
-            external_user_emails=set([recipient_addr]),
+            external_user_emails=recipient_emails,
             external_user_group_ids=set(),
             is_public=False,
         ),
@@ -291,6 +293,27 @@ def _parse_email_body(
 
 def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
     return [f'"{mailbox}"' for mailbox in mailboxes if mailbox]
+
+
+def _parse_addrs(raw_header: str) -> list[tuple[str, str]]:
+    addrs = raw_header.split(",")
+    name_addr_pairs = [parseaddr(addr=addr, strict=True) for addr in addrs if addr]
+    return [(name, addr) for name, addr in name_addr_pairs if addr]
+
+
+def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
+    addrs = _parse_addrs(raw_header=raw_header)
+    if not addrs:
+        raise RuntimeError(
+            f"Parsing email header resulted in no addresses being found; {raw_header=}"
+        )
+    elif len(addrs) >= 2:
+        raise RuntimeError(
+            f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
+        )
+
+    [(name, addr)] = addrs
+    return name, addr
 
 
 if __name__ == "__main__":
@@ -342,7 +365,6 @@ if __name__ == "__main__":
     #         except StopIteration as e:
     #             checkpoint = cast(ImapCheckpoint, copy.deepcopy(e.value))
     #             break
-
     #     if not checkpoint.has_more:
     #         break
 

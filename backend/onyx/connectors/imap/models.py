@@ -26,7 +26,7 @@ class EmailHeaders(BaseModel):
     id: str
     subject: str
     sender: str
-    recipient: str
+    recipients: str
     date: datetime
 
     @classmethod
@@ -70,7 +70,7 @@ class EmailHeaders(BaseModel):
                 "id": message_id,
                 "subject": subject,
                 "sender": from_,
-                "recipient": to,
+                "recipients": to,
                 "date": date,
                 "content_type": content_type,
             }
