@@ -3,6 +3,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 from typing import cast
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 from googleapiclient.errors import HttpError  # type: ignore
 from googleapiclient.http import MediaIoBaseDownload  # type: ignore
@@ -77,7 +79,15 @@ class PermissionSyncContext(BaseModel):
 
 
 def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
-    return file[WEB_VIEW_LINK_KEY]
+    link = file[WEB_VIEW_LINK_KEY]
+    parsed_url = urlparse(link)
+    parsed_url = parsed_url._replace(query="")  # remove query parameters
+    spl_path = parsed_url.path.split("/")
+    if spl_path and (spl_path[-1] in ["edit", "view", "preview"]):
+        spl_path.pop()
+        parsed_url = parsed_url._replace(path="/".join(spl_path))
+    # Remove query parameters and reconstruct URL
+    return urlunparse(parsed_url)
 
 
 def is_gdrive_image_mime_type(mime_type: str) -> bool:

@@ -165,11 +165,11 @@ export default function IndexAttemptErrorsModal({
             <TableBody>
               {paginationData.currentPageItems.length > 0 ? (
                 paginationData.currentPageItems.map((error) => (
-                  <TableRow key={error.id}>
-                    <TableCell>
+                  <TableRow key={error.id} className="h-[60px] max-h-[60px]">
+                    <TableCell className="h-[60px] align-top">
                       {localizeAndPrettify(error.time_created)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="h-[60px] align-top">
                       {error.document_link ? (
                         <a
                           href={error.document_link}
@@ -183,10 +183,12 @@ export default function IndexAttemptErrorsModal({
                         error.document_id || error.entity_id || "Unknown"
                       )}
                     </TableCell>
-                    <TableCell className="whitespace-normal">
-                      {error.failure_message}
+                    <TableCell className="h-[60px] align-top p-0">
+                      <div className="h-[60px] overflow-y-auto p-4 whitespace-normal">
+                        {error.failure_message}
+                      </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="h-[60px] align-top">
                       <span
                         className={`px-2 py-1 rounded text-xs ${
                           error.is_resolved

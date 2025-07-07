@@ -13,11 +13,7 @@ import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import {
-  parseLlmDescriptor,
-  findProviderForModel,
-  structureValue,
-} from "./llm/utils";
+import { parseLlmDescriptor } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
@@ -503,7 +499,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.name };
+        return { ...model, provider: provider.provider };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -517,14 +513,7 @@ export function useLlmManager(
 
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
-    const provider =
-      newLlm.provider || findProviderForModel(llmProviders, newLlm.modelName);
-    const structuredValue = structureValue(
-      newLlm.name,
-      provider,
-      newLlm.modelName
-    );
-    setCurrentLlm(getValidLlmDescriptor(structuredValue));
+    setCurrentLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
   };
 

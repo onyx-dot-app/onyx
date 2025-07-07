@@ -80,6 +80,7 @@ def upgrade() -> None:
         )
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_config CASCADE")
     op.create_table(
         "kg_config",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False, index=True),
@@ -123,6 +124,7 @@ def upgrade() -> None:
         ],
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_entity_type CASCADE")
     op.create_table(
         "kg_entity_type",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
@@ -156,6 +158,7 @@ def upgrade() -> None:
         ),
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship_type CASCADE")
     # Create KGRelationshipType table
     op.create_table(
         "kg_relationship_type",
@@ -194,6 +197,7 @@ def upgrade() -> None:
         ),
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship_type_extraction_staging CASCADE")
     # Create KGRelationshipTypeExtractionStaging table
     op.create_table(
         "kg_relationship_type_extraction_staging",
@@ -226,6 +230,8 @@ def upgrade() -> None:
             ["target_entity_type_id_name"], ["kg_entity_type.id_name"]
         ),
     )
+
+    op.execute("DROP TABLE IF EXISTS kg_entity CASCADE")
 
     # Create KGEntity table
     op.create_table(
@@ -281,6 +287,7 @@ def upgrade() -> None:
         "ix_entity_name_search", "kg_entity", ["name", "entity_type_id_name"]
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_entity_extraction_staging CASCADE")
     # Create KGEntityExtractionStaging table
     op.create_table(
         "kg_entity_extraction_staging",
@@ -330,6 +337,7 @@ def upgrade() -> None:
         ["name", "entity_type_id_name"],
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship CASCADE")
     # Create KGRelationship table
     op.create_table(
         "kg_relationship",
@@ -371,6 +379,7 @@ def upgrade() -> None:
         "ix_kg_relationship_nodes", "kg_relationship", ["source_node", "target_node"]
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship_extraction_staging CASCADE")
     # Create KGRelationshipExtractionStaging table
     op.create_table(
         "kg_relationship_extraction_staging",
@@ -414,6 +423,7 @@ def upgrade() -> None:
         ["source_node", "target_node"],
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_term CASCADE")
     # Create KGTerm table
     op.create_table(
         "kg_term",
