@@ -49,7 +49,8 @@ def on_task_postrun(
     state: str | None = None,
     **kwds: Any,
 ) -> None:
-    app_base.on_task_postrun(sender, task_id, task, args, kwargs, retval, state, **kwds)
+    app_base.on_task_postrun(sender, task_id, task,
+                             args, kwargs, retval, state, **kwds)
 
 
 @celeryd_init.connect
@@ -66,7 +67,8 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info(f"Concurrency: {sender.concurrency}")  # type: ignore
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=EXTRA_CONCURRENCY)  # type: ignore
+    SqlEngine.init_engine(pool_size=sender.concurrency,
+                          max_overflow=EXTRA_CONCURRENCY)  # type: ignore
 
     if MANAGED_VESPA:
         httpx_init_vespa_pool(
@@ -75,7 +77,8 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
             ssl_key=VESPA_CLOUD_KEY_PATH,
         )
     else:
-        httpx_init_vespa_pool(sender.concurrency + EXTRA_CONCURRENCY)  # type: ignore
+        httpx_init_vespa_pool(sender.concurrency +
+                              EXTRA_CONCURRENCY)  # type: ignore
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
@@ -99,9 +102,7 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
 
 
 @signals.setup_logging.connect
-def on_setup_logging(
-    loglevel: Any, logfile: Any, format: Any, colorize: Any, **kwargs: Any
-) -> None:
+def on_setup_logging(loglevel: Any, logfile: Any, format: Any, colorize: Any, **kwargs: Any) -> None:
     app_base.on_setup_logging(loglevel, logfile, format, colorize, **kwargs)
 
 
@@ -113,5 +114,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.doc_permission_syncing",
         "onyx.background.celery.tasks.user_file_folder_sync",
         "onyx.background.celery.tasks.indexing",
+        "onyx.background.celery.tasks.eea",
     ]
 )
