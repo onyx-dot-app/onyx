@@ -1,6 +1,7 @@
 import json
 from collections import defaultdict
 from copy import deepcopy
+from math import ceil
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -72,6 +73,12 @@ def _separate_federated_sections(
     sections: list[InferenceSection],
     section_relevance_list: list[bool] | None,
 ) -> tuple[list[InferenceSection], list[InferenceSection], list[bool] | None]:
+    """
+    Separates out the first NUM_FEDERATED_SECTIONS federated sections to be spared from pruning.
+    Any remaining federated sections are treated as normal sections, and will get added if it
+    fits within the allocated context window. This is done as federated sections do not have
+    a score and would otherwise always get pruned.
+    """
     federated_sections: list[InferenceSection] = []
     normal_sections: list[InferenceSection] = []
     normal_section_relevance_list: list[bool] = []
@@ -178,12 +185,6 @@ def _apply_pruning(
     # build combined relevance list, treating the keep_sections as relevant
     if section_relevance_list is not None:
         section_relevance_list = [True] * len(keep_sections) + section_relevance_list
-
-    # map unique_id: relevance for final ordering step
-    section_id_to_relevance: dict[str, bool] = {}
-    if section_relevance_list is not None:
-        for sec, rel in zip(sections, section_relevance_list):
-            section_id_to_relevance[sec.center_chunk.unique_id] = rel
 
     # re-order docs with all the "relevant" docs at the front
     sections = _reorder_sections(
@@ -313,15 +314,23 @@ def _apply_pruning(
                 )
                 sections = [sections[0]]
 
-    # sort by relevance, then by score (as we added the keep_sections first)
-    sections.sort(
-        key=lambda s: (
-            not section_id_to_relevance.get(s.center_chunk.unique_id, True),
-            -(s.center_chunk.score or 0.0),
-        ),
-    )
+    # distribute the keep sections evenly throughout the pruned sections
+    if len(keep_sections) == 0:
+        return sections
 
-    return sections
+    normal_sections = sections[len(keep_sections) :]
+    n_batch = ceil(len(normal_sections) / len(keep_sections))
+    normal_batches = [
+        normal_sections[i * n_batch : (i + 1) * n_batch]
+        for i in range(len(keep_sections))
+    ]
+
+    final_sections: list[InferenceSection] = []
+    for keep_section, normal_batch in zip(keep_sections, normal_batches):
+        final_sections.extend(normal_batch)
+        final_sections.append(keep_section)
+
+    return final_sections
 
 
 def prune_sections(
