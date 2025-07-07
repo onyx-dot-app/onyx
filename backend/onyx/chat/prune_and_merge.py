@@ -77,7 +77,10 @@ def _separate_federated_sections(
     normal_section_relevance_list: list[bool] = []
 
     for i, section in enumerate(sections):
-        if section.center_chunk.is_federated:
+        if (
+            len(federated_sections) < NUM_FEDERATED_SECTIONS
+            and section.center_chunk.is_federated
+        ):
             federated_sections.append(section)
             continue
         normal_sections.append(section)
