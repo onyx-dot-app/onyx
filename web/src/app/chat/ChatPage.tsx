@@ -2150,11 +2150,7 @@ export function ChatPage({
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!sidebarVisible).toLocaleLowerCase()
-    ),
-      {
-        path: "/",
-      };
-
+    );
     toggle();
   };
   const removeToggle = () => {
