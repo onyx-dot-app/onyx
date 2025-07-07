@@ -341,7 +341,7 @@ def retrieve_chunks(
 
     # Federated retrieval
     federated_retrieval_infos = get_federated_retrieval_functions(
-        db_session, user_id, query.filters.document_set
+        db_session, user_id, query.filters.source_type, query.filters.document_set
     )
     federated_sources = set(
         federated_retrieval_info.source.to_non_federated_source()

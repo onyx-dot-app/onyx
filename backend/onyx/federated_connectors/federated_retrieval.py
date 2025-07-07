@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import SearchQuery
@@ -31,6 +32,7 @@ class FederatedRetrievalInfo(BaseModel):
 def get_federated_retrieval_functions(
     db_session: Session,
     user_id: UUID | None,
+    source_types: list[DocumentSource] | None,
     document_set_names: list[str] | None,
 ) -> list[FederatedRetrievalInfo]:
     if user_id is None:
@@ -60,6 +62,13 @@ def get_federated_retrieval_functions(
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
+        if (
+            source_types is not None
+            and oauth_token.federated_connector.source.to_non_federated_source()
+            not in source_types
+        ):
+            continue
+
         document_set_associations = federated_connector_id_to_document_sets[
             oauth_token.federated_connector_id
         ]
