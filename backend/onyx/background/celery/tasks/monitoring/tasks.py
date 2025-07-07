@@ -147,7 +147,7 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     metrics = []
     queue_mappings = {
         "celery_queue_length": "celery",
-        "indexing_queue_length": "indexing",
+        "docprocessing_queue_length": "docprocessing",
         "sync_queue_length": "sync",
         "deletion_queue_length": "deletion",
         "pruning_queue_length": "pruning",

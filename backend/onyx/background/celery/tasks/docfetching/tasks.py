@@ -18,7 +18,7 @@ from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.indexing.tasks import ConnectorIndexingLogBuilder
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
-from onyx.background.celery.tasks.models import ConnectorIndexingContext
+from onyx.background.celery.tasks.models import DocProcessingContext
 from onyx.background.celery.tasks.models import IndexingWatchdogTerminalStatus
 from onyx.background.celery.tasks.models import SimpleJobResult
 from onyx.background.indexing.job_client import SimpleJob
@@ -180,14 +180,14 @@ def docfetching_task(
     acquired = lock.acquire(blocking=False)
     if not acquired:
         logger.warning(
-            f"Indexing task already running, exiting...: "
+            f"Docfetching task already running, exiting...: "
             f"index_attempt={index_attempt_id} "
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
 
         raise SimpleJobException(
-            f"Indexing task already running, exiting...: "
+            f"Docfetching task already running, exiting...: "
             f"index_attempt={index_attempt_id} "
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}",
@@ -402,7 +402,7 @@ def docfetching_proxy_task(
 
     result = SimpleJobResult()
 
-    ctx = ConnectorIndexingContext(
+    ctx = DocProcessingContext(
         tenant_id=tenant_id,
         cc_pair_id=cc_pair_id,
         search_settings_id=search_settings_id,

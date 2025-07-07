@@ -3,7 +3,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 
-class ConnectorIndexingContext(BaseModel):
+class DocProcessingContext(BaseModel):
     tenant_id: str
     cc_pair_id: int
     search_settings_id: int

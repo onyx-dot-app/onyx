@@ -18,8 +18,6 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
@@ -27,7 +25,7 @@ from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_sta
 from onyx.background.celery.tasks.indexing.utils import should_index
 from onyx.background.celery.tasks.indexing.utils import try_creating_docfetching_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
-from onyx.background.celery.tasks.models import ConnectorIndexingContext
+from onyx.background.celery.tasks.models import DocProcessingContext
 from onyx.background.celery.tasks.models import IndexingWatchdogTerminalStatus
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
@@ -113,7 +111,7 @@ def _get_fence_validation_block_expiration() -> int:
 
 
 class ConnectorIndexingLogBuilder:
-    def __init__(self, ctx: ConnectorIndexingContext):
+    def __init__(self, ctx: DocProcessingContext):
         self.ctx = ctx
 
     def build(self, msg: str, **kwargs: Any) -> str:
