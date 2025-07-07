@@ -151,7 +151,7 @@ def _get_federated_connector_instance(
 @router.post("")
 def create_federated_connector(
     federated_connector_data: FederatedConnectorRequest,
-    user: User = Depends(current_curator_or_admin_user),
+    user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> FederatedConnectorResponse:
     """Create a new federated connector"""
@@ -159,7 +159,8 @@ def create_federated_connector(
 
     logger.info(
         f"Creating federated connector: source={federated_connector_data.source}, "
-        f"user={user.email}, tenant_id={tenant_id}"
+        f"user={user.email if user else 'unknown'}, "
+        f"tenant_id={tenant_id}"
     )
 
     try:
