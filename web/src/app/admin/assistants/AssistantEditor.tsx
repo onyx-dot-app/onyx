@@ -904,8 +904,8 @@ export function AssistantEditor({
                                   <TooltipTrigger asChild>
                                     <div
                                       className={`${ccPairs.length === 0
-                                          ? "opacity-70 cursor-not-allowed"
-                                          : ""
+                                        ? "opacity-70 cursor-not-allowed"
+                                        : ""
                                         }`}
                                     >
                                       <SwitchField
@@ -946,8 +946,8 @@ export function AssistantEditor({
                             <div className="flex gap-2.5">
                               <div
                                 className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${values.knowledge_source === "team_knowledge"
-                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                  ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                  : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
                                   }`}
                                 onClick={() =>
                                   setFieldValue(
@@ -966,8 +966,8 @@ export function AssistantEditor({
 
                               <div
                                 className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${values.knowledge_source === "user_files"
-                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                  ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                  : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
                                   }`}
                                 onClick={() =>
                                   setFieldValue(
@@ -1171,7 +1171,7 @@ export function AssistantEditor({
                           label="KnowledgeMapTool"
                           subtext="Инструмент для поиска информации в карте знаний по запросу пользователя."
                           onChange={() => {
-                            toggleToolInValues(knowledgeMapTool.id);
+                            toggleToolInValues(knowledgeMapTool?.id);
                           }}
                         />
 
@@ -1188,7 +1188,7 @@ export function AssistantEditor({
                                     выбрана хотя бы одна Карта знаний.
                                   </SubLabel>
                                 </div>
-                                {documentSets.length > 0 ? (
+                                {knowledgeMaps.length > 0 ? (
                                   <FieldArray
                                     name="knowledge_maps_ids"
                                     render={(arrayHelpers: ArrayHelpers) => (
@@ -1221,7 +1221,7 @@ export function AssistantEditor({
                                                   if (isSelected) {
                                                     arrayHelpers.remove(ind);
                                                   } else {
-                                                    arrayHelpers.push(map.id);
+                                                    arrayHelpers?.push(map?.id || 1);
                                                   }
                                                 }}
                                               >
@@ -1239,7 +1239,13 @@ export function AssistantEditor({
                                                     <div className="pl-1">
                                                       <Checkbox
                                                         checked={isSelected}
-                                                        onChange={() => null}
+                                                        onChange={() => {
+                                                          if (isSelected) {
+                                                            arrayHelpers.remove(ind);
+                                                          } else {
+                                                            arrayHelpers?.push(map?.id || 1);
+                                                          }
+                                                        }}
                                                       />
                                                     </div>
                                                   </div>
