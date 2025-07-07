@@ -1,8 +1,9 @@
 from collections import defaultdict
-from typing import Protocol
+from collections.abc import Callable
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
@@ -20,12 +21,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class RetrievalFunction(Protocol):
-    def __call__(self, query: SearchQuery) -> list[InferenceChunk]: ...
-
-
 class FederatedRetrievalInfo(BaseModel):
-    retrieval_function: RetrievalFunction
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    retrieval_function: Callable[[SearchQuery], list[InferenceChunk]]
     source: FederatedConnectorSource
 
 
