@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 class SlackMessage(BaseModel):
     document_id: str
+    channel_id: str
+    message_id: str
+    thread_id: str | None
     link: str
     metadata: dict[str, str | list[str]]
     timestamp: datetime

@@ -9,9 +9,9 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
-from onyx.configs.app_configs import MAX_SLACK_QUERIES
-from onyx.configs.app_configs import NUM_SLACK_SEARCH_DOCS
+from onyx.configs.app_configs import MAX_SLACK_QUERY_EXPANSIONS
 from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import TextSection
 from onyx.context.search.federated.models import SlackMessage
@@ -60,24 +60,27 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
 
     return [
         rephrased_query.strip() + time_filter
-        for rephrased_query in rephrased_queries[:MAX_SLACK_QUERIES]
+        for rephrased_query in rephrased_queries[:MAX_SLACK_QUERY_EXPANSIONS]
     ]
 
 
 def query_slack(
-    query_string: str, original_query: SearchQuery, access_token: str
+    query_string: str,
+    original_query: SearchQuery,
+    access_token: str,
+    limit: int | None = None,
 ) -> list[SlackMessage]:
     # query slack
     slack_client = WebClient(token=access_token)
     try:
         response = slack_client.search_messages(
-            query=query_string, count=NUM_SLACK_SEARCH_DOCS, highlight=True
+            query=query_string, count=limit, highlight=True
         )
         response.validate()
         messages: dict[str, Any] = response.get("messages", {})
         matches: list[dict[str, Any]] = messages.get("matches", [])
     except SlackApiError as e:
-        logger.error(f"Slack API error: {e}")
+        logger.error(f"Slack API error in query_slack: {e}")
         return []
 
     # convert matches to slack messages
@@ -85,7 +88,7 @@ def query_slack(
     for match in matches:
         text: str | None = match.get("text")
         permalink: str | None = match.get("permalink")
-        thread_ts: str | None = match.get("ts")
+        message_id: str | None = match.get("ts")
         channel_id: str | None = match.get("channel", {}).get("id")
         channel_name: str | None = match.get("channel", {}).get("name")
         username: str | None = match.get("username")
@@ -93,23 +96,23 @@ def query_slack(
         if (  # can't use any() because of type checking :(
             not text
             or not permalink
-            or not thread_ts
+            or not message_id
             or not channel_id
             or not channel_name
             or not username
         ):
             continue
 
-        # generate metadata and document id
-        document_id = f"{channel_id}_{thread_ts.replace('.', '')}"
-        metadata: dict[str, str | list[str]] = {
-            "channel": channel_name,
-            "sender": username,
-        }
+        # generate metadata, thread id, and document id
+        thread_id = (
+            permalink.split("?thread_ts=", 1)[1] if "?thread_ts=" in permalink else None
+        )
+        document_id = f"{channel_id}_{message_id}"
+        metadata: dict[str, str | list[str]] = {"channel": channel_name}
 
         # compute recency bias (parallels vespa calculation)
         decay_factor = DOC_TIME_DECAY * original_query.recency_bias_multiplier
-        doc_time = datetime.fromtimestamp(float(thread_ts))
+        doc_time = datetime.fromtimestamp(float(message_id))
         doc_age_years = (datetime.now() - doc_time).total_seconds() / (
             365 * 24 * 60 * 60
         )
@@ -127,20 +130,23 @@ def query_slack(
         )
 
         # get the semantic identifier
-        snippet = (text[:50].rstrip() + "..." if len(text) > 50 else text).replace(
-            "\n", " "
-        )
+        snippet = (
+            cleaned_text[:50].rstrip() + "..." if len(cleaned_text) > 50 else text
+        ).replace("\n", " ")
         doc_sem_id = f"{username} in #{channel_name}: {snippet}"
 
         slack_messages.append(
             SlackMessage(
                 document_id=document_id,
+                channel_id=channel_id,
+                message_id=message_id,
+                thread_id=thread_id,
                 link=permalink,
                 metadata=metadata,
                 timestamp=doc_time,
                 recency_bias=recency_bias,
                 semantic_identifier=doc_sem_id,
-                text=cleaned_text,
+                text=f"{username}: {cleaned_text}",
                 highlighted_texts=highlighted_texts,
                 slack_score=score,
             )
@@ -178,6 +184,95 @@ def merge_slack_messages(
     return merged_messages, docid_to_message
 
 
+def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> str:
+    """
+    Retrieves the initial thread message as well as the text following the message
+    and combines them into a single string. If the slack query fails, returns the
+    original message text.
+
+    The idea is that the message (the one that actually matched the search), the
+    initial thread message, and the replies to the message are important in answering
+    the user's query.
+    """
+    channel_id = message.channel_id
+    thread_id = message.thread_id
+    message_id = message.message_id
+
+    # if it's not a thread, return the message text
+    if thread_id is None:
+        return message.text
+
+    # get the thread messages
+    slack_client = WebClient(token=access_token)
+    try:
+        response = slack_client.conversations_replies(
+            channel=channel_id,
+            ts=thread_id,
+        )
+        response.validate()
+        messages: list[dict[str, Any]] = response.get("messages", [])
+    except SlackApiError as e:
+        logger.error(f"Slack API error in get_contextualized_thread_text: {e}")
+        return message.text
+
+    # make sure we didn't get an empty response or a single message (not a thread)
+    if len(messages) <= 1:
+        return message.text
+
+    # add the initial thread message
+    msg_text = messages[0].get("text", "")
+    msg_sender = messages[0].get("user", "")
+    thread_text = f"<@{msg_sender}>: {msg_text}"
+
+    # add the message (unless it's the initial message)
+    thread_text += "\n\nReplies:"
+    if thread_id == message_id:
+        message_id_idx = 0
+    else:
+        message_id_idx = next(
+            (i for i, msg in enumerate(messages) if msg.get("ts") == message_id), 0
+        )
+        if not message_id_idx:
+            return thread_text
+
+        # add the message
+        thread_text += "\n..." if message_id_idx > 1 else ""
+        msg_text = messages[message_id_idx].get("text", "")
+        msg_sender = messages[message_id_idx].get("user", "")
+        thread_text += f"\n<@{msg_sender}>: {msg_text}"
+
+    # add the following replies to the thread text
+    len_replies = 0
+    for msg in messages[message_id_idx + 1 :]:
+        msg_text = msg.get("text", "")
+        msg_sender = msg.get("user", "")
+        reply = f"\n\n<@{msg_sender}>: {msg_text}"
+        thread_text += reply
+
+        # stop if len_replies exceeds chunk_size * 4 chars as the rest likely won't fit
+        len_replies += len(reply)
+        if len_replies >= DOC_EMBEDDING_CONTEXT_SIZE * 4:
+            thread_text += "\n..."
+            break
+
+    # replace user ids with names in the thread text
+    userids: set[str] = set(re.findall(r"<@([A-Z0-9]+)>", thread_text))
+    for userid in userids:
+        try:
+            response = slack_client.users_profile_get(user=userid)
+            response.validate()
+            profile: dict[str, Any] = response.get("profile", {})
+            name: str | None = profile.get("real_name") or profile.get("email")
+        except SlackApiError as e:
+            logger.error(f"Slack API error in get_contextualized_thread_text: {e}")
+            continue
+        if not name:
+            continue
+        thread_text = thread_text.replace(f"<@{userid}>", name)
+
+    return thread_text
+
+
 @log_function_time(print_only=True)
 def slack_retrieval(
     query: SearchQuery,
@@ -191,13 +286,24 @@ def slack_retrieval(
 
     results: list[list[SlackMessage]] = run_functions_tuples_in_parallel(
         [
-            (query_slack, (query_string, query, access_token))
+            (query_slack, (query_string, query, access_token, limit))
             for query_string in query_strings
         ]
     )
     slack_messages, docid_to_message = merge_slack_messages(results)
+    slack_messages = slack_messages[: limit or len(slack_messages)]
     if not slack_messages:
         return []
+
+    # contextualize the slack messages
+    thread_texts: list[str] = run_functions_tuples_in_parallel(
+        [
+            (get_contextualized_thread_text, (slack_message, access_token))
+            for slack_message in slack_messages
+        ]
+    )
+    for slack_message, thread_text in zip(slack_messages, thread_texts):
+        slack_message.text = thread_text
 
     # get the highlighted texts from shortest to longest
     highlighted_texts: set[str] = set()
@@ -248,8 +354,7 @@ def slack_retrieval(
     chunkid_to_match_highlight: dict[str, str] = {}
     for chunk in chunks:
         match_highlight = chunk.content
-        # this is faster than a regex, especially with more highlights
-        for highlight in sorted_highlighted_texts:
+        for highlight in sorted_highlighted_texts:  # faster than re sub
             match_highlight = match_highlight.replace(
                 highlight, f"<hi>{highlight}</hi>"
             )
@@ -264,7 +369,7 @@ def slack_retrieval(
 
     # convert to inference chunks
     top_chunks: list[InferenceChunk] = []
-    for chunk in relevant_chunks:
+    for chunk in relevant_chunks[: limit or len(relevant_chunks)]:
         document_id = chunk.source_document.id
         chunk_id = f"{document_id}__{chunk.chunk_id}"
 
@@ -294,7 +399,5 @@ def slack_retrieval(
                 is_federated=True,
             )
         )
-        if limit and len(top_chunks) >= limit:
-            break
 
     return top_chunks
