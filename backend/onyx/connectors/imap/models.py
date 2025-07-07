@@ -8,6 +8,9 @@ from pydantic import BaseModel
 _SUBJECT_HEADER = "subject"
 _FROM_HEADER = "from"
 _TO_HEADER = "to"
+_DELIVERED_TO_HEADER = (
+    "Delivered-To"  # Used in mailing lists instead of the "to" header.
+)
 _DATE_HEADER = "date"
 _ENCODING_HEADER = "Content-Transfer-Encoding"
 _CONTENT_TYPE_HEADER = "Content-Type"
@@ -55,6 +58,8 @@ class EmailHeaders(BaseModel):
         subject = _decode(header=_SUBJECT_HEADER) or "Unknown Subject"
         from_ = _decode(header=_FROM_HEADER)
         to = _decode(header=_TO_HEADER)
+        if not to:
+            to = _decode(header=_DELIVERED_TO_HEADER)
         date_str = _decode(header=_DATE_HEADER)
         date = _parse_date(date_str)
         content_type = _decode(header=_CONTENT_TYPE_HEADER)
