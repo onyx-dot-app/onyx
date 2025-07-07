@@ -10,7 +10,6 @@ import bs4
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.imap.models import EmailHeaders
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
@@ -218,6 +217,8 @@ def _parse_email_body(
 if __name__ == "__main__":
     import os
     import time
+    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+    from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 
     username = os.environ.get("IMAP_USERNAME")
     password = os.environ.get("IMAP_PASSWORD")
@@ -239,17 +240,23 @@ if __name__ == "__main__":
         )
     )
 
-    checkpoint = imap_connector.build_dummy_checkpoint()
-    while True:
-        for doc in imap_connector.load_from_checkpoint(
-            start=0.0, end=time.time(), checkpoint=checkpoint
-        ):
-            print(doc)
+    # # Manual iteration through the checkpointing logic.
+    # # Uncomment to add breakpoints and step through manually.
+    # checkpoint = imap_connector.build_dummy_checkpoint()
+    # while True:
+    #     gen = imap_connector.load_from_checkpoint(
+    #         start=0.0, end=time.time(), checkpoint=checkpoint
+    #     )
+    #     while True:
+    #         try:
+    #             doc = next(gen)
+    #         except StopIteration as e:
+    #             checkpoint = cast(ImapCheckpoint, copy.deepcopy(e.value))
+    #             break
 
-    # for doc in load_all_docs_from_checkpoint_connector(
-    #     connector=imap_connector,
-    #     start=0,
-    #     end=time.time(),
-    # ):
-    #     print(doc)
-    #     ...
+    for doc in load_all_docs_from_checkpoint_connector(
+        connector=imap_connector,
+        start=0,
+        end=time.time(),
+    ):
+        print(doc)
