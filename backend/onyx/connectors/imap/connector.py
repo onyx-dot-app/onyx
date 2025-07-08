@@ -337,8 +337,7 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
             f"Expected a singular address, but instead got multiple; {raw_header=} {addrs=}"
         )
 
-    [(name, addr)] = addrs
-    return name, addr
+    return addrs[0]
 
 
 if __name__ == "__main__":
