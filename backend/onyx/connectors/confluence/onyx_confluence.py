@@ -997,12 +997,12 @@ def extract_text_from_confluence_html(
 
 
 def _remove_macro_stylings(soup: bs4.BeautifulSoup) -> None:
-    macro_root = soup.find("ac:structured-macro")
-    if not macro_root or not isinstance(macro_root, bs4.Tag):
-        return
+    for macro_root in soup.findAll("ac:structured-macro"):
+        if not isinstance(macro_root, bs4.Tag):
+            continue
 
-    macro_styling = macro_root.find(name="ac:parameter", attrs={"ac:name": "page"})
-    if not macro_styling or not isinstance(macro_styling, bs4.Tag):
-        return
+        macro_styling = macro_root.find(name="ac:parameter", attrs={"ac:name": "page"})
+        if not macro_styling or not isinstance(macro_styling, bs4.Tag):
+            continue
 
-    macro_styling.extract()
+        macro_styling.extract()
