@@ -219,6 +219,13 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
             )
             continue
 
+        # The mailbox LIST response output can be found here:
+        # https://www.rfc-editor.org/rfc/rfc3501.html#section-7.2.2
+        #
+        # The general format is:
+        # `(<name-attributes>) <hierarchy-delimiter> <mailbox-name>`
+        #
+        # The below regex matches on that pattern; from there, we select the 3rd match (index 2), which is the mailbox-name.
         match = re.match(r'\([^)]*\)\s+"([^"]+)"\s+"?(.+?)"?$', mailboxes_str)
         if not match:
             logger.warn(
@@ -267,7 +274,7 @@ def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | Non
             f"Message data should be a tuple; instead got a {type(data)=} {data=}"
         )
 
-    _other, raw_email = data
+    _metadata, raw_email = data
     return email.message_from_bytes(raw_email)
 
 
@@ -307,6 +314,8 @@ def _parse_email_body(
     body = None
     for part in email_msg.walk():
         if part.is_multipart():
+            # Multipart parts are *containers* for other parts, not the actual content itself.
+            # Therefore, we skip until we find the individual parts instead.
             continue
 
         charset = part.get_content_charset() or "utf-8"
