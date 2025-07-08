@@ -12,10 +12,8 @@ _DELIVERED_TO_HEADER = (
     "Delivered-To"  # Used in mailing lists instead of the "to" header.
 )
 _DATE_HEADER = "date"
-_ENCODING_HEADER = "Content-Transfer-Encoding"
 _CONTENT_TYPE_HEADER = "Content-Type"
 _MESSAGE_ID_HEADER = "Message-ID"
-_DEFAULT_ENCODING = "utf-8"
 
 
 class EmailHeaders(BaseModel):
@@ -63,7 +61,6 @@ class EmailHeaders(BaseModel):
         date_str = _decode(header=_DATE_HEADER)
         date = _parse_date(date_str)
         content_type = _decode(header=_CONTENT_TYPE_HEADER)
-        _encoding = _decode(header=_ENCODING_HEADER, default=_DEFAULT_ENCODING)
 
         return cls.model_validate(
             {
