@@ -254,9 +254,6 @@ def _convert_email_headers_and_body_into_document(
     _sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
     parsed_recipients = _parse_addrs(raw_header=email_headers.recipients)
 
-    recipient_emails = set(addr for _name, addr in parsed_recipients)
-
-    title = f"{sender_addr} to {recipient_emails} about {email_headers.subject}"
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
     primary_owners = [
         BasicExpertInfo(display_name=recipient_name, email=recipient_addr)
@@ -266,13 +263,13 @@ def _convert_email_headers_and_body_into_document(
     return Document(
         id=email_headers.id,
         title=email_headers.subject,
-        semantic_identifier=title,
+        semantic_identifier=email_headers.subject,
         metadata={},
         source=DocumentSource.IMAP,
         sections=[TextSection(text=email_body)],
         primary_owners=primary_owners,
         external_access=ExternalAccess(
-            external_user_emails=recipient_emails,
+            external_user_emails=set(addr for _name, addr in parsed_recipients),
             external_user_group_ids=set(),
             is_public=False,
         ),
