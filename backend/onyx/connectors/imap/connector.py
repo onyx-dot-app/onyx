@@ -61,8 +61,7 @@ class ImapConnector(
         self._host = host
         self._port = port
         self._mailboxes = mailboxes
-        self._username: str | None = None
-        self._password: str | None = None
+        self._credentials: dict[str, Any] | None = None
         self._mail_client: imaplib.IMAP4_SSL | None = None
 
     @property
@@ -79,12 +78,16 @@ class ImapConnector(
         raise NotImplementedError("Use `set_credentials_provider` instead")
 
     def validate_connector_settings(self) -> None:
-        if not self._username or not self._password:
+        if not self._credentials:
             raise RuntimeError(
-                "Credentials not yet set; call `set_credentials_provider` first"
+                "`self._credentials` not set; call `set_credentials_provider` first"
             )
 
-        self.mail_client.login(user=self._username, password=self._password)
+        username, password = _get_username_and_password_from_credentials_dict(
+            credentials=self._credentials
+        )
+
+        self.mail_client.login(user=username, password=password)
         self.mail_client.logout()
 
     # impls for CredentialsConnector
@@ -92,20 +95,11 @@ class ImapConnector(
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
-        credentials = credentials_provider.get_credentials()
+        self._credentials = credentials_provider.get_credentials()
 
-        def get_or_raise(name: str) -> str:
-            value = credentials.get(name)
-            if not value:
-                raise RuntimeError(f"Credential item {name=} was not found")
-            if not isinstance(value, str):
-                raise RuntimeError(
-                    f"Credential item {name=} must be of type str, instead received {type(name)=}"
-                )
-            return value
-
-        username = get_or_raise("username")
-        password = get_or_raise("password")
+        username, password = _get_username_and_password_from_credentials_dict(
+            credentials=self._credentials
+        )
 
         self._mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
         self.mail_client.login(user=username, password=password)
@@ -175,6 +169,25 @@ class ImapConnector(
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ImapCheckpoint:
         return ImapCheckpoint.model_validate_json(json_data=checkpoint_json)
+
+
+def _get_username_and_password_from_credentials_dict(
+    credentials: dict[str, Any],
+) -> tuple[str, str]:
+    def get_or_raise(name: str) -> str:
+        value = credentials.get(name)
+        if not value:
+            raise RuntimeError(f"Credential item {name=} was not found")
+        if not isinstance(value, str):
+            raise RuntimeError(
+                f"Credential item {name=} must be of type str, instead received {type(name)=}"
+            )
+        return value
+
+    username = get_or_raise("username")
+    password = get_or_raise("password")
+
+    return username, password
 
 
 def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> list[str]:
@@ -375,22 +388,6 @@ if __name__ == "__main__":
             },
         )
     )
-
-    # # Manual iteration through the checkpointing logic.
-    # # Uncomment to add breakpoints and step through manually.
-    # checkpoint = imap_connector.build_dummy_checkpoint()
-    # while True:
-    #     gen = imap_connector.load_from_checkpoint(
-    #         start=0.0, end=time.time(), checkpoint=checkpoint
-    #     )
-    #     while True:
-    #         try:
-    #             doc = next(gen)
-    #         except StopIteration as e:
-    #             checkpoint = cast(ImapCheckpoint, copy.deepcopy(e.value))
-    #             break
-    #     if not checkpoint.has_more:
-    #         break
 
     for doc in load_all_docs_from_checkpoint_connector(
         connector=imap_connector,
