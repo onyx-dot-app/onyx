@@ -34,13 +34,7 @@ class SimpleJobException(Exception):
         super().__init__(*args, **kwargs)
 
 
-JobStatusType = (
-    Literal["error"]
-    | Literal["finished"]
-    | Literal["pending"]
-    | Literal["running"]
-    | Literal["cancelled"]
-)
+JobStatusType = Literal["error"] | Literal["finished"] | Literal["pending"] | Literal["running"] | Literal["cancelled"]
 
 
 def _initializer(
@@ -75,9 +69,8 @@ def _initializer(
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME)
 
     # Initialize a new engine with desired parameters
-    SqlEngine.init_engine(
-        pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
-    )
+    SqlEngine.init_engine(pool_size=4, max_overflow=12,
+                          pool_recycle=60, pool_pre_ping=True)
 
     # Proceed with executing the target function
     try:
@@ -139,11 +132,7 @@ class SimpleJob:
             return "finished"
 
     def done(self) -> bool:
-        return (
-            self.status == "finished"
-            or self.status == "cancelled"
-            or self.status == "error"
-        )
+        return self.status == "finished" or self.status == "cancelled" or self.status == "error"
 
     def exception(self) -> str:
         """Needed to match the Dask API, but not implemented since we don't currently
@@ -156,7 +145,9 @@ class SimpleJob:
         if self._exception:
             return self._exception
 
-        return f"Job with ID '{self.id}' did not report an exception."
+        # tibi: if there's no exception, should not return a string
+        return None
+        # return f"Job with ID '{self.id}' did not report an exception."
 
 
 class SimpleJobClient:
@@ -180,8 +171,7 @@ class SimpleJobClient:
         self._cleanup_completed_jobs()
         if len(self.jobs) >= self.n_workers:
             logger.debug(
-                f"No available workers to run job. "
-                f"Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
+                f"No available workers to run job. Currently running '{len(self.jobs)}' jobs, with a limit of '{self.n_workers}'."
             )
             return None
 
@@ -192,9 +182,8 @@ class SimpleJobClient:
         # get_start_method's current setting
         ctx = mp.get_context("spawn")
         queue = ctx.Queue()
-        process = ctx.Process(
-            target=_run_in_process, args=(func, queue, args), daemon=True
-        )
+        process = ctx.Process(target=_run_in_process,
+                              args=(func, queue, args), daemon=True)
         job = SimpleJob(id=job_id, process=process, queue=queue)
         process.start()
 
