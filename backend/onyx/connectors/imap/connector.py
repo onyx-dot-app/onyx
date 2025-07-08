@@ -1,6 +1,7 @@
 import copy
 import email
 import imaplib
+import os
 import re
 from datetime import datetime
 from datetime import timezone
@@ -29,7 +30,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-_DEFAULT_IMAP_PORT_NUMBER = 993
+_DEFAULT_IMAP_PORT_NUMBER = int(os.environ.get("IMAP_PORT", 993))
 _IMAP_OKAY_STATUS = "OK"
 _PAGE_SIZE = 100
 
@@ -364,7 +365,6 @@ def _parse_singular_addr(raw_header: str) -> tuple[str, str]:
 
 
 if __name__ == "__main__":
-    import os
     import time
     from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
     from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
