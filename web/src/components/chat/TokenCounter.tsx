@@ -37,12 +37,15 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({
   // Calculate percentage based on context tokens (context window usage)
   const maxTokens = currentModel?.maxTokens || 200000; // Default fallback
   const tokenPercentage = (sessionUsage.contextTotalTokens / maxTokens) * 100;
+  
+  // Calculate total billed tokens
+  const totalBilledTokens = sessionUsage.billedPromptTokens + sessionUsage.billedCompletionTokens + sessionUsage.billedReasoningTokens;
 
   return (
     <TooltipProvider>
       <Tooltip delayDuration={0}>
         <TooltipTrigger asChild>
-          <div className="relative w-32 h-5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+          <div className="relative w-32 h-5 bg-neutral-200 dark:bg-neutral-600 rounded-full overflow-hidden shadow-sm">
             <div
               className={`absolute top-0 left-0 h-full rounded-full ${
                 tokenPercentage >= 100
@@ -68,25 +71,57 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({
             </div>
           </div>
         </TooltipTrigger>
-        <TooltipContent className="text-xs max-w-xs">
-          <div className="space-y-1">
-            <div className="font-medium">Conversation Token Usage</div>
-            <div className="space-y-1">
-              <div className="text-neutral-600 dark:text-neutral-300 font-medium">Billed Tokens:</div>
-              <div>Prompt: {sessionUsage.billedPromptTokens.toLocaleString()}</div>
-              <div>Completion: {sessionUsage.billedCompletionTokens.toLocaleString()}</div>
-              {sessionUsage.billedReasoningTokens > 0 && (
-                <div>Reasoning: {sessionUsage.billedReasoningTokens.toLocaleString()}</div>
-              )}
+        <TooltipContent className="text-xs max-w-xs bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100">
+          <div className="space-y-3">
+            <div className="font-medium text-center">Conversation Token Usage</div>
+            
+            <div>
+              <div className="text-neutral-700 dark:text-neutral-200 font-medium mb-2">Billed Tokens</div>
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr>
+                    <td className="text-neutral-500 dark:text-neutral-300">Prompt:</td>
+                    <td className="text-right font-mono">{sessionUsage.billedPromptTokens.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-neutral-500 dark:text-neutral-300">Completion:</td>
+                    <td className="text-right font-mono">{sessionUsage.billedCompletionTokens.toLocaleString()}</td>
+                  </tr>
+                  {sessionUsage.billedReasoningTokens > 0 ? (
+                    <tr>
+                      <td className="text-neutral-500 dark:text-neutral-300">Reasoning:</td>
+                      <td className="text-right font-mono">{sessionUsage.billedReasoningTokens.toLocaleString()}</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
-            <div className="border-t pt-1 mt-2">
-              <div className="text-neutral-600 dark:text-neutral-300 font-medium">Context Usage:</div>
-              <div>Current: {formatNumber(sessionUsage.contextTotalTokens)}</div>
-              <div>Max: {formatNumber(maxTokens)} ({tokenPercentage.toFixed(1)}% used)</div>
+
+            <div>
+              <div className="text-neutral-700 dark:text-neutral-200 font-medium mb-2">Context Usage</div>
+              <table className="w-full text-xs">
+                <tbody>
+                  <tr>
+                    <td className="text-neutral-500 dark:text-neutral-300">Current:</td>
+                    <td className="text-right font-mono">{sessionUsage.contextTotalTokens.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-neutral-500 dark:text-neutral-300">Max:</td>
+                    <td className="text-right font-mono">{maxTokens.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-neutral-500 dark:text-neutral-300">Usage:</td>
+                    <td className="text-right font-mono">{tokenPercentage.toFixed(1)}%</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+
             {currentModel && (
-              <div className="text-neutral-400 mt-1">
-                Model: {getDisplayNameForModel(currentModel.modelName)}
+              <div className="text-center pt-2 border-t">
+                <div className="text-neutral-400 text-[10px]">
+                  {getDisplayNameForModel(currentModel.modelName)}
+                </div>
               </div>
             )}
           </div>
