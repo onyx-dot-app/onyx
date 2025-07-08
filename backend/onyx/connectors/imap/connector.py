@@ -2,6 +2,8 @@ import copy
 import email
 import imaplib
 import re
+from datetime import datetime
+from datetime import timezone
 from email.message import Message
 from email.utils import parseaddr
 from typing import Any
@@ -83,6 +85,7 @@ class ImapConnector(
             )
 
         self.mail_client.login(user=self._username, password=self._password)
+        self.mail_client.logout()
 
     # impls for CredentialsConnector
 
@@ -103,6 +106,8 @@ class ImapConnector(
 
         username = get_or_raise("username")
         password = get_or_raise("password")
+
+        self._mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
         self.mail_client.login(user=username, password=password)
 
     # impls for CheckpointedConnector
@@ -140,7 +145,10 @@ class ImapConnector(
 
             mailbox = checkpoint.todo_mailboxes.pop(0)
             checkpoint.todo_email_ids = _fetch_email_ids_in_mailbox(
-                mail_client=self.mail_client, mailbox=mailbox
+                mail_client=self.mail_client,
+                mailbox=mailbox,
+                start=start,
+                end=end,
             )
 
         current_todos = cast(
@@ -201,13 +209,20 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
 
 
 def _fetch_email_ids_in_mailbox(
-    mail_client: imaplib.IMAP4_SSL, mailbox: str
+    mail_client: imaplib.IMAP4_SSL,
+    mailbox: str,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
 ) -> list[str]:
     status, _ids = mail_client.select(mailbox=mailbox, readonly=True)
     if status != _IMAP_OKAY_STATUS:
         raise RuntimeError(f"Failed to select {mailbox=}")
 
-    status, email_ids_byte_array = mail_client.search(None, "ALL")
+    start_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%d-%b-%Y")
+    end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d-%b-%Y")
+    search_criteria = f'(SINCE "{start_str}" BEFORE "{end_str}")'
+
+    status, email_ids_byte_array = mail_client.search(None, search_criteria)
 
     if status != _IMAP_OKAY_STATUS or not email_ids_byte_array:
         raise RuntimeError(f"Failed to fetch email ids; {status=}")
