@@ -273,6 +273,15 @@ def get_contextualized_thread_text(message: SlackMessage, access_token: str) -> 
     return thread_text
 
 
+def convert_slack_score(slack_score: float) -> float:
+    """
+    Convert slack score to a score between 0 and 1.
+    Will affect UI ordering and LLM ordering, but not the pruning.
+    I.e., should have very little effect on the search/answer quality.
+    """
+    return max(0.0, min(1.0, slack_score / 80_000))
+
+
 @log_function_time(print_only=True)
 def slack_retrieval(
     query: SearchQuery,
@@ -342,7 +351,6 @@ def slack_retrieval(
     )
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
-        # do we need all these?
         enable_multipass=multipass_config.multipass_indexing,
         enable_large_chunks=multipass_config.enable_large_chunks,
         enable_contextual_rag=enable_contextual_rag,
@@ -366,10 +374,12 @@ def slack_retrieval(
         chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
         relevant_chunks.append(chunk)
         chunkid_to_match_highlight[chunk_id] = match_highlight
+        if limit and len(relevant_chunks) >= limit:
+            break
 
     # convert to inference chunks
     top_chunks: list[InferenceChunk] = []
-    for chunk in relevant_chunks[: limit or len(relevant_chunks)]:
+    for chunk in relevant_chunks:
         document_id = chunk.source_document.id
         chunk_id = f"{document_id}__{chunk.chunk_id}"
 
@@ -387,7 +397,7 @@ def slack_retrieval(
                 title=chunk.title_prefix,
                 boost=0,
                 recency_bias=docid_to_message[document_id].recency_bias,
-                score=0.0,  # not using slack score as it's a different scale
+                score=convert_slack_score(docid_to_message[document_id].slack_score),
                 hidden=False,
                 is_relevant=True,
                 relevance_explanation="",
