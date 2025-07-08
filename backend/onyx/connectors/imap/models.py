@@ -50,16 +50,18 @@ class EmailHeaders(BaseModel):
             except (TypeError, ValueError):
                 return None
 
-        # It's possible for the subject line to not exist or be an empty string.
         message_id = _decode(header=_MESSAGE_ID_HEADER)
+        # It's possible for the subject line to not exist or be an empty string.
         subject = _decode(header=_SUBJECT_HEADER) or "Unknown Subject"
         from_ = _decode(header=_FROM_HEADER)
         to = _decode(header=_TO_HEADER)
         if not to:
             to = _decode(header=_DELIVERED_TO_HEADER)
         date_str = _decode(header=_DATE_HEADER)
-        date = _parse_date(date_str)
+        date = _parse_date(date_str=date_str)
 
+        # If any of the above are `None`, model validation will fail.
+        # Therefore, no guards (i.e.: `if <header> is None: raise RuntimeError(..)`) were written.
         return cls.model_validate(
             {
                 "id": message_id,
