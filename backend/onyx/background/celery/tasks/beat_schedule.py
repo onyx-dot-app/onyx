@@ -67,9 +67,8 @@ beat_task_templates.extend(
         {
             "name": "check-for-user-file-folder-sync",
             "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
-            "schedule": timedelta(
-                days=1
-            ),  # This should essentially always be triggered manually for user folder updates.
+            # This should essentially always be triggered manually for user folder updates.
+            "schedule": timedelta(days=1),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -84,24 +83,25 @@ beat_task_templates.extend(
                 "expires": BEAT_EXPIRES_DEFAULT,
             },
         },
-        {
-            "name": "check-for-doc-permissions-sync",
-            "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
-            "schedule": timedelta(seconds=30),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        },
-        {
-            "name": "check-for-external-group-sync",
-            "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
-            "schedule": timedelta(seconds=20),
-            "options": {
-                "priority": OnyxCeleryPriority.MEDIUM,
-                "expires": BEAT_EXPIRES_DEFAULT,
-            },
-        },
+        # tibi: disabled these two tasks, they're enterprise edition
+        # {
+        #     "name": "check-for-doc-permissions-sync",
+        #     "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
+        #     "schedule": timedelta(seconds=30),
+        #     "options": {
+        #         "priority": OnyxCeleryPriority.MEDIUM,
+        #         "expires": BEAT_EXPIRES_DEFAULT,
+        #     },
+        # },
+        # {
+        #     "name": "check-for-external-group-sync",
+        #     "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
+        #     "schedule": timedelta(seconds=20),
+        #     "options": {
+        #         "priority": OnyxCeleryPriority.MEDIUM,
+        #         "expires": BEAT_EXPIRES_DEFAULT,
+        #     },
+        # },
         {
             "name": "monitor-background-processes",
             "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
@@ -242,9 +242,7 @@ if not MULTI_TENANT:
     tasks_to_schedule.extend(beat_task_templates)
 
 
-def generate_cloud_tasks(
-    beat_tasks: list[dict], beat_templates: list[dict], beat_multiplier: float
-) -> list[dict[str, Any]]:
+def generate_cloud_tasks(beat_tasks: list[dict], beat_templates: list[dict], beat_multiplier: float) -> list[dict[str, Any]]:
     """
     beat_tasks: system wide tasks that can be sent as is
     beat_templates: task templates that will be transformed into per tenant tasks via

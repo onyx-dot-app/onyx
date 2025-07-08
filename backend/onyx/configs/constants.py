@@ -20,9 +20,8 @@ DEFAULT_BOOST = 0
 SESSION_KEY = "session"
 
 # Cookies
-FASTAPI_USERS_AUTH_COOKIE_NAME = (
-    "fastapiusersauth"  # Currently a constant, but logic allows for configuration
-)
+# Currently a constant, but logic allows for configuration
+FASTAPI_USERS_AUTH_COOKIE_NAME = "fastapiusersauth"
 TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
@@ -48,25 +47,9 @@ DISABLED_GEN_AI_MSG = (
 
 DEFAULT_PERSONA_ID = 0
 
-DEFAULT_CC_PAIR_ID = 1
 
-# subquestion level and question number for basic flow
-BASIC_KEY = (-1, -1)
-AGENT_SEARCH_INITIAL_KEY = (0, 0)
-CANCEL_CHECK_INTERVAL = 20
-DISPATCH_SEP_CHAR = "\n"
-FORMAT_DOCS_SEPARATOR = "\n\n"
-NUM_EXPLORATORY_DOCS = 15
 # Postgres connection constants for application_name
-POSTGRES_WEB_APP_NAME = "web"
-POSTGRES_INDEXER_APP_NAME = "indexer"
-POSTGRES_CELERY_APP_NAME = "celery"
-POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
-POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
-POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
-POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
-POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
-POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
+
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
@@ -110,7 +93,8 @@ CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
 # hard timeout applied by the watchdog to the indexing connector run
 # to handle hung connectors
-CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
+CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * \
+    60 * 60  # 3 hours (in seconds)
 
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
@@ -188,7 +172,8 @@ class DocumentSource(str, Enum):
     MOCK_CONNECTOR = "mock_connector"
 
 
-DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
+DocumentSourceRequiringTenantContext: list[DocumentSource] = [
+    DocumentSource.FILE]
 
 
 class NotificationType(str, Enum):
@@ -332,20 +317,14 @@ class OnyxRedisLocks:
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
     CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
-    CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
-        "da_lock:check_connector_doc_permissions_sync_beat"
-    )
-    CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
-        "da_lock:check_connector_external_group_sync_beat"
-    )
+    CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = "da_lock:check_connector_doc_permissions_sync_beat"
+    CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = "da_lock:check_connector_external_group_sync_beat"
     CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
-    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
-        "da_lock:connector_doc_permissions_sync"
-    )
+    CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = "da_lock:connector_doc_permissions_sync"
     CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
@@ -360,18 +339,12 @@ class OnyxRedisLocks:
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
-    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = (
-        "signal:block_validate_external_group_sync_fences"
-    )
-    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = (
-        "signal:block_validate_permission_sync_fences"
-    )
+    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = "signal:block_validate_external_group_sync_fences"
+    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = "signal:block_validate_permission_sync_fences"
     BLOCK_PRUNING = "signal:block_pruning"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
-    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
-        "signal:block_validate_connector_deletion_fences"
-    )
+    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = "signal:block_validate_connector_deletion_fences"
 
 
 class OnyxRedisConstants:
@@ -402,15 +375,9 @@ class OnyxCeleryTask:
 
     CLOUD_BEAT_TASK_GENERATOR = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_generate_beat_tasks"
     CLOUD_MONITOR_ALEMBIC = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_alembic"
-    CLOUD_MONITOR_CELERY_QUEUES = (
-        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
-    )
-    CLOUD_CHECK_AVAILABLE_TENANTS = (
-        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
-    )
-    CLOUD_MONITOR_CELERY_PIDBOX = (
-        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
-    )
+    CLOUD_MONITOR_CELERY_QUEUES = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
+    CLOUD_CHECK_AVAILABLE_TENANTS = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
+    CLOUD_MONITOR_CELERY_PIDBOX = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
 
     UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
 
@@ -433,15 +400,9 @@ class OnyxCeleryTask:
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
-    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
-        "connector_permission_sync_generator_task"
-    )
-    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = (
-        "update_external_document_permissions_task"
-    )
-    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = (
-        "connector_external_group_sync_generator_task"
-    )
+    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = "connector_permission_sync_generator_task"
+    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = "update_external_document_permissions_task"
+    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = "connector_external_group_sync_generator_task"
     CONNECTOR_INDEXING_PROXY_TASK = "connector_indexing_proxy_task"
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
