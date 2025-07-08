@@ -16,7 +16,7 @@ import bs4
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.imap.models import EmailHeaders
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
@@ -56,8 +56,8 @@ class LoginState(str, Enum):
 
 
 class ImapConnector(
-    CheckpointedConnector[ImapCheckpoint],
     CredentialsConnector,
+    CheckpointedConnectorWithPermSync[ImapCheckpoint],
 ):
     def __init__(
         self,
@@ -115,30 +115,12 @@ class ImapConnector(
         self._login_state = LoginState.LoggedOut
         self.mail_client.logout()
 
-    # impls for BaseConnector
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        raise NotImplementedError("Use `set_credentials_provider` instead")
-
-    def validate_connector_settings(self) -> None:
-        self._login()
-        self._logout()
-
-    # impls for CredentialsConnector
-
-    def set_credentials_provider(
-        self, credentials_provider: CredentialsProviderInterface
-    ) -> None:
-        self._credentials = credentials_provider.get_credentials()
-        self._mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
-
-    # impls for CheckpointedConnector
-
-    def load_from_checkpoint(
+    def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: ImapCheckpoint,
+        include_perm_sync: bool,
     ) -> CheckpointOutput[ImapCheckpoint]:
         checkpoint = cast(ImapCheckpoint, copy.deepcopy(checkpoint))
         checkpoint.has_more = True
@@ -189,16 +171,59 @@ class ImapConnector(
             email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
 
             yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg, email_headers=email_headers
+                email_msg=email_msg,
+                email_headers=email_headers,
+                include_perm_sync=include_perm_sync,
             )
 
         return checkpoint
+
+    # impls for BaseConnector
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        raise NotImplementedError("Use `set_credentials_provider` instead")
+
+    def validate_connector_settings(self) -> None:
+        self._login()
+        self._logout()
+
+    # impls for CredentialsConnector
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self._credentials = credentials_provider.get_credentials()
+        self._mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
+
+    # impls for CheckpointedConnector
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ImapCheckpoint,
+    ) -> CheckpointOutput[ImapCheckpoint]:
+        return self._load_from_checkpoint(
+            start=start, end=end, checkpoint=checkpoint, include_perm_sync=False
+        )
 
     def build_dummy_checkpoint(self) -> ImapCheckpoint:
         return ImapCheckpoint(has_more=True)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> ImapCheckpoint:
         return ImapCheckpoint.model_validate_json(json_data=checkpoint_json)
+
+    # impls for CheckpointedConnectorWithPermSync
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ImapCheckpoint,
+    ) -> CheckpointOutput[ImapCheckpoint]:
+        return self._load_from_checkpoint(
+            start=start, end=end, checkpoint=checkpoint, include_perm_sync=True
+        )
 
 
 def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> list[str]:
@@ -281,6 +306,7 @@ def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | Non
 def _convert_email_headers_and_body_into_document(
     email_msg: Message,
     email_headers: EmailHeaders,
+    include_perm_sync: bool,
 ) -> Document:
     _sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
     parsed_recipients = _parse_addrs(raw_header=email_headers.recipients)
@@ -290,6 +316,15 @@ def _convert_email_headers_and_body_into_document(
         BasicExpertInfo(display_name=recipient_name, email=recipient_addr)
         for recipient_name, recipient_addr in parsed_recipients
     ]
+    external_access = (
+        ExternalAccess(
+            external_user_emails=set(addr for _name, addr in parsed_recipients),
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        if include_perm_sync
+        else None
+    )
 
     return Document(
         id=email_headers.id,
@@ -299,11 +334,7 @@ def _convert_email_headers_and_body_into_document(
         source=DocumentSource.IMAP,
         sections=[TextSection(text=email_body)],
         primary_owners=primary_owners,
-        external_access=ExternalAccess(
-            external_user_emails=set(addr for _name, addr in parsed_recipients),
-            external_user_group_ids=set(),
-            is_public=False,
-        ),
+        external_access=external_access,
     )
 
 
