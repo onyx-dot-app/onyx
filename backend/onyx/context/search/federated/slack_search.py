@@ -103,20 +103,23 @@ def query_slack(
         ):
             continue
 
-        # generate metadata, thread id, and document id
+        # generate thread id and document id
         thread_id = (
             permalink.split("?thread_ts=", 1)[1] if "?thread_ts=" in permalink else None
         )
         document_id = f"{channel_id}_{message_id}"
-        metadata: dict[str, str | list[str]] = {"channel": channel_name}
 
-        # compute recency bias (parallels vespa calculation)
+        # compute recency bias (parallels vespa calculation) and metadata
         decay_factor = DOC_TIME_DECAY * original_query.recency_bias_multiplier
         doc_time = datetime.fromtimestamp(float(message_id))
         doc_age_years = (datetime.now() - doc_time).total_seconds() / (
             365 * 24 * 60 * 60
         )
         recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
+        metadata: dict[str, str | list[str]] = {
+            "channel": channel_name,
+            "time": doc_time.isoformat(),
+        }
 
         # extract out the highlighted texts
         highlighted_texts = set(
@@ -279,7 +282,7 @@ def convert_slack_score(slack_score: float) -> float:
     Will affect UI ordering and LLM ordering, but not the pruning.
     I.e., should have very little effect on the search/answer quality.
     """
-    return max(0.0, min(1.0, slack_score / 80_000))
+    return max(0.0, min(1.0, slack_score / 90_000))
 
 
 @log_function_time(print_only=True)
@@ -399,7 +402,7 @@ def slack_retrieval(
                 recency_bias=docid_to_message[document_id].recency_bias,
                 score=convert_slack_score(docid_to_message[document_id].slack_score),
                 hidden=False,
-                is_relevant=True,
+                is_relevant=None,
                 relevance_explanation="",
                 metadata=docid_to_message[document_id].metadata,
                 match_highlights=[chunkid_to_match_highlight[chunk_id]],
