@@ -56,7 +56,7 @@ class ImapConnector(
         self,
         host: str,
         port: int = _DEFAULT_IMAP_PORT_NUMBER,
-        mailboxes: list[str] = [],
+        mailboxes: list[str] | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -316,6 +316,10 @@ def _parse_email_body(
 
 
 def _sanitize_mailbox_names(mailboxes: list[str]) -> list[str]:
+    """
+    Mailboxes with special characters in them must be enclosed by double-quotes, as per the IMAP protocol.
+    Just to be safe, we wrap *all* mailboxes with double-quotes.
+    """
     return [f'"{mailbox}"' for mailbox in mailboxes if mailbox]
 
 
