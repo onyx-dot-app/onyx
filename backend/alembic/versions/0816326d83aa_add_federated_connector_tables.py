@@ -1,7 +1,7 @@
 """add federated connector tables
 
 Revision ID: 0816326d83aa
-Revises: 58c50ef19f08
+Revises: 12635f6655b7
 Create Date: 2025-06-29 14:09:45.109518
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "0816326d83aa"
-down_revision = "58c50ef19f08"
+down_revision = "12635f6655b7"
 branch_labels = None
 depends_on = None
 
