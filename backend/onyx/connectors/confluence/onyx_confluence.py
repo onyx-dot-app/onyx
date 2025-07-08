@@ -311,8 +311,8 @@ class OnyxConfluence:
         return confluence
 
     # https://developer.atlassian.com/cloud/confluence/rate-limiting/
-    # this uses the native rate limiting option provided by the
-    # confluence client and otherwise applies a simpler set of error handling
+    # This uses the native rate limiting option provided by the
+    # confluence client and otherwise applies a simpler set of error handling.
     def _make_rate_limited_confluence_method(
         self, name: str, credential_provider: CredentialsProviderInterface | None
     ) -> Callable[..., Any]:
@@ -377,25 +377,6 @@ class OnyxConfluence:
                     time.sleep(5)
 
         return wrapped_call
-
-    # def _wrap_methods(self) -> None:
-    #     """
-    #     For each attribute that is callable (i.e., a method) and doesn't start with an underscore,
-    #     wrap it with handle_confluence_rate_limit.
-    #     """
-    #     for attr_name in dir(self):
-    #         if callable(getattr(self, attr_name)) and not attr_name.startswith("_"):
-    #             setattr(
-    #                 self,
-    #                 attr_name,
-    #                 handle_confluence_rate_limit(getattr(self, attr_name)),
-    #             )
-
-    # def _ensure_token_valid(self) -> None:
-    #     if self._token_is_expired():
-    #         self._refresh_token()
-    #         # Re-init the Confluence client with the originally stored args
-    #         self._confluence = Confluence(self._url, *self._args, **self._kwargs)
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically intercept attribute/method access."""
@@ -926,6 +907,9 @@ def extract_text_from_confluence_html(
     object_html = body.get("storage", body.get("view", {})).get("value")
 
     soup = bs4.BeautifulSoup(object_html, "html.parser")
+
+    _remove_macro_stylings(soup=soup)
+
     for user in soup.findAll("ri:user"):
         user_id = (
             user.attrs["ri:account-id"]
@@ -1007,3 +991,15 @@ def extract_text_from_confluence_html(
             logger.warning(f"Error processing ac:link-body: {e}")
 
     return format_document_soup(soup)
+
+
+def _remove_macro_stylings(soup: bs4.BeautifulSoup) -> None:
+    macro_root = soup.find("ac:structured-macro")
+    if not macro_root or not isinstance(macro_root, bs4.Tag):
+        return
+
+    macro_styling = macro_root.find(name="ac:parameter", attrs={"ac:name": "page"})
+    if not macro_styling or not isinstance(macro_styling, bs4.Tag):
+        return
+
+    macro_styling.extract()
