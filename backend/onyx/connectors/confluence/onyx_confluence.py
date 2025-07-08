@@ -53,7 +53,6 @@ class ConfluenceRateLimitError(Exception):
 
 
 _DEFAULT_PAGINATION_LIMIT = 1000
-_MINIMUM_PAGINATION_LIMIT = 50
 
 
 class OnyxConfluence:
@@ -479,6 +478,10 @@ class OnyxConfluence:
                 raw_response = self.get(
                     path=url_suffix,
                     advanced_mode=True,
+                    params={
+                        "body-format": "atlas_doc_format",
+                        "expand": "body.atlas_doc_format",
+                    },
                 )
             except Exception as e:
                 logger.exception(f"Error in confluence call to {url_suffix}")
