@@ -7,7 +7,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.imap.connector import ImapConnector
 from tests.daily.connectors.imap.models import EmailDoc
-from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import (
+    load_all_docs_from_checkpoint_connector_with_perm_sync,
+)
 from tests.daily.connectors.utils import to_documents
 
 
@@ -68,7 +70,7 @@ def test_imap_connector(
         EmailDoc.from_doc(document=document)
         for document in to_documents(
             iterator=iter(
-                load_all_docs_from_checkpoint_connector(
+                load_all_docs_from_checkpoint_connector_with_perm_sync(
                     connector=imap_connector,
                     start=0,
                     end=time.time(),
