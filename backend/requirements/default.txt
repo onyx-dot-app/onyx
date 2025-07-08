@@ -83,7 +83,7 @@ supervisor==4.2.5
 RapidFuzz==3.13.0
 tiktoken==0.7.0
 timeago==1.0.16
-transformers==4.49.0
+transformers==4.51.0
 unstructured==0.15.1
 unstructured-client==0.25.4
 uvicorn==0.21.1
