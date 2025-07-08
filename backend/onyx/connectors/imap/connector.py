@@ -143,7 +143,7 @@ class ImapConnector(
                 checkpoint.has_more = False
                 return checkpoint
 
-            mailbox = checkpoint.todo_mailboxes.pop(0)
+            mailbox = checkpoint.todo_mailboxes.pop()
             checkpoint.todo_email_ids = _fetch_email_ids_in_mailbox(
                 mail_client=self.mail_client,
                 mailbox=mailbox,
