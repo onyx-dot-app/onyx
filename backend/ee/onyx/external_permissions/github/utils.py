@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -20,6 +21,15 @@ from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_excep
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class GitHubVisibility(Enum):
+    """GitHub repository visibility options."""
+
+    PUBLIC = "public"
+    PRIVATE = "private"
+    INTERNAL = "internal"
+
 
 MAX_RETRY_COUNT = 3
 
@@ -262,25 +272,26 @@ def form_outside_collaborators_group_id(repository_id: int) -> str:
     return group_id
 
 
-def get_repository_visibility(repo: Repository) -> str:
+def get_repository_visibility(repo: Repository) -> GitHubVisibility:
     """
     Get the visibility of a repository.
-    Returns "public", "private", or "internal".
+    Returns GitHubVisibility enum member.
     """
     if hasattr(repo, "visibility"):
         visibility = repo.visibility
         logger.info(
             f"Repository {repo.full_name} visibility from attribute: {visibility}"
         )
-        return visibility
-
-    # Fallback to private field for older GitHub API versions
-    if not repo.private:
-        logger.info(f"Repository {repo.full_name} is public")
-        return "public"
+        try:
+            return GitHubVisibility(visibility)
+        except ValueError:
+            logger.warning(
+                f"Unknown visibility '{visibility}' for repo {repo.full_name}, defaulting to private"
+            )
+            return GitHubVisibility.PRIVATE
 
     logger.info(f"Repository {repo.full_name} is private")
-    return "private"
+    return GitHubVisibility.PRIVATE
 
 
 def get_external_access_permission(
@@ -301,10 +312,10 @@ def get_external_access_permission(
 
     repo_visibility = get_repository_visibility(repo)
     logger.info(
-        f"Generating ExternalAccess for {repo.full_name}: visibility={repo_visibility}"
+        f"Generating ExternalAccess for {repo.full_name}: visibility={repo_visibility.value}"
     )
 
-    if repo_visibility == "public":
+    if repo_visibility == GitHubVisibility.PUBLIC:
         logger.info(
             f"Repository {repo.full_name} is public - allowing access to all users"
         )
@@ -313,7 +324,7 @@ def get_external_access_permission(
             external_user_group_ids=group_ids,
             is_public=True,
         )
-    elif repo_visibility == "private":
+    elif repo_visibility == GitHubVisibility.PRIVATE:
         logger.info(
             f"Repository {repo.full_name} is private - setting up restricted access"
         )
@@ -358,10 +369,10 @@ def get_external_user_group(
     """
     repo_visibility = get_repository_visibility(repo)
     logger.info(
-        f"Generating ExternalUserGroups for {repo.full_name}: visibility={repo_visibility}"
+        f"Generating ExternalUserGroups for {repo.full_name}: visibility={repo_visibility.value}"
     )
 
-    if repo_visibility == "private":
+    if repo_visibility == GitHubVisibility.PRIVATE:
         logger.info(f"Processing private repository {repo.full_name}")
 
         collaborators, outside_collaborators = (
@@ -421,7 +432,7 @@ def get_external_user_group(
         )
         return external_user_groups
 
-    if repo_visibility == "internal":
+    if repo_visibility == GitHubVisibility.INTERNAL:
         logger.info(f"Processing internal repository {repo.full_name}")
 
         org_group_id = form_organization_group_id(repo.organization.id)

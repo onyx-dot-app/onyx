@@ -212,7 +212,6 @@ class EventConnector(BaseConnector):
 
 
 CheckpointOutput: TypeAlias = Generator[Document | ConnectorFailure, None, CT]
-SlimCheckpointOutput: TypeAlias = Generator[SlimDocument | ConnectorFailure, None, CT]
 
 
 class CheckpointedConnector(BaseConnector[CT]):
@@ -262,17 +261,4 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
     ) -> CheckpointOutput[CT]:
-        raise NotImplementedError
-
-
-# Slim connector with checkpointing support
-class CheckpointedSlimConnector(CheckpointedConnector[CT]):
-    @abc.abstractmethod
-    def checkpointed_retrieve_all_slim_documents(
-        self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        checkpoint: CT | None = None,
-    ) -> SlimCheckpointOutput[CT]:
-        """Retrieve all slim documents with checkpointing support."""
         raise NotImplementedError

@@ -21,7 +21,6 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -31,16 +30,13 @@ from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_excep
 from onyx.connectors.github.utils import deserialize_repository
 from onyx.connectors.github.utils import get_external_access_permission
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
-from onyx.connectors.interfaces import CheckpointedSlimConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import ConnectorFailure
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.interfaces import SlimCheckpointOutput
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -384,10 +380,7 @@ def make_cursor_url_callback(
     return cursor_url_callback
 
 
-class GithubConnector(
-    CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint],
-    CheckpointedSlimConnector[GithubConnectorCheckpoint],
-):
+class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint]):
     def __init__(
         self,
         repo_owner: str,
@@ -756,167 +749,6 @@ class GithubConnector(
         return self._load_from_checkpoint(
             start, end, checkpoint, include_permissions=True
         )
-
-    @override
-    def checkpointed_retrieve_all_slim_documents(
-        self,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        checkpoint: GithubConnectorCheckpoint | None = None,
-    ) -> SlimCheckpointOutput[GithubConnectorCheckpoint]:
-        """
-        Retrieve slim documents from GitHub with checkpointing support.
-
-        Processes all pages and stages within the current repository, yielding documents
-        and returning checkpoints only for repository transitions.
-
-        Args:
-            start: Start timestamp (Unix epoch seconds)
-            end: End timestamp (Unix epoch seconds)
-            checkpoint: Current checkpoint state
-
-        Yields:
-            SlimDocument: Documents with ID and external access
-
-        Returns:
-            GithubConnectorCheckpoint: Updated checkpoint for next iteration
-        """
-        # Set default values for optional parameters
-        if checkpoint is None:
-            checkpoint = self.build_dummy_checkpoint()
-
-        if start is None:
-            start = 0.0
-
-        if end is None:
-            end = datetime.now(timezone.utc).timestamp()
-
-        logger.info(
-            f"Starting slim document retrieval for GitHub connector. "
-            f"Repo owner: {self.repo_owner}, "
-            f"Repositories: {self.repositories}, "
-            f"Time range: {start} to {end}, "
-            f"Checkpoint stage: {checkpoint.stage}, "
-            f"Current page: {checkpoint.curr_page}, "
-            f"Objects retrieved so far: {checkpoint.num_retrieved}"
-        )
-
-        # Convert timestamps to datetime objects for processing
-        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
-        # Add a day for timezone safety to ensure we don't miss documents
-        # due to timezone differences between GitHub and our system
-        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc) + ONE_DAY
-
-        logger.info(
-            f"Converted time range - Start: {start_datetime}, End: {end_datetime}"
-        )
-
-        # Move start time back by 3 hours to include all relevant PRs and Issues
-        # This accounts for GitHub's internal processing delays and ensures
-        # we capture documents that might have been created slightly before
-        # the specified start time
-        adjusted_start_datetime = start_datetime - timedelta(hours=3)
-
-        logger.info(f"Adjusted start time: {adjusted_start_datetime}")
-
-        # Ensure we don't go before the Unix epoch (1970-01-01)
-        epoch = datetime.fromtimestamp(0, tz=timezone.utc)
-        if adjusted_start_datetime < epoch:
-            logger.warning(
-                f"Adjusted start time {adjusted_start_datetime} is before Unix epoch. "
-                f"Setting to epoch start: {epoch}"
-            )
-            adjusted_start_datetime = epoch
-
-        logger.info(
-            f"Fetching documents from GitHub with time range: "
-            f"{adjusted_start_datetime} to {end_datetime}"
-        )
-
-        checkpoint_connector_generator = self._fetch_from_github(
-            checkpoint,
-            start=adjusted_start_datetime,
-            end=end_datetime,
-            include_permissions=True,
-        )
-
-        while checkpoint.has_more:
-            logger.info(
-                f"Processing batch - Stage: {checkpoint.stage}, "
-                f"Page: {checkpoint.curr_page}, "
-            )
-
-            checkpoint_connector_generator = self._fetch_from_github(
-                checkpoint,
-                start=adjusted_start_datetime,
-                end=end_datetime,
-                include_permissions=True,
-            )
-
-            logger.info("Starting document processing loop")
-
-            for document, failure, next_checkpoint in CheckpointOutputWrapper[
-                GithubConnectorCheckpoint
-            ]()(checkpoint_connector_generator):
-
-                if next_checkpoint:
-                    logger.info(
-                        f"Received checkpoint update - Stage: {next_checkpoint.stage}, "
-                        f"Page: {next_checkpoint.curr_page}, "
-                    )
-
-                    # Check if we've moved to a different repository
-                    if (
-                        checkpoint.cached_repo
-                        and next_checkpoint.cached_repo
-                        and checkpoint.cached_repo.id != next_checkpoint.cached_repo.id
-                    ) or (
-                        checkpoint.cached_repo is None
-                        and next_checkpoint.cached_repo is not None
-                    ):
-                        logger.info(
-                            f"Repository changed from {checkpoint.cached_repo.id if checkpoint.cached_repo else 'None'} "
-                            f"to {next_checkpoint.cached_repo.id}. "
-                            f"Returning checkpoint to allow caller to handle repository transition."
-                        )
-                        return next_checkpoint
-
-                    # For page-level and stage transitions within the same repository,
-                    # continue processing internally by updating the checkpoint and restarting the loop
-                    logger.info(
-                        f"Continuing with page-level processing - Stage: {next_checkpoint.stage}, "
-                        f"Page: {next_checkpoint.curr_page}, "
-                    )
-                    checkpoint = next_checkpoint
-                    break
-
-                if failure:
-                    logger.error(f"Document retrieval failure: {failure}")
-                    continue
-
-                if document is not None and isinstance(document, Document):
-                    doc = cast(Document, document)
-                    slim_doc = SlimDocument(
-                        id=doc.id, external_access=doc.external_access
-                    )
-
-                    yield slim_doc
-                else:
-                    logger.warning(
-                        f"Received unexpected document type: {type(document)}. "
-                        f"Expected Document instance or None."
-                    )
-            else:
-                break
-
-        logger.info(
-            f"Slim document retrieval completed for current repository. "
-            f"Final checkpoint stage: {checkpoint.stage}, "
-            f"Final page: {checkpoint.curr_page}, "
-            f"Has more: {checkpoint.has_more}"
-        )
-
-        return checkpoint
 
     def validate_connector_settings(self) -> None:
         if self.github_client is None:
