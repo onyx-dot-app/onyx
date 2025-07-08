@@ -1,18 +1,20 @@
 import email
 from datetime import datetime
 from email.message import Message
+from enum import Enum
 
 from pydantic import BaseModel
 
 
-_SUBJECT_HEADER = "subject"
-_FROM_HEADER = "from"
-_TO_HEADER = "to"
-_DELIVERED_TO_HEADER = (
-    "Delivered-To"  # Used in mailing lists instead of the "to" header.
-)
-_DATE_HEADER = "date"
-_MESSAGE_ID_HEADER = "Message-ID"
+class Header(str, Enum):
+    SUBJECT_HEADER = "subject"
+    FROM_HEADER = "from"
+    TO_HEADER = "to"
+    DELIVERED_TO_HEADER = (
+        "Delivered-To"  # Used in mailing lists instead of the "to" header.
+    )
+    DATE_HEADER = "date"
+    MESSAGE_ID_HEADER = "Message-ID"
 
 
 class EmailHeaders(BaseModel):
@@ -50,14 +52,14 @@ class EmailHeaders(BaseModel):
             except (TypeError, ValueError):
                 return None
 
-        message_id = _decode(header=_MESSAGE_ID_HEADER)
+        message_id = _decode(header=Header.MESSAGE_ID_HEADER)
         # It's possible for the subject line to not exist or be an empty string.
-        subject = _decode(header=_SUBJECT_HEADER) or "Unknown Subject"
-        from_ = _decode(header=_FROM_HEADER)
-        to = _decode(header=_TO_HEADER)
+        subject = _decode(header=Header.SUBJECT_HEADER) or "Unknown Subject"
+        from_ = _decode(header=Header.FROM_HEADER)
+        to = _decode(header=Header.TO_HEADER)
         if not to:
-            to = _decode(header=_DELIVERED_TO_HEADER)
-        date_str = _decode(header=_DATE_HEADER)
+            to = _decode(header=Header.DELIVERED_TO_HEADER)
+        date_str = _decode(header=Header.DATE_HEADER)
         date = _parse_date(date_str=date_str)
 
         # If any of the above are `None`, model validation will fail.
