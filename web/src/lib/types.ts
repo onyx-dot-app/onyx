@@ -456,7 +456,9 @@ export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
 
 export type ConfigurableSources = Exclude<
   ValidSources,
-  ValidSources.NotApplicable | ValidSources.IngestionApi
+  | ValidSources.NotApplicable
+  | ValidSources.IngestionApi
+  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [
