@@ -116,6 +116,9 @@ def delete_document_set(
             detail=f"Document set {document_set_id} does not exist",
         )
 
+    # check if the user has "edit" access to the document set.
+    # `validate_object_creation_for_user` is poorly named, but this
+    # is the right function to use here
     fetch_ee_implementation_or_noop(
         "onyx.db.user_group", "validate_object_creation_for_user", None
     )(

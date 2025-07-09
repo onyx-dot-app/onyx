@@ -128,8 +128,8 @@ def validate_object_creation_for_user(
     target_group_ids: list[int] | None = None,
     object_is_public: bool | None = None,
     object_is_perm_sync: bool | None = None,
-    object_is_owned_by_user: bool | None = None,
-    object_is_new: bool | None = None,
+    object_is_owned_by_user: bool = False,
+    object_is_new: bool = False,
 ) -> None:
     """
     All users can create/edit permission synced objects if they don't specify a group

@@ -207,7 +207,6 @@ export default function CreateCredential({
         ) {
           formikProps.setFieldValue("authentication_method", authMethod);
         }
-        console.log(formikProps.isSubmitting);
 
         return (
           <Form className="w-full flex items-stretch">
