@@ -9,7 +9,6 @@ from datetime import timezone
 from typing import Any
 
 from sqlalchemy import and_
-from sqlalchemy import ColumnElement
 from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
@@ -22,7 +21,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.expression import null
 
 from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
@@ -43,6 +41,7 @@ from onyx.db.models import Credential
 from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import DocumentColumns
 from onyx.db.models import KGEntity
 from onyx.db.models import KGRelationship
 from onyx.db.models import User
@@ -51,6 +50,8 @@ from onyx.db.relationships import (
     delete_from_kg_relationships_extraction_staging__no_commit,
 )
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
+from onyx.db.utils import build_where_clause_from_filter
+from onyx.db.utils import DocumentFilter
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
@@ -168,9 +169,9 @@ def get_documents_for_connector_credential_pair_filtered(
     db_session: Session,
     connector_id: int,
     credential_id: int,
-    where_clause: ColumnElement[bool] | None = None,
+    document_filter: DocumentFilter | None = None,
     limit: int | None = None,
-    columns: list[InstrumentedAttribute] | None = None,
+    columns: list[DocumentColumns] | None = None,
 ) -> Sequence[dict[str, Any]]:
     """Get documents for a connector credential pair with optional filtering and column selection.
 
@@ -193,6 +194,9 @@ def get_documents_for_connector_credential_pair_filtered(
         )
     )
 
+    if document_filter:
+        where_clause = build_where_clause_from_filter(document_filter)
+
     # If limit is 1, order by last_modified ASC to get the oldest record
     if limit and limit == 1 and where_clause is not None:
         # Join with Document table to get access to last_modified for ordering
@@ -207,26 +211,24 @@ def get_documents_for_connector_credential_pair_filtered(
             )
             .order_by(DbDocument.last_modified.asc())
             .limit(limit)
-            .where(where_clause)
         )
+        if where_clause is not None:
+            initial_doc_ids_stmt = initial_doc_ids_stmt.where(where_clause)
+
     elif limit:
-        # Apply limit to the first query for better performance
         initial_doc_ids_stmt = initial_doc_ids_stmt.limit(limit)
-    # Build the main query based on columns requested
+
     if columns:
-        stmt = select(*columns)
+        stmt = select(*[getattr(DbDocument, col) for col in columns])
     else:
         stmt = select(DbDocument)
 
-    # Filter documents by the IDs from the first query
     stmt = stmt.where(DbDocument.id.in_(initial_doc_ids_stmt))
 
-    # Apply additional filtering if provided
     if where_clause is not None:
         logger.info(f"Where clause: {where_clause}")
         stmt = stmt.where(where_clause)
 
-    # Make results distinct
     stmt = stmt.distinct()
 
     return [dict(row) for row in db_session.execute(stmt).mappings().all()]

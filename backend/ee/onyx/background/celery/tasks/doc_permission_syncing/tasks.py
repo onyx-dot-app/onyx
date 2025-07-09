@@ -15,9 +15,7 @@ from pydantic import ValidationError
 from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
-from sqlalchemy import ColumnElement
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import InstrumentedAttribute
 from tenacity import retry
 from tenacity import retry_if_exception
 from tenacity import stop_after_delay
@@ -57,9 +55,11 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentColumns
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
+from onyx.db.utils import DocumentFilter
 from onyx.db.utils import is_retryable_sqlalchemy_error
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
@@ -501,15 +501,15 @@ def connector_permission_sync_generator_task(
             # should no longer be accessible. The decision as to whether we should find
             # every document during the doc sync process is connector-specific.
             def fetch_all_existing_docs_fn(
-                columns: list[InstrumentedAttribute] | None = None,
-                where_clause: ColumnElement[bool] | None = None,
+                columns: list[DocumentColumns] | None = None,
+                document_filter: DocumentFilter | None = None,
                 limit: int | None = None,
             ) -> list[dict[str, Any]]:
                 result = get_documents_for_connector_credential_pair_filtered(
                     db_session=db_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
-                    where_clause=where_clause,
+                    document_filter=document_filter,
                     limit=limit,
                     columns=columns,
                 )

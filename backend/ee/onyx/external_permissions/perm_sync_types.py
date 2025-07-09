@@ -5,10 +5,9 @@ from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement
-from sqlalchemy.orm.attributes import InstrumentedAttribute
-
 from onyx.context.search.models import InferenceChunk
+from onyx.db.models import DocumentColumns
+from onyx.db.utils import DocumentFilter
 
 # Avoid circular imports
 if TYPE_CHECKING:
@@ -27,8 +26,8 @@ class FetchAllDocumentsFunction(Protocol):
 
     def __call__(
         self,
-        columns: list[InstrumentedAttribute] | None = None,
-        where_clause: ColumnElement[bool] | None = None,
+        columns: list[DocumentColumns] | None = None,
+        document_filter: DocumentFilter | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         """

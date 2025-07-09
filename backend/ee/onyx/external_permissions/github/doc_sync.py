@@ -18,7 +18,8 @@ from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.connector import GithubConnector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import Document
+from onyx.db.utils import DocumentFilter
+from onyx.db.utils import FilterOperation
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -107,8 +108,12 @@ def github_doc_sync(
             )
 
             repo_documents = fetch_all_existing_docs_fn(
-                columns=[Document.id],
-                where_clause=Document.id.like(f"%{repo.full_name}%"),
+                columns=["id"],
+                document_filter=DocumentFilter(
+                    field="id",
+                    operation=FilterOperation.LIKE,
+                    value=f"%{repo.full_name}%",
+                ),
             )
 
             logger.info(
@@ -151,8 +156,12 @@ def _check_repository_for_changes(
     logger.info(f"Checking repository {repo.id} ({repo.name}) for changes")
 
     docs = fetch_all_existing_docs_fn(
-        columns=[Document.id, Document.external_user_group_ids],
-        where_clause=Document.id.like(f"%{repo.full_name}%"),
+        columns=["id", "external_user_group_ids"],
+        document_filter=DocumentFilter(
+            field="id",
+            operation=FilterOperation.LIKE,
+            value=f"%{repo.full_name}%",
+        ),
         limit=1,
     )
 
