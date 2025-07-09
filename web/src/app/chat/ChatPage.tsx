@@ -151,7 +151,6 @@ export enum UploadIntent {
 // ================================ CONSTRUCTION ZONE ================================
 
 // ===== CENTRALIZED MODAL MANAGEMENT =====
-
 // Modal Types Enum
 export enum ModalType {
   NONE = "NONE",
@@ -652,6 +651,9 @@ export function ChatPage({
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
 
+  // IN PROGRESS: Centralized modal state management
+  const { state: modalState, actions: modalActions } = useModal();
+
   // UI STATE: Document selection modal visibility
   const [isDocSelectionModalOpen, setIsDocSelectionModalOpen] = useState(false);
   // UI STATE: Document sidebar visibility (shows search results and selected documents)
@@ -671,9 +673,10 @@ export function ChatPage({
   const [isUserSettingsModalOpen, setIsUserSettingsModalOpen] = useState(false);
 
   // UI STATE: API key configuration modal visibility
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(
-    !shouldShowWelcomeModal
-  );
+  // const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(
+  //   !shouldShowWelcomeModal
+  // );
+  // REMOVED: Now handled by centralized modal management. Initially open if welcome modal is not shown. See `useEffect` near Popup.
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
@@ -856,6 +859,16 @@ export function ChatPage({
   const submitOnLoadPerformed = useRef<boolean>(false);
 
   const { popup, setPopup } = usePopup();
+
+  // Initialize API Key modal if needed
+  useEffect(() => {
+    if (!shouldShowWelcomeModal) {
+      modalActions.openApiKeyModal({
+        hide: () => modalActions.closeModal(),
+        setPopup: setPopup,
+      });
+    }
+  }, [shouldShowWelcomeModal, modalActions, setPopup]);
 
   // fetch messages for the chat session
   const [isFetchingChatMessages, setIsFetchingChatMessages] = useState(
@@ -2772,14 +2785,21 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-      {isApiKeyModalOpen && !shouldShowWelcomeModal && (
+      {/* {isApiKeyModalOpen && !shouldShowWelcomeModal && (
         <ApiKeyModal
           hide={() => setIsApiKeyModalOpen(false)}
           setPopup={setPopup}
         />
-      )}
+      )} */}
 
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+
+      {/* Centralized Modal Renderer */}
+      <ModalRenderer
+        state={modalState}
+        onClose={modalActions.closeModal}
+        shouldShowWelcomeModal={shouldShowWelcomeModal ?? false}
+      />
 
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
@@ -3771,7 +3791,10 @@ export function ChatPage({
                                 setIsDocSelectionModalOpen(true)
                               }
                               showConfigureAPIKey={() =>
-                                setIsApiKeyModalOpen(true)
+                                modalActions.openApiKeyModal({
+                                  hide: () => modalActions.closeModal(),
+                                  setPopup: setPopup,
+                                })
                               }
                               selectedDocuments={selectedDocuments}
                               message={message}
