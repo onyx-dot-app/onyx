@@ -358,6 +358,14 @@ def get_personas_for_user(
             joinedload(Persona.labels),
             # only show document sets in the UI that the assistant has access to
             joinedload(Persona.document_sets),
+            joinedload(DocumentSet.connector_credential_pairs).joinedload(
+                ConnectorCredentialPair.connector
+            ),
+            joinedload(DocumentSet.connector_credential_pairs).joinedload(
+                ConnectorCredentialPair.credential
+            ),
+            # user
+            joinedload(Persona.user),
         )
     elif load_type == PersonaLoadType.FULL:
         stmt = stmt.options(

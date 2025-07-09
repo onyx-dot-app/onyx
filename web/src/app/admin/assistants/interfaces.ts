@@ -23,9 +23,9 @@ export interface MinimalPersonaSnapshot {
   id: number;
   name: string;
   description: string;
-  tools: ToolSnapshot[];
-  starter_messages: StarterMessage[] | null;
-  document_sets: DocumentSet[];
+  tools: readonly ToolSnapshot[];
+  starter_messages: readonly StarterMessage[] | null;
+  document_sets: readonly DocumentSet[];
   llm_model_version_override?: string;
   llm_model_provider_override?: string;
 
