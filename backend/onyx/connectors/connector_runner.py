@@ -5,9 +5,6 @@ from datetime import datetime
 from typing import Generic
 from typing import TypeVar
 
-from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
@@ -136,25 +133,6 @@ class ConnectorRunner(Generic[CT]):
                     checkpoint_connector_generator
                 ):
                     if document is not None and isinstance(document, Document):
-                        # We need to prefix the group IDs with the source to match the format in the database for github
-                        if document.source == DocumentSource.GITHUB:
-                            prefixed_group_ids: set[str] = set()
-                            document_external_access = document.external_access
-                            if document_external_access:
-                                for (
-                                    group_id
-                                ) in document_external_access.external_user_group_ids:
-                                    group_id = build_ext_group_name_for_onyx(
-                                        source=DocumentSource.GITHUB,
-                                        ext_group_name=group_id,
-                                    )
-                                    prefixed_group_ids.add(group_id)
-                                document_external_access = ExternalAccess(
-                                    external_user_emails=document_external_access.external_user_emails,
-                                    external_user_group_ids=prefixed_group_ids,
-                                    is_public=document_external_access.is_public,
-                                )
-                                document.external_access = document_external_access
                         self.doc_batch.append(document)
 
                     if failure is not None:

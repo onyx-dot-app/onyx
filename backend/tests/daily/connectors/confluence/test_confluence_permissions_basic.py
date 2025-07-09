@@ -11,6 +11,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentColumns
+from onyx.db.utils import DocumentFilter
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
@@ -103,8 +105,8 @@ def test_confluence_connector_restriction_handling(
 
     # Call the confluence_doc_sync function directly with the mock cc_pair
     def mock_fetch_all_docs_fn(
-        columns: list[Any] | None = None,
-        where_clause: Any = None,
+        columns: list[DocumentColumns] | None = None,
+        document_filter: DocumentFilter | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         return []

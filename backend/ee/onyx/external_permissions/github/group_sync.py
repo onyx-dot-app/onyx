@@ -39,5 +39,5 @@ def github_group_sync(
         for external_group in get_external_user_group(
             repo, github_connector.github_client
         ):
-            logger.warning(f"External group: {external_group}")
+            logger.info(f"External group: {external_group}")
             yield external_group

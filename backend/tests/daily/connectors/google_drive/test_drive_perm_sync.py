@@ -11,6 +11,8 @@ from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentColumns
+from onyx.db.utils import DocumentFilter
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
@@ -73,8 +75,8 @@ def test_gdrive_perm_sync_with_real_data(
     ):
         # Call the function under test
         def mock_fetch_all_docs_fn(
-            columns: list[Any] | None = None,
-            where_clause: Any = None,
+            columns: list[DocumentColumns] | None = None,
+            document_filter: DocumentFilter | None = None,
             limit: int | None = None,
         ) -> list[dict[str, Any]]:
             return []

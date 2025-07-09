@@ -17,6 +17,8 @@ from github.Team import Team
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
 from onyx.utils.logger import setup_logger
 
@@ -295,7 +297,7 @@ def get_repository_visibility(repo: Repository) -> GitHubVisibility:
 
 
 def get_external_access_permission(
-    repo: Repository, github_client: Github
+    repo: Repository, github_client: Github, add_prefix: bool = False
 ) -> ExternalAccess:
     """
     Get the external access permission for a repository.
@@ -331,11 +333,28 @@ def get_external_access_permission(
 
         collaborators_group_id = form_collaborators_group_id(repo.id)
         outside_collaborators_group_id = form_outside_collaborators_group_id(repo.id)
+        if add_prefix:
+            collaborators_group_id = build_ext_group_name_for_onyx(
+                source=DocumentSource.GITHUB,
+                ext_group_name=collaborators_group_id,
+            )
+            outside_collaborators_group_id = build_ext_group_name_for_onyx(
+                source=DocumentSource.GITHUB,
+                ext_group_name=outside_collaborators_group_id,
+            )
 
         group_ids.add(collaborators_group_id)
         group_ids.add(outside_collaborators_group_id)
 
         team_slugs = fetch_repository_team_slugs(repo, github_client)
+        if add_prefix:
+            team_slugs = [
+                build_ext_group_name_for_onyx(
+                    source=DocumentSource.GITHUB,
+                    ext_group_name=slug,
+                )
+                for slug in team_slugs
+            ]
         group_ids.update(team_slugs)
 
         logger.info(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
@@ -350,6 +369,11 @@ def get_external_access_permission(
             f"Repository {repo.full_name} is internal - accessible to org members"
         )
         org_group_id = form_organization_group_id(repo.organization.id)
+        if add_prefix:
+            org_group_id = build_ext_group_name_for_onyx(
+                source=DocumentSource.GITHUB,
+                ext_group_name=org_group_id,
+            )
         group_ids.add(org_group_id)
 
         logger.info(f"ExternalAccess groups for {repo.full_name}: {group_ids}")

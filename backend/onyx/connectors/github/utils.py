@@ -27,14 +27,14 @@ def get_external_access_permission(
 
     # Fetch the EE implementation
     ee_get_external_access_permission = cast(
-        Callable[[Repository, Github], ExternalAccess],
+        Callable[[Repository, Github, bool], ExternalAccess],
         fetch_versioned_implementation(
             "onyx.external_permissions.github.utils",
             "get_external_access_permission",
         ),
     )
 
-    return ee_get_external_access_permission(repo, github_client)
+    return ee_get_external_access_permission(repo, github_client, True)
 
 
 def deserialize_repository(
