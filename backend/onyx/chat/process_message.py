@@ -845,6 +845,18 @@ def stream_chat_message_objects(
             error: str | None,
             tool_call: ToolCall | None,
         ) -> ChatMessage:
+
+            is_kg_beta = parent_message.chat_session.persona.description.startswith(
+                "DR Alpha"
+            )
+            is_basic_search = (
+                tool_call.tool_name == SearchTool._NAME if tool_call else False
+            )
+            is_agentic_overwrite = (
+                False
+                if (is_kg_beta and is_basic_search)
+                else new_msg_req.use_agentic_search
+            )
             return create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=(
@@ -867,7 +879,7 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 commit=False,
                 reserved_message_id=reserved_message_id,
-                is_agentic=new_msg_req.use_agentic_search,
+                is_agentic=is_agentic_overwrite,
             )
 
         partial_response = create_response
