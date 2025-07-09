@@ -6,6 +6,9 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.agents.agent_search.kb_search.models import KGExpandedGraphObjects
 from onyx.agents.agent_search.kb_search.states import SubQuestionAnswerResults
+from onyx.agents.agent_search.kb_search.step_definitions import (
+    BASIC_SEARCH_STEP_DESCRIPTIONS,
+)
 from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
@@ -129,6 +132,24 @@ def stream_write_step_activities(
         )
 
 
+def stream_write_basic_search_activities(
+    writer: StreamWriter, step_nr: int, level: int = 0
+) -> None:
+    for activity_nr, activity in enumerate(
+        BASIC_SEARCH_STEP_DESCRIPTIONS[step_nr].activities
+    ):
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query=activity,
+                level=level,
+                level_question_num=step_nr,
+                query_id=activity_nr + 1,
+            ),
+            writer,
+        )
+
+
 def stream_write_step_activity_explicit(
     writer: StreamWriter, step_nr: int, query_id: int, activity: str, level: int = 0
 ) -> None:
@@ -162,6 +183,41 @@ def stream_write_step_answer_explicit(
 
 def stream_write_step_structure(writer: StreamWriter, level: int = 0) -> None:
     for step_nr, step_detail in STEP_DESCRIPTIONS.items():
+
+        write_custom_event(
+            "decomp_qs",
+            SubQuestionPiece(
+                sub_question=step_detail.description,
+                level=level,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    for step_nr in STEP_DESCRIPTIONS.keys():
+
+        write_custom_event(
+            "stream_finished",
+            StreamStopInfo(
+                stop_reason=StreamStopReason.FINISHED,
+                stream_type=StreamType.SUB_QUESTIONS,
+                level=level,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.SUB_QUESTIONS,
+        level=0,
+    )
+
+    write_custom_event("stream_finished", stop_event, writer)
+
+
+def stream_write_basic_search_structure(writer: StreamWriter, level: int = 0) -> None:
+    for step_nr, step_detail in BASIC_SEARCH_STEP_DESCRIPTIONS.items():
 
         write_custom_event(
             "decomp_qs",

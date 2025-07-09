@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.messages import BaseMessage
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.basic.models import BasicSearchProcessedStreamResults
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import LlmDoc
 from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
@@ -24,7 +25,7 @@ def process_llm_stream(
     writer: StreamWriter,
     final_search_results: list[LlmDoc] | None = None,
     displayed_search_results: list[LlmDoc] | None = None,
-) -> AIMessageChunk:
+) -> BasicSearchProcessedStreamResults:
     tool_call_chunk = AIMessageChunk(content="")
 
     if final_search_results and displayed_search_results:
@@ -61,4 +62,9 @@ def process_llm_stream(
                 )
 
     logger.debug(f"Full answer: {full_answer}")
-    return cast(AIMessageChunk, tool_call_chunk)
+    return BasicSearchProcessedStreamResults(
+        ai_message_chunk=cast(AIMessageChunk, tool_call_chunk),
+        full_answer=full_answer,
+        cited_references=[],
+        retrieved_documents=[],
+    )
