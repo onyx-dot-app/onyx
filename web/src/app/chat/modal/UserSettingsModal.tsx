@@ -296,12 +296,12 @@ export function UserSettingsModal({
         showPasswordSection || hasConnectors ? "max-w-3xl" : "max-w-xl"
       }`}
     >
-      <div className="p-2">
+      <div className="p-2 max-h-[80vh] flex flex-col">
         <h2 className="text-xl font-bold mb-4">User Settings</h2>
         <Separator className="mb-6" />
-        <div className="flex">
+        <div className="flex flex-1 min-h-0">
           {(showPasswordSection || hasConnectors) && (
-            <div className="w-1/4 pr-4">
+            <div className="w-1/4 pr-4 flex-shrink-0">
               <nav>
                 <ul className="space-y-2">
                   <li>
@@ -350,8 +350,10 @@ export function UserSettingsModal({
           )}
           <div
             className={`${
-              showPasswordSection || hasConnectors ? "w-3/4 pl-4" : "w-full"
-            }`}
+              showPasswordSection || hasConnectors
+                ? "w-3/4 pl-4 pr-3"
+                : "w-full pr-3"
+            } overflow-y-scroll default-scrollbar`}
           >
             {activeSection === "settings" && (
               <div className="space-y-6">

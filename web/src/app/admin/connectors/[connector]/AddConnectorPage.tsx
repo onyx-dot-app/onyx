@@ -511,6 +511,7 @@ export default function AddConnector({
               includeDivider={false}
               icon={<SourceIcon iconSize={32} sourceType={connector} />}
               title={displayName}
+              farRightElement={undefined}
             />
 
             {formStep == 0 && (

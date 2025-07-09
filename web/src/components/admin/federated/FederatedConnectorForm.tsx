@@ -33,6 +33,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -467,9 +468,11 @@ export function FederatedConnectorForm({
         <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
           <div className="text-2xl font-bold text-text-default flex items-center gap-2">
             <span>
-              {isEditMode ? "Edit" : "Setup"} {sourceMetadata.displayName}{" "}
-              (Federated)
+              {isEditMode ? "Edit" : "Setup"} {sourceMetadata.displayName}
             </span>
+            <Badge variant="outline" className="text-xs">
+              Federated
+            </Badge>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>

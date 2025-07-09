@@ -18,6 +18,7 @@ import {
   ValidSources,
   ValidStatuses,
   FederatedConnectorInfo,
+  federatedSourceToRegularSource,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
@@ -245,7 +246,7 @@ border border-border dark:border-neutral-700
           {federatedConnector.name}
         </p>
       </TableCell>
-      <TableCell>n/a</TableCell>
+      <TableCell>N/A</TableCell>
       <TableCell>
         <Badge variant="success">Indexed</Badge>
       </TableCell>
@@ -256,7 +257,7 @@ border border-border dark:border-neutral-700
           </Badge>
         </TableCell>
       )}
-      <TableCell>n/a</TableCell>
+      <TableCell>N/A</TableCell>
       <TableCell>
         <TooltipProvider>
           <Tooltip>
@@ -357,7 +358,7 @@ export function CCPairIndexingStatusTable({
     sorted.forEach((source) => {
       const statuses = grouped[source];
       const federatedForSource = federatedConnectors.filter(
-        (fc) => fc.source.replace(/^federated_/, "") === source
+        (fc) => federatedSourceToRegularSource(fc.source) === source
       );
 
       summaries[source] = {
@@ -446,7 +447,9 @@ export function CCPairIndexingStatusTable({
   const allSourcesWithFederated = useMemo(() => {
     const federatedSources = Array.from(
       new Set(
-        federatedConnectors.map((fc) => fc.source.replace(/^federated_/, ""))
+        federatedConnectors.map((fc) =>
+          federatedSourceToRegularSource(fc.source)
+        )
       )
     ) as ValidSources[];
 
@@ -696,7 +699,7 @@ export function CCPairIndexingStatusTable({
               );
 
               const federatedForSource = federatedConnectors.filter(
-                (fc) => fc.source.replace(/^federated_/, "") === source
+                (fc) => federatedSourceToRegularSource(fc.source) === source
               );
 
               const hasFederatedMatches = federatedForSource.some((fc) =>

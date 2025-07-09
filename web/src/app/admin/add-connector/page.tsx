@@ -15,7 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useFederatedConnectors } from "@/lib/hooks";
-import { FederatedConnectorInfo, ValidSources } from "@/lib/types";
+import {
+  FederatedConnectorInfo,
+  federatedSourceToRegularSource,
+  ValidSources,
+} from "@/lib/types";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
@@ -40,7 +44,8 @@ function SourceTile({
 
     return federatedConnectors.find(
       (connector) =>
-        connector.source === `federated_${sourceMetadata.internalName}`
+        federatedSourceToRegularSource(connector.source) ===
+        sourceMetadata.internalName
     );
   }, [sourceMetadata, federatedConnectors]);
 

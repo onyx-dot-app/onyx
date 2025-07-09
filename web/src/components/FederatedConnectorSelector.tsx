@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import { FederatedConnectorInfo, FederatedConnectorConfig } from "@/lib/types";
+import {
+  FederatedConnectorInfo,
+  FederatedConnectorConfig,
+  federatedSourceToRegularSource,
+  ValidSources,
+} from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { X, Search, Settings } from "lucide-react";
 import { Label } from "@/components/ui/label";
@@ -28,7 +33,7 @@ interface FederatedConnectorSelectorProps {
 interface EntityConfigDialogProps {
   connectorId: number;
   connectorName: string;
-  connectorSource: string;
+  connectorSource: ValidSources | null;
   currentEntities: Record<string, any>;
   onSave: (entities: Record<string, any>) => void;
   onClose: () => void;
@@ -92,13 +97,17 @@ const EntityConfigDialog = ({
     }));
   };
 
+  if (!connectorSource) {
+    return null;
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <SourceIcon
-              sourceType={connectorSource.replace(/^federated_/, "") as any}
+              sourceType={federatedSourceToRegularSource(connectorSource)}
               iconSize={20}
             />
             Configure {connectorName}
@@ -219,13 +228,13 @@ export const FederatedConnectorSelector = ({
     isOpen: boolean;
     connectorId: number | null;
     connectorName: string;
-    connectorSource: string;
+    connectorSource: ValidSources | null;
     currentEntities: Record<string, any>;
   }>({
     isOpen: false,
     connectorId: null,
     connectorName: "",
-    connectorSource: "",
+    connectorSource: null,
     currentEntities: {},
   });
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -410,9 +419,9 @@ export const FederatedConnectorSelector = ({
                     <div className="flex items-center truncate mr-2">
                       <div className="mr-2">
                         <SourceIcon
-                          sourceType={
-                            connector.source.replace(/^federated_/, "") as any
-                          }
+                          sourceType={federatedSourceToRegularSource(
+                            connector.source
+                          )}
                           iconSize={16}
                         />
                       </div>
@@ -444,9 +453,9 @@ export const FederatedConnectorSelector = ({
                   <div className="flex items-center overflow-hidden">
                     <div className="mr-1 flex-shrink-0">
                       <SourceIcon
-                        sourceType={
-                          connector.source.replace(/^federated_/, "") as any
-                        }
+                        sourceType={federatedSourceToRegularSource(
+                          connector.source
+                        )}
                         iconSize={14}
                       />
                     </div>

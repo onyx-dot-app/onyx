@@ -177,7 +177,7 @@ export interface ConnectorIndexingStatus<
 
 export interface FederatedConnectorInfo {
   id: number;
-  source: string;
+  source: ValidSources;
   name: string;
   status: string;
   last_success: string | null;
@@ -433,6 +433,15 @@ export enum ValidSources {
   // Federated Connectors
   FederatedSlack = "federated_slack",
 }
+
+export const federatedSourceToRegularSource = (
+  maybeFederatedSource: ValidSources
+): ValidSources => {
+  if (maybeFederatedSource === ValidSources.FederatedSlack) {
+    return ValidSources.Slack;
+  }
+  return maybeFederatedSource;
+};
 
 export const validAutoSyncSources = [
   ValidSources.Confluence,

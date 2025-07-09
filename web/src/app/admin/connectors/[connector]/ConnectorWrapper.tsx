@@ -8,12 +8,26 @@ import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { Button } from "@/components/ui/button";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
+import { useSearchParams } from "next/navigation";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
+import { Credential } from "@/lib/connectors/credentials";
 
 export default function ConnectorWrapper({
   connector,
 }: {
   connector: ConfigurableSources;
 }) {
+  const searchParams = useSearchParams();
+  const mode = searchParams?.get("mode"); // 'federated' or 'regular'
+
+  // Fetch existing credentials for this connector type
+  const { data: existingCredentials } = useSWR<Credential<any>[]>(
+    buildSimilarCredentialInfoURL(connector),
+    errorHandlingFetcher
+  );
+
   // Check if the connector is valid
   if (!isValidSource(connector)) {
     return (
@@ -39,12 +53,34 @@ export default function ConnectorWrapper({
     );
   }
 
-  // Check if the connector is federated
   const sourceMetadata = getSourceMetadata(connector);
-  const isFederated = sourceMetadata.federated;
+  const supportsFederated = sourceMetadata.federated === true;
+  const hasExistingCredentials =
+    existingCredentials && existingCredentials.length > 0;
 
-  // For federated connectors, use the specialized form without FormProvider
-  if (isFederated) {
+  // Determine which form to show based on:
+  // 1. URL parameter mode (takes priority)
+  // 2. If no mode specified and existing credentials exist, show regular form
+  // 3. If no mode specified and no credentials, show federated form for federated-supported sources
+  let showFederatedForm = false;
+
+  if (mode === "federated") {
+    showFederatedForm = supportsFederated;
+  } else if (mode === "regular") {
+    showFederatedForm = false;
+  } else {
+    // No mode specified - use default logic
+    if (hasExistingCredentials) {
+      // Default to regular form if existing credentials exist
+      showFederatedForm = false;
+    } else {
+      // Default to federated for federated-supported sources with no existing credentials
+      showFederatedForm = supportsFederated;
+    }
+  }
+
+  // For federated form, use the specialized form without FormProvider
+  if (showFederatedForm) {
     return (
       <div className="flex justify-center w-full h-full">
         <div className="mt-12 w-full max-w-4xl mx-auto">

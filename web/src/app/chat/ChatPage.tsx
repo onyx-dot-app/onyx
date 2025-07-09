@@ -484,7 +484,17 @@ export function ChatPage({
         return getSourceMetadata(connector.source as ValidSources);
       }) || [];
 
-    return [...regularSources, ...federatedSources];
+    // Combine sources and deduplicate based on internalName
+    const allSources = [...regularSources, ...federatedSources];
+    const deduplicatedSources = allSources.reduce((acc, source) => {
+      const existing = acc.find((s) => s.internalName === source.internalName);
+      if (!existing) {
+        acc.push(source);
+      }
+      return acc;
+    }, [] as SourceMetadata[]);
+
+    return deduplicatedSources;
   }, [availableSources, federatedConnectorsData]);
 
   const stopGenerating = () => {
