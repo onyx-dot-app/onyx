@@ -258,7 +258,7 @@ export function AssistantEditor({
       existingPersona?.llm_model_version_override ?? null,
     starter_messages: existingPersona?.starter_messages?.length
       ? existingPersona.starter_messages
-      : [{ message: "" }],
+      : [{ message: "", name: "" }],
     enabled_tools_map: enabledToolsMap,
     icon_color: existingPersona?.icon_color ?? defautIconColor,
     icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
@@ -526,10 +526,8 @@ export function AssistantEditor({
           // to tell the backend to not fetch any documents
           const numChunks = searchToolEnabled ? values.num_chunks || 25 : 0;
           const starterMessages = values.starter_messages
-            .filter(
-              (message: { message: string }) => message.message.trim() !== ""
-            )
-            .map((message: { message: string; name?: string }) => ({
+            .filter((message: StarterMessage) => message.message.trim() !== "")
+            .map((message: StarterMessage) => ({
               message: message.message,
               name: message.message,
             }));
