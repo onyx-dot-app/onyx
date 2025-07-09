@@ -147,7 +147,8 @@ def _modify_one_query(
             messages=stream,
             should_stream_answer=False,
             writer=writer,
-        )
+        ).ai_message_chunk
+
         return (
             tool_message.tool_calls[0]["args"]["query"]
             if tool_message.tool_calls

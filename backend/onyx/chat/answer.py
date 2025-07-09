@@ -12,6 +12,7 @@ from onyx.agents.agent_search.models import GraphTooling
 from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
+from onyx.agents.agent_search.run_graph import run_dr_graph
 from onyx.agents.agent_search.run_graph import run_kb_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
@@ -144,6 +145,14 @@ class Answer:
             and self.graph_config.inputs.persona.name.startswith("KG Beta")
         ):
             run_langgraph = run_kb_graph
+
+        elif (
+            self.graph_config.inputs.persona
+            and self.graph_config.behavior.kg_config_settings.KG_ENABLED
+            and self.graph_config.inputs.persona.name.startswith("DR Alpha")
+        ):
+            run_langgraph = run_dr_graph
+
         elif self.graph_config.behavior.use_agentic_search:
             run_langgraph = run_agent_search_graph
         elif (
