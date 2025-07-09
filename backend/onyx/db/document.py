@@ -194,6 +194,8 @@ def get_documents_for_connector_credential_pair_filtered(
         )
     )
 
+    where_clause = None
+
     if document_filter:
         where_clause = build_where_clause_from_filter(document_filter)
 
