@@ -47,7 +47,8 @@ jobs:
           -i /local/openapi.json \
           -g python \
           -o /local/onyx_openapi_client \
-          --package-name onyx_openapi_client
+          --package-name onyx_openapi_client \
+          --additional-properties=disallowAdditionalPropertiesIfNotPresent=false
             
     - name: Run MyPy
       run: |

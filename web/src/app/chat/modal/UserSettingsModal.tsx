@@ -587,9 +587,9 @@ export function UserSettingsModal({
                                 hasSuccessfulRun: false,
                               };
                             }
-                            acc[source].count++;
+                            acc[source]!.count++;
                             if (ccPair.has_successful_run) {
-                              acc[source].hasSuccessfulRun = true;
+                              acc[source]!.hasSuccessfulRun = true;
                             }
                             return acc;
                           },
