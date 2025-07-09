@@ -163,12 +163,13 @@ class MainState(
     ResearchObjectUpdate,
     ConsolidatedResearchUpdate,
 ):
-    pass
+    final_answer: str | None = None
 
 
 ## Graph Output State - presently not used
 class MainOutput(TypedDict):
     log_messages: list[str]
+    final_answer: str | None
 
 
 class ResearchObjectInput(LoggerUpdate):

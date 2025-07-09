@@ -52,6 +52,8 @@ def generate_answer(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.prompt_builder.raw_user_query
 
+    final_answer: str | None = None
+
     user = (
         graph_config.tooling.search_tool.user
         if graph_config.tooling.search_tool
@@ -206,7 +208,7 @@ def generate_answer(
         )
     ]
     try:
-        run_with_timeout(
+        stream_results: tuple[list[str], list[float]] = run_with_timeout(
             KG_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.fast_llm,
@@ -223,7 +225,10 @@ def generate_answer(
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")
 
+    final_answer = "".join(stream_results[0])
+
     return MainOutput(
+        final_answer=final_answer,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

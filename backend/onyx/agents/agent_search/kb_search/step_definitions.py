@@ -27,3 +27,7 @@ STEP_DESCRIPTIONS: dict[int, KGSteps] = {
         description="Conducting further research on source documents...", activities=[]
     ),
 }
+
+BASIC_SEARCH_STEP_DESCRIPTIONS: dict[int, KGSteps] = {
+    1: KGSteps(description="Conducting a standard search...", activities=[]),
+}

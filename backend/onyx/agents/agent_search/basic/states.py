@@ -6,6 +6,9 @@ from pydantic import BaseModel
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.chat.models import LlmDoc
+from onyx.context.search.models import InferenceSection
+
 
 # States contain values that change over the course of graph execution,
 # Config is for values that are set at the start and never change.
@@ -23,6 +26,9 @@ class BasicInput(BaseModel):
 ## Graph Output State
 class BasicOutput(TypedDict):
     tool_call_chunk: AIMessageChunk
+    full_answer: str | None
+    cited_references: list[InferenceSection] | None = None
+    retrieved_documents: list[LlmDoc] | None = None
 
 
 ## Graph State
