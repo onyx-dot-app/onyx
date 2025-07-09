@@ -147,6 +147,79 @@ export enum UploadIntent {
   ADD_TO_DOCUMENTS, // For files uploaded via FilePickerModal or similar (just add to repo)
 }
 
+// WORK IN PROGRESS, MIGRATING WHAT I CAN HERE BEFORE OUT OF FILE
+function useScreenSize() {
+  const [screenSize, setScreenSize] = useState({
+    width: typeof window !== "undefined" ? window.innerWidth : 0,
+    height: typeof window !== "undefined" ? window.innerHeight : 0,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setScreenSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  return screenSize;
+}
+
+/**
+ * @param onError - Function to call when an redirect fails
+ * @param setIsLoading - Function to notify the parent that the redirect is in progress
+ */
+function useSlackChatRedirect(
+  onError: (error: any) => void,
+  setIsLoading: (isLoading: boolean) => void
+) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const slackChatId = searchParams?.get("slackChatId");
+
+  useEffect(() => {
+    const handleSlackChatRedirect = async () => {
+      if (!slackChatId) return;
+
+      // Notify the parent that the redirect is in progress
+      setIsLoading(true);
+
+      try {
+        const response = await fetch("/api/chat/seed-chat-session-from-slack", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            chat_session_id: slackChatId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to seed chat from Slack");
+        }
+
+        const data = await response.json();
+
+        router.push(data.redirect_url);
+      } catch (error) {
+        console.error("Error seeding chat from Slack:", error);
+
+        onError(error);
+      }
+    };
+
+    handleSlackChatRedirect();
+  }, [searchParams, router]);
+}
+
+// END WORK IN PROGRESS
+
 export function ChatPage({
   toggle,
   documentSidebarInitialWidth,
@@ -198,28 +271,6 @@ export function ChatPage({
     ? parseInt(defaultAssistantIdRaw)
     : undefined;
 
-  // Function declarations need to be outside of blocks in strict mode
-  function useScreenSize() {
-    const [screenSize, setScreenSize] = useState({
-      width: typeof window !== "undefined" ? window.innerWidth : 0,
-      height: typeof window !== "undefined" ? window.innerHeight : 0,
-    });
-
-    useEffect(() => {
-      const handleResize = () => {
-        setScreenSize({
-          width: window.innerWidth,
-          height: window.innerHeight,
-        });
-      };
-
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }, []);
-
-    return screenSize;
-  }
-
   // handle redirect if chat page is disabled
   // NOTE: this must be done here, in a client component since
   // settings are passed in via Context and therefore aren't
@@ -227,8 +278,11 @@ export function ChatPage({
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
 
+  // UI STATE: Document selection modal visibility
   const [toggleDocSelection, setToggleDocSelection] = useState(false);
+  // UI STATE: Document sidebar visibility (shows search results and selected documents)
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
+  // UI STATE: Pro search feature toggle state
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
   const toggleProSearch = () => {
     Cookies.set(
@@ -239,18 +293,18 @@ export function ChatPage({
   };
 
   const isInitialLoad = useRef(true);
+  // UI STATE: User settings modal visibility
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
-  const { assistants: availableAssistants, pinnedAssistants } = useAssistants();
-
+  // UI STATE: API key configuration modal visibility
   const [showApiKeyModal, setShowApiKeyModal] = useState(
     !shouldShowWelcomeModal
   );
 
   const { user, isAdmin } = useUser();
-  const slackChatId = searchParams?.get("slackChatId");
   const existingChatIdRaw = searchParams?.get("chatId");
 
+  // UI STATE: History sidebar visibility (shows chat history and navigation)
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
   const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
@@ -259,6 +313,7 @@ export function ChatPage({
     (chatSession) => chatSession.id === existingChatSessionId
   );
 
+  // UI EFFECT: Hide sidebar for anonymous users
   useEffect(() => {
     if (user?.is_anonymous_user) {
       Cookies.set(
@@ -302,6 +357,9 @@ export function ChatPage({
   // Useful for determining which session has been loaded (i.e. still on `new, empty session` or `previous session`)
   const loadedIdSessionRef = useRef<string | null>(existingChatSessionId);
 
+  // --- Assistant Management ---
+  const { assistants: availableAssistants, pinnedAssistants } = useAssistants();
+
   const existingChatSessionAssistantId = selectedChatSession?.persona_id;
   const [selectedAssistant, setSelectedAssistant] = useState<
     Persona | undefined
@@ -319,10 +377,6 @@ export function ChatPage({
           )
         : undefined
   );
-  // Gather default temperature settings
-  const search_param_temperature = searchParams?.get(
-    SEARCH_PARAM_NAMES.TEMPERATURE
-  );
 
   const setSelectedAssistantFromId = (assistantId: number) => {
     // NOTE: also intentionally look through available assistants here, so that
@@ -333,11 +387,9 @@ export function ChatPage({
     );
   };
 
+  // UI STATE: Alternative assistant selection (for @mentions and switching assistants)
   const [alternativeAssistant, setAlternativeAssistant] =
     useState<Persona | null>(null);
-
-  const [presentingDocument, setPresentingDocument] =
-    useState<MinimalOnyxDocument | null>(null);
 
   // Current assistant is decided based on this ordering
   // 1. Alternative assistant (assistant selected explicitly by user)
@@ -359,13 +411,30 @@ export function ChatPage({
     ]
   );
 
+  const noAssistants = liveAssistant == null || liveAssistant == undefined;
+
+  // this is for "@"ing assistants
+
+  // this is used to track which assistant is being used to generate the current message
+  // for example, this would come into play when:
+  // 1. default assistant is `Onyx`
+  // 2. we "@"ed the `GPT` assistant and sent a message
+  // 3. while the `GPT` assistant message is generating, we "@" the `Paraphrase` assistant
+  // UI STATE: Currently generating assistant (tracks which assistant is actively responding)
+  const [alternativeGeneratingAssistant, setAlternativeGeneratingAssistant] =
+    useState<Persona | null>(null);
+
+  // --- End Assistant Management ---
+
+  // UI STATE: Document viewer modal - currently displayed document for reading
+  const [presentingDocument, setPresentingDocument] =
+    useState<MinimalOnyxDocument | null>(null);
+
   const llmManager = useLlmManager(
     llmProviders,
     selectedChatSession,
     liveAssistant
   );
-
-  const noAssistants = liveAssistant == null || liveAssistant == undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
     return ccPairs.map((ccPair) => ccPair.source);
@@ -405,16 +474,6 @@ export function ChatPage({
 
     updateChatState("input", currentSession);
   };
-
-  // this is for "@"ing assistants
-
-  // this is used to track which assistant is being used to generate the current message
-  // for example, this would come into play when:
-  // 1. default assistant is `Onyx`
-  // 2. we "@"ed the `GPT` assistant and sent a message
-  // 3. while the `GPT` assistant message is generating, we "@" the `Paraphrase` assistant
-  const [alternativeGeneratingAssistant, setAlternativeGeneratingAssistant] =
-    useState<Persona | null>(null);
 
   // used to track whether or not the initial "submit on load" has been performed
   // this only applies if `?submit-on-load=true` or `?submit-on-load=1` is in the URL
@@ -849,6 +908,7 @@ export function ChatPage({
 
   // for document display
   // NOTE: -1 is a special designation that means the latest AI message
+  // UI STATE: Selected message for document display (determines which message's documents are shown in sidebar)
   const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
     useState<number | null>(null);
 
@@ -902,28 +962,34 @@ export function ChatPage({
   }, [liveAssistant]);
 
   const filterManager = useFilters();
+  // UI STATE: Chat search modal visibility (for searching through chat history)
   const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
 
+  // UI STATE: Feedback modal - currently active feedback form for a specific message
   const [currentFeedback, setCurrentFeedback] = useState<
     [FeedbackType, number] | null
   >(null);
 
+  // UI STATE: Chat sharing modal visibility (for sharing chat sessions)
   const [sharingModalVisible, setSharingModalVisible] =
     useState<boolean>(false);
 
+  // UI STATE: Scroll position indicator - whether user has scrolled above the "horizon" (shows scroll-to-bottom button)
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
-  const scrollableDivRef = useRef<HTMLDivElement>(null);
-  const lastMessageRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLDivElement>(null);
-  const endDivRef = useRef<HTMLDivElement>(null);
-  const endPaddingRef = useRef<HTMLDivElement>(null);
+  // UI REFS: DOM element references for scroll management and layout
+  const scrollableDivRef = useRef<HTMLDivElement>(null); // Main scrollable chat container
+  const lastMessageRef = useRef<HTMLDivElement>(null); // Reference to last message for scroll positioning
+  const inputRef = useRef<HTMLDivElement>(null); // Input bar container for height calculations
+  const endDivRef = useRef<HTMLDivElement>(null); // End marker for scroll-to-bottom functionality
+  const endPaddingRef = useRef<HTMLDivElement>(null); // Bottom padding that adjusts with input height
 
   const previousHeight = useRef<number>(
     inputRef.current?.getBoundingClientRect().height!
   );
   const scrollDist = useRef<number>(0);
 
+  // UI FUNCTION: Handle input bar resize with smooth scrolling and padding adjustments
   const handleInputResize = () => {
     setTimeout(() => {
       if (
@@ -960,6 +1026,7 @@ export function ChatPage({
     }, 100);
   };
 
+  // UI FUNCTION: Scroll chat to bottom with smooth animation and visibility checks
   const clientScrollToBottom = (fast?: boolean) => {
     waitForScrollRef.current = true;
 
@@ -989,23 +1056,29 @@ export function ChatPage({
     }, 1500);
   };
 
+  // UI CONSTANT: Debounce time for scroll events (milliseconds)
   const debounceNumber = 100; // time for debouncing
 
+  // UI STATE: Initial scroll completion flag (prevents scroll issues during initial load)
   const [hasPerformedInitialScroll, setHasPerformedInitialScroll] = useState(
     existingChatSessionId === null
   );
 
-  // handle re-sizing of the text area
+  // UI REF: Text area reference for focus management and resizing
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  // UI EFFECT: Handle text area resizing when message content changes
   useEffect(() => {
     handleInputResize();
   }, [message]);
 
   // used for resizing of the document sidebar
+  // UI REF: Master flexbox container for responsive layout calculations
   const masterFlexboxRef = useRef<HTMLDivElement>(null);
+  // UI STATE: Document sidebar maximum width (responsive layout constraint)
   const [maxDocumentSidebarWidth, setMaxDocumentSidebarWidth] = useState<
     number | null
   >(null);
+  // UI FUNCTION: Calculate responsive document sidebar width based on screen size
   const adjustDocumentSidebarWidth = () => {
     if (masterFlexboxRef.current && document.documentElement.clientWidth) {
       // numbers below are based on the actual width the center section for different
@@ -1021,6 +1094,7 @@ export function ChatPage({
     }
   };
 
+  // UI EFFECT: Auto-hide document sidebar when no documents are selected or retrieval is disabled
   useEffect(() => {
     if (
       (!personaIncludesRetrieval &&
@@ -1051,6 +1125,7 @@ export function ChatPage({
     }
   }, [searchParams, router]);
 
+  // UI EFFECT: Setup responsive document sidebar width and window event listeners
   useEffect(() => {
     adjustDocumentSidebarWidth();
     window.addEventListener("resize", adjustDocumentSidebarWidth);
@@ -1109,6 +1184,7 @@ export function ChatPage({
     }
   }
 
+  // UI FUNCTION: Reset input bar state and styling after message submission
   const resetInputBar = () => {
     setMessage("");
     setCurrentMessageFiles([]);
@@ -1132,6 +1208,7 @@ export function ChatPage({
     });
   };
   const [uncaughtError, setUncaughtError] = useState<string | null>(null);
+  // UI STATE: Agentic generation indicator (shows when AI is using multi-step reasoning)
   const [agenticGenerating, setAgenticGenerating] = useState(false);
 
   const autoScrollEnabled =
@@ -1170,6 +1247,7 @@ export function ChatPage({
 
   const { height: screenHeight } = useScreenSize();
 
+  // UI FUNCTION: Calculate responsive container height based on screen size and auto-scroll state
   const getContainerHeight = useMemo(() => {
     return () => {
       if (!currentSessionHasSentLocalUserMessage(chatSessionIdRef.current)) {
@@ -2021,9 +2099,12 @@ export function ChatPage({
   };
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
+  // UI STATE: Sidebar untoggle animation state (prevents flickering during sidebar transitions)
   const [untoggled, setUntoggled] = useState(false);
+  // UI STATE: Loading error message display
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
+  // UI FUNCTION: Explicitly close history sidebar with animation delay
   const explicitlyUntoggle = () => {
     setShowHistorySidebar(false);
 
@@ -2032,6 +2113,7 @@ export function ChatPage({
       setUntoggled(false);
     }, 200);
   };
+  // UI FUNCTION: Toggle history sidebar with cookie persistence
   const toggleSidebar = () => {
     if (user?.is_anonymous_user) {
       return;
@@ -2046,13 +2128,15 @@ export function ChatPage({
 
     toggle();
   };
+  // UI FUNCTION: Remove sidebar toggle state (close sidebar)
   const removeToggle = () => {
     setShowHistorySidebar(false);
     toggle(false);
   };
 
-  const waitForScrollRef = useRef(false);
-  const sidebarElementRef = useRef<HTMLDivElement>(null);
+  // UI REFS: Scroll and sidebar management
+  const waitForScrollRef = useRef(false); // Prevents scroll conflicts during animations
+  const sidebarElementRef = useRef<HTMLDivElement>(null); // History sidebar container
 
   useSidebarVisibility({
     sidebarVisible,
@@ -2077,6 +2161,7 @@ export function ChatPage({
 
   useSendMessageToParent();
 
+  // ** Features gated on existence and properties of liveAssistant
   useEffect(() => {
     if (liveAssistant) {
       const hasSearchTool = liveAssistant.tools.some(
@@ -2092,6 +2177,7 @@ export function ChatPage({
     }
   }, [liveAssistant]);
 
+  // UI STATE: Retrieval feature availability (controls document search and sidebar functionality)
   const [retrievalEnabled, setRetrievalEnabled] = useState(() => {
     if (liveAssistant) {
       return liveAssistant.tools.some(
@@ -2103,28 +2189,37 @@ export function ChatPage({
     }
     return false;
   });
+  // ** End Features gated on existence and properties of liveAssistant
 
+  // UI EFFECT: Hide document sidebar when retrieval is disabled
   useEffect(() => {
     if (!retrievalEnabled) {
       setDocumentSidebarVisible(false);
     }
   }, [retrievalEnabled]);
 
+  // UI STATE: Stack trace modal content (for displaying error details)
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
   >(null);
 
+  // UI REF: Inner sidebar element for document results display
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
+  // UI STATE: Settings modal visibility (general settings, not user-specific)
   const [settingsToggled, setSettingsToggled] = useState(false);
 
+  // UI STATE: Selected documents for context (displayed in document sidebar)
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
   );
+  // UI STATE: Token count for selected documents (for context limit management)
   const [selectedDocumentTokens, setSelectedDocumentTokens] = useState(0);
 
   const currentPersona = alternativeAssistant || liveAssistant;
 
+  // UI CONSTANT: Distance threshold for showing scroll-to-bottom button
   const HORIZON_DISTANCE = 800;
+  // UI FUNCTION: Handle scroll events to determine if scroll-to-bottom button should be shown
   const handleScroll = useCallback(() => {
     const scrollDistance =
       endDivRef?.current?.getBoundingClientRect()?.top! -
@@ -2133,42 +2228,17 @@ export function ChatPage({
     setAboveHorizon(scrollDist.current > HORIZON_DISTANCE);
   }, []);
 
-  useEffect(() => {
-    const handleSlackChatRedirect = async () => {
-      if (!slackChatId) return;
-
-      // Set isReady to false before starting retrieval to display loading text
-      setIsReady(false);
-
-      try {
-        const response = await fetch("/api/chat/seed-chat-session-from-slack", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            chat_session_id: slackChatId,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to seed chat from Slack");
-        }
-
-        const data = await response.json();
-
-        router.push(data.redirect_url);
-      } catch (error) {
-        console.error("Error seeding chat from Slack:", error);
-        setPopup({
-          message: "Failed to load chat from Slack",
-          type: "error",
-        });
-      }
-    };
-
-    handleSlackChatRedirect();
-  }, [searchParams, router]);
+  // slack chat redirect wuz here
+  useSlackChatRedirect(
+    (_error) =>
+      setPopup({
+        message: "Failed to load chat from Slack",
+        type: "error",
+      }),
+    (isLoading: boolean) => {
+      setIsReady(!isLoading);
+    }
+  );
 
   useEffect(() => {
     llmManager.updateImageFilesPresent(imageFileInMessageHistory);
@@ -2237,6 +2307,7 @@ export function ChatPage({
 
   useSidebarShortcut(router, toggleSidebar);
 
+  // UI STATE: Shared chat session modal - currently displayed chat session for sharing
   const [sharedChatSession, setSharedChatSession] =
     useState<ChatSession | null>();
 
@@ -2261,11 +2332,14 @@ export function ChatPage({
     });
   };
 
+  // UI FUNCTION: Show chat sharing modal for specific chat session
   const showShareModal = (chatSession: ChatSession) => {
     setSharedChatSession(chatSession);
   };
+  // UI STATE: Assistants modal visibility (for managing and selecting assistants)
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
 
+  // UI FUNCTION: Toggle document sidebar visibility
   const toggleDocumentSidebar = () => {
     if (!documentSidebarVisible) {
       setDocumentSidebarVisible(true);
@@ -2303,12 +2377,14 @@ export function ChatPage({
       </>
     );
 
+  // UI FUNCTION: Clear selected documents and reset token count
   const clearSelectedDocuments = () => {
     setSelectedDocuments([]);
     setSelectedDocumentTokens(0);
     clearSelectedItems();
   };
 
+  // UI FUNCTION: Toggle document selection in document sidebar
   const toggleDocumentSelection = (document: OnyxDocument) => {
     setSelectedDocuments((prev) =>
       prev.some((d) => d.document_id === document.document_id)
@@ -2847,11 +2923,12 @@ export function ChatPage({
                                     (file) =>
                                       file.type == ChatFileType.USER_KNOWLEDGE
                                   );
-                                const userFiles = allUserFiles?.filter((file) =>
-                                  attachedFileDescriptors?.some(
-                                    (descriptor) =>
-                                      descriptor.id === file.file_id
-                                  )
+                                const userFiles = allUserFiles?.filter(
+                                  (file) =>
+                                    attachedFileDescriptors?.some(
+                                      (descriptor) =>
+                                        descriptor.id === file.file_id
+                                    )
                                 );
 
                                 return (
