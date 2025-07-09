@@ -887,7 +887,7 @@ export const AIMessage = ({
   );
 };
 
-function MessageSwitcher({
+export function MessageSwitcher({
   currentPage,
   totalPages,
   handlePrevious,
@@ -912,8 +912,8 @@ function MessageSwitcher({
                   disableForStreaming
                     ? () => null
                     : currentPage === 1
-                      ? undefined
-                      : handlePrevious
+                    ? undefined
+                    : handlePrevious
                 }
               />
             </div>
@@ -940,8 +940,8 @@ function MessageSwitcher({
                   disableForStreaming
                     ? () => null
                     : currentPage === totalPages
-                      ? undefined
-                      : handleNext
+                    ? undefined
+                    : handleNext
                 }
               />
             </div>
