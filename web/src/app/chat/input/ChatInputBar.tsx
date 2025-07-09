@@ -8,6 +8,7 @@ import { InputPrompt } from "@/app/chat/interfaces";
 
 import { FilterManager, getDisplayNameForModel, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import {
   DocumentIcon2,
@@ -40,6 +41,8 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
 import { UploadIntent } from "../ChatPage";
+import { TokenCounter } from "@/components/chat/TokenCounter";
+import { SessionTokenUsage } from "@/hooks/useTokenCounter";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -197,6 +200,8 @@ interface ChatInputBarProps {
   retrievalEnabled: boolean;
   proSearchEnabled: boolean;
   setProSearchEnabled: (proSearchEnabled: boolean) => void;
+  sessionUsage: SessionTokenUsage;
+  availableLlmProviders: LLMProviderDescriptor[]; // For getting correct model max tokens
 }
 
 export function ChatInputBar({
@@ -227,6 +232,8 @@ export function ChatInputBar({
   llmManager,
   proSearchEnabled,
   setProSearchEnabled,
+  sessionUsage,
+  availableLlmProviders,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const {
@@ -837,7 +844,7 @@ export function ChatInputBar({
               </div>
             )}
 
-            <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
+            <div className="flex pr-4 pb-2 bg-input-background items-center w-full ">
               <div className="space-x-1 flex  px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
@@ -850,7 +857,7 @@ export function ChatInputBar({
                 />
 
                 <LLMPopover
-                  llmProviders={llmProviders}
+                  llmProviders={availableLlmProviders}
                   llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
@@ -879,7 +886,39 @@ export function ChatInputBar({
                   />
                 )}
               </div>
-              <div className="flex items-center my-auto">
+              
+              {/* Center section with token counter */}
+              <div className="flex-1 flex justify-center">
+                <TokenCounter 
+                  sessionUsage={sessionUsage} 
+                  currentModel={{
+                    modelName: llmManager.currentLlm?.modelName || "Unknown Model",
+                    maxTokens: (() => {
+                      // Use the same pattern as ChatPage to get correct max_input_tokens
+                      const currentModelName = llmManager.currentLlm?.modelName;
+                      if (!currentModelName) return 200000;
+                      
+                      // Create model descriptors like ChatPage does
+                      const modelDescriptors = availableLlmProviders.flatMap((provider) =>
+                        provider.model_configurations.map((modelConfiguration) => ({
+                          modelName: modelConfiguration.name,
+                          provider: provider.provider,
+                          maxTokens: modelConfiguration.max_input_tokens!,
+                        }))
+                      );
+                      
+                      // Find the matching model configuration
+                      const matchingModel = modelDescriptors.find(
+                        (descriptor) => descriptor.modelName === currentModelName
+                      );
+                      
+                      return matchingModel?.maxTokens || 200000; // Fallback if not found
+                    })(),
+                  }}
+                />
+              </div>
+              
+              <div className="flex items-center my-auto gap-2">
                 {retrievalEnabled && settings?.settings.pro_search_enabled && (
                   <AgenticToggle
                     proSearchEnabled={proSearchEnabled}
