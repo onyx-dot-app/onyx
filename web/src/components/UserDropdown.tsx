@@ -57,11 +57,11 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
 
 export function UserDropdown({
   page,
-  toggleUserSettings,
+  showUserSettingsModal,
   hideUserDropdown,
 }: {
   page?: pageType;
-  toggleUserSettings?: () => void;
+  showUserSettingsModal?: () => void;
   hideUserDropdown?: boolean;
 }) {
   const { user, isCurator } = useUser();
@@ -255,9 +255,9 @@ export function UserDropdown({
                   )
                 )}
 
-                {toggleUserSettings && (
+                {showUserSettingsModal && (
                   <DropdownOption
-                    onClick={toggleUserSettings}
+                    onClick={showUserSettingsModal}
                     icon={<UserIcon size={16} className="my-auto" />}
                     label="User Settings"
                   />

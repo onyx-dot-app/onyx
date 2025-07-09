@@ -172,7 +172,7 @@ export const SourceChip = ({
 );
 
 interface ChatInputBarProps {
-  toggleDocSelection: () => void;
+  showDocSelectionModal: () => void;
   removeDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
@@ -200,7 +200,7 @@ interface ChatInputBarProps {
 }
 
 export function ChatInputBar({
-  toggleDocSelection,
+  showDocSelectionModal,
   retrievalEnabled,
   removeDocs,
   toggleDocumentSidebar,
@@ -844,7 +844,7 @@ export function ChatInputBar({
                   name="File"
                   Icon={FiPlusCircle}
                   onClick={() => {
-                    toggleDocSelection();
+                    showDocSelectionModal();
                   }}
                   tooltipContent={"Upload files and attach user files"}
                 />

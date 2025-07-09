@@ -15,12 +15,12 @@ export default function FunctionalHeader({
   page,
   removeHeight,
   currentChatSession,
-  setSharingModalVisible,
+  setSharingModalOpen,
   toggleSidebar = () => null,
   documentSidebarVisible,
   reset = () => null,
   sidebarToggled,
-  toggleUserSettings,
+  showUserSettingsModal,
   hideUserDropdown,
 }: {
   removeHeight?: boolean;
@@ -28,9 +28,9 @@ export default function FunctionalHeader({
   page: pageType;
   sidebarToggled?: boolean;
   currentChatSession?: ChatSession | null | undefined;
-  setSharingModalVisible?: (value: SetStateAction<boolean>) => void;
+  setSharingModalOpen?: (value: SetStateAction<boolean>) => void;
   toggleSidebar?: () => void;
-  toggleUserSettings?: () => void;
+  showUserSettingsModal?: () => void;
   hideUserDropdown?: boolean;
   documentSidebarVisible?: boolean;
 }) {
@@ -143,9 +143,9 @@ export default function FunctionalHeader({
           </div>
 
           <div className="absolute right-2 mobile:top-1 desktop:top-1 h-8  flex">
-            {setSharingModalVisible && !hideUserDropdown && (
+            {setSharingModalOpen && !hideUserDropdown && (
               <div
-                onClick={() => setSharingModalVisible(true)}
+                onClick={() => setSharingModalOpen(true)}
                 className="mobile:hidden mr-2 my-auto rounded-full p-1 cursor-pointer hover:bg-accent-background"
               >
                 <FiShare2 size="18" />
@@ -156,7 +156,7 @@ export default function FunctionalHeader({
               <UserDropdown
                 hideUserDropdown={hideUserDropdown}
                 page={page}
-                toggleUserSettings={toggleUserSettings}
+                showUserSettingsModal={showUserSettingsModal}
               />
             </div>
             <Link

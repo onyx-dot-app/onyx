@@ -61,6 +61,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useReducer,
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SEARCH_PARAM_NAMES, shouldSubmitOnLoad } from "./searchParams";
@@ -147,7 +148,359 @@ export enum UploadIntent {
   ADD_TO_DOCUMENTS, // For files uploaded via FilePickerModal or similar (just add to repo)
 }
 
-// WORK IN PROGRESS, MIGRATING WHAT I CAN HERE BEFORE OUT OF FILE
+// ================================ CONSTRUCTION ZONE ================================
+
+// ===== CENTRALIZED MODAL MANAGEMENT =====
+
+// Modal Types Enum
+export enum ModalType {
+  NONE = "NONE",
+  API_KEY = "API_KEY",
+  USER_SETTINGS = "USER_SETTINGS",
+  SETTINGS = "SETTINGS",
+  DOC_SELECTION = "DOC_SELECTION",
+  CHAT_SEARCH = "CHAT_SEARCH",
+  SHARING = "SHARING",
+  ASSISTANTS = "ASSISTANTS",
+  STACK_TRACE = "STACK_TRACE",
+  FEEDBACK = "FEEDBACK",
+  SHARED_CHAT = "SHARED_CHAT",
+}
+
+// Modal Data Types
+interface ModalData {
+  // API Key Modal
+  apiKey?: {
+    hide: () => void;
+    setPopup: (popup: any) => void;
+  };
+
+  // Settings Modals
+  settings?: {
+    setPopup: (popup: any) => void;
+    setCurrentLlm: (llm: any) => void;
+    defaultModel: string;
+    llmProviders: any[];
+    onClose: () => void;
+  };
+
+  // Document Selection Modal
+  docSelection?: {
+    setPresentingDocument: (doc: any) => void;
+    buttonContent: string;
+    onClose: () => void;
+    onSave: () => void;
+  };
+
+  // Chat Search Modal
+  chatSearch?: {
+    onCloseModal: () => void;
+  };
+
+  // Sharing Modal
+  sharing?: {
+    assistantId?: number;
+    message: string;
+    modelOverride: any;
+    chatSessionId: string;
+    existingSharedStatus: any;
+    onClose: () => void;
+    onShare?: (shared: boolean) => void;
+  };
+
+  // Assistants Modal
+  assistants?: {
+    hideModal: () => void;
+  };
+
+  // Stack Trace Modal
+  stackTrace?: {
+    exceptionTrace: string;
+    onOutsideClick: () => void;
+  };
+
+  // Feedback Modal
+  feedback?: {
+    feedbackType: FeedbackType;
+    messageId: number;
+    onClose: () => void;
+    onSubmit: (data: any) => void;
+  };
+
+  // Shared Chat Modal
+  sharedChat?: {
+    assistantId?: number;
+    message: string;
+    modelOverride: any;
+    chatSessionId: string;
+    existingSharedStatus: any;
+    onClose: () => void;
+    onShare: (shared: boolean) => void;
+  };
+}
+
+// Modal State Interface
+interface ModalState {
+  isVisible: boolean;
+  type: ModalType;
+  data?: ModalData;
+}
+
+// Modal Actions
+type ModalAction =
+  | { type: "MODAL_OPEN"; payload: { type: ModalType; data?: ModalData } }
+  | { type: "MODAL_CLOSE" }
+  | { type: "MODAL_UPDATE_DATA"; payload: Partial<ModalData> };
+
+// Modal Reducer
+const modalReducer = (state: ModalState, action: ModalAction): ModalState => {
+  switch (action.type) {
+    case "MODAL_OPEN":
+      return {
+        isVisible: true,
+        type: action.payload.type,
+        data: action.payload.data,
+      };
+
+    case "MODAL_CLOSE":
+      return {
+        isVisible: false,
+        type: ModalType.NONE,
+        data: undefined,
+      };
+
+    case "MODAL_UPDATE_DATA":
+      return {
+        ...state,
+        data: { ...state.data, ...action.payload },
+      };
+
+    default:
+      return state;
+  }
+};
+
+// Modal Hook with Convenience Methods
+export function useModal() {
+  const [state, dispatch] = useReducer(modalReducer, {
+    isVisible: false,
+    type: ModalType.NONE,
+    data: undefined,
+  });
+
+  const modalActions = useMemo(
+    () => ({
+      // Generic actions
+      openModal: (type: ModalType, data?: ModalData) =>
+        dispatch({ type: "MODAL_OPEN", payload: { type, data } }),
+      closeModal: () => dispatch({ type: "MODAL_CLOSE" }),
+      updateModalData: (data: Partial<ModalData>) =>
+        dispatch({ type: "MODAL_UPDATE_DATA", payload: data }),
+
+      // Convenience methods for each modal type
+      openApiKeyModal: (data: ModalData["apiKey"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.API_KEY, data: { apiKey: data } },
+        }),
+
+      openUserSettingsModal: (data: ModalData["settings"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.USER_SETTINGS, data: { settings: data } },
+        }),
+
+      openSettingsModal: (data: ModalData["settings"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.SETTINGS, data: { settings: data } },
+        }),
+
+      openDocSelectionModal: (data: ModalData["docSelection"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: {
+            type: ModalType.DOC_SELECTION,
+            data: { docSelection: data },
+          },
+        }),
+
+      openChatSearchModal: (data: ModalData["chatSearch"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.CHAT_SEARCH, data: { chatSearch: data } },
+        }),
+
+      openSharingModal: (data: ModalData["sharing"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.SHARING, data: { sharing: data } },
+        }),
+
+      openAssistantsModal: (data: ModalData["assistants"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.ASSISTANTS, data: { assistants: data } },
+        }),
+
+      openStackTraceModal: (data: ModalData["stackTrace"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.STACK_TRACE, data: { stackTrace: data } },
+        }),
+
+      openFeedbackModal: (data: ModalData["feedback"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.FEEDBACK, data: { feedback: data } },
+        }),
+
+      openSharedChatModal: (data: ModalData["sharedChat"]) =>
+        dispatch({
+          type: "MODAL_OPEN",
+          payload: { type: ModalType.SHARED_CHAT, data: { sharedChat: data } },
+        }),
+    }),
+    [dispatch]
+  );
+
+  return { state, actions: modalActions };
+}
+
+// Modal Renderer Component
+function ModalRenderer({
+  state,
+  onClose,
+  shouldShowWelcomeModal,
+}: {
+  state: ModalState;
+  onClose: () => void;
+  shouldShowWelcomeModal: boolean;
+}) {
+  if (!state.isVisible) return null;
+
+  switch (state.type) {
+    case ModalType.API_KEY:
+      if (shouldShowWelcomeModal) return null;
+      const apiKeyData = state.data?.apiKey;
+      if (!apiKeyData?.setPopup) return null;
+      return <ApiKeyModal hide={onClose} setPopup={apiKeyData.setPopup} />;
+
+    case ModalType.USER_SETTINGS:
+    case ModalType.SETTINGS:
+      const settingsData = state.data?.settings;
+      if (
+        !settingsData?.setPopup ||
+        !settingsData?.setCurrentLlm ||
+        !settingsData?.defaultModel ||
+        !settingsData?.llmProviders
+      )
+        return null;
+      return (
+        <UserSettingsModal
+          setPopup={settingsData.setPopup}
+          setCurrentLlm={settingsData.setCurrentLlm}
+          defaultModel={settingsData.defaultModel}
+          llmProviders={settingsData.llmProviders}
+          onClose={onClose}
+        />
+      );
+
+    case ModalType.DOC_SELECTION:
+      const docSelectionData = state.data?.docSelection;
+      if (
+        !docSelectionData?.setPresentingDocument ||
+        !docSelectionData?.buttonContent ||
+        !docSelectionData?.onSave
+      )
+        return null;
+      return (
+        <FilePickerModal
+          setPresentingDocument={docSelectionData.setPresentingDocument}
+          buttonContent={docSelectionData.buttonContent}
+          isOpen={true}
+          onClose={onClose}
+          onSave={docSelectionData.onSave}
+        />
+      );
+
+    case ModalType.CHAT_SEARCH:
+      return <ChatSearchModal open={true} onCloseModal={onClose} />;
+
+    case ModalType.SHARING:
+      const sharingData = state.data?.sharing;
+      if (
+        !sharingData?.message ||
+        !sharingData?.modelOverride ||
+        !sharingData?.chatSessionId ||
+        !sharingData?.existingSharedStatus
+      )
+        return null;
+      return (
+        <ShareChatSessionModal
+          assistantId={sharingData.assistantId}
+          message={sharingData.message}
+          modelOverride={sharingData.modelOverride}
+          chatSessionId={sharingData.chatSessionId}
+          existingSharedStatus={sharingData.existingSharedStatus}
+          onClose={onClose}
+          onShare={sharingData.onShare}
+        />
+      );
+
+    case ModalType.ASSISTANTS:
+      return <AssistantModal hideModal={onClose} />;
+
+    case ModalType.STACK_TRACE:
+      const stackTraceData = state.data?.stackTrace;
+      if (!stackTraceData?.exceptionTrace) return null;
+      return (
+        <ExceptionTraceModal
+          onOutsideClick={onClose}
+          exceptionTrace={stackTraceData.exceptionTrace}
+        />
+      );
+
+    case ModalType.FEEDBACK:
+      const feedbackData = state.data?.feedback;
+      if (!feedbackData?.feedbackType || !feedbackData?.onSubmit) return null;
+      return (
+        <FeedbackModal
+          feedbackType={feedbackData.feedbackType}
+          onClose={onClose}
+          onSubmit={feedbackData.onSubmit}
+        />
+      );
+
+    case ModalType.SHARED_CHAT:
+      const sharedChatData = state.data?.sharedChat;
+      if (
+        !sharedChatData?.message ||
+        !sharedChatData?.modelOverride ||
+        !sharedChatData?.chatSessionId ||
+        !sharedChatData?.existingSharedStatus ||
+        !sharedChatData?.onShare
+      )
+        return null;
+      return (
+        <ShareChatSessionModal
+          assistantId={sharedChatData.assistantId}
+          message={sharedChatData.message}
+          modelOverride={sharedChatData.modelOverride}
+          chatSessionId={sharedChatData.chatSessionId}
+          existingSharedStatus={sharedChatData.existingSharedStatus}
+          onClose={onClose}
+          onShare={sharedChatData.onShare}
+        />
+      );
+
+    default:
+      return null;
+  }
+}
+
+// ===== EXISTING HOOKS =====
+
 function useScreenSize() {
   const [screenSize, setScreenSize] = useState({
     width: typeof window !== "undefined" ? window.innerWidth : 0,
@@ -218,7 +571,28 @@ function useSlackChatRedirect(
   }, [searchParams, router]);
 }
 
-// END WORK IN PROGRESS
+// There are a number of UI states that are interrelated and can be improved in refactor
+// For example, the following states are interrelated:
+// Modal visibility:
+// - isDocSelectionModalOpen
+// - isUserSettingsModalOpen
+// - isApiKeyModalOpen
+// - isChatSearchModalOpen
+// - isSharingModalOpen
+// - isSettingsModalOpen
+// - isAssistantsModalOpen
+// Existence based visibility modals, should be same system:
+// - stackTraceModalContent
+// - sharedChatSession
+// - currentFeedback
+//
+// Other UI visibility:
+// - ...
+//
+//
+// We could use a reducer with modal visibility actions, possibly join with other visibility states
+
+// ================================ END CONSTRUCTION ZONE ================================
 
 export function ChatPage({
   toggle,
@@ -279,7 +653,7 @@ export function ChatPage({
   const enterpriseSettings = settings?.enterpriseSettings;
 
   // UI STATE: Document selection modal visibility
-  const [toggleDocSelection, setToggleDocSelection] = useState(false);
+  const [isDocSelectionModalOpen, setIsDocSelectionModalOpen] = useState(false);
   // UI STATE: Document sidebar visibility (shows search results and selected documents)
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   // UI STATE: Pro search feature toggle state
@@ -294,10 +668,10 @@ export function ChatPage({
 
   const isInitialLoad = useRef(true);
   // UI STATE: User settings modal visibility
-  const [userSettingsToggled, setUserSettingsToggled] = useState(false);
+  const [isUserSettingsModalOpen, setIsUserSettingsModalOpen] = useState(false);
 
   // UI STATE: API key configuration modal visibility
-  const [showApiKeyModal, setShowApiKeyModal] = useState(
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(
     !shouldShowWelcomeModal
   );
 
@@ -971,8 +1345,7 @@ export function ChatPage({
   >(null);
 
   // UI STATE: Chat sharing modal visibility (for sharing chat sessions)
-  const [sharingModalVisible, setSharingModalVisible] =
-    useState<boolean>(false);
+  const [isSharingModalOpen, setIsSharingModalOpen] = useState<boolean>(false);
 
   // UI STATE: Scroll position indicator - whether user has scrolled above the "horizon" (shows scroll-to-bottom button)
   const [aboveHorizon, setAboveHorizon] = useState(false);
@@ -2199,6 +2572,7 @@ export function ChatPage({
   }, [retrievalEnabled]);
 
   // UI STATE: Stack trace modal content (for displaying error details)
+  // existence of this state is used to determine if the modal should be displayed
   const [stackTraceModalContent, setStackTraceModalContent] = useState<
     string | null
   >(null);
@@ -2206,7 +2580,7 @@ export function ChatPage({
   // UI REF: Inner sidebar element for document results display
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   // UI STATE: Settings modal visibility (general settings, not user-specific)
-  const [settingsToggled, setSettingsToggled] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // UI STATE: Selected documents for context (displayed in document sidebar)
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
@@ -2308,6 +2682,7 @@ export function ChatPage({
   useSidebarShortcut(router, toggleSidebar);
 
   // UI STATE: Shared chat session modal - currently displayed chat session for sharing
+  // existence of this state is used to determine if the modal should be displayed
   const [sharedChatSession, setSharedChatSession] =
     useState<ChatSession | null>();
 
@@ -2333,11 +2708,11 @@ export function ChatPage({
   };
 
   // UI FUNCTION: Show chat sharing modal for specific chat session
-  const showShareModal = (chatSession: ChatSession) => {
+  const openShareModal = (chatSession: ChatSession) => {
     setSharedChatSession(chatSession);
   };
   // UI STATE: Assistants modal visibility (for managing and selecting assistants)
-  const [showAssistantsModal, setShowAssistantsModal] = useState(false);
+  const [isAssistantsModalOpen, setIsAssistantsModalOpen] = useState(false);
 
   // UI FUNCTION: Toggle document sidebar visibility
   const toggleDocumentSidebar = () => {
@@ -2397,9 +2772,9 @@ export function ChatPage({
     <>
       <HealthCheckBanner />
 
-      {showApiKeyModal && !shouldShowWelcomeModal && (
+      {isApiKeyModalOpen && !shouldShowWelcomeModal && (
         <ApiKeyModal
-          hide={() => setShowApiKeyModal(false)}
+          hide={() => setIsApiKeyModalOpen(false)}
           setPopup={setPopup}
         />
       )}
@@ -2428,27 +2803,27 @@ export function ChatPage({
         />
       )}
 
-      {(settingsToggled || userSettingsToggled) && (
+      {(isSettingsModalOpen || isUserSettingsModalOpen) && (
         <UserSettingsModal
           setPopup={setPopup}
           setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
           onClose={() => {
-            setUserSettingsToggled(false);
-            setSettingsToggled(false);
+            setIsUserSettingsModalOpen(false);
+            setIsSettingsModalOpen(false);
           }}
         />
       )}
 
-      {toggleDocSelection && (
+      {isDocSelectionModalOpen && (
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
           buttonContent="Set as Context"
           isOpen={true}
-          onClose={() => setToggleDocSelection(false)}
+          onClose={() => setIsDocSelectionModalOpen(false)}
           onSave={() => {
-            setToggleDocSelection(false);
+            setIsDocSelectionModalOpen(false);
           }}
         />
       )}
@@ -2527,19 +2902,19 @@ export function ChatPage({
         />
       )}
 
-      {sharingModalVisible && chatSessionIdRef.current !== null && (
+      {isSharingModalOpen && chatSessionIdRef.current !== null && (
         <ShareChatSessionModal
           message={message}
           assistantId={liveAssistant?.id}
           modelOverride={llmManager.currentLlm}
           chatSessionId={chatSessionIdRef.current}
           existingSharedStatus={chatSessionSharedStatus}
-          onClose={() => setSharingModalVisible(false)}
+          onClose={() => setIsSharingModalOpen(false)}
         />
       )}
 
-      {showAssistantsModal && (
-        <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
+      {isAssistantsModalOpen && (
+        <AssistantModal hideModal={() => setIsAssistantsModalOpen(false)} />
       )}
 
       <div className="fixed inset-0 flex flex-col text-text-dark">
@@ -2570,7 +2945,7 @@ export function ChatPage({
                     setIsChatSearchModalOpen((open) => !open)
                   }
                   liveAssistant={liveAssistant}
-                  setShowAssistantsModal={setShowAssistantsModal}
+                  setShowAssistantsModal={setIsAssistantsModalOpen}
                   explicitlyUntoggle={explicitlyUntoggle}
                   reset={reset}
                   page="chat"
@@ -2581,7 +2956,7 @@ export function ChatPage({
                   currentChatSession={selectedChatSession}
                   folders={folders}
                   removeToggle={removeToggle}
-                  showShareModal={showShareModal}
+                  showShareModal={openShareModal} // TODO: ideally we want consistent open/close naming across codebase, out of scope for now
                 />
               </div>
 
@@ -2671,13 +3046,14 @@ export function ChatPage({
             >
               {liveAssistant && (
                 <FunctionalHeader
-                  toggleUserSettings={() => setUserSettingsToggled(true)}
+                  // careful when defining callbacks inline as this can cause a rerender of subcomponent on every parent render
+                  showUserSettingsModal={() => setIsUserSettingsModalOpen(true)}
                   sidebarToggled={sidebarVisible}
                   reset={() => setMessage("")}
                   page="chat"
-                  setSharingModalVisible={
+                  setSharingModalOpen={
                     chatSessionIdRef.current !== null
-                      ? setSharingModalVisible
+                      ? setIsSharingModalOpen
                       : undefined
                   }
                   documentSidebarVisible={
@@ -3391,11 +3767,11 @@ export function ChatPage({
                                 clearSelectedDocuments();
                               }}
                               retrievalEnabled={retrievalEnabled}
-                              toggleDocSelection={() =>
-                                setToggleDocSelection(true)
+                              showDocSelectionModal={() =>
+                                setIsDocSelectionModalOpen(true)
                               }
                               showConfigureAPIKey={() =>
-                                setShowApiKeyModal(true)
+                                setIsApiKeyModalOpen(true)
                               }
                               selectedDocuments={selectedDocuments}
                               message={message}

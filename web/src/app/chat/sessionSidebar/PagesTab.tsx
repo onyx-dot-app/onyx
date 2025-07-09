@@ -207,8 +207,9 @@ export function PagesTab({
 
   const existingChatsNotinFolders = existingChats?.filter(
     (chat) =>
-      !folders?.some((folder) =>
-        folder.chat_sessions?.some((session) => session.id === chat.id)
+      !folders?.some(
+        (folder) =>
+          folder.chat_sessions?.some((session) => session.id === chat.id)
       )
   );
 
