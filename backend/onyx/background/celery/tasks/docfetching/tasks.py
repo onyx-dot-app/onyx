@@ -2,8 +2,6 @@ import multiprocessing
 import os
 import time
 import traceback
-from datetime import datetime
-from datetime import timezone
 from http import HTTPStatus
 from time import sleep
 
@@ -30,17 +28,17 @@ from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
-from onyx.redis.redis_connector_index import RedisConnectorIndexPayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
@@ -49,55 +47,63 @@ from shared_configs.configs import SENTRY_DSN
 logger = setup_logger()
 
 
-def _wait_for_fence_payload(
-    redis_connector: RedisConnector,
-    redis_connector_index: RedisConnectorIndex,
+def _verify_indexing_attempt(
     index_attempt_id: int,
-) -> RedisConnectorIndexPayload:
-    # this wait is needed to avoid a race condition where
-    # the primary worker sends the task and it is immediately executed
-    # before the primary worker can finalize the fence
-    start = time.monotonic()
-    while True:
-        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise SimpleJobException(
-                f"docfetching_task - timed out waiting for fence to be ready: "
-                f"fence={redis_connector.permissions.fence_key}",
-                code=IndexingWatchdogTerminalStatus.FENCE_READINESS_TIMEOUT.code,
-            )
+    cc_pair_id: int,
+    search_settings_id: int,
+) -> None:
+    """
+    Verify that the indexing attempt exists and is in the correct state.
+    """
 
-        if not redis_connector_index.fenced:  # The fence must exist
+    with get_session_with_current_tenant() as db_session:
+        attempt = get_index_attempt(db_session, index_attempt_id)
+
+        if not attempt:
             raise SimpleJobException(
-                f"docfetching_task - fence not found: fence={redis_connector_index.fence_key}",
+                f"docfetching_task - IndexAttempt not found: attempt_id={index_attempt_id}",
                 code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
             )
 
-        payload = redis_connector_index.payload  # The payload must exist
-        if not payload:
+        if attempt.connector_credential_pair_id != cc_pair_id:
             raise SimpleJobException(
-                "docfetching_task: payload invalid or not found",
-                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
-            )
-
-        if payload.index_attempt_id is None or payload.celery_task_id is None:
-            logger.info(
-                f"docfetching_task - Waiting for fence: fence={redis_connector_index.fence_key}"
-            )
-            sleep(1)
-            continue
-
-        if payload.index_attempt_id != index_attempt_id:
-            raise SimpleJobException(
-                f"docfetching_task - id mismatch. Task may be left over from previous run.: "
-                f"task_index_attempt={index_attempt_id} "
-                f"payload_index_attempt={payload.index_attempt_id}",
+                f"docfetching_task - CC pair mismatch: "
+                f"expected={cc_pair_id} actual={attempt.connector_credential_pair_id}",
                 code=IndexingWatchdogTerminalStatus.FENCE_MISMATCH.code,
             )
 
-        logger.info(
-            f"docfetching_task - Fence found, continuing...: fence={redis_connector_index.fence_key}"
-        )
-        return payload
+        if attempt.search_settings_id != search_settings_id:
+            raise SimpleJobException(
+                f"docfetching_task - Search settings mismatch: "
+                f"expected={search_settings_id} actual={attempt.search_settings_id}",
+                code=IndexingWatchdogTerminalStatus.FENCE_MISMATCH.code,
+            )
+
+        if attempt.status not in [
+            IndexingStatus.NOT_STARTED,
+            IndexingStatus.IN_PROGRESS,
+        ]:
+            raise SimpleJobException(
+                f"docfetching_task - Invalid attempt status: "
+                f"attempt_id={index_attempt_id} status={attempt.status}",
+                code=IndexingWatchdogTerminalStatus.FENCE_MISMATCH.code,
+            )
+
+        # Check for cancellation
+        if IndexingCoordination.check_cancellation_requested(
+            db_session, index_attempt_id
+        ):
+            raise SimpleJobException(
+                f"docfetching_task - Cancellation requested: attempt_id={index_attempt_id}",
+                code=IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL.code,
+            )
+
+    logger.info(
+        f"docfetching_task - IndexAttempt verified: "
+        f"attempt_id={index_attempt_id} "
+        f"cc_pair={cc_pair_id} "
+        f"search_settings={search_settings_id}"
+    )
 
 
 def docfetching_task(
@@ -165,9 +171,12 @@ def docfetching_task(
             code=IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL.code,
         )
 
-    payload = _wait_for_fence_payload(
-        redis_connector, redis_connector_index, index_attempt_id
-    )
+    # Verify the indexing attempt exists and is valid
+    # This replaces the Redis fence payload waiting
+    _verify_indexing_attempt(index_attempt_id, cc_pair_id, search_settings_id)
+
+    # We still need a basic Redis lock to prevent duplicate task execution
+    # but this is much simpler than the full fencing mechanism
     r = get_redis_client()
     # set thread_local=False since we don't control what thread the indexing/pruning
     # might run our callback with
@@ -193,9 +202,6 @@ def docfetching_task(
             f"search_settings={search_settings_id}",
             code=IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING.code,
         )
-
-    payload.started = datetime.now(timezone.utc)
-    redis_connector_index.set_fence(payload)
 
     try:
         with get_session_with_current_tenant() as db_session:

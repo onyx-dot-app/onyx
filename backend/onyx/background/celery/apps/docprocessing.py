@@ -108,6 +108,6 @@ for bootstep in base_bootsteps:
 
 celery_app.autodiscover_tasks(
     [
-        "onyx.background.celery.tasks.docprocessing",
+        "onyx.background.celery.tasks.indexing",
     ]
 )

@@ -124,12 +124,14 @@ def create_index_attempt(
     search_settings_id: int,
     db_session: Session,
     from_beginning: bool = False,
+    celery_task_id: str | None = None,
 ) -> int:
     new_attempt = IndexAttempt(
         connector_credential_pair_id=connector_credential_pair_id,
         search_settings_id=search_settings_id,
         from_beginning=from_beginning,
         status=IndexingStatus.NOT_STARTED,
+        celery_task_id=celery_task_id,
     )
     db_session.add(new_attempt)
     db_session.commit()

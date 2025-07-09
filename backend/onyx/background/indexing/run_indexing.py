@@ -54,6 +54,7 @@ from onyx.db.index_attempt import mark_attempt_partially_succeeded
 from onyx.db.index_attempt import mark_attempt_succeeded
 from onyx.db.index_attempt import transition_attempt_to_in_progress
 from onyx.db.index_attempt import update_docs_indexed
+from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 from onyx.document_index.factory import get_default_document_index
@@ -65,7 +66,6 @@ from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
-from onyx.redis.redis_connector import RedisConnector
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.middleware import make_randomized_onyx_request_id
@@ -74,7 +74,6 @@ from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
-
 
 logger = setup_logger()
 
@@ -1208,15 +1207,14 @@ def connector_document_extraction(
             f"elapsed={elapsed_time:.2f}s"
         )
 
-        final_state = batch_storage.get_extraction_state()
-        if final_state is None:
-            raise RuntimeError("Extraction state should not be None")
-
-        # counts how many batches were queued
-        final_state.doc_extraction_complete_batch_num = batch_num
-        batch_storage.store_extraction_state(final_state)
-
-        check_indexing_completion(index_attempt_id, tenant_id)
+        # Set total batches in database to signal extraction completion
+        # This replaces storing extraction state in FileStore
+        with get_session_with_current_tenant() as db_session:
+            IndexingCoordination.set_total_batches(
+                db_session=db_session,
+                index_attempt_id=index_attempt_id,
+                total_batches=batch_num,
+            )
 
     except Exception as e:
         logger.exception(
@@ -1321,109 +1319,3 @@ def connector_document_extraction(
 
             memory_tracer.stop()
             raise e
-
-
-def check_indexing_completion(
-    index_attempt_id: int,
-    tenant_id: str,
-) -> None:
-
-    logger.info(
-        f"Checking for document processing completion: "
-        f"attempt={index_attempt_id} "
-        f"tenant={tenant_id}"
-    )
-
-    storage = get_document_batch_storage(tenant_id, index_attempt_id)
-
-    try:
-        last_progress_time = time.monotonic()
-        last_batches_completed = 0
-        # TODO: if there are no indexing workers running, fail the attempt
-        while True:
-            # Get current state
-            indexing_state = storage.ensure_indexing_state()
-            extraction_state = storage.ensure_extraction_state()
-
-            # Check if extraction is complete and all batches are processed
-            batches_total = extraction_state.doc_extraction_complete_batch_num
-            batches_processed = indexing_state.batches_done
-            extraction_completed = batches_total is not None and (
-                batches_processed >= batches_total
-            )
-
-            logger.info(
-                f"Processing status: "
-                f"extraction_completed={extraction_completed} "
-                f"batches_processed={batches_processed}/{batches_total or '?'}"  # probably off by 1
-            )
-
-            if extraction_completed:
-                break
-
-            if batches_processed > last_batches_completed:
-                last_batches_completed = batches_processed
-                last_progress_time = time.monotonic()
-            elif time.monotonic() - last_progress_time > 3600 * 6:
-                raise RuntimeError(
-                    f"Indexing attempt {index_attempt_id} has been indexing for 6 hours without progress. "
-                    f"Marking it as failed."
-                )
-
-        logger.info(
-            f"All batches for index attempt {index_attempt_id} have been processed."
-        )
-
-        # All processing is complete
-        total_failures = indexing_state.total_failures
-
-        with get_session_with_current_tenant() as db_session:
-            if total_failures == 0:
-                mark_attempt_succeeded(index_attempt_id, db_session)
-                logger.info(f"Index attempt {index_attempt_id} completed successfully")
-            else:
-                mark_attempt_partially_succeeded(index_attempt_id, db_session)
-                logger.info(
-                    f"Index attempt {index_attempt_id} completed with {total_failures} failures"
-                )
-
-        # Clean up all remaining storage
-        storage.cleanup_all_batches()
-
-        # Clean up the fence to allow the next run to start
-        with get_session_with_current_tenant() as db_session:
-            index_attempt = get_index_attempt(db_session, index_attempt_id)
-            if index_attempt and index_attempt.search_settings:
-                redis_connector = RedisConnector(
-                    tenant_id, index_attempt.connector_credential_pair_id
-                )
-                redis_connector_index = redis_connector.new_index(
-                    index_attempt.search_settings.id
-                )
-                redis_connector_index.reset()
-                logger.info(f"Resetting indexing fence for attempt {index_attempt_id}")
-
-    except Exception as e:
-        logger.exception(
-            f"Failed to monitor document processing completion: "
-            f"attempt={index_attempt_id} "
-            f"error={str(e)}"
-        )
-
-        # Mark the attempt as failed if monitoring fails
-        try:
-            with get_session_with_current_tenant() as db_session:
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session,
-                    failure_reason=f"Processing monitoring failed: {str(e)}",
-                    full_exception_trace=traceback.format_exc(),
-                )
-        except Exception:
-            logger.exception("Failed to mark attempt as failed")
-
-        # Try to clean up storage
-        try:
-            storage.cleanup_all_batches()
-        except Exception:
-            logger.exception("Failed to cleanup storage after monitoring failure")
