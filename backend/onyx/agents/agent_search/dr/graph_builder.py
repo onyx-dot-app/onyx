@@ -52,7 +52,8 @@ def dr_graph_builder() -> StateGraph:
 
     graph.add_conditional_edges("orchestrator", decision_router)
 
-    graph.add_edge(start_key=["search", "kg_query"], end_key="orchestrator")
+    graph.add_edge(start_key="search", end_key="orchestrator")
+    graph.add_edge(start_key="kg_query", end_key="orchestrator")
 
     graph.add_edge(
         start_key="closer",
