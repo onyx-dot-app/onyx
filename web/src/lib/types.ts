@@ -175,19 +175,9 @@ export interface ConnectorIndexingStatus<
   docs_indexed: number;
 }
 
-export interface FederatedConnectorInfo {
-  id: number;
-  source: ValidSources;
-  name: string;
-  status: string;
-  last_success: string | null;
-  docs_indexed: number;
-  entities_count: number;
-}
-
 export interface FederatedConnectorDetail {
   id: number;
-  source: string;
+  source: ValidSources.FederatedSlack;
   name: string;
   credentials: Record<string, any>;
   oauth_token_exists: boolean;

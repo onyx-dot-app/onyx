@@ -182,7 +182,7 @@ export function UserSettingsModal({
 
   const handleConnectOAuth = (authorizeUrl: string) => {
     // Redirect to OAuth URL in the same window
-    window.location.href = authorizeUrl;
+    router.push(authorizeUrl);
   };
 
   const handleDisconnectOAuth = async (connectorId: number) => {

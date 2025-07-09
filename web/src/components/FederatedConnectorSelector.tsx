@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
-  FederatedConnectorInfo,
+  FederatedConnectorDetail,
   FederatedConnectorConfig,
   federatedSourceToRegularSource,
   ValidSources,
@@ -22,7 +22,7 @@ import {
 interface FederatedConnectorSelectorProps {
   name: string;
   label: string;
-  federatedConnectors: FederatedConnectorInfo[];
+  federatedConnectors: FederatedConnectorDetail[];
   selectedConfigs: FederatedConnectorConfig[];
   onChange: (selectedConfigs: FederatedConnectorConfig[]) => void;
   disabled?: boolean;

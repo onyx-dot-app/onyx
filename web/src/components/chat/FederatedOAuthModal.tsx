@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useContext, useState } from "react";
+import React, { useContext } from "react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { SourceIcon } from "@/components/SourceIcon";
 import { ValidSources } from "@/lib/types";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getSourceMetadata } from "@/lib/sources";
+import { useRouter } from "next/navigation";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -32,6 +33,7 @@ export function FederatedOAuthModal({
 }: FederatedOAuthModalProps) {
   const settings = useContext(SettingsContext);
   const needsAuth = connectors.filter((c) => !c.has_oauth_token);
+  const router = useRouter();
 
   if (needsAuth.length === 0) {
     return null;
@@ -39,7 +41,7 @@ export function FederatedOAuthModal({
 
   const handleAuthorize = (authorizeUrl: string) => {
     // Redirect to OAuth URL in the same window
-    window.location.href = authorizeUrl;
+    router.push(authorizeUrl);
   };
 
   const applicationName =

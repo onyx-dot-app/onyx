@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useFederatedConnectors } from "@/lib/hooks";
 import {
-  FederatedConnectorInfo,
+  FederatedConnectorDetail,
   federatedSourceToRegularSource,
   ValidSources,
 } from "@/lib/types";
@@ -33,7 +33,7 @@ function SourceTile({
 }: {
   sourceMetadata: SourceMetadata;
   preSelect?: boolean;
-  federatedConnectors?: FederatedConnectorInfo[];
+  federatedConnectors?: FederatedConnectorDetail[];
   slackCredentials?: Credential<any>[];
 }) {
   // Check if there's already a federated connector for this source

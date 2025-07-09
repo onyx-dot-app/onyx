@@ -129,7 +129,7 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { ValidSources, FederatedConnectorInfo } from "@/lib/types";
+import { ValidSources, FederatedConnectorDetail } from "@/lib/types";
 import {
   FileResponse,
   FolderResponse,
@@ -480,8 +480,8 @@ export function ChatPage({
 
     // Add federated connectors as sources
     const federatedSources =
-      federatedConnectorsData?.map((connector: FederatedConnectorInfo) => {
-        return getSourceMetadata(connector.source as ValidSources);
+      federatedConnectorsData?.map((connector: FederatedConnectorDetail) => {
+        return getSourceMetadata(connector.source);
       }) || [];
 
     // Combine sources and deduplicate based on internalName

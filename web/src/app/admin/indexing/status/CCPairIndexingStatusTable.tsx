@@ -17,7 +17,7 @@ import {
   GroupedConnectorSummaries,
   ValidSources,
   ValidStatuses,
-  FederatedConnectorInfo,
+  FederatedConnectorDetail,
   federatedSourceToRegularSource,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
@@ -217,7 +217,7 @@ function FederatedConnectorRow({
   federatedConnector,
   invisible,
 }: {
-  federatedConnector: FederatedConnectorInfo;
+  federatedConnector: FederatedConnectorDetail;
   invisible?: boolean;
 }) {
   const router = useRouter();
@@ -284,7 +284,7 @@ export function CCPairIndexingStatusTable({
 }: {
   ccPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
   editableCcPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
-  federatedConnectors: FederatedConnectorInfo[];
+  federatedConnectors: FederatedConnectorDetail[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -715,10 +715,7 @@ export function CCPairIndexingStatusTable({
                   count: federatedForSource.length,
                   active: federatedForSource.length, // All federated connectors are considered active
                   public: 0,
-                  totalDocsIndexed: federatedForSource.reduce(
-                    (sum, fc) => sum + (fc.docs_indexed ?? 0),
-                    0
-                  ),
+                  totalDocsIndexed: 0,
                   errors: 0,
                 };
                 return (
