@@ -1,7 +1,5 @@
 import json
-from datetime import datetime
 from typing import Any
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -9,7 +7,6 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
@@ -33,108 +30,23 @@ from onyx.federated_connectors.oauth_utils import add_state_to_oauth_url
 from onyx.federated_connectors.oauth_utils import generate_oauth_state
 from onyx.federated_connectors.oauth_utils import get_oauth_callback_uri
 from onyx.federated_connectors.oauth_utils import verify_oauth_state
+from onyx.server.federated.models import AuthorizeUrlResponse
+from onyx.server.federated.models import CredentialSchemaResponse
+from onyx.server.federated.models import EntitySpecResponse
+from onyx.server.federated.models import FederatedConnectorCredentials
+from onyx.server.federated.models import FederatedConnectorDetail
+from onyx.server.federated.models import FederatedConnectorRequest
+from onyx.server.federated.models import FederatedConnectorResponse
+from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.server.federated.models import FederatedConnectorUpdateRequest
+from onyx.server.federated.models import OAuthCallbackResult
+from onyx.server.federated.models import UserOAuthStatus
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 router = APIRouter(prefix="/federated")
-
-
-class FederatedConnectorCredentials(BaseModel):
-    """Credentials for federated connector"""
-
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
-    redirect_uri: Optional[str] = None
-    # Add other common credential fields as needed
-
-    class Config:
-        extra = "allow"  # Allow additional fields for different connector types
-
-
-class FederatedConnectorEntities(BaseModel):
-    """Entities configuration for federated connector"""
-
-    channels: Optional[list[str]] = None
-    workspaces: Optional[list[str]] = None
-    # Add other entity types as needed
-
-    class Config:
-        extra = "allow"  # Allow additional fields for different connector types
-
-
-class FederatedConnectorRequest(BaseModel):
-    source: FederatedConnectorSource
-    credentials: FederatedConnectorCredentials
-
-
-class FederatedConnectorResponse(BaseModel):
-    id: int
-    source: FederatedConnectorSource
-
-
-class EntityValidationRequest(BaseModel):
-    entities: FederatedConnectorEntities
-
-
-class AuthorizeUrlResponse(BaseModel):
-    authorize_url: str
-
-
-class OAuthCallbackResult(BaseModel):
-    access_token: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    refresh_token: Optional[str] = None
-    token_type: Optional[str] = None
-    scope: Optional[str] = None
-    source: Optional[FederatedConnectorSource] = None
-
-    class Config:
-        extra = "allow"  # Allow additional fields from different OAuth providers
-
-
-class FederatedConnectorStatus(BaseModel):
-    id: int
-    source: FederatedConnectorSource
-    name: str
-
-
-class UserOAuthStatus(BaseModel):
-    """OAuth status for a specific user and federated connector"""
-
-    federated_connector_id: int
-    source: FederatedConnectorSource
-    name: str
-    has_oauth_token: bool
-    oauth_token_expires_at: Optional[datetime] = None
-    authorize_url: Optional[str] = None
-
-
-class FederatedConnectorDetail(BaseModel):
-    id: int
-    source: FederatedConnectorSource
-    name: str
-    credentials: FederatedConnectorCredentials
-    oauth_token_exists: bool
-    oauth_token_expires_at: Optional[datetime] = None
-    document_sets: list[dict[str, Any]] = []
-
-
-class FederatedConnectorUpdateRequest(BaseModel):
-    credentials: Optional[FederatedConnectorCredentials] = None
-
-
-class EntitySpecResponse(BaseModel):
-    """Response for entity specification"""
-
-    entities: dict[str, Any]
-
-
-class CredentialSchemaResponse(BaseModel):
-    """Response for credential schema specification"""
-
-    credentials: dict[str, Any]
 
 
 def _get_federated_connector_instance(
@@ -351,13 +263,10 @@ def validate_entities(
                 logger.warning("Could not parse entities from query parameters")
                 return Response(status_code=400)
 
-        # Convert to Pydantic model for validation
-        entities = FederatedConnectorEntities(**entities_dict)
-
         connector_instance = _get_federated_connector_instance(
             federated_connector.source, federated_connector.credentials
         )
-        is_valid = connector_instance.validate_entities(entities.dict())
+        is_valid = connector_instance.validate_entities(entities_dict)
 
         if is_valid:
             return Response(status_code=200)

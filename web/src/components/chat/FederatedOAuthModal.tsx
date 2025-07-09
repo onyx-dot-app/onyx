@@ -23,7 +23,7 @@ interface FederatedOAuthModalProps {
   skipCount?: number;
 }
 
-const MAX_SKIP_COUNT = 1;
+const MAX_SKIP_COUNT = 2;
 
 export function FederatedOAuthModal({
   connectors,
