@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.configs.constants import FederatedConnectorSource
 
@@ -61,7 +62,7 @@ class FederatedConnectorDetail(BaseModel):
     credentials: FederatedConnectorCredentials
     oauth_token_exists: bool
     oauth_token_expires_at: datetime | None = None
-    document_sets: list[dict[str, Any]] = []
+    document_sets: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FederatedConnectorUpdateRequest(BaseModel):
