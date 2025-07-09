@@ -17,11 +17,25 @@ from pydantic import ValidationError
 from requests.exceptions import RequestException
 from retry import retry
 
+# load env before app_config loads (env vars doesn't get loaded when running as a script)
+current_dir = Path(__file__).parent
+env_dir = current_dir.parent.parent.parent.parent / ".vscode" / ".env"
+if not env_dir.exists():
+    raise RuntimeError(
+        "Could not find .env file. Please create one in the root .vscode directory."
+    )
+load_dotenv(env_dir)
+
+# pylint: disable=E402
+# flake8: noqa: E402
+
 from ee.onyx.server.query_and_chat.models import OneShotQARequest
 from ee.onyx.server.query_and_chat.models import OneShotQAResponse
 from onyx.chat.models import ThreadMessage
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.configs.constants import MessageType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import IndexFilters
@@ -411,12 +425,15 @@ class SearchAnswerAnalyzer:
         response = None
         try:
             request_data = qa_request.model_dump()
+            headers = GENERAL_HEADERS.copy()
+            if AUTH_TYPE != AuthType.DISABLED:
+                headers["Authorization"] = f"Bearer {os.environ.get('ONYX_API_KEY')}"
 
             start_time = time.monotonic()
             response = requests.post(
                 url=f"{self.config.api_url}/query/answer-with-citation",
                 json=request_data,
-                headers=GENERAL_HEADERS,
+                headers=headers,
                 timeout=self.config.request_timeout,
             )
             time_taken = time.monotonic() - start_time
@@ -572,15 +589,19 @@ def run_search_eval(
     config: EvalConfig,
     tenant_id: str | None,
 ) -> None:
-    current_dir = Path(__file__).parent
-    env_dir = current_dir.parent.parent.parent.parent / ".vscode" / ".env"
-    if not env_dir.exists():
-        raise RuntimeError(
-            "Could not find .env file. Please create one in the root .vscode directory."
-        )
-    load_dotenv(env_dir)
+    # check openai api key is set if doing answer eval (must be called that for ragas to recognize)
     if not config.search_only and not os.environ.get("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY is required for answer evaluation")
+        raise RuntimeError(
+            "OPENAI_API_KEY is required for answer evaluation. "
+            "Please add it to the root .vscode/.env file."
+        )
+
+    # check onyx api key is set if auth is enabled
+    if AUTH_TYPE != AuthType.DISABLED and not os.environ.get("ONYX_API_KEY"):
+        raise RuntimeError(
+            "ONYX_API_KEY is required if auth is enabled. "
+            "Please create one in the admin panel and add it to the root .vscode/.env file."
+        )
 
     # check onyx is running
     try:
