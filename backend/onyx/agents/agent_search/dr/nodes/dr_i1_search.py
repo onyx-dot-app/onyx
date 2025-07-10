@@ -36,7 +36,11 @@ def search(
 
     # stream_close_step_answer(writer, 1)
 
-    search_results = search_graph.invoke(input=input, config=config)
+    search_config = config.copy()
+    search_config["metadata"]["config"].behavior.use_agentic_search = False
+    search_config["metadata"]["config"].tooling.force_use_tool.force_use = True
+
+    search_results = search_graph.invoke(input=input, config=search_config)
 
     full_answer = search_results.get("full_answer") or "No answer provided"
 

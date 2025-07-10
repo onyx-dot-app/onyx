@@ -1,3 +1,4 @@
+from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -13,6 +14,14 @@ from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+
+
+class TimeBudget(str, Enum):
+    """Time budget options for agent search operations"""
+
+    FAST = "fast"
+    SHALLOW = "shallow research"
+    DEEP = "deep research"
 
 
 class GraphInputs(BaseModel):
@@ -72,6 +81,7 @@ class GraphSearchConfig(BaseModel):
     skip_gen_ai_answer_generation: bool = False
     allow_agent_reranking: bool = False
     kg_config_settings: KGConfigSettings = KGConfigSettings()
+    time_budget: TimeBudget = TimeBudget.FAST
 
 
 class GraphConfig(BaseModel):

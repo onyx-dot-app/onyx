@@ -22,7 +22,10 @@ def kg_query(state: MainState, config: RunnableConfig) -> AnswerUpdate:
 
     kb_graph = kb_graph_builder().compile()
 
-    kb_results = kb_graph.invoke(input=state, config=config)
+    kg_config = config.copy()
+    kg_config["metadata"]["config"].behavior.use_agentic_search = True
+
+    kb_results = kb_graph.invoke(input=state, config=kg_config)
 
     return AnswerUpdate(
         answers=[kb_results.get("final_answer") or ""],
