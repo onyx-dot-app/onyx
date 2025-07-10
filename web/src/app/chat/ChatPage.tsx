@@ -660,13 +660,13 @@ export function ChatPage({
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   // UI STATE: Pro search feature toggle state
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
-  const toggleProSearch = () => {
+  const toggleProSearch = useCallback(() => {
     Cookies.set(
       PRO_SEARCH_TOGGLED_COOKIE_NAME,
       String(!proSearchEnabled).toLocaleLowerCase()
     );
     setProSearchEnabled(!proSearchEnabled);
-  };
+  }, [proSearchEnabled]);
 
   const isInitialLoad = useRef(true);
   // UI STATE: User settings modal visibility
@@ -700,33 +700,6 @@ export function ChatPage({
       toggle(false);
     }
   }, [user]);
-
-  const processSearchParamsAndSubmitMessage = (searchParamsString: string) => {
-    const newSearchParams = new URLSearchParams(searchParamsString);
-    const message = newSearchParams?.get("user-prompt");
-
-    filterManager.buildFiltersFromQueryString(
-      newSearchParams.toString(),
-      availableSources,
-      documentSets.map((ds) => ds.name),
-      tags
-    );
-
-    const fileDescriptorString = newSearchParams?.get(SEARCH_PARAM_NAMES.FILES);
-    const overrideFileDescriptors: FileDescriptor[] = fileDescriptorString
-      ? JSON.parse(decodeURIComponent(fileDescriptorString))
-      : [];
-
-    newSearchParams.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
-
-    router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-
-    // If there's a message, submit it
-    if (message) {
-      setSubmittedMessage(message);
-      onSubmit({ messageOverride: message, overrideFileDescriptors });
-    }
-  };
 
   const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
 
@@ -821,36 +794,6 @@ export function ChatPage({
     const uniqueSources = Array.from(new Set(availableSources));
     return uniqueSources.map((source) => getSourceMetadata(source));
   }, [availableSources]);
-
-  const stopGenerating = () => {
-    const currentSession = currentSessionId();
-    const controller = abortControllers.get(currentSession);
-    if (controller) {
-      controller.abort();
-      setAbortControllers((prev) => {
-        const newControllers = new Map(prev);
-        newControllers.delete(currentSession);
-        return newControllers;
-      });
-    }
-
-    const lastMessage = messageHistory[messageHistory.length - 1];
-    if (
-      lastMessage &&
-      lastMessage.type === "assistant" &&
-      lastMessage.toolCall &&
-      lastMessage.toolCall.tool_result === undefined
-    ) {
-      const newCompleteMessageMap = new Map(
-        currentMessageMap(completeMessageDetail)
-      );
-      const updatedMessage = { ...lastMessage, toolCall: null };
-      newCompleteMessageMap.set(lastMessage.messageId, updatedMessage);
-      updateCompleteMessageDetail(currentSession, newCompleteMessageMap);
-    }
-
-    updateChatState("input", currentSession);
-  };
 
   // used to track whether or not the initial "submit on load" has been performed
   // this only applies if `?submit-on-load=true` or `?submit-on-load=1` is in the URL
@@ -1492,6 +1435,33 @@ export function ChatPage({
     }
     clientScrollToBottom();
   }, [chatSessionIdRef.current]);
+
+  const processSearchParamsAndSubmitMessage = (searchParamsString: string) => {
+    const newSearchParams = new URLSearchParams(searchParamsString);
+    const message = newSearchParams?.get("user-prompt");
+
+    filterManager.buildFiltersFromQueryString(
+      newSearchParams.toString(),
+      availableSources,
+      documentSets.map((ds) => ds.name),
+      tags
+    );
+
+    const fileDescriptorString = newSearchParams?.get(SEARCH_PARAM_NAMES.FILES);
+    const overrideFileDescriptors: FileDescriptor[] = fileDescriptorString
+      ? JSON.parse(decodeURIComponent(fileDescriptorString))
+      : [];
+
+    newSearchParams.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
+
+    router.replace(`?${newSearchParams.toString()}`, { scroll: false });
+
+    // If there's a message, submit it
+    if (message) {
+      setSubmittedMessage(message);
+      onSubmit({ messageOverride: message, overrideFileDescriptors });
+    }
+  };
 
   const loadNewPageLogic = (event: MessageEvent) => {
     if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
@@ -2766,20 +2736,59 @@ export function ChatPage({
     );
 
   // UI FUNCTION: Clear selected documents and reset token count
-  const clearSelectedDocuments = () => {
+  const clearSelectedDocuments = useCallback(() => {
     setSelectedDocuments([]);
     setSelectedDocumentTokens(0);
     clearSelectedItems();
-  };
+  }, [clearSelectedItems]);
 
   // UI FUNCTION: Toggle document selection in document sidebar
-  const toggleDocumentSelection = (document: OnyxDocument) => {
+  const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
     setSelectedDocuments((prev) =>
       prev.some((d) => d.document_id === document.document_id)
         ? prev.filter((d) => d.document_id !== document.document_id)
         : [...prev, document]
     );
-  };
+  }, []);
+
+  const stopGenerating = useCallback(() => {
+    const currentSession = currentSessionId();
+    const controller = abortControllers.get(currentSession);
+    if (controller) {
+      controller.abort();
+      setAbortControllers((prev) => {
+        const newControllers = new Map(prev);
+        newControllers.delete(currentSession);
+        return newControllers;
+      });
+    }
+
+    const lastMessage = messageHistory[messageHistory.length - 1];
+    if (
+      lastMessage &&
+      lastMessage.type === "assistant" &&
+      lastMessage.toolCall &&
+      lastMessage.toolCall.tool_result === undefined
+    ) {
+      const newCompleteMessageMap = new Map(
+        currentMessageMap(completeMessageDetail)
+      );
+      const updatedMessage = { ...lastMessage, toolCall: null };
+      newCompleteMessageMap.set(lastMessage.messageId, updatedMessage);
+      updateCompleteMessageDetail(currentSession, newCompleteMessageMap);
+    }
+
+    updateChatState("input", currentSession);
+  }, [
+    currentSessionId,
+    messageHistory,
+    completeMessageDetail,
+    updateCompleteMessageDetail,
+    updateChatState,
+    abortControllers,
+    setAbortControllers,
+    currentMessageMap,
+  ]);
 
   return (
     <>
@@ -3776,7 +3785,7 @@ export function ChatPage({
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
                             <ChatInputBar
                               proSearchEnabled={proSearchEnabled}
-                              setProSearchEnabled={() => toggleProSearch()}
+                              setProSearchEnabled={toggleProSearch}
                               toggleDocumentSidebar={toggleDocumentSidebar}
                               availableSources={sources}
                               availableDocumentSets={documentSets}
