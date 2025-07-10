@@ -1222,19 +1222,19 @@ export function AssistantEditor({
                                                     ? " bg-hover"
                                                     : " bg-background hover:bg-hover-light")
                                                 }
-                                                onClick={() => {
-                                                  console.log(
-                                                    "TEST",
-                                                    arrayHelpers
-                                                  );
-                                                  if (isSelected) {
-                                                    arrayHelpers.remove(ind);
-                                                  } else {
-                                                    arrayHelpers?.push(
-                                                      map?.id || 1
-                                                    );
-                                                  }
-                                                }}
+                                                // onClick={() => {
+                                                //   console.log(
+                                                //     "TEST",
+                                                //     arrayHelpers
+                                                //   );
+                                                //   if (isSelected) {
+                                                //     arrayHelpers.remove(ind);
+                                                //   } else {
+                                                //     arrayHelpers?.push(
+                                                //       map?.id || 1
+                                                //     );
+                                                //   }
+                                                // }}
                                               >
                                                 <div className="flex w-full">
                                                   <div className="flex flex-col h-full">
