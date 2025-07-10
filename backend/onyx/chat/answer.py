@@ -28,6 +28,7 @@ from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.constants import BASIC_KEY
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import RerankingDetails
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
@@ -149,7 +150,9 @@ class Answer:
         elif (
             self.graph_config.inputs.persona
             and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith("DR Alpha")
+            and self.graph_config.inputs.persona.name.startswith(
+                TMP_DRALPHA_PERSONA_NAME
+            )
         ):
             run_langgraph = run_dr_graph
 
