@@ -1205,6 +1205,7 @@ export function AssistantEditor({
                                                 map.id
                                               );
                                             let isSelected = ind !== -1;
+
                                             return (
                                               <div
                                                 key={map.id}
@@ -1216,8 +1217,7 @@ export function AssistantEditor({
                                                       rounded-lg 
                                                       border
                                                       border-border
-                                                      flex 
-                                                      cursor-pointer ` +
+                                                      flex ` +
                                                   (isSelected
                                                     ? " bg-hover"
                                                     : " bg-background hover:bg-hover-light")
@@ -1251,10 +1251,6 @@ export function AssistantEditor({
                                                       <Checkbox
                                                         checked={isSelected}
                                                         onClick={() => {
-                                                          console.log(
-                                                            "TEST",
-                                                            arrayHelpers
-                                                          );
                                                           if (isSelected) {
                                                             arrayHelpers.remove(
                                                               ind
