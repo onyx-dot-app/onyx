@@ -1250,7 +1250,7 @@ export function AssistantEditor({
                                                     <div className="pl-1">
                                                       <Checkbox
                                                         checked={isSelected}
-                                                        onChange={() => {
+                                                        onClick={() => {
                                                           console.log(
                                                             "TEST",
                                                             arrayHelpers
