@@ -54,6 +54,7 @@ from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
@@ -847,7 +848,7 @@ def stream_chat_message_objects(
         ) -> ChatMessage:
 
             is_kg_beta = parent_message.chat_session.persona.description.startswith(
-                "DR Alpha"
+                TMP_DRALPHA_PERSONA_NAME
             )
             is_basic_search = (
                 tool_call.tool_name == SearchTool._NAME if tool_call else False
