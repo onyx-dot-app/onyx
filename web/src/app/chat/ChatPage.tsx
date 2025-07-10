@@ -803,20 +803,25 @@ export function ChatPage({
 
   const { popup, setPopup } = usePopup();
 
-  // Initialize API Key modal if needed
-  useEffect(() => {
-    if (!shouldShowWelcomeModal) {
-      modalActions.openApiKeyModal({
-        hide: () => modalActions.closeModal(),
-        setPopup: setPopup,
-      });
-    }
-  }, [shouldShowWelcomeModal, modalActions, setPopup]);
-
   // fetch messages for the chat session
   const [isFetchingChatMessages, setIsFetchingChatMessages] = useState(
     existingChatSessionId !== null
   );
+
+  const [completeMessageDetail, setCompleteMessageDetail] = useState<
+    Map<string | null, Map<number, Message>>
+  >(new Map());
+
+  const updateCompleteMessageDetail = (
+    sessionId: string | null,
+    messageMap: Map<number, Message>
+  ) => {
+    setCompleteMessageDetail((prevState) => {
+      const newState = new Map(prevState);
+      newState.set(sessionId, messageMap);
+      return newState;
+    });
+  };
 
   const [isReady, setIsReady] = useState(false);
 
@@ -825,6 +830,7 @@ export function ChatPage({
     setIsReady(true);
   }, []);
 
+  // UI EFFECT: Initial session fetch and setup
   useEffect(() => {
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;
@@ -994,21 +1000,6 @@ export function ChatPage({
   const [message, setMessage] = useState(
     searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""
   );
-
-  const [completeMessageDetail, setCompleteMessageDetail] = useState<
-    Map<string | null, Map<number, Message>>
-  >(new Map());
-
-  const updateCompleteMessageDetail = (
-    sessionId: string | null,
-    messageMap: Map<number, Message>
-  ) => {
-    setCompleteMessageDetail((prevState) => {
-      const newState = new Map(prevState);
-      newState.set(sessionId, messageMap);
-      return newState;
-    });
-  };
 
   const currentMessageMap = (
     messageDetail: Map<string | null, Map<number, Message>>
@@ -2789,6 +2780,16 @@ export function ChatPage({
     setAbortControllers,
     currentMessageMap,
   ]);
+
+  // Initialize API Key modal on mount if needed
+  useEffect(() => {
+    if (!shouldShowWelcomeModal) {
+      modalActions.openApiKeyModal({
+        hide: () => modalActions.closeModal(),
+        setPopup: setPopup,
+      });
+    }
+  }, [shouldShowWelcomeModal, modalActions, setPopup]);
 
   return (
     <>
