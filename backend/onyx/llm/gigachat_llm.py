@@ -33,18 +33,15 @@ GIGACHAT_TOKEN_DELTA = 5
 GIGACHAT_MAX_OUTPUT_TOKENS = 1200
 GIGACHAT_TIMEOUT = 120
 
-_token: str | None = None
-_expires_at: datetime = datetime.min
 
 
 class GigachatModelServer(LLM):
 
     def get_token(self) -> str:
-        global _token, _expires_at
 
         now = datetime.now()
-        if _token and _expires_at > now + timedelta(minutes=GIGACHAT_TOKEN_DELTA):
-            return _token
+        if self._token and self._expires_at > now + timedelta(minutes=GIGACHAT_TOKEN_DELTA):
+            return self._token
 
         rq_uid = str(uuid.uuid4())
         headers = {
@@ -64,10 +61,10 @@ class GigachatModelServer(LLM):
                 raise Exception(f"Can't get oauth token: {response.text}")
 
             res_body = response.json()
-            _token = res_body["access_token"]
-            _expires_at = datetime.fromtimestamp(res_body["expires_at"] / 1000)
+            self._token = res_body["access_token"]
+            self._expires_at = datetime.fromtimestamp(res_body["expires_at"] / 1000)
 
-            return _token
+            return self._token
         except requests.RequestException as e:
             logger.error(f"Token request failed: {str(e)}")
             raise e
@@ -101,7 +98,7 @@ class GigachatModelServer(LLM):
         self._timeout = timeout
         self._api_key = api_key
         self._token = None
-        self._expires_at = 0.0
+        self._expires_at: datetime = datetime.min
         self._model = model
         self._scope = custom_config['scope']
 
@@ -149,17 +146,12 @@ class GigachatModelServer(LLM):
                     break
                 retry_after = response.headers.get('Retry-After')
 
-                # Определяем время ожидания
                 if retry_after:
                     try:
-                        # Пытаемся преобразовать в секунды
                         wait_time = int(retry_after)
                     except ValueError:
-                        # Если заголовок содержит дату (не реализовано для краткости),
-                        # используем экспоненциальную задержку
                         wait_time = base_delay * (2 ** attempt)
                 else:
-                    # Экспоненциальная задержка
                     wait_time = base_delay * (2 ** attempt)
                 time.sleep(wait_time)
             if response_content_request:
