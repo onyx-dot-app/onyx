@@ -138,6 +138,8 @@ CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
+TMP_DRALPHA_PERSONA_NAME = "DR Alpha"
+
 
 class DocumentSource(str, Enum):
     # Special case, document passed in via Onyx APIs without specifying a source type
