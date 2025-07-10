@@ -46,8 +46,7 @@ def get_connectors_state(db_session, tenant_id) -> list[ConnectorIndexingStatus]
     )
 
     cc_pair_identifiers = [
-        ConnectorCredentialPairIdentifier(
-            connector_id=cc_pair.connector_id, credential_id=cc_pair.credential_id)
+        ConnectorCredentialPairIdentifier(connector_id=cc_pair.connector_id, credential_id=cc_pair.credential_id)
         for cc_pair in cc_pairs
     ]
 
@@ -68,8 +67,7 @@ def get_connectors_state(db_session, tenant_id) -> list[ConnectorIndexingStatus]
         db_session=db_session,
         cc_pairs=cc_pair_identifiers,
     )
-    cc_pair_to_document_cnt = {(connector_id, credential_id)
-                                : cnt for connector_id, credential_id, cnt in document_count_info}
+    cc_pair_to_document_cnt = {(connector_id, credential_id): cnt for connector_id, credential_id, cnt in document_count_info}
 
     group_cc_pair_relationships = get_cc_pair_groups_for_ids(
         db_session=db_session,
@@ -77,14 +75,17 @@ def get_connectors_state(db_session, tenant_id) -> list[ConnectorIndexingStatus]
     )
     group_cc_pair_relationships_dict: dict[int, list[int]] = {}
     for relationship in group_cc_pair_relationships:
-        group_cc_pair_relationships_dict.setdefault(
-            relationship.cc_pair_id, []).append(relationship.user_group_id)
+        group_cc_pair_relationships_dict.setdefault(relationship.cc_pair_id, []).append(relationship.user_group_id)
 
     search_settings: SearchSettings | None = None
     if not secondary_index:
         search_settings = get_current_search_settings(db_session)
     else:
         search_settings = get_secondary_search_settings(db_session)
+
+    connector_to_cc_pair_ids: dict[int, list[int]] = {}
+    for cc_pair in cc_pairs:
+        connector_to_cc_pair_ids.setdefault(cc_pair.connector_id, []).append(cc_pair.id)
 
     for cc_pair in cc_pairs:
         # TODO remove this to enable ingestion API
@@ -100,8 +101,7 @@ def get_connectors_state(db_session, tenant_id) -> list[ConnectorIndexingStatus]
         in_progress = False
         if search_settings:
             redis_connector = RedisConnector(tenant_id, cc_pair.id)
-            redis_connector_index = redis_connector.new_index(
-                search_settings.id)
+            redis_connector_index = redis_connector.new_index(search_settings.id)
             if redis_connector_index.fenced:
                 in_progress = True
 
@@ -110,8 +110,7 @@ def get_connectors_state(db_session, tenant_id) -> list[ConnectorIndexingStatus]
         #            if r.exists(rci.fence_key):
         #                in_progress = True
 
-        latest_index_attempt = cc_pair_to_latest_index_attempt.get(
-            (connector.id, credential.id))
+        latest_index_attempt = cc_pair_to_latest_index_attempt.get((connector.id, credential.id))
 
         latest_finished_attempt = get_latest_index_attempt_for_cc_pair_id(
             db_session=db_session,
@@ -124,40 +123,36 @@ def get_connectors_state(db_session, tenant_id) -> list[ConnectorIndexingStatus]
             ConnectorIndexingStatus(
                 cc_pair_id=cc_pair.id,
                 name=cc_pair.name,
+                in_progress=in_progress,
                 cc_pair_status=cc_pair.status,
-                connector=ConnectorSnapshot.from_connector_db_model(connector),
-                credential=CredentialSnapshot.from_credential_db_model(
-                    credential),
+                in_repeated_error_state=cc_pair.in_repeated_error_state,
+                connector=ConnectorSnapshot.from_connector_db_model(connector, connector_to_cc_pair_ids.get(connector.id, [])),
+                credential=CredentialSnapshot.from_credential_db_model(credential),
                 access_type=cc_pair.access_type,
                 owner=credential.user.email if credential.user else "",
                 groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
-                last_finished_status=(
-                    latest_finished_attempt.status if latest_finished_attempt else None),
-                last_status=(
-                    latest_index_attempt.status if latest_index_attempt else None),
+                last_finished_status=(latest_finished_attempt.status if latest_finished_attempt else None),
+                last_status=(latest_index_attempt.status if latest_index_attempt else None),
                 last_success=cc_pair.last_successful_index_time,
-                docs_indexed=cc_pair_to_document_cnt.get(
-                    (connector.id, credential.id), 0),
-                error_msg=(
-                    latest_index_attempt.error_msg if latest_index_attempt else None),
+                docs_indexed=cc_pair_to_document_cnt.get((connector.id, credential.id), 0),
+                # error_msg=(
+                #     latest_index_attempt.error_msg if latest_index_attempt else None),
                 latest_index_attempt=(
-                    IndexAttemptSnapshot.from_index_attempt_db_model(
-                        latest_index_attempt) if latest_index_attempt else None
+                    IndexAttemptSnapshot.from_index_attempt_db_model(latest_index_attempt) if latest_index_attempt else None
                 ),
-                deletion_attempt=get_deletion_attempt_snapshot(
-                    connector_id=connector.id,
-                    credential_id=credential.id,
-                    db_session=db_session,
-                    tenant_id=tenant_id,
-                ),
-                is_deletable=check_deletion_attempt_is_allowed(
-                    connector_credential_pair=cc_pair,
-                    db_session=db_session,
-                    # allow scheduled indexing attempts here, since on deletion request we will cancel them
-                    allow_scheduled=True,
-                )
-                is None,
-                in_progress=in_progress,
+                # deletion_attempt=get_deletion_attempt_snapshot(
+                #     connector_id=connector.id,
+                #     credential_id=credential.id,
+                #     db_session=db_session,
+                #     tenant_id=tenant_id,
+                # ),
+                # is_deletable=check_deletion_attempt_is_allowed(
+                #     connector_credential_pair=cc_pair,
+                #     db_session=db_session,
+                #     # allow scheduled indexing attempts here, since on deletion request we will cancel them
+                #     allow_scheduled=True,
+                # )
+                # is None,
             )
         )
     return indexing_statuses
