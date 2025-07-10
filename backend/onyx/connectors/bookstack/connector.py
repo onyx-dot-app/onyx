@@ -21,6 +21,12 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 
+import base64
+import logging
+from io import BytesIO
+from onyx.file_processing.extract_file_text import extract_text_and_images, ExtractionResult
+
+logger = logging.getLogger(__name__)
 
 class BookstackConnector(LoadConnector, PollConnector):
     def __init__(
@@ -150,7 +156,7 @@ class BookstackConnector(LoadConnector, PollConnector):
     ) -> Document:
         page_id = str(page.get("id"))
         title = str(page.get("name", ""))
-        page_data = bookstack_client.get("/pages/" + page_id, {})
+        page_data = bookstack_client.get(f"/pages/{page_id}", {})
         url = bookstack_client.build_app_url(
             "/books/"
             + str(page.get("book_slug"))
@@ -159,15 +165,75 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         page_html = "<h1>" + html.escape(title) + "</h1>" + str(page_data.get("html"))
         text = parse_html_page_basic(page_html)
+        
+        attachment_sections = []
+        
+        try:
+            all_attachments = bookstack_client.get("/attachments", {"filter[uploaded_to]": page_id}).get("data", [])
+            
+            for attachment in all_attachments:
+                attachment_id = str(attachment.get("id"))
+                try:
+                    attachment_details = bookstack_client.get(f"/attachments/{attachment_id}", {})
+                    
+                    attachment_name = attachment_details.get("name", "Unnamed Attachment")
+                    is_external = attachment_details.get("external", False)
+                    content = attachment_details.get("content", "")
+                    extension = attachment_details.get("extension", "")
+                    
+                    file_name = attachment_name
+                    if extension and not file_name.endswith(f".{extension}"):
+                        file_name += f".{extension}"
+                    
+                    attachment_url = bookstack_client.build_app_url(f"/attachments/{attachment_id}")
+                    
+                    if is_external:
+                        link_url = content
+                        attachment_sections.append(TextSection(
+                            link=attachment_url,
+                            text=f"EXTERNAL ATTACHMENT: {file_name}\nLink: {link_url}"
+                        ))
+                    else:
+                        if not content:
+                            logger.warning(f"No content for attachment {attachment_id}")
+                            continue
+
+                        try:
+                            file_bytes = base64.b64decode(content)
+                        except Exception as decode_error:
+                            logger.error(f"Failed to decode attachment {attachment_id}: {str(decode_error)}")
+                            continue
+                        
+                        file_content = BytesIO(file_bytes)
+                        extraction_result = extract_text_and_images(
+                            file=file_content,
+                            file_name=file_name
+                        )
+                        
+                        if extraction_result.text_content:
+                            attachment_sections.append(TextSection(
+                                link=attachment_url,
+                                text=f"ATTACHMENT: {file_name}\n\n{extraction_result.text_content}"
+                            ))
+                        else:
+                            logger.warning(f"Failed to extract text from attachment: {file_name}")
+                except Exception as attachment_error:
+                    logger.error(f"Error processing attachment {attachment_id}: {str(attachment_error)}")
+        except Exception as e:
+            logger.error(f"Error getting attachments for page {page_id}: {str(e)}")
+        
         updated_at_str = (
             str(page_data.get("updated_at"))
             if page_data.get("updated_at") is not None
             else None
         )
         time.sleep(0.1)
+        
+        all_sections = [TextSection(link=url, text=text)] + attachment_sections
+        
         return Document(
             id="page:" + page_id,
-            sections=[TextSection(link=url, text=text)],
+            sections=all_sections,
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Page: " + str(title),
             title=str(title),
