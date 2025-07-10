@@ -13,7 +13,6 @@ from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
 from onyx.agents.agent_search.run_graph import run_dr_graph
-from onyx.agents.agent_search.run_graph import run_kb_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
@@ -140,14 +139,14 @@ class Answer:
             yield from self._processed_stream
             return
 
-        if self.graph_config.behavior.use_agentic_search and (
-            self.graph_config.inputs.persona
-            and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith("KG Beta")
-        ):
-            run_langgraph = run_kb_graph
+        # if self.graph_config.behavior.use_agentic_search and (
+        #     self.graph_config.inputs.persona
+        #     and self.graph_config.behavior.kg_config_settings.KG_ENABLED
+        #     and self.graph_config.inputs.persona.name.startswith("KG Beta")
+        # ):
+        #     run_langgraph = run_kb_graph
 
-        elif (
+        if (
             self.graph_config.inputs.persona
             and self.graph_config.behavior.kg_config_settings.KG_ENABLED
             and self.graph_config.inputs.persona.name.startswith(
