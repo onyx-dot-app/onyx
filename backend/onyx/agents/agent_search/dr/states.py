@@ -1,6 +1,8 @@
 from enum import Enum
 from operator import add
 from typing import Annotated
+from typing import Dict
+from typing import List
 from typing import TypedDict
 
 from pydantic import BaseModel
@@ -27,11 +29,17 @@ class DRPath(Enum):
 class OrchestrationUpdate(LoggerUpdate):
     query_path: Annotated[list[DRPath], add] = []
     iteration_nr: int = 0
+    plan_of_record: Annotated[List[Dict[int, List[Dict[str, str]]]], add] = []
+    used_time_budget_int: int = 0
 
 
 class AnswerUpdate(LoggerUpdate):
+    iteration_nr: int = 0
+    parallelization_nr: int = 0
+    instructions: str | None = None
     answers: Annotated[list[str], add] = []
     cited_references: Annotated[list[str], add] = []
+    iteration_answers: Dict[int, Dict[int, Dict[str, str]]] = {}  # it, par, {Q, A}
 
 
 class FinalUpdate(LoggerUpdate):

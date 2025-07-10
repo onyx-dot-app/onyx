@@ -8,6 +8,7 @@ from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.models import TimeBudget
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -35,61 +36,65 @@ def orchestrator(state: MainState, config: RunnableConfig) -> OrchestrationUpdat
 
     iteration_nr = state.iteration_nr
 
-    if iteration_nr > 0:
-        query_path = DRPath.CLOSER
+    if graph_config.behavior.time_budget == TimeBudget.FAST:
+        if iteration_nr == 0:
+            decision_prompt = (
+                DR_DECISION_PROMPT.replace("---possible_entities---", all_entity_types)
+                .replace("---possible_relationships---", all_relationship_types)
+                .replace("---question---", question)
+            )
+
+            msg = [
+                HumanMessage(
+                    content=decision_prompt,
+                )
+            ]
+            primary_llm = graph_config.tooling.primary_llm
+            # Grader
+            try:
+                llm_response = run_with_timeout(
+                    5,
+                    # fast_llm.invoke,
+                    primary_llm.invoke,
+                    prompt=msg,
+                    timeout_override=5,
+                    max_tokens=5,
+                )
+
+                cleaned_response = (
+                    str(llm_response.content)
+                    .replace("```json\n", "")
+                    .replace("\n```", "")
+                    .replace("\n", "")
+                )
+                if "ANSWER:" in cleaned_response:
+                    response_text = cleaned_response.split("ANSWER:")[1].strip()
+                else:
+                    response_text = cleaned_response.strip()
+
+                # Normalize the response to match enum values
+                response_text = response_text.lower()
+                if response_text == "search":
+                    query_path = DRPath.SEARCH
+                elif response_text == "knowledge_graph":
+                    query_path = DRPath.KNOWLEDGE_GRAPH
+                else:
+                    logger.warning(
+                        f"Invalid response from LLM: '{response_text}'. Defaulting to SEARCH."
+                    )
+                    query_path = DRPath.SEARCH
+
+            except Exception as e:
+                logger.error(f"Error in orchestration: {e}")
+                raise e
+
+            # End node
+
+        else:
+            query_path = DRPath.CLOSER
 
     else:
-        decision_prompt = (
-            DR_DECISION_PROMPT.replace("---possible_entities---", all_entity_types)
-            .replace("---possible_relationships---", all_relationship_types)
-            .replace("---question---", question)
-        )
-
-        msg = [
-            HumanMessage(
-                content=decision_prompt,
-            )
-        ]
-        primary_llm = graph_config.tooling.primary_llm
-        # Grader
-        try:
-            llm_response = run_with_timeout(
-                5,
-                # fast_llm.invoke,
-                primary_llm.invoke,
-                prompt=msg,
-                timeout_override=5,
-                max_tokens=5,
-            )
-
-            cleaned_response = (
-                str(llm_response.content)
-                .replace("```json\n", "")
-                .replace("\n```", "")
-                .replace("\n", "")
-            )
-            if "ANSWER:" in cleaned_response:
-                response_text = cleaned_response.split("ANSWER:")[1].strip()
-            else:
-                response_text = cleaned_response.strip()
-
-            # Normalize the response to match enum values
-            response_text = response_text.lower()
-            if response_text == "search":
-                query_path = DRPath.SEARCH
-            elif response_text == "knowledge_graph":
-                query_path = DRPath.KNOWLEDGE_GRAPH
-            else:
-                logger.warning(
-                    f"Invalid response from LLM: '{response_text}'. Defaulting to SEARCH."
-                )
-                query_path = DRPath.SEARCH
-
-        except Exception as e:
-            logger.error(f"Error in orchestration: {e}")
-            raise e
-
-        # End node
+        state.plan_of_record[-1]
 
     return OrchestrationUpdate(
         query_path=[query_path],
@@ -101,4 +106,6 @@ def orchestrator(state: MainState, config: RunnableConfig) -> OrchestrationUpdat
                 node_start_time=node_start_time,
             )
         ],
+        plan_of_record=[],
+        used_time_budget_int=0,
     )

@@ -847,7 +847,7 @@ def stream_chat_message_objects(
             tool_call: ToolCall | None,
         ) -> ChatMessage:
 
-            is_kg_beta = parent_message.chat_session.persona.description.startswith(
+            is_kg_beta = parent_message.chat_session.persona.name.startswith(
                 TMP_DRALPHA_PERSONA_NAME
             )
             is_basic_search = (
@@ -858,6 +858,7 @@ def stream_chat_message_objects(
                 if (is_kg_beta and is_basic_search)
                 else new_msg_req.use_agentic_search
             )
+
             return create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=(
