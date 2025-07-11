@@ -29,7 +29,6 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import DocExtractionContext
-from onyx.connectors.models import DocIndexingContext
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import TextSection
@@ -219,6 +218,9 @@ def _check_connector_and_attempt_status(
         raise RuntimeError(
             f"Index Attempt was canceled, status is {index_attempt_loop.status}"
         )
+
+    if index_attempt_loop.celery_task_id is None:
+        raise RuntimeError(f"Index attempt {index_attempt_id} has no celery task id")
 
 
 # TODO: delete from here if ends up unused
@@ -885,7 +887,7 @@ def connector_document_extraction(
     """Extract documents from connector and queue them for indexing pipeline processing.
 
     This is the first part of the split indexing process that runs the connector
-    and extracts documents, storing them in local files or S3 for later processing.
+    and extracts documents, storing them in the filestore for later processing.
     """
 
     start_time = time.monotonic()
@@ -899,7 +901,7 @@ def connector_document_extraction(
     )
 
     # Get batch storage (transition to IN_PROGRESS is handled by run_indexing_entrypoint)
-    batch_storage = get_document_batch_storage(tenant_id, index_attempt_id)
+    batch_storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
 
     # Initialize memory tracer. NOTE: won't actually do anything if
     # `INDEXING_TRACER_INTERVAL` is 0.
@@ -907,6 +909,7 @@ def connector_document_extraction(
     memory_tracer.start()
 
     index_attempt = None
+    last_batch_num = -1  # used to continue from checkpointing
     # comes from _run_indexing
     with get_session_with_current_tenant() as db_session:
         index_attempt = get_index_attempt(
@@ -940,6 +943,8 @@ def connector_document_extraction(
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
         )
+
+        # TODO: these can just be local variables now
         ctx = DocExtractionContext(
             index_name=index_attempt.search_settings.index_name,
             cc_pair_id=cc_pair_id,
@@ -1015,16 +1020,6 @@ def connector_document_extraction(
         else:
             window_end = datetime.now(tz=timezone.utc)
 
-        batch_storage.store_extraction_state(ctx)
-        # initialize indexing state
-        current_state = DocIndexingContext(
-            batches_done=0,
-            total_failures=0,
-            net_doc_change=0,
-            total_chunks=0,
-        )
-        batch_storage.store_indexing_state(current_state)
-
         # TODO: maybe memory tracer here
 
         # Set up connector runner
@@ -1045,8 +1040,15 @@ def connector_document_extraction(
         if index_attempt.from_beginning or (
             most_recent_attempt and most_recent_attempt.status.is_successful()
         ):
+            logger.info(
+                f"Cleaning up all old batches for index attempt {index_attempt_id}"
+            )
+            batch_storage.cleanup_all_batches()
             checkpoint = connector_runner.connector.build_dummy_checkpoint()
         else:
+            logger.info(
+                f"Getting latest valid checkpoint for index attempt {index_attempt_id}"
+            )
             checkpoint = get_latest_valid_checkpoint(
                 db_session=db_session,
                 cc_pair_id=ctx.cc_pair_id,
@@ -1056,6 +1058,31 @@ def connector_document_extraction(
                 connector=connector_runner.connector,
             )
 
+            # When loading from a checkpoint, we need to start new docprocessing tasks
+            # tied to the new index attempt for any batches left over in the file store
+            for batch_id in batch_storage.get_all_batches_for_cc_pair():
+                logger.info(
+                    f"Re-issuing docprocessing task for batch {batch_id} for index attempt {index_attempt_id}"
+                )
+                path_info = batch_storage.extract_path_info(batch_id)
+                if path_info.cc_pair_id != cc_pair_id:
+                    raise RuntimeError(
+                        f"Batch {batch_id} is not for cc pair {cc_pair_id}"
+                    )
+
+                app.send_task(
+                    OnyxCeleryTask.DOCPROCESSING_TASK,
+                    kwargs={
+                        "index_attempt_id": index_attempt_id,
+                        "cc_pair_id": cc_pair_id,
+                        "tenant_id": tenant_id,
+                        "batch_num": path_info.batch_num,  # use same batch num as previously
+                    },
+                    queue=OnyxCeleryQueues.DOCPROCESSING,
+                    priority=OnyxCeleryPriority.MEDIUM,
+                )
+                last_batch_num = max(last_batch_num, path_info.batch_num)
+
         # Save initial checkpoint
         save_checkpoint(
             db_session=db_session,
@@ -1064,7 +1091,7 @@ def connector_document_extraction(
         )
 
     try:
-        batch_num = 0
+        batch_num = last_batch_num + 1  # starts at 0 if no last batch
         total_doc_batches_queued = 0
         total_failures = 0
         document_count = 0
@@ -1148,16 +1175,12 @@ def connector_document_extraction(
                 # instead of that big extraction state. index_attempt_md will be the
                 # persisted communication between the connector extraction task and the
                 # document processing task
-                batch_id = f"batch_{batch_num}"
 
                 # Store documents in storage
-                batch_storage.store_batch(batch_id, doc_batch_cleaned)
-
-                batch_storage.store_extraction_state(ctx)
+                batch_storage.store_batch(batch_num, doc_batch_cleaned)
 
                 # Create processing task data
                 processing_batch_data = {
-                    "batch_id": batch_id,
                     "index_attempt_id": index_attempt_id,
                     "cc_pair_id": cc_pair_id,
                     "tenant_id": tenant_id,
@@ -1177,7 +1200,7 @@ def connector_document_extraction(
 
                 logger.info(
                     f"Queued document processing batch: "
-                    f"batch_id={batch_id} "
+                    f"batch_num={batch_num} "
                     f"docs={len(doc_batch_cleaned)} "
                     f"attempt={index_attempt_id}"
                 )

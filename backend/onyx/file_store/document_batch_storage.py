@@ -3,10 +3,11 @@ from abc import ABC
 from abc import abstractmethod
 from enum import Enum
 from io import StringIO
-from typing import cast
 from typing import List
 from typing import Optional
 from typing import TypeAlias
+
+from pydantic import BaseModel
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import DocExtractionContext
@@ -32,59 +33,47 @@ STATE_TYPE_TO_MODEL: dict[str, type[DocumentStorageState]] = {
 }
 
 
+class BatchStoragePathInfo(BaseModel):
+    cc_pair_id: int
+    index_attempt_id: int
+    batch_num: int
+
+
 class DocumentBatchStorage(ABC):
     """Abstract base class for document batch storage implementations."""
 
-    def __init__(self, tenant_id: str, index_attempt_id: int):
-        self.tenant_id = tenant_id
+    def __init__(self, cc_pair_id: int, index_attempt_id: int):
+        self.cc_pair_id = cc_pair_id
         self.index_attempt_id = index_attempt_id
-        self.base_path = f"{tenant_id}/{index_attempt_id}"
+        self.base_path = f"{self._per_cc_pair_base_path()}/{index_attempt_id}"
 
     @abstractmethod
-    def store_batch(self, batch_id: str, documents: List[Document]) -> None:
+    def store_batch(self, batch_num: int, documents: List[Document]) -> None:
         """Store a batch of documents."""
 
     @abstractmethod
-    def get_batch(self, batch_id: str) -> Optional[List[Document]]:
+    def get_batch(self, batch_num: int) -> Optional[List[Document]]:
         """Retrieve a batch of documents."""
 
     @abstractmethod
-    def delete_batch(self, batch_id: str) -> None:
+    def delete_batch_by_name(self, batch_file_name: str) -> None:
         """Delete a specific batch."""
 
     @abstractmethod
-    def store_extraction_state(self, state: DocExtractionContext) -> None:
-        """Store extraction state metadata."""
-
-    @abstractmethod
-    def get_extraction_state(self) -> DocExtractionContext | None:
-        """Get extraction state metadata."""
-
-    @abstractmethod
-    def store_indexing_state(self, state: DocIndexingContext) -> None:
-        """Store indexing state metadata."""
-
-    @abstractmethod
-    def get_indexing_state(self) -> DocIndexingContext | None:
-        """Get indexing state metadata."""
+    def delete_batch_by_num(self, batch_num: int) -> None:
+        """Delete a specific batch."""
 
     @abstractmethod
     def cleanup_all_batches(self) -> None:
         """Clean up all batches and state for this index attempt."""
 
-    def ensure_extraction_state(self) -> DocExtractionContext:
-        """Ensure extraction state exists."""
-        state = self.get_extraction_state()
-        if not state:
-            raise RuntimeError("Expected extraction state not found")
-        return state
+    @abstractmethod
+    def get_all_batches_for_cc_pair(self) -> list[str]:
+        """Get all IDs of batches stored in the file store."""
 
-    def ensure_indexing_state(self) -> DocIndexingContext:
-        """Ensure indexing state exists."""
-        state = self.get_indexing_state()
-        if not state:
-            raise RuntimeError("Expected indexing state not found")
-        return state
+    @abstractmethod
+    def extract_path_info(self, path: str) -> BatchStoragePathInfo:
+        """Extract path info from a path."""
 
     def _serialize_documents(self, documents: list[Document]) -> str:
         """Serialize documents to JSON string."""
@@ -96,27 +85,25 @@ class DocumentBatchStorage(ABC):
         doc_dicts = json.loads(data)
         return [Document.model_validate(doc_dict) for doc_dict in doc_dicts]
 
+    def _per_cc_pair_base_path(self) -> str:
+        """Get the base path for the cc pair."""
+        return str(self.cc_pair_id)
+
 
 class FileStoreDocumentBatchStorage(DocumentBatchStorage):
     """FileStore-based implementation of document batch storage."""
 
-    def __init__(self, tenant_id: str, index_attempt_id: int, file_store: FileStore):
-        super().__init__(tenant_id, index_attempt_id)
+    def __init__(self, cc_pair_id: int, index_attempt_id: int, file_store: FileStore):
+        super().__init__(cc_pair_id, index_attempt_id)
         self.file_store = file_store
-        # Track stored batch files for cleanup
-        self._batch_files: set[str] = set()
 
-    def _get_batch_file_name(self, batch_id: str) -> str:
+    def _get_batch_file_name(self, batch_num: int) -> str:
         """Generate file name for a document batch."""
-        return f"document_batch_{self.base_path.replace('/', '_')}_{batch_id}.json"
+        return f"{self.base_path}/{batch_num}.json"
 
-    def _get_state_file_name(self, state_type: str) -> str:
-        """Generate file name for extraction state."""
-        return f"{state_type}_state_{self.base_path.replace('/', '_')}.json"
-
-    def store_batch(self, batch_id: str, documents: list[Document]) -> None:
+    def store_batch(self, batch_num: int, documents: list[Document]) -> None:
         """Store a batch of documents using FileStore."""
-        file_name = self._get_batch_file_name(batch_id)
+        file_name = self._get_batch_file_name(batch_num)
         try:
             data = self._serialize_documents(documents)
             content = StringIO(data)
@@ -124,30 +111,25 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             self.file_store.save_file(
                 file_id=file_name,
                 content=content,
-                display_name=f"Document Batch {batch_id}",
+                display_name=f"Document Batch {batch_num}",
                 file_origin=FileOrigin.OTHER,
                 file_type="application/json",
                 file_metadata={
-                    "tenant_id": self.tenant_id,
-                    "index_attempt_id": str(self.index_attempt_id),
-                    "batch_id": batch_id,
+                    "batch_num": batch_num,
                     "document_count": str(len(documents)),
                 },
             )
 
-            # Track this batch file for cleanup
-            self._batch_files.add(file_name)
-
             logger.debug(
-                f"Stored batch {batch_id} with {len(documents)} documents to FileStore as {file_name}"
+                f"Stored batch {batch_num} with {len(documents)} documents to FileStore as {file_name}"
             )
         except Exception as e:
-            logger.error(f"Failed to store batch {batch_id}: {e}")
+            logger.error(f"Failed to store batch {batch_num}: {e}")
             raise
 
-    def get_batch(self, batch_id: str) -> list[Document] | None:
+    def get_batch(self, batch_num: int) -> list[Document] | None:
         """Retrieve a batch of documents from FileStore."""
-        file_name = self._get_batch_file_name(batch_id)
+        file_name = self._get_batch_file_name(batch_num)
         try:
             # Check if file exists
             if not self.file_store.has_file(
@@ -155,7 +137,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
                 file_origin=FileOrigin.OTHER,
                 file_type="application/json",
             ):
-                logger.warning(f"Batch {batch_id} not found in FileStore")
+                logger.warning(f"Batch {batch_num} not found in FileStore")
                 return None
 
             content_io = self.file_store.read_file(file_name)
@@ -163,132 +145,57 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
             documents = self._deserialize_documents(data)
             logger.debug(
-                f"Retrieved batch {batch_id} with {len(documents)} documents from FileStore"
+                f"Retrieved batch {batch_num} with {len(documents)} documents from FileStore"
             )
             return documents
         except Exception as e:
-            logger.error(f"Failed to retrieve batch {batch_id}: {e}")
+            logger.error(f"Failed to retrieve batch {batch_num}: {e}")
             raise
 
-    def delete_batch(self, batch_id: str) -> None:
+    def delete_batch_by_name(self, batch_file_name: str) -> None:
         """Delete a specific batch from FileStore."""
-        file_name = self._get_batch_file_name(batch_id)
-        try:
-            self.file_store.delete_file(file_name)
-            # Remove from tracked files
-            self._batch_files.discard(file_name)
-            logger.debug(f"Deleted batch {batch_id} from FileStore")
-        except Exception as e:
-            logger.warning(f"Failed to delete batch {batch_id}: {e}")
-            # Don't raise - batch might not exist, which is acceptable
+        self.file_store.delete_file(batch_file_name)
+        logger.debug(f"Deleted batch {batch_file_name} from FileStore")
 
-    def _store_state(self, state: DocumentStorageState, state_type: str) -> None:
-        """Store state using FileStore."""
-        file_name = self._get_state_file_name(state_type)
-        try:
-            data = json.dumps(state.model_dump(mode="json"), indent=2)
-            content = StringIO(data)
-
-            self.file_store.save_file(
-                file_id=file_name,
-                content=content,
-                display_name=f"{state_type.capitalize()} State {self.base_path}",
-                file_origin=FileOrigin.OTHER,
-                file_type="application/json",
-                file_metadata={
-                    "tenant_id": self.tenant_id,
-                    "index_attempt_id": str(self.index_attempt_id),
-                    "type": f"{state_type}_state",
-                },
-            )
-
-            logger.debug(f"Stored {state_type} state to FileStore as {file_name}")
-        except Exception as e:
-            logger.error(f"Failed to store {state_type} state: {e}")
-            raise
-
-    def _get_state(self, state_type: str) -> DocumentStorageState | None:
-        """Get state from FileStore."""
-        file_name = self._get_state_file_name(state_type)
-        try:
-            # Check if file exists
-            if not self.file_store.has_file(
-                file_id=file_name,
-                file_origin=FileOrigin.OTHER,
-                file_type="application/json",
-            ):
-                return None
-
-            content_io = self.file_store.read_file(file_name)
-            data = content_io.read().decode("utf-8")
-
-            state = STATE_TYPE_TO_MODEL[state_type].model_validate(json.loads(data))
-            logger.debug(f"Retrieved {state_type} state from FileStore")
-            return state
-        except Exception as e:
-            logger.error(f"Failed to retrieve {state_type} state: {e}")
-            return None
-
-    def store_extraction_state(self, state: DocExtractionContext) -> None:
-        """Store extraction state using FileStore."""
-        self._store_state(state, DocumentBatchStorageStateType.EXTRACTION.value)
-
-    def get_extraction_state(self) -> DocExtractionContext | None:
-        """Get extraction state from FileStore."""
-        return cast(
-            DocExtractionContext | None,
-            self._get_state(DocumentBatchStorageStateType.EXTRACTION.value),
-        )
-
-    def store_indexing_state(self, state: DocIndexingContext) -> None:
-        """Store indexing state using FileStore."""
-        self._store_state(state, DocumentBatchStorageStateType.INDEXING.value)
-
-    def get_indexing_state(self) -> DocIndexingContext | None:
-        """Get indexing state from FileStore."""
-        return cast(
-            DocIndexingContext | None,
-            self._get_state(DocumentBatchStorageStateType.INDEXING.value),
-        )
+    def delete_batch_by_num(self, batch_num: int) -> None:
+        """Delete a specific batch from FileStore."""
+        batch_file_name = self._get_batch_file_name(batch_num)
+        self.delete_batch_by_name(batch_file_name)
+        logger.debug(f"Deleted batch num {batch_num} from FileStore")
 
     def cleanup_all_batches(self) -> None:
-        """Clean up all batches and state for this index attempt."""
-        # Since we don't have direct access to S3 listing logic here,
-        # we'll rely on deleting tracked files.
-        # A more robust cleanup might involve a separate task that can list/delete
-        # from S3 if needed, but for now this is simpler.
-        deleted_count = 0
+        """Clean up all batches for this index attempt."""
+        for batch_file_name in self.get_all_batches_for_cc_pair():
+            self.delete_batch_by_name(batch_file_name)
 
-        # Create a copy of the set to avoid issues with modification during iteration
-        for file_name in list(self._batch_files):
-            try:
-                self.file_store.delete_file(file_name)
-                deleted_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to delete batch file {file_name}: {e}")
+    def get_all_batches_for_cc_pair(self) -> list[str]:
+        """Get all IDs of batches stored in the file store for the cc pair
+        this batch store was initialized with.
+        This includes any batches left over from a previous
+        indexing attempt that need to be processed.
+        """
+        return [
+            file.file_id
+            for file in self.file_store.list_files_by_prefix(
+                self._per_cc_pair_base_path()
+            )
+        ]
 
-        # Delete state
-        for state_type in DocumentBatchStorageStateType:
-            try:
-                state_file_name = self._get_state_file_name(state_type.value)
-                self.file_store.delete_file(state_file_name)
-                deleted_count += 1
-            except Exception as e:
-                logger.warning(f"Failed to delete extraction state: {e}")
-
-        # Clear tracked files
-        self._batch_files.clear()
-
-        logger.info(
-            f"Cleaned up {deleted_count} files for index attempt {self.index_attempt_id}"
+    def extract_path_info(self, path: str) -> BatchStoragePathInfo:
+        """Extract path info from a path."""
+        cc_pair_id, index_attempt_id, batch_num = path.split("/")
+        return BatchStoragePathInfo(
+            cc_pair_id=int(cc_pair_id),
+            index_attempt_id=int(index_attempt_id),
+            batch_num=int(batch_num.split(".")[0]),  # remove .json
         )
 
 
 def get_document_batch_storage(
-    tenant_id: str, index_attempt_id: int
+    cc_pair_id: int, index_attempt_id: int
 ) -> DocumentBatchStorage:
     """Factory function to get the configured document batch storage implementation."""
     # The get_default_file_store will now correctly use S3BackedFileStore
     # or other configured stores based on environment variables
     file_store = get_default_file_store()
-    return FileStoreDocumentBatchStorage(tenant_id, index_attempt_id, file_store)
+    return FileStoreDocumentBatchStorage(cc_pair_id, index_attempt_id, file_store)

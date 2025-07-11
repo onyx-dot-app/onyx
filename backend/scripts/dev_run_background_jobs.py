@@ -65,7 +65,7 @@ def run_jobs() -> None:
         "onyx.background.celery.versioned_apps.docprocessing",
         "worker",
         "--pool=threads",
-        "--concurrency=1",
+        "--concurrency=6",
         "--prefetch-multiplier=1",
         "--loglevel=INFO",
         "--hostname=docprocessing@%n",

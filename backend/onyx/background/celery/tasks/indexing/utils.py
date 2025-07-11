@@ -24,6 +24,7 @@ from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.index_attempt import get_last_attempt_for_cc_pair
 from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
+from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import SearchSettings
@@ -402,14 +403,7 @@ def try_creating_docfetching_task(
 
         # Clean up on failure
         if index_attempt_id is not None:
-            try:
-                IndexingCoordination.cleanup_attempt_coordination(
-                    db_session, index_attempt_id
-                )
-            except Exception:
-                task_logger.exception(
-                    "Failed to cleanup attempt coordination during cleanup"
-                )
+            mark_attempt_failed(index_attempt_id, db_session)
 
         return None
     finally:

@@ -198,18 +198,7 @@ class RedisConnectorIndex:
         self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
 
-    def get_progress(self) -> int | None:
-        """Returns None if the key doesn't exist. The"""
-        # TODO: move into fence?
-        bytes = self.redis.get(self.generator_progress_key)
-        if bytes is None:
-            return None
-
-        progress = int(cast(int, bytes))
-        return progress
-
     def get_completion(self) -> int | None:
-        # TODO: move into fence?
         bytes = self.redis.get(self.generator_complete_key)
         if bytes is None:
             return None

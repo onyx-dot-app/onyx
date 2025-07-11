@@ -223,19 +223,6 @@ def docfetching_task(
                     code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
                 )
 
-            # TODO: pretty sure it's impossible for these to happen, should probably delete
-            if not cc_pair.connector:
-                raise SimpleJobException(
-                    f"Connector not found: cc_pair={cc_pair_id} connector={cc_pair.connector_id}",
-                    code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
-                )
-
-            if not cc_pair.credential:
-                raise SimpleJobException(
-                    f"Credential not found: cc_pair={cc_pair_id} credential={cc_pair.credential_id}",
-                    code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
-                )
-
         # define a callback class
         callback = IndexingCallback(
             os.getppid(),
@@ -262,9 +249,6 @@ def docfetching_task(
             callback=callback,
         )
 
-        # get back the total number of indexed docs and return it
-        redis_connector_index.get_progress()
-        redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
     except ConnectorValidationError:
         raise SimpleJobException(
             f"Indexing task failed: attempt={index_attempt_id} "

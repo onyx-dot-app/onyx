@@ -267,7 +267,7 @@ def mark_attempt_in_progress(
 def mark_attempt_succeeded(
     index_attempt_id: int,
     db_session: Session,
-) -> None:
+) -> IndexAttempt:
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
@@ -276,6 +276,7 @@ def mark_attempt_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.SUCCESS
+        attempt.celery_task_id = None
         db_session.commit()
 
         # Add telemetry for index attempt status change
@@ -287,6 +288,7 @@ def mark_attempt_succeeded(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
+        return attempt
     except Exception:
         db_session.rollback()
         raise
@@ -295,7 +297,7 @@ def mark_attempt_succeeded(
 def mark_attempt_partially_succeeded(
     index_attempt_id: int,
     db_session: Session,
-) -> None:
+) -> IndexAttempt:
     try:
         attempt = db_session.execute(
             select(IndexAttempt)
@@ -304,6 +306,7 @@ def mark_attempt_partially_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
+        attempt.celery_task_id = None
         db_session.commit()
 
         # Add telemetry for index attempt status change
@@ -315,6 +318,7 @@ def mark_attempt_partially_succeeded(
                 "cc_pair_id": attempt.connector_credential_pair_id,
             },
         )
+        return attempt
     except Exception:
         db_session.rollback()
         raise
@@ -370,6 +374,7 @@ def mark_attempt_failed(
         attempt.status = IndexingStatus.FAILED
         attempt.error_msg = failure_reason
         attempt.full_exception_trace = full_exception_trace
+        attempt.celery_task_id = None
         db_session.commit()
 
         # Add telemetry for index attempt status change

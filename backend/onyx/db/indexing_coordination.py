@@ -100,24 +100,6 @@ class IndexingCoordination:
             return None
 
     @staticmethod
-    def cleanup_attempt_coordination(
-        db_session: Session,
-        index_attempt_id: int,
-    ) -> None:
-        """
-        Clean up coordination fields when the attempt is completed or failed.
-        This replaces clearing the Redis fence.
-        """
-        attempt = get_index_attempt(db_session, index_attempt_id)
-        if attempt and not attempt.status.is_terminal():
-            # The attempt will be marked as success/failure by other functions
-            # This just ensures we clean up coordination fields
-            attempt.celery_task_id = None
-            db_session.commit()
-
-            logger.info(f"Released indexing lock for attempt {index_attempt_id}")
-
-    @staticmethod
     def check_cancellation_requested(
         db_session: Session,
         index_attempt_id: int,
@@ -339,17 +321,10 @@ class IndexingCoordination:
 
         attempt = get_index_attempt(db_session, index_attempt_id)
         if not attempt:
+            logger.error(f"Index attempt {index_attempt_id} not found in database")
             return False
 
         current_time = get_db_current_time(db_session)
-
-        # Check if progress has been made
-        if current_batches_completed > attempt.last_batches_completed_count:
-            # Progress made - update tracking
-            attempt.last_progress_time = current_time
-            attempt.last_batches_completed_count = current_batches_completed
-            db_session.commit()
-            return True
 
         # No progress - check if this is the first time tracking
         if attempt.last_progress_time is None:
@@ -359,9 +334,23 @@ class IndexingCoordination:
             db_session.commit()
             return True
 
-        return (
-            current_time - attempt.last_progress_time
-        ).total_seconds() > timeout_hours * 3600
+        time_elapsed = (current_time - attempt.last_progress_time).total_seconds()
+        # only actually write to db every timeout_hours/2
+        # this ensure thats at most timeout_hours will pass with no activity
+        if time_elapsed < timeout_hours * 1800:
+            return True
+
+        # Check if progress has been made
+        if current_batches_completed <= attempt.last_batches_completed_count:
+            # if between timeout_hours/2 and timeout_hours has passed
+            # without an update, we consider the attempt stalled
+            return False
+
+        # Progress made - update tracking
+        attempt.last_progress_time = current_time
+        attempt.last_batches_completed_count = current_batches_completed
+        db_session.commit()
+        return True
 
     @staticmethod
     def check_for_stall(
