@@ -19,6 +19,8 @@ def kg_query(state: MainState, config: RunnableConfig) -> AnswerUpdate:
     """
 
     node_start_time = datetime.now()
+    iteration_nr = state.iteration_nr
+    search_query = state.query_list[0]  # TODO: fix this
 
     kb_graph = kb_graph_builder().compile()
 
@@ -26,9 +28,11 @@ def kg_query(state: MainState, config: RunnableConfig) -> AnswerUpdate:
     kg_config["metadata"]["config"].behavior.use_agentic_search = True
 
     kb_results = kb_graph.invoke(input=state, config=kg_config)
+    full_answer = kb_results.get("final_answer") or "No answer provided"
 
     return AnswerUpdate(
         answers=[kb_results.get("final_answer") or ""],
+        iteration_answers={iteration_nr: {0: {"Q": search_query, "A": full_answer}}},
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

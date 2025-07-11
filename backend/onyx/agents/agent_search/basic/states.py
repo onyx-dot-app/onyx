@@ -27,8 +27,8 @@ class BasicInput(BaseModel):
 class BasicOutput(TypedDict):
     tool_call_chunk: AIMessageChunk
     full_answer: str | None
-    cited_references: list[InferenceSection] | None = None
-    retrieved_documents: list[LlmDoc] | None = None
+    cited_references: list[InferenceSection] | None
+    retrieved_documents: list[LlmDoc] | None
 
 
 ## Graph State
