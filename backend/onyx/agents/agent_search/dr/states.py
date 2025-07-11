@@ -1,8 +1,6 @@
 from enum import Enum
 from operator import add
 from typing import Annotated
-from typing import Dict
-from typing import List
 from typing import TypedDict
 
 from pydantic import BaseModel
@@ -21,16 +19,21 @@ class LoggerUpdate(BaseModel):
 
 
 class DRPath(Enum):
-    SEARCH = "search"
-    KNOWLEDGE_GRAPH = "knowledge_graph"
-    CLOSER = "closer"
+    SEARCH = "SEARCH"
+    KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
+    CLOSER = "CLOSER"
+
+
+class OrchestratorStep(BaseModel):
+    tool: DRPath
+    questions: list[str]
 
 
 class OrchestrationUpdate(LoggerUpdate):
     query_path: Annotated[list[DRPath], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
-    plan_of_record: Annotated[List[str], add] = []
+    plan_of_record: Annotated[list[OrchestratorStep], add] = []
     used_time_budget_int: int = 0
 
 
@@ -42,7 +45,7 @@ class SubAgentState(LoggerUpdate):
 class SubAgentUpdate(LoggerUpdate):
     iteration_nr: int = 0
     parallelization_nr: int = 0
-    iteration_answers: Dict[int, Dict[int, Dict[str, str]]] = {}
+    iteration_answers: dict[int, dict[int, dict[str, str]]] = {}
 
 
 class SearchAgentState(SubAgentState):
@@ -55,7 +58,9 @@ class AnswerUpdate(LoggerUpdate):
     instructions: str | None = None
     answers: Annotated[list[str], add] = []
     cited_references: Annotated[list[str], add] = []
-    iteration_answers: Dict[int, Dict[int, Dict[str, str]]] = {}  # it, par, {Q, A}
+    iteration_answers: dict[int, dict[int, dict[str, str]]] = (
+        {}
+    )  # it, par, {Q, A} TODO: Annotated?
 
 
 class FinalUpdate(LoggerUpdate):

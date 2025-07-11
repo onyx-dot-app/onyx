@@ -47,7 +47,7 @@ def search(
 
     cast(GraphConfig, config["metadata"]["config"])
 
-    search_config = copy.deepcopy(config)
+    search_config = copy.deepcopy(config)  # TODO: fix this
 
     search_config["metadata"][
         "config"
