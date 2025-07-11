@@ -7,7 +7,9 @@ from langgraph.types import StreamWriter
 
 from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_close_steps
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_close_steps,
+)
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -71,7 +73,7 @@ def generate_answer(
 
     # DECLARE STEPS DONE
 
-    stream_write_close_steps(writer)
+    stream_write_kg_search_close_steps(writer)
 
     ## MAIN ANSWER
 

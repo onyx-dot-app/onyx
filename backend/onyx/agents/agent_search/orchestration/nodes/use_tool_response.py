@@ -65,10 +65,7 @@ def basic_use_tool_response(
             ]
 
     new_tool_call_chunk = BasicSearchProcessedStreamResults(
-        ai_message_chunk=AIMessageChunk(content=""),
-        full_answer=None,
-        cited_references=[],
-        retrieved_documents=[],
+        ai_message_chunk=AIMessageChunk(content=""), full_answer=None
     )
     if not agent_config.behavior.skip_gen_ai_answer_generation:
         stream = llm.stream(

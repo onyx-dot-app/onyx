@@ -43,6 +43,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+GraphInput = BasicInput | MainInput | DCMainInput | KBMainInput | DRMainInput
+
 _COMPILED_GRAPH: CompiledStateGraph | None = None
 
 
@@ -92,7 +94,7 @@ def _parse_agent_event(
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput | DCMainInput | KBMainInput | DRMainInput,
+    graph_input: GraphInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -106,7 +108,7 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput | DCMainInput | KBMainInput | DRMainInput,
+    input: GraphInput,
 ) -> AnswerStream:
 
     for event in manage_sync_streaming(
