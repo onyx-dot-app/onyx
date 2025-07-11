@@ -18,7 +18,7 @@ class LoggerUpdate(BaseModel):
     log_messages: Annotated[list[str], add] = []
 
 
-class DRPath(Enum):
+class DRPath(str, Enum):
     SEARCH = "SEARCH"
     KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
     CLOSER = "CLOSER"
@@ -34,7 +34,7 @@ class OrchestrationUpdate(LoggerUpdate):
     query_list: list[str] = []
     iteration_nr: int = 0
     plan_of_record: Annotated[list[OrchestratorStep], add] = []
-    used_time_budget_int: int = 0
+    used_time_budget: int = 0
 
 
 class SubAgentState(LoggerUpdate):

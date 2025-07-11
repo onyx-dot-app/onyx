@@ -20,8 +20,8 @@ class TimeBudget(str, Enum):
     """Time budget options for agent search operations"""
 
     FAST = "fast"
-    SHALLOW = "shallow research"
-    DEEP = "deep research"
+    SHALLOW = "shallow"
+    DEEP = "deep"
 
 
 class GraphInputs(BaseModel):

@@ -15,7 +15,7 @@ logger = setup_logger()
 
 def kg_query(state: MainState, config: RunnableConfig) -> AnswerUpdate:
     """
-    LangGraph node to start the agentic search process.
+    LangGraph node to perform a knowledge graph search as part of the deep research process.
     """
 
     node_start_time = datetime.now()
