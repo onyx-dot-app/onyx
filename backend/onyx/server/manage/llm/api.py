@@ -25,6 +25,7 @@ from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
+from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
@@ -61,6 +62,7 @@ def test_llm_configuration(
 
     # the api key is sanitized if we are testing a provider already in the system
 
+    existing_provider = None
     test_api_key = test_llm_request.api_key
     if test_llm_request.name:
         # NOTE: we are querying by name. we probably should be querying by an invariant id, but
@@ -75,7 +77,21 @@ def test_llm_configuration(
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
     # Therefore, instead of performing additional, more complex logic, we just use a dummy value
+    model_name = (
+        test_llm_request.fast_default_model_name or test_llm_request.default_model_name
+    )
     max_input_tokens = -1
+
+    if existing_provider:
+        llm_provider = LLMProviderView.from_model(existing_provider)
+        max_input_tokens = get_max_input_tokens_from_llm_provider(
+            llm_provider=llm_provider, model_name=model_name
+        )
+    else:
+        max_input_tokens = get_max_input_tokens(
+            model_provider=test_llm_request.provider,
+            model_name=model_name,
+        )
 
     llm = get_llm(
         provider=test_llm_request.provider,
@@ -200,6 +216,18 @@ def put_llm_provider(
         raise HTTPException(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
+        )
+
+    if is_creation and llm_provider_upsert_request.native_or_custom is None:
+        raise HTTPException(
+            status_code=400,
+            detail="The given LLM Provider has to be denoted as either being native or custom",
+        )
+    elif not is_creation and llm_provider_upsert_request.native_or_custom is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="""The given provider's native-or-custom field is trying to be updated, but this field cannot be updated;"""
+            f"""value received: {llm_provider_upsert_request.native_or_custom}""",
         )
 
     default_model_found = False
