@@ -28,9 +28,25 @@ class DRPath(Enum):
 
 class OrchestrationUpdate(LoggerUpdate):
     query_path: Annotated[list[DRPath], add] = []
+    query_list: list[str] = []
     iteration_nr: int = 0
-    plan_of_record: Annotated[List[Dict[int, List[Dict[str, str]]]], add] = []
+    plan_of_record: Annotated[List[str], add] = []
     used_time_budget_int: int = 0
+
+
+class SubAgentState(LoggerUpdate):
+    iteration_nr: int = 0
+    parallelization_nr: int = 0
+
+
+class SubAgentUpdate(LoggerUpdate):
+    iteration_nr: int = 0
+    parallelization_nr: int = 0
+    iteration_answers: Dict[int, Dict[int, Dict[str, str]]] = {}
+
+
+class SearchAgentState(SubAgentState):
+    pass
 
 
 class AnswerUpdate(LoggerUpdate):
