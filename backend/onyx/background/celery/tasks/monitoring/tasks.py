@@ -960,8 +960,9 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:
             "--hostname=heavy": "heavy",
             "--hostname=indexing": "indexing",
             "--hostname=monitoring": "monitoring",
-            "beat": "beat",
             "slack/listener.py": "slack",
+            # tibi: fixing problem of duplicate process in memory watchdog
+            "onyx.background.celery.versioned_apps.beat": "beat",
         }
 
         # Find all python processes that are likely celery workers
