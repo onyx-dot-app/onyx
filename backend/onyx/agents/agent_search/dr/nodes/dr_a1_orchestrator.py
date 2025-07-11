@@ -36,7 +36,9 @@ def orchestrator(state: MainState, config: RunnableConfig) -> OrchestrationUpdat
     question = graph_config.inputs.prompt_builder.raw_user_query
     time_budget = graph_config.behavior.time_budget
     current_plan_of_record_string = (
-        str(state.plan_of_record) if state.plan_of_record else "(No plan yet available)"
+        str(state.plan_of_record[-1])
+        if state.plan_of_record
+        else "(No plan yet available)"
     )
 
     answer_history = state.iteration_answers
@@ -172,6 +174,6 @@ def orchestrator(state: MainState, config: RunnableConfig) -> OrchestrationUpdat
                 node_start_time=node_start_time,
             )
         ],
-        plan_of_record=plan_of_record,
+        plan_of_record=[plan_of_record],
         used_time_budget=0,  # TODO: maybe do remaining instead?
     )
