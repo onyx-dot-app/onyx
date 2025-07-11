@@ -629,6 +629,16 @@ def fetch_connector_credential_pairs(
     return list(db_session.scalars(stmt).unique().all())
 
 
+def fetch_connector_credential_pair_for_connector(
+    db_session: Session,
+    connector_id: int,
+) -> ConnectorCredentialPair | None:
+    stmt = select(ConnectorCredentialPair).where(
+        ConnectorCredentialPair.connector_id == connector_id,
+    )
+    return db_session.scalar(stmt)
+
+
 def resync_cc_pair(
     cc_pair: ConnectorCredentialPair,
     search_settings_id: int,

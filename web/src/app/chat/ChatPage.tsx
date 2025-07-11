@@ -98,6 +98,8 @@ import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
+import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
@@ -127,7 +129,7 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import { ValidSources, FederatedConnectorDetail } from "@/lib/types";
 import {
   FileResponse,
   FolderResponse,
@@ -137,6 +139,8 @@ import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
+import { useFederatedConnectors } from "@/lib/hooks";
+import { Button } from "@/components/ui/button";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -190,6 +194,103 @@ export function ChatPage({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
+
+  // Federated OAuth status
+  const {
+    connectors: federatedConnectors,
+    hasUnauthenticatedConnectors,
+    loading: oauthLoading,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
+
+  // Also fetch federated connectors for the sources list
+  const { data: federatedConnectorsData } = useFederatedConnectors();
+
+  const MAX_SKIP_COUNT = 1;
+
+  // Check localStorage for previous skip preference and count
+  const [oAuthModalState, setOAuthModalState] = useState<{
+    hidden: boolean;
+    skipCount: number;
+  }>(() => {
+    if (typeof window !== "undefined") {
+      const skipData = localStorage.getItem("federatedOAuthModalSkipData");
+      if (skipData) {
+        try {
+          const parsed = JSON.parse(skipData);
+          // Check if we're still within the hide duration (1 hour)
+          const now = Date.now();
+          const hideUntil = parsed.hideUntil || 0;
+          const isWithinHideDuration = now < hideUntil;
+
+          return {
+            hidden: parsed.permanentlyHidden || isWithinHideDuration,
+            skipCount: parsed.skipCount || 0,
+          };
+        } catch {
+          return { hidden: false, skipCount: 0 };
+        }
+      }
+    }
+    return { hidden: false, skipCount: 0 };
+  });
+
+  const handleOAuthModalSkip = () => {
+    if (typeof window !== "undefined") {
+      const newSkipCount = oAuthModalState.skipCount + 1;
+
+      // If we've reached the max skip count, show the "No problem!" modal first
+      if (newSkipCount >= MAX_SKIP_COUNT) {
+        // Don't hide immediately - let the "No problem!" modal show
+        setOAuthModalState({
+          hidden: false,
+          skipCount: newSkipCount,
+        });
+      } else {
+        // For first skip, hide after a delay to show "No problem!" modal
+        const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+
+        const skipData = {
+          skipCount: newSkipCount,
+          hideUntil: oneHourFromNow,
+          permanentlyHidden: false,
+        };
+
+        localStorage.setItem(
+          "federatedOAuthModalSkipData",
+          JSON.stringify(skipData)
+        );
+
+        setOAuthModalState({
+          hidden: true,
+          skipCount: newSkipCount,
+        });
+      }
+    }
+  };
+
+  // Handle the final dismissal of the "No problem!" modal
+  const handleOAuthModalFinalDismiss = () => {
+    if (typeof window !== "undefined") {
+      const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+
+      const skipData = {
+        skipCount: oAuthModalState.skipCount,
+        hideUntil: oneHourFromNow,
+        permanentlyHidden: false,
+      };
+
+      localStorage.setItem(
+        "federatedOAuthModalSkipData",
+        JSON.stringify(skipData)
+      );
+
+      setOAuthModalState({
+        hidden: true,
+        skipCount: oAuthModalState.skipCount,
+      });
+    }
+  };
 
   const defaultAssistantIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.PERSONA_ID
@@ -275,7 +376,7 @@ export function ChatPage({
 
     filterManager.buildFiltersFromQueryString(
       newSearchParams.toString(),
-      availableSources,
+      sources,
       documentSets.map((ds) => ds.name),
       tags
     );
@@ -373,8 +474,28 @@ export function ChatPage({
 
   const sources: SourceMetadata[] = useMemo(() => {
     const uniqueSources = Array.from(new Set(availableSources));
-    return uniqueSources.map((source) => getSourceMetadata(source));
-  }, [availableSources]);
+    const regularSources = uniqueSources.map((source) =>
+      getSourceMetadata(source)
+    );
+
+    // Add federated connectors as sources
+    const federatedSources =
+      federatedConnectorsData?.map((connector: FederatedConnectorDetail) => {
+        return getSourceMetadata(connector.source);
+      }) || [];
+
+    // Combine sources and deduplicate based on internalName
+    const allSources = [...regularSources, ...federatedSources];
+    const deduplicatedSources = allSources.reduce((acc, source) => {
+      const existing = acc.find((s) => s.internalName === source.internalName);
+      if (!existing) {
+        acc.push(source);
+      }
+      return acc;
+    }, [] as SourceMetadata[]);
+
+    return deduplicatedSources;
+  }, [availableSources, federatedConnectorsData]);
 
   const stopGenerating = () => {
     const currentSession = currentSessionId();
@@ -2039,11 +2160,7 @@ export function ChatPage({
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!sidebarVisible).toLocaleLowerCase()
-    ),
-      {
-        path: "/",
-      };
-
+    );
     toggle();
   };
   const removeToggle = () => {
@@ -2330,6 +2447,18 @@ export function ChatPage({
 
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 
+      {isReady && !oAuthModalState.hidden && hasUnauthenticatedConnectors && (
+        <FederatedOAuthModal
+          connectors={federatedConnectors}
+          onSkip={
+            oAuthModalState.skipCount >= MAX_SKIP_COUNT
+              ? handleOAuthModalFinalDismiss
+              : handleOAuthModalSkip
+          }
+          skipCount={oAuthModalState.skipCount}
+        />
+      )}
+
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
       {popup}
@@ -2358,6 +2487,9 @@ export function ChatPage({
           setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectors}
+          refetchFederatedConnectors={refetchFederatedConnectors}
           onClose={() => {
             setUserSettingsToggled(false);
             setSettingsToggled(false);

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ValidSources } from "@/lib/types";
+import { ValidSources, AccessType } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
 import { BooleanFormField, TextFormField } from "@/components/Field";
@@ -59,6 +59,7 @@ type formType = IsPublicGroupSelectorFormType & {
 export default function CreateCredential({
   hideSource,
   sourceType,
+  accessType,
   setPopup,
   close,
   onClose = () => null,
@@ -70,7 +71,7 @@ export default function CreateCredential({
   // Source information
   hideSource?: boolean; // hides docs link
   sourceType: ValidSources;
-
+  accessType: AccessType;
   setPopup: (popupSpec: PopupSpec | null) => void;
 
   // Optional toggle- close section after selection?
@@ -81,7 +82,11 @@ export default function CreateCredential({
   // Switch currently selected credential
   onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
   // Switch currently selected credential + link with connector
-  onSwap?: (selectedCredential: Credential<any>, connectorId: number) => void;
+  onSwap?: (
+    selectedCredential: Credential<any>,
+    connectorId: number,
+    accessType: AccessType
+  ) => void;
 
   // For swapping credentials on selection
   swapConnector?: Connector<any>;
@@ -137,7 +142,7 @@ export default function CreateCredential({
 
       if (isSuccess && swapConnector) {
         if (action === "createAndSwap") {
-          onSwap(credential, swapConnector.id);
+          onSwap(credential, swapConnector.id, accessType);
         } else {
           setPopup({ type: "success", message: "Created new credential!" });
           setTimeout(() => setPopup(null), 4000);

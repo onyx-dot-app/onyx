@@ -253,7 +253,7 @@ Please rephrase the following user question/query as a semantic query that would
 search engine.
 
 Note:
- - do not change the meaning of the question! Specifically, if the query is a an instruction, keep it \
+ - do not change the meaning of the question! Specifically, if the query is an instruction, keep it \
 as an instruction!
 
 Here is the user question/query:

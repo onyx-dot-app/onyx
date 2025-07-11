@@ -463,10 +463,13 @@ def associate_credential_to_connector(
         target_group_ids=metadata.groups,
         object_is_public=metadata.access_type == AccessType.PUBLIC,
         object_is_perm_sync=metadata.access_type == AccessType.SYNC,
+        object_is_new=True,
     )
 
     try:
-        validate_ccpair_for_user(connector_id, credential_id, db_session)
+        validate_ccpair_for_user(
+            connector_id, credential_id, metadata.access_type, db_session
+        )
 
         response = add_credential_to_connector(
             db_session=db_session,

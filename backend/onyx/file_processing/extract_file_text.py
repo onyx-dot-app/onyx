@@ -28,6 +28,7 @@ from pypdf.errors import PdfStreamError
 
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
@@ -312,8 +313,17 @@ def docx_to_text_and_images(
     try:
         doc = docx.Document(file)
     except BadZipFile as e:
-        logger.warning(f"Failed to extract text from {file_name or 'docx file'}: {e}")
-        return "", []
+        logger.warning(
+            f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
+        )
+
+        # May be an invalid docx, but still a valid text file
+        file.seek(0)
+        encoding = detect_encoding(file)
+        text_content_raw, _ = read_text_file(
+            file, encoding=encoding, ignore_onyx_metadata=False
+        )
+        return text_content_raw or "", []
 
     # Grab text from paragraphs
     for paragraph in doc.paragraphs:
@@ -533,7 +543,9 @@ def extract_text_and_images(
         if extension == ".pdf":
             file.seek(0)
             text_content, pdf_metadata, images = read_pdf_file(
-                file, pdf_pass, extract_images=True
+                file,
+                pdf_pass,
+                extract_images=get_image_extraction_and_analysis_enabled(),
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata

@@ -103,6 +103,8 @@ def _get_connector_runner(
         # validate the connector settings
         if not INTEGRATION_TESTS_MODE:
             runnable_connector.validate_connector_settings()
+            if attempt.connector_credential_pair.access_type == AccessType.SYNC:
+                runnable_connector.validate_perm_sync()
 
     except UnexpectedValidationError as e:
         logger.exception(

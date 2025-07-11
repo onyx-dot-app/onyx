@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
+import { CCPairStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
   ConnectorIndexingStatus,
@@ -17,6 +17,8 @@ import {
   GroupedConnectorSummaries,
   ValidSources,
   ValidStatuses,
+  FederatedConnectorDetail,
+  federatedSourceToRegularSource,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
@@ -26,7 +28,6 @@ import {
   FiLock,
   FiUnlock,
   FiRefreshCw,
-  FiPauseCircle,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -36,7 +37,6 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
-import { Warning } from "@phosphor-icons/react";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -213,12 +213,78 @@ border border-border dark:border-neutral-700
   );
 }
 
+function FederatedConnectorRow({
+  federatedConnector,
+  invisible,
+}: {
+  federatedConnector: FederatedConnectorDetail;
+  invisible?: boolean;
+}) {
+  const router = useRouter();
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+
+  const handleManageClick = (e: any) => {
+    e.stopPropagation();
+    router.push(`/admin/federated/${federatedConnector.id}`);
+  };
+
+  return (
+    <TableRow
+      className={`
+border border-border dark:border-neutral-700
+        hover:bg-accent-background ${
+          invisible
+            ? "invisible !h-0 !-mb-10 !border-none"
+            : "!border border-border dark:border-neutral-700"
+        }  w-full cursor-pointer relative `}
+      onClick={() => {
+        router.push(`/admin/federated/${federatedConnector.id}`);
+      }}
+    >
+      <TableCell className="">
+        <p className="lg:w-[200px] xl:w-[400px] inline-block ellipsis truncate">
+          {federatedConnector.name}
+        </p>
+      </TableCell>
+      <TableCell>N/A</TableCell>
+      <TableCell>
+        <Badge variant="success">Indexed</Badge>
+      </TableCell>
+      {isPaidEnterpriseFeaturesEnabled && (
+        <TableCell>
+          <Badge variant="secondary" icon={FiRefreshCw}>
+            Federated Access
+          </Badge>
+        </TableCell>
+      )}
+      <TableCell>N/A</TableCell>
+      <TableCell>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <FiSettings
+                className="cursor-pointer"
+                onClick={handleManageClick}
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Manage Federated Connector</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export function CCPairIndexingStatusTable({
   ccPairsIndexingStatuses,
   editableCcPairsIndexingStatuses,
+  federatedConnectors,
 }: {
   ccPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
   editableCcPairsIndexingStatuses: ConnectorIndexingStatus<any, any>[];
+  federatedConnectors: FederatedConnectorDetail[];
 }) {
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -291,12 +357,17 @@ export function CCPairIndexingStatusTable({
       {} as GroupedConnectorSummaries;
     sorted.forEach((source) => {
       const statuses = grouped[source];
+      const federatedForSource = federatedConnectors.filter(
+        (fc) => federatedSourceToRegularSource(fc.source) === source
+      );
+
       summaries[source] = {
-        count: statuses.length,
-        active: statuses.filter(
-          (status) =>
-            status.cc_pair_status === ConnectorCredentialPairStatus.ACTIVE
-        ).length,
+        count: statuses.length + federatedForSource.length,
+        active:
+          statuses.filter(
+            (status) =>
+              status.cc_pair_status === ConnectorCredentialPairStatus.ACTIVE
+          ).length + federatedForSource.length, // All federated connectors are considered active
         public: statuses.filter((status) => status.access_type === "public")
           .length,
         totalDocsIndexed: statuses.reduce(
@@ -372,6 +443,27 @@ export function CCPairIndexingStatusTable({
     };
   }, [ccPairsIndexingStatuses, editableCcPairsIndexingStatuses, filterOptions]);
 
+  // Combine regular connector sources with sources that only have federated connectors
+  const allSourcesWithFederated = useMemo(() => {
+    const federatedSources = Array.from(
+      new Set(
+        federatedConnectors.map((fc) =>
+          federatedSourceToRegularSource(fc.source)
+        )
+      )
+    ) as ValidSources[];
+
+    // Ensure we keep original ordering for existing sources, then append any new ones
+    const combined = [...sortedSources];
+    federatedSources.forEach((src) => {
+      if (!combined.includes(src)) {
+        combined.push(src);
+      }
+    });
+
+    return combined;
+  }, [sortedSources, federatedConnectors]);
+
   // Determine which sources to display based on filters and search
   const displaySources = useMemo(() => {
     const hasActiveFilters =
@@ -383,8 +475,8 @@ export function CCPairIndexingStatusTable({
       return Object.keys(filteredGroupedStatuses) as ValidSources[];
     }
 
-    return sortedSources;
-  }, [sortedSources, filteredGroupedStatuses, filterOptions]);
+    return allSourcesWithFederated;
+  }, [allSourcesWithFederated, filteredGroupedStatuses, filterOptions]);
 
   const handleFilterChange = (newFilters: FilterOptions) => {
     setFilterOptions(newFilters);
@@ -416,24 +508,6 @@ export function CCPairIndexingStatusTable({
     }
   };
 
-  const clearAllFilters = () => {
-    const emptyFilters: FilterOptions = {
-      accessType: null,
-      docsCountFilter: {
-        operator: null,
-        value: null,
-      },
-      lastStatus: null,
-    };
-
-    setFilterOptions(emptyFilters);
-
-    // Reset the FilterComponent's internal state
-    if (filterComponentRef.current) {
-      filterComponentRef.current.resetFilters();
-    }
-  };
-
   // Check if filters are active
   const hasActiveFilters = useMemo(() => {
     return (
@@ -457,6 +531,7 @@ export function CCPairIndexingStatusTable({
       JSON.stringify(newConnectorsToggled)
     );
   };
+
   const toggleSources = () => {
     const connectors = sortedSources.reduce(
       (acc, source) => {
@@ -613,7 +688,9 @@ export function CCPairIndexingStatusTable({
                 .includes(searchTerm.toLowerCase());
 
               const statuses =
-                filteredGroupedStatuses[source] || groupedStatuses[source];
+                filteredGroupedStatuses[source] ??
+                groupedStatuses[source] ??
+                [];
 
               const matchingConnectors = statuses.filter((status) =>
                 (status.name || "")
@@ -621,13 +698,32 @@ export function CCPairIndexingStatusTable({
                   .includes(searchTerm.toLowerCase())
               );
 
-              if (sourceMatches || matchingConnectors.length > 0) {
+              const federatedForSource = federatedConnectors.filter(
+                (fc) => federatedSourceToRegularSource(fc.source) === source
+              );
+
+              const hasFederatedMatches = federatedForSource.some((fc) =>
+                fc.name.toLowerCase().includes(searchTerm.toLowerCase())
+              );
+
+              if (
+                sourceMatches ||
+                matchingConnectors.length > 0 ||
+                hasFederatedMatches
+              ) {
+                const summaryForSource = groupSummaries[source] ?? {
+                  count: federatedForSource.length,
+                  active: federatedForSource.length, // All federated connectors are considered active
+                  public: 0,
+                  totalDocsIndexed: 0,
+                  errors: 0,
+                };
                 return (
                   <React.Fragment key={ind}>
                     <br className="mt-4" />
                     <SummaryRow
                       source={source}
-                      summary={groupSummaries[source]}
+                      summary={summaryForSource}
                       isOpen={connectorsToggled[source] || false}
                       onToggle={() => toggleSource(source)}
                     />
@@ -638,7 +734,7 @@ export function CCPairIndexingStatusTable({
                           <TableHead>Last Indexed</TableHead>
                           <TableHead>Status</TableHead>
                           {isPaidEnterpriseFeaturesEnabled && (
-                            <TableHead>Permissions</TableHead>
+                            <TableHead>Permissions / Access</TableHead>
                           )}
                           <TableHead>Total Docs</TableHead>
                           <TableHead></TableHead>
@@ -656,6 +752,21 @@ export function CCPairIndexingStatusTable({
                             />
                           )
                         )}
+
+                        {/* Add federated connectors belonging to this source */}
+                        {(sourceMatches
+                          ? federatedForSource
+                          : federatedForSource.filter((fc) =>
+                              fc.name
+                                .toLowerCase()
+                                .includes(searchTerm.toLowerCase())
+                            )
+                        ).map((federatedConnector) => (
+                          <FederatedConnectorRow
+                            key={`federated-${federatedConnector.id}`}
+                            federatedConnector={federatedConnector}
+                          />
+                        ))}
                       </>
                     )}
                   </React.Fragment>

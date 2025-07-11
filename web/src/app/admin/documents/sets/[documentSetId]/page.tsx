@@ -33,7 +33,11 @@ function Main({ documentSetId }: { documentSetId: number }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
 
   if (isDocumentSetsLoading || isCCPairsLoading || userGroupsIsLoading) {
-    return <ThreeDotsLoader />;
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <ThreeDotsLoader />
+      </div>
+    );
   }
 
   if (documentSetsError || !documentSets) {
@@ -98,7 +102,7 @@ export default function Page(props: {
   const documentSetId = parseInt(params.documentSetId);
 
   return (
-    <div>
+    <div className="container mx-auto">
       <BackButton />
 
       <Main documentSetId={documentSetId} />

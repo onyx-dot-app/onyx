@@ -364,8 +364,12 @@ class ConnectorFailure(BaseModel):
 
 
 class OnyxMetadata(BaseModel):
+    # Note that doc_id cannot be overriden here as it may cause issues
+    # with the display functionalities in the UI. Ask @chris if clarification is needed.
+    source_type: DocumentSource | None = None
     link: str | None = None
     file_display_name: str | None = None
     primary_owners: list[BasicExpertInfo] | None = None
     secondary_owners: list[BasicExpertInfo] | None = None
     doc_updated_at: datetime | None = None
+    title: str | None = None

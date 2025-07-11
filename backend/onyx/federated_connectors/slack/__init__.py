@@ -1,0 +1,1 @@
+# Slack federated connector module

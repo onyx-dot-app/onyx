@@ -80,6 +80,7 @@ def upgrade() -> None:
         )
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_config CASCADE")
     op.create_table(
         "kg_config",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False, index=True),
@@ -123,6 +124,7 @@ def upgrade() -> None:
         ],
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_entity_type CASCADE")
     op.create_table(
         "kg_entity_type",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
@@ -156,6 +158,7 @@ def upgrade() -> None:
         ),
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship_type CASCADE")
     # Create KGRelationshipType table
     op.create_table(
         "kg_relationship_type",
@@ -194,6 +197,7 @@ def upgrade() -> None:
         ),
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship_type_extraction_staging CASCADE")
     # Create KGRelationshipTypeExtractionStaging table
     op.create_table(
         "kg_relationship_type_extraction_staging",
@@ -226,6 +230,8 @@ def upgrade() -> None:
             ["target_entity_type_id_name"], ["kg_entity_type.id_name"]
         ),
     )
+
+    op.execute("DROP TABLE IF EXISTS kg_entity CASCADE")
 
     # Create KGEntity table
     op.create_table(
@@ -281,6 +287,7 @@ def upgrade() -> None:
         "ix_entity_name_search", "kg_entity", ["name", "entity_type_id_name"]
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_entity_extraction_staging CASCADE")
     # Create KGEntityExtractionStaging table
     op.create_table(
         "kg_entity_extraction_staging",
@@ -330,6 +337,7 @@ def upgrade() -> None:
         ["name", "entity_type_id_name"],
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship CASCADE")
     # Create KGRelationship table
     op.create_table(
         "kg_relationship",
@@ -371,6 +379,7 @@ def upgrade() -> None:
         "ix_kg_relationship_nodes", "kg_relationship", ["source_node", "target_node"]
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_relationship_extraction_staging CASCADE")
     # Create KGRelationshipExtractionStaging table
     op.create_table(
         "kg_relationship_extraction_staging",
@@ -414,6 +423,7 @@ def upgrade() -> None:
         ["source_node", "target_node"],
     )
 
+    op.execute("DROP TABLE IF EXISTS kg_term CASCADE")
     # Create KGTerm table
     op.create_table(
         "kg_term",
@@ -467,11 +477,11 @@ def upgrade() -> None:
 
     # Create GIN index for clustering and normalization
     op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
+        "CREATE INDEX IF NOT EXISTS idx_kg_entity_clustering_trigrams "
         f"ON kg_entity USING GIN (name {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.gin_trgm_ops)"
     )
     op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_normalization_trigrams "
+        "CREATE INDEX IF NOT EXISTS idx_kg_entity_normalization_trigrams "
         "ON kg_entity USING GIN (name_trigrams)"
     )
 
@@ -625,9 +635,8 @@ def downgrade() -> None:
         op.execute(f"DROP FUNCTION IF EXISTS {function}()")
 
     # Drop index
-    op.execute("COMMIT")  # Commit to allow CONCURRENTLY
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_clustering_trigrams")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_normalization_trigrams")
+    op.execute("DROP INDEX IF EXISTS idx_kg_entity_clustering_trigrams")
+    op.execute("DROP INDEX IF EXISTS idx_kg_entity_normalization_trigrams")
 
     # Drop tables in reverse order of creation to handle dependencies
     op.drop_table("kg_term")

@@ -175,6 +175,20 @@ export interface ConnectorIndexingStatus<
   docs_indexed: number;
 }
 
+export interface FederatedConnectorDetail {
+  id: number;
+  source: ValidSources.FederatedSlack;
+  name: string;
+  credentials: Record<string, any>;
+  oauth_token_exists: boolean;
+  oauth_token_expires_at: string | null;
+  document_sets: Array<{
+    id: number;
+    name: string;
+    entities: Record<string, any>;
+  }>;
+}
+
 export interface OAuthPrepareAuthorizationResponse {
   url: string;
 }
@@ -243,6 +257,18 @@ export interface CCPairDescriptor<ConnectorType, CredentialType> {
   access_type: AccessType;
 }
 
+export interface FederatedConnectorConfig {
+  federated_connector_id: number;
+  entities: Record<string, any>;
+}
+
+export interface FederatedConnectorDescriptor {
+  id: number;
+  name: string;
+  source: string;
+  entities: Record<string, any>;
+}
+
 export interface DocumentSet {
   id: number;
   name: string;
@@ -252,6 +278,7 @@ export interface DocumentSet {
   is_public: boolean;
   users: string[];
   groups: number[];
+  federated_connectors: FederatedConnectorDescriptor[];
 }
 
 export interface Tag {
@@ -392,7 +419,19 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+
+  // Federated Connectors
+  FederatedSlack = "federated_slack",
 }
+
+export const federatedSourceToRegularSource = (
+  maybeFederatedSource: ValidSources
+): ValidSources => {
+  if (maybeFederatedSource === ValidSources.FederatedSlack) {
+    return ValidSources.Slack;
+  }
+  return maybeFederatedSource;
+};
 
 export const validAutoSyncSources = [
   ValidSources.Confluence,
@@ -407,7 +446,9 @@ export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
 
 export type ConfigurableSources = Exclude<
   ValidSources,
-  ValidSources.NotApplicable | ValidSources.IngestionApi
+  | ValidSources.NotApplicable
+  | ValidSources.IngestionApi
+  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [
@@ -418,3 +459,27 @@ export const oauthSupportedSources: ConfigurableSources[] = [
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+
+// Federated Connector Types
+export interface CredentialFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+}
+
+export interface CredentialSchemaResponse {
+  credentials: Record<string, CredentialFieldSpec>;
+}
+
+export interface FederatedConnectorCreateRequest {
+  source: string;
+  credentials: Record<string, any>;
+}
+
+export interface FederatedConnectorCreateResponse {
+  id: number;
+  source: string;
+}

@@ -24,11 +24,15 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FiTrash2 } from "react-icons/fi";
+import { FiTrash2, FiExternalLink } from "react-icons/fi";
 import { deleteAllChatSessions } from "../lib";
 import { useChatContext } from "@/components/context/ChatContext";
+import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
+import { SourceIcon } from "@/components/SourceIcon";
+import { ValidSources, CCPairBasicInfo } from "@/lib/types";
+import { getSourceMetadata } from "@/lib/sources";
 
-type SettingsSection = "settings" | "password";
+type SettingsSection = "settings" | "password" | "connectors";
 
 export function UserSettingsModal({
   setPopup,
@@ -36,12 +40,18 @@ export function UserSettingsModal({
   onClose,
   setCurrentLlm,
   defaultModel,
+  ccPairs,
+  federatedConnectors,
+  refetchFederatedConnectors,
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
   setCurrentLlm?: (newLlm: LlmDescriptor) => void;
   onClose: () => void;
   defaultModel: string | null;
+  ccPairs?: CCPairBasicInfo[];
+  federatedConnectors?: FederatedConnectorOAuthStatus[];
+  refetchFederatedConnectors?: () => void;
 }) {
   const {
     refreshUser,
@@ -64,6 +74,11 @@ export function UserSettingsModal({
     useState<SettingsSection>("settings");
   const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState<number | null>(null);
+
+  const hasConnectors =
+    (ccPairs && ccPairs.length > 0) ||
+    (federatedConnectors && federatedConnectors.length > 0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -165,6 +180,39 @@ export function UserSettingsModal({
     }
   };
 
+  const handleConnectOAuth = (authorizeUrl: string) => {
+    // Redirect to OAuth URL in the same window
+    router.push(authorizeUrl);
+  };
+
+  const handleDisconnectOAuth = async (connectorId: number) => {
+    setIsDisconnecting(connectorId);
+    try {
+      const response = await fetch(`/api/federated/${connectorId}/oauth`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setPopup({
+          message: "Disconnected successfully",
+          type: "success",
+        });
+        if (refetchFederatedConnectors) {
+          refetchFederatedConnectors();
+        }
+      } else {
+        throw new Error("Failed to disconnect");
+      }
+    } catch (error) {
+      setPopup({
+        message: "Failed to disconnect",
+        type: "error",
+      });
+    } finally {
+      setIsDisconnecting(null);
+    }
+  };
+
   const settings = useContext(SettingsContext);
   const autoScroll = settings?.settings?.auto_scroll;
 
@@ -245,15 +293,15 @@ export function UserSettingsModal({
     <Modal
       onOutsideClick={onClose}
       width={`rounded-lg w-full ${
-        showPasswordSection ? "max-w-3xl" : "max-w-xl"
+        showPasswordSection || hasConnectors ? "max-w-3xl" : "max-w-xl"
       }`}
     >
-      <div className="p-2">
+      <div className="p-2 max-h-[80vh] flex flex-col">
         <h2 className="text-xl font-bold mb-4">User Settings</h2>
         <Separator className="mb-6" />
-        <div className="flex">
-          {showPasswordSection && (
-            <div className="w-1/4 pr-4">
+        <div className="flex flex-1 min-h-0">
+          {(showPasswordSection || hasConnectors) && (
+            <div className="w-1/4 pr-4 flex-shrink-0">
               <nav>
                 <ul className="space-y-2">
                   <li>
@@ -268,23 +316,45 @@ export function UserSettingsModal({
                       Settings
                     </button>
                   </li>
-                  <li>
-                    <button
-                      className={`w-full text-left py-2 px-4 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
-                        activeSection === "password"
-                          ? "bg-neutral-100 dark:bg-neutral-700 font-semibold"
-                          : ""
-                      }`}
-                      onClick={() => setActiveSection("password")}
-                    >
-                      Password
-                    </button>
-                  </li>
+                  {showPasswordSection && (
+                    <li>
+                      <button
+                        className={`w-full text-left py-2 px-4 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+                          activeSection === "password"
+                            ? "bg-neutral-100 dark:bg-neutral-700 font-semibold"
+                            : ""
+                        }`}
+                        onClick={() => setActiveSection("password")}
+                      >
+                        Password
+                      </button>
+                    </li>
+                  )}
+                  {hasConnectors && (
+                    <li>
+                      <button
+                        className={`w-full text-base text-left py-2 px-4 rounded hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+                          activeSection === "connectors"
+                            ? "bg-neutral-100 dark:bg-neutral-700 font-semibold"
+                            : ""
+                        }`}
+                        onClick={() => setActiveSection("connectors")}
+                      >
+                        Connectors
+                      </button>
+                    </li>
+                  )}
                 </ul>
               </nav>
             </div>
           )}
-          <div className={`${showPasswordSection ? "w-3/4 pl-4" : "w-full"}`}>
+          <div
+            className={`${
+              showPasswordSection || hasConnectors
+                ? "w-3/4 pl-4 pr-3"
+                : "w-full pr-3"
+            } overflow-y-scroll default-scrollbar`}
+          >
             {activeSection === "settings" && (
               <div className="space-y-6">
                 <div>
@@ -486,6 +556,194 @@ export function UserSettingsModal({
                     {isLoading ? "Changing..." : "Change Password"}
                   </Button>
                 </form>
+              </div>
+            )}
+            {activeSection === "connectors" && (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium mb-4">
+                    Connected Services
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Manage your connected services to search across all your
+                    content.
+                  </p>
+
+                  {/* Indexed Connectors Section */}
+                  {ccPairs && ccPairs.length > 0 && (
+                    <div className="space-y-3 mb-6">
+                      <h4 className="text-md font-medium text-muted-foreground">
+                        Indexed Connectors
+                      </h4>
+                      {(() => {
+                        // Group connectors by source
+                        const groupedConnectors = ccPairs.reduce(
+                          (acc, ccPair) => {
+                            const source = ccPair.source;
+                            if (!acc[source]) {
+                              acc[source] = {
+                                source,
+                                count: 0,
+                                hasSuccessfulRun: false,
+                              };
+                            }
+                            acc[source]!.count++;
+                            if (ccPair.has_successful_run) {
+                              acc[source]!.hasSuccessfulRun = true;
+                            }
+                            return acc;
+                          },
+                          {} as Record<
+                            string,
+                            {
+                              source: ValidSources;
+                              count: number;
+                              hasSuccessfulRun: boolean;
+                            }
+                          >
+                        );
+
+                        // Helper function to format source names
+                        const formatSourceName = (source: string) => {
+                          return source
+                            .split("_")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        return Object.values(groupedConnectors).map((group) => (
+                          <div
+                            key={group.source}
+                            className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30"
+                          >
+                            <div className="flex items-center gap-3">
+                              <SourceIcon
+                                sourceType={group.source}
+                                iconSize={24}
+                              />
+                              <div>
+                                <p className="font-medium">
+                                  {formatSourceName(group.source)}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {group.count > 1
+                                    ? `${group.count} connectors`
+                                    : "Connected"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-sm text-muted-foreground font-medium">
+                              Active
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Federated Search Section */}
+                  {federatedConnectors && federatedConnectors.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-md font-medium text-muted-foreground">
+                        Federated Connectors
+                      </h4>
+                      {(() => {
+                        // Helper function to format source names
+                        const formatSourceName = (source: string) => {
+                          return source
+                            .split("_")
+                            .map(
+                              (word) =>
+                                word.charAt(0).toUpperCase() + word.slice(1)
+                            )
+                            .join(" ");
+                        };
+
+                        return federatedConnectors.map((connector) => {
+                          const sourceMetadata = getSourceMetadata(
+                            connector.source as ValidSources
+                          );
+                          return (
+                            <div
+                              key={connector.federated_connector_id}
+                              className="flex items-center justify-between p-4 rounded-lg border border-border"
+                            >
+                              <div className="flex items-center gap-3">
+                                <SourceIcon
+                                  sourceType={sourceMetadata.internalName}
+                                  iconSize={24}
+                                />
+                                <div>
+                                  <p className="font-medium">
+                                    {formatSourceName(
+                                      sourceMetadata.displayName
+                                    )}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {connector.has_oauth_token
+                                      ? "Connected"
+                                      : "Not connected"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div>
+                                {connector.has_oauth_token ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleDisconnectOAuth(
+                                        connector.federated_connector_id
+                                      )
+                                    }
+                                    disabled={
+                                      isDisconnecting ===
+                                      connector.federated_connector_id
+                                    }
+                                  >
+                                    {isDisconnecting ===
+                                    connector.federated_connector_id
+                                      ? "Disconnecting..."
+                                      : "Disconnect"}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      if (connector.authorize_url) {
+                                        handleConnectOAuth(
+                                          connector.authorize_url
+                                        );
+                                      }
+                                    }}
+                                    disabled={!connector.authorize_url}
+                                  >
+                                    <FiExternalLink
+                                      className="mr-2"
+                                      size={14}
+                                    />
+                                    Connect
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+
+                  {!hasConnectors && (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">
+                        No connectors available.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

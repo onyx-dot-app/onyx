@@ -8,12 +8,16 @@ from office365.graph_client import GraphClient  # type: ignore
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.channels.channel import ConversationMember  # type: ignore
 
+from onyx.access.models import ExternalAccess
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.teams.models import Message
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+_PUBLIC_MEMBERSHIP_TYPE = "standard"  # public teams channel
 
 
 def _retry(
@@ -62,6 +66,34 @@ def _get_next_url(
         )
 
     return next_url.removeprefix(graph_client.service_root_url()).removeprefix("/")
+
+
+def _get_or_fetch_email(
+    graph_client: GraphClient,
+    member: ConversationMember,
+) -> str | None:
+    if email := member.properties.get("email"):
+        return email
+
+    user_id = member.properties.get("userId")
+    if not user_id:
+        logger.warn(f"No user-id found for this member; {member=}")
+        return None
+
+    json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
+    email = json_data.get("userPrincipalName")
+
+    if not isinstance(email, str):
+        logger.warn(f"Expected email to be of type str, instead got {email=}")
+        return None
+
+    return email
+
+
+def _is_channel_public(channel: Channel) -> bool:
+    return (
+        channel.membership_type and channel.membership_type == _PUBLIC_MEMBERSHIP_TYPE
+    )
 
 
 def fetch_messages(
@@ -115,28 +147,6 @@ def fetch_replies(
         )
 
 
-def _get_or_fetch_email(
-    graph_client: GraphClient,
-    member: ConversationMember,
-) -> str | None:
-    if email := member.properties.get("email"):
-        return email
-
-    user_id = member.properties.get("userId")
-    if not user_id:
-        logger.warn(f"No user-id found for this member; {member=}")
-        return None
-
-    json_data = _retry(graph_client=graph_client, request_url=f"users/{user_id}")
-    email = json_data.get("userPrincipalName")
-
-    if not isinstance(email, str):
-        logger.warn(f"Expected email to be of type str, instead got {email=}")
-        return None
-
-    return email
-
-
 def fetch_expert_infos(
     graph_client: GraphClient, channel: Channel
 ) -> list[BasicExpertInfo]:
@@ -164,3 +174,27 @@ def fetch_expert_infos(
         )
 
     return expert_infos
+
+
+def fetch_external_access(
+    graph_client: GraphClient,
+    channel: Channel,
+    expert_infos: list[BasicExpertInfo] | None = None,
+) -> ExternalAccess:
+    is_public = _is_channel_public(channel=channel)
+
+    if is_public:
+        return ExternalAccess.public()
+
+    expert_infos = (
+        expert_infos
+        if expert_infos is not None
+        else fetch_expert_infos(graph_client=graph_client, channel=channel)
+    )
+    emails = {expert_info.email for expert_info in expert_infos if expert_info.email}
+
+    return ExternalAccess(
+        external_user_emails=emails,
+        external_user_group_ids=set(),
+        is_public=is_public,
+    )

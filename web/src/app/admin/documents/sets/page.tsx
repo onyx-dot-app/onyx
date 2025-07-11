@@ -39,8 +39,67 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import CreateButton from "@/components/ui/createButton";
+import { SourceIcon } from "@/components/SourceIcon";
+import Link from "next/link";
 
 const numToDisplay = 50;
+
+// Component to display federated connectors with consistent styling
+const FederatedConnectorTitle = ({
+  federatedConnector,
+  showMetadata = true,
+  isLink = true,
+}: {
+  federatedConnector: any;
+  showMetadata?: boolean;
+  isLink?: boolean;
+}) => {
+  const sourceType = federatedConnector.source.replace(/^federated_/, "");
+
+  const mainSectionClassName = "text-blue-500 dark:text-blue-100 flex w-fit";
+  const mainDisplay = (
+    <>
+      <SourceIcon sourceType={sourceType as any} iconSize={16} />
+      <div className="ml-1 my-auto text-xs font-medium truncate">
+        {federatedConnector.name}
+      </div>
+      <Badge variant="outline" className="text-xs ml-2">
+        Federated
+      </Badge>
+    </>
+  );
+
+  return (
+    <div className="my-auto max-w-full">
+      {isLink ? (
+        <Link
+          className={mainSectionClassName}
+          href={`/admin/federated/${federatedConnector.id}`}
+        >
+          {mainDisplay}
+        </Link>
+      ) : (
+        <div className={mainSectionClassName}>{mainDisplay}</div>
+      )}
+      {showMetadata && Object.keys(federatedConnector.entities).length > 0 && (
+        <div className="text-[10px] mt-0.5 text-gray-600 dark:text-gray-400">
+          {Object.entries(federatedConnector.entities)
+            .filter(
+              ([_, value]) =>
+                value &&
+                (Array.isArray(value) ? value.length > 0 : String(value).trim())
+            )
+            .map(([key, value]) => (
+              <div key={key} className="truncate">
+                <i>{key}:</i>{" "}
+                {Array.isArray(value) ? value.join(", ") : String(value)}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const EditRow = ({
   documentSet,
@@ -162,6 +221,7 @@ const DocumentSetTable = ({
                   </TableCell>
                   <TableCell>
                     <div>
+                      {/* Regular Connectors */}
                       {documentSet.cc_pair_descriptors.map(
                         (ccPairDescriptor, ind) => {
                           return (
@@ -184,6 +244,37 @@ const DocumentSetTable = ({
                           );
                         }
                       )}
+
+                      {/* Federated Connectors */}
+                      {documentSet.federated_connectors &&
+                        documentSet.federated_connectors.length > 0 && (
+                          <>
+                            {documentSet.cc_pair_descriptors.length > 0 && (
+                              <div className="mb-3" />
+                            )}
+                            {documentSet.federated_connectors.map(
+                              (federatedConnector, ind) => {
+                                return (
+                                  <div
+                                    className={
+                                      ind !==
+                                      documentSet.federated_connectors.length -
+                                        1
+                                        ? "mb-3"
+                                        : ""
+                                    }
+                                    key={`federated-${federatedConnector.id}`}
+                                  >
+                                    <FederatedConnectorTitle
+                                      federatedConnector={federatedConnector}
+                                      showMetadata={true}
+                                    />
+                                  </div>
+                                );
+                              }
+                            )}
+                          </>
+                        )}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -191,7 +282,9 @@ const DocumentSetTable = ({
                       <Badge variant="success" icon={FiCheckCircle}>
                         Up to Date
                       </Badge>
-                    ) : documentSet.cc_pair_descriptors.length > 0 ? (
+                    ) : documentSet.cc_pair_descriptors.length > 0 ||
+                      (documentSet.federated_connectors &&
+                        documentSet.federated_connectors.length > 0) ? (
                       <Badge variant="in_progress" icon={FiClock}>
                         Syncing
                       </Badge>
@@ -281,7 +374,11 @@ const Main = () => {
   } = useDocumentSets(true);
 
   if (isDocumentSetsLoading || isEditableDocumentSetsLoading) {
-    return <ThreeDotsLoader />;
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <ThreeDotsLoader />
+      </div>
+    );
   }
 
   if (documentSetsError || !documentSets) {
@@ -308,9 +405,6 @@ const Main = () => {
           href="/admin/documents/sets/new"
           text="New Document Set"
         />
-        {/* <Link href="/admin/documents/sets/new">
-          <Button variant="navigate">New Document Set</Button>
-        </Link> */}
       </div>
 
       {documentSets.length > 0 && (

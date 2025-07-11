@@ -292,7 +292,7 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={{
-        ...createConnectorInitialValues(connector, currentCredential),
+        ...createConnectorInitialValues(connector),
         ...Object.fromEntries(
           connectorConfigs[connector].advanced_values.map((field) => [
             field.name,
@@ -511,6 +511,7 @@ export default function AddConnector({
               includeDivider={false}
               icon={<SourceIcon iconSize={32} sourceType={connector} />}
               title={displayName}
+              farRightElement={undefined}
             />
 
             {formStep == 0 && (
@@ -523,7 +524,7 @@ export default function AddConnector({
                   <>
                     <ModifyCredential
                       showIfEmpty
-                      source={connector}
+                      accessType={formikProps.values.access_type}
                       defaultedCredential={currentCredential!}
                       credentials={credentials}
                       editableCredentials={editableCredentials}
@@ -614,6 +615,7 @@ export default function AddConnector({
                                 close
                                 refresh={refresh}
                                 sourceType={connector}
+                                accessType={formikProps.values.access_type}
                                 setPopup={setPopup}
                                 onSwitch={onSwap}
                                 onClose={() =>

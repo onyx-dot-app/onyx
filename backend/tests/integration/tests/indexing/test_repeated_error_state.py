@@ -86,7 +86,7 @@ def test_repeated_error_state_detection_and_recovery(
             for ia in index_attempts_page.items
             if ia.status and ia.status.is_terminal()
         ]
-        if len(index_attempts) == NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE:
+        if len(index_attempts) >= NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE:
             break
 
         if time.monotonic() - start_time > 180:

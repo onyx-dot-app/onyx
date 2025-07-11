@@ -29,11 +29,7 @@ import { TooltipProvider } from "@radix-ui/react-tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { SearchMultiSelectDropdown } from "@/components/Dropdown";
-import { fetchSlackChannels } from "../lib";
 import { Badge } from "@/components/ui/badge";
-import useSWR from "swr";
-import { ThreeDotsLoader } from "@/components/Loading";
 import {
   Accordion,
   AccordionContent,
@@ -171,48 +167,6 @@ export function SlackChannelConfigFormFields({
     );
   }, [documentSets]);
 
-  const {
-    data: channelOptions,
-    error,
-    isLoading,
-  } = useSWR(
-    `/api/manage/admin/slack-app/bots/${slack_bot_id}/channels`,
-    async () => {
-      const channels = await fetchSlackChannels(slack_bot_id);
-      return channels.map((channel: any) => ({
-        name: channel.name,
-        value: channel.id,
-      }));
-    },
-    {
-      shouldRetryOnError: false, // don't spam the Slack API
-      dedupingInterval: 60000, // Limit re-fetching to once per minute
-    }
-  );
-
-  // Define the helper text based on the state
-  const channelHelperText = useMemo(() => {
-    if (isLoading || error) {
-      // No helper text needed during loading or if there's an error
-      // (error message is shown separately)
-      return null;
-    }
-    if (!channelOptions || channelOptions.length === 0) {
-      return "No channels found. You can type any channel name in directly.";
-    }
-
-    let helpText = `Select a channel from the dropdown list or type any channel name in directly.`;
-    if (channelOptions.length >= 500) {
-      return `${helpText} (Retrieved the first ${channelOptions.length} channels.)`;
-    }
-
-    return helpText;
-  }, [isLoading, error, channelOptions]);
-
-  if (isLoading) {
-    return <ThreeDotsLoader />;
-  }
-
   return (
     <>
       <div className="w-full">
@@ -241,48 +195,12 @@ export function SlackChannelConfigFormFields({
         )}
         {!isDefault && (
           <>
-            <label
-              htmlFor="channel_name"
-              className="block  text-text font-medium text-base mb-2"
-            >
-              Select A Slack Channel:
-            </label>{" "}
-            {error ? (
-              <div>
-                <div className="text-red-600 text-sm mb-4">
-                  {error.message || "Unable to fetch Slack channels."}
-                  {" Please enter the channel name manually."}
-                </div>
-                <TextFormField
-                  name="channel_name"
-                  label="Channel Name"
-                  placeholder="Enter channel name"
-                />
-              </div>
-            ) : (
-              <>
-                <Field name="channel_name">
-                  {({ field, form }: { field: any; form: any }) => (
-                    <SearchMultiSelectDropdown
-                      options={channelOptions || []}
-                      onSelect={(selected) => {
-                        form.setFieldValue("channel_name", selected.name);
-                      }}
-                      initialSearchTerm={field.value}
-                      onSearchTermChange={(term) => {
-                        form.setFieldValue("channel_name", term);
-                      }}
-                      allowCustomValues={true}
-                    />
-                  )}
-                </Field>
-                {channelHelperText && (
-                  <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
-                    {channelHelperText}
-                  </p>
-                )}
-              </>
-            )}
+            <TextFormField
+              name="channel_name"
+              label="Slack Channel Name"
+              placeholder="Enter channel name (e.g., general, support)"
+              subtext="Enter the name of the Slack channel (without the # symbol)"
+            />
           </>
         )}
         <div className="space-y-2 mt-4">

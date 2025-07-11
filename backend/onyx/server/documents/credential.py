@@ -104,6 +104,7 @@ def swap_credentials_for_connector(
     validate_ccpair_for_user(
         credential_swap_req.connector_id,
         credential_swap_req.new_credential_id,
+        credential_swap_req.access_type,
         db_session,
     )
 

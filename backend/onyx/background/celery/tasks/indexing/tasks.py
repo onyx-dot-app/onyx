@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
+from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
 from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_state
@@ -84,6 +85,24 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
+
+
+def _get_fence_validation_block_expiration() -> int:
+    """
+    Compute the expiration time for the fence validation block signal.
+    Base expiration is 60 seconds, multiplied by the beat multiplier only in MULTI_TENANT mode.
+    """
+    base_expiration = 60  # seconds
+
+    if not MULTI_TENANT:
+        return base_expiration
+
+    try:
+        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+    except Exception:
+        beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
+
+    return int(base_expiration * beat_multiplier)
 
 
 class IndexingWatchdogTerminalStatus(str, Enum):
@@ -630,7 +649,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             except Exception:
                 task_logger.exception("Exception while validating indexing fences")
 
-            redis_client.set(OnyxRedisSignals.BLOCK_VALIDATE_INDEXING_FENCES, 1, ex=60)
+            redis_client.set(
+                OnyxRedisSignals.BLOCK_VALIDATE_INDEXING_FENCES,
+                1,
+                ex=_get_fence_validation_block_expiration(),
+            )
 
         # 3/3: FINALIZE
         lock_beat.reacquire()

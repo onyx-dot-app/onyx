@@ -40,8 +40,28 @@ def _get_slim_doc_generator(
     )
 
 
+def _merge_permissions_lists(
+    permission_lists: list[list[GoogleDrivePermission]],
+) -> list[GoogleDrivePermission]:
+    """
+    Merge a list of permission lists into a single list of permissions.
+    """
+    seen_permission_ids: set[str] = set()
+    merged_permissions: list[GoogleDrivePermission] = []
+    for permission_list in permission_lists:
+        for permission in permission_list:
+            if permission.id not in seen_permission_ids:
+                merged_permissions.append(permission)
+                seen_permission_ids.add(permission.id)
+
+    return merged_permissions
+
+
 def get_external_access_for_raw_gdrive_file(
-    file: GoogleDriveFileType, company_domain: str, drive_service: GoogleDriveService
+    file: GoogleDriveFileType,
+    company_domain: str,
+    retriever_drive_service: GoogleDriveService | None,
+    admin_drive_service: GoogleDriveService,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
@@ -62,11 +82,28 @@ def get_external_access_for_raw_gdrive_file(
             GoogleDrivePermission.from_drive_permission(p) for p in permissions
         ]
     elif permission_ids:
-        permissions_list = get_permissions_by_ids(
-            drive_service=drive_service,
-            doc_id=doc_id,
-            permission_ids=permission_ids,
+
+        def _get_permissions(
+            drive_service: GoogleDriveService,
+        ) -> list[GoogleDrivePermission]:
+            return get_permissions_by_ids(
+                drive_service=drive_service,
+                doc_id=doc_id,
+                permission_ids=permission_ids,
+            )
+
+        permissions_list = _get_permissions(
+            retriever_drive_service or admin_drive_service
         )
+        if len(permissions_list) != len(permission_ids) and retriever_drive_service:
+            logger.warning(
+                f"Failed to get all permissions for file {doc_id} with retriever service, "
+                "trying admin service"
+            )
+            backup_permissions_list = _get_permissions(admin_drive_service)
+            permissions_list = _merge_permissions_lists(
+                [permissions_list, backup_permissions_list]
+            )
 
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()

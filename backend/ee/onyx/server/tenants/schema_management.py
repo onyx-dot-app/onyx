@@ -34,7 +34,7 @@ def run_alembic_migrations(schema_name: str) -> None:
 
         # Mimic command-line options by adding 'cmd_opts' to the config
         alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
-        alembic_cfg.cmd_opts.x = [f"schema={schema_name}"]  # type: ignore
+        alembic_cfg.cmd_opts.x = [f"schemas={schema_name}"]  # type: ignore
 
         # Run migrations programmatically
         command.upgrade(alembic_cfg, "head")

@@ -203,7 +203,9 @@ class GoogleDriveConnector(
         specific_requests_made = False
         if bool(shared_drive_urls) or bool(my_drive_emails) or bool(shared_folder_urls):
             specific_requests_made = True
+        self.specific_requests_made = specific_requests_made
 
+        # NOTE: potentially modified in load_credentials if using service account
         self.include_files_shared_with_me = (
             False if specific_requests_made else include_files_shared_with_me
         )
@@ -283,6 +285,16 @@ class GoogleDriveConnector(
             credentials=credentials,
             source=DocumentSource.GOOGLE_DRIVE,
         )
+
+        # Service account connectors don't have a specific setting determining whether
+        # to include "shared with me" for each user, so we default to true unless the connector
+        # is in specific folders/drives mode. Note that shared files are only picked up during
+        # the My Drive stage, so this does nothing if the connector is set to only index shared drives.
+        if (
+            isinstance(self._creds, ServiceAccountCredentials)
+            and not self.specific_requests_made
+        ):
+            self.include_files_shared_with_me = True
 
         self._creds_dict = new_creds_dict
 
