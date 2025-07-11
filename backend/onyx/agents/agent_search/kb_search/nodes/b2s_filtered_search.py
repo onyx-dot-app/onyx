@@ -7,9 +7,11 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
+    stream_kg_search_close_step_answer,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_answer_explicit,
 )
 from onyx.agents.agent_search.kb_search.graph_utils import write_custom_event
 from onyx.agents.agent_search.kb_search.ops import research
@@ -165,11 +167,11 @@ def filtered_search(
 
     step_answer = "Filtered search is complete."
 
-    stream_write_step_answer_explicit(
+    stream_write_kg_search_answer_explicit(
         writer, answer=step_answer, level=0, step_nr=_KG_STEP_NR
     )
 
-    stream_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
+    stream_kg_search_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
 
     return ConsolidatedResearchUpdate(
         consolidated_research_object_results_str=filtered_search_answer,

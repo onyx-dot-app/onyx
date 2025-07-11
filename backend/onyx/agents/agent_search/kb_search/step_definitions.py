@@ -1,6 +1,6 @@
 from onyx.agents.agent_search.kb_search.models import KGSteps
 
-STEP_DESCRIPTIONS: dict[int, KGSteps] = {
+KG_SEARCH_STEP_DESCRIPTIONS: dict[int, KGSteps] = {
     1: KGSteps(
         description="Analyzing the question...",
         activities=[

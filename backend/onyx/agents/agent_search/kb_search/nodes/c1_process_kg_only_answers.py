@@ -4,9 +4,11 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
+    stream_kg_search_close_step_answer,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_answer_explicit,
 )
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResultsDataUpdate
@@ -99,9 +101,11 @@ def process_kg_only_answers(
         "No further research is needed, the answer is derived from the knowledge graph."
     )
 
-    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
+    stream_write_kg_search_answer_explicit(
+        writer, step_nr=_KG_STEP_NR, answer=step_answer
+    )
 
-    stream_close_step_answer(writer, _KG_STEP_NR)
+    stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     return ResultsDataUpdate(
         query_results_data_str=query_results_data_str,

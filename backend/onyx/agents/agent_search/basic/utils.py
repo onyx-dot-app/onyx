@@ -63,8 +63,5 @@ def process_llm_stream(
 
     logger.debug(f"Full answer: {full_answer}")
     return BasicSearchProcessedStreamResults(
-        ai_message_chunk=cast(AIMessageChunk, tool_call_chunk),
-        full_answer=full_answer,
-        cited_references=[],
-        retrieved_documents=[],
+        ai_message_chunk=cast(AIMessageChunk, tool_call_chunk), full_answer=full_answer
     )

@@ -14,10 +14,12 @@ logger = setup_logger()
 
 def closer(state: MainState, config: RunnableConfig) -> FinalUpdate:
     """
-    LangGraph node to start the agentic search process.
+    LangGraph node to close the agentic search process and finalize the answer.
     """
 
     node_start_time = datetime.now()
+    # TODO: generate final answer using all the previous steps
+    # (right now, answers from each step are concatenated onto each other)
 
     return FinalUpdate(
         log_messages=[

@@ -62,7 +62,6 @@ def search(
     return AnswerUpdate(
         answers=[full_answer],
         iteration_answers={iteration_nr: {0: {"Q": search_query, "A": full_answer}}},
-        cited_references=[],
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
