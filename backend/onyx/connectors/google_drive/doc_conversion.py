@@ -142,17 +142,15 @@ def _download_and_extract_sections_basic(
         # Store images for later processing
         sections: list[TextSection | ImageSection] = []
         try:
-            with get_session_with_current_tenant() as db_session:
-                section, embedded_id = store_image_and_create_section(
-                    db_session=db_session,
-                    image_data=response_call(),
-                    file_id=file_id,
-                    display_name=file_name,
-                    media_type=mime_type,
-                    file_origin=FileOrigin.CONNECTOR,
-                    link=link,
-                )
-                sections.append(section)
+            section, embedded_id = store_image_and_create_section(
+                image_data=response_call(),
+                file_id=file_id,
+                display_name=file_name,
+                media_type=mime_type,
+                file_origin=FileOrigin.CONNECTOR,
+                link=link,
+            )
+            sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process image {file_name}: {e}")
         return sections
