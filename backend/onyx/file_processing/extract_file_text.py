@@ -26,6 +26,13 @@ from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
+
+from docx.document import Document as DocDocument
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import Table
+from docx.text.paragraph import Paragraph
+
 from onyx.configs.constants import DANSWER_METADATA_FILENAME
 from onyx.configs.constants import FileOrigin
 from onyx.file_processing.html_utils import parse_html_page_basic
@@ -311,6 +318,15 @@ def read_pdf_file(
     return "", metadata, []
 
 
+def iter_block_items(parent: DocDocument) -> Any:
+    parent_elm = parent.element.body
+    for child in parent_elm.iterchildren():
+        if isinstance(child, CT_P):
+            yield Paragraph(child, parent)
+        elif isinstance(child, CT_Tbl):
+            yield Table(child, parent)
+
+
 def docx_to_text_and_images(
     file: IO[Any],
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
@@ -318,14 +334,25 @@ def docx_to_text_and_images(
     Extract text from a docx. If embed_images=True, also extract inline images.
     Return (text_content, list_of_images).
     """
-    paragraphs = []
     embedded_images: list[tuple[bytes, str]] = []
 
     doc = docx.Document(file)
+    text_parts: list[str] = []
 
-    # Grab text from paragraphs
-    for paragraph in doc.paragraphs:
-        paragraphs.append(paragraph.text)
+    for block in iter_block_items(doc):
+        if isinstance(block, Paragraph):
+            if block.text.strip():  # Игнорируем пустые параграфы
+                text_parts.append(block.text)
+        elif isinstance(block, Table):
+            table_text = []
+            for row in block.rows:
+                row_text = []
+                for cell in row.cells:
+                    cell_text = [p.text for p in cell.paragraphs if p.text.strip()]
+                    row_text.append(" ".join(cell_text))
+                table_text.append(" | ".join(row_text))
+            text_parts.append(f"```\n{table_text}\n```")
+
 
     # Reset position so we can re-load the doc (python-docx has read the stream)
     # Note: if python-docx has fully consumed the stream, you may need to open it again from memory.
@@ -343,7 +370,7 @@ def docx_to_text_and_images(
             # store
             embedded_images.append((image_bytes, os.path.basename(str(image_name))))
 
-    text_content = "\n".join(paragraphs)
+    text_content = "\n".join(text_parts)
     return text_content, embedded_images
 
 
