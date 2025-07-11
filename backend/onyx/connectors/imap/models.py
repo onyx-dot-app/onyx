@@ -25,7 +25,7 @@ class EmailHeaders(BaseModel):
     id: str
     subject: str
     sender: str
-    recipients: str
+    recipients: str | None
     date: datetime
 
     @classmethod

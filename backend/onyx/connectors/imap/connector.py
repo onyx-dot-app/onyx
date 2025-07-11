@@ -333,14 +333,19 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    _sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
-    parsed_recipients = _parse_addrs(raw_header=email_headers.recipients)
+    sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
+    parsed_recipients = (
+        _parse_addrs(raw_header=email_headers.recipients)
+        if email_headers.recipients
+        else []
+    )
 
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
     primary_owners = [
         BasicExpertInfo(display_name=recipient_name, email=recipient_addr)
         for recipient_name, recipient_addr in parsed_recipients
     ]
+    primary_owners.append(BasicExpertInfo(display_name=sender_name, email=sender_addr))
     external_access = (
         ExternalAccess(
             external_user_emails=set(addr for _name, addr in parsed_recipients),
