@@ -33,7 +33,7 @@ class OrchestrationUpdate(LoggerUpdate):
     query_path: Annotated[list[DRPath], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
-    plan_of_record: Annotated[list[OrchestratorStep], add] = []
+    plan_of_record: Annotated[list[list[OrchestratorStep]], add] = []
     used_time_budget: int = 0
 
 
