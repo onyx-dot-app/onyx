@@ -340,15 +340,22 @@ def _convert_email_headers_and_body_into_document(
         else []
     )
 
-    email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
-    primary_owners = [
-        BasicExpertInfo(display_name=recipient_name, email=recipient_addr)
+    expert_info_map = {
+        recipient_addr: BasicExpertInfo(
+            display_name=recipient_name, email=recipient_addr
+        )
         for recipient_name, recipient_addr in parsed_recipients
-    ]
-    primary_owners.append(BasicExpertInfo(display_name=sender_name, email=sender_addr))
+    }
+    if sender_addr not in expert_info_map:
+        expert_info_map[sender_addr] = BasicExpertInfo(
+            display_name=sender_name, email=sender_addr
+        )
+
+    email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
+    primary_owners = list(expert_info_map.values())
     external_access = (
         ExternalAccess(
-            external_user_emails=set(addr for _name, addr in parsed_recipients),
+            external_user_emails=set(expert_info_map.keys()),
             external_user_group_ids=set(),
             is_public=False,
         )
