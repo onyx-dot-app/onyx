@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Text from "@/components/ui/text";
@@ -16,7 +17,6 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
-  ModelConfiguration,
   ModelConfigurationUpsertRequest,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
@@ -24,34 +24,6 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
-
-const VERTEX_LOCATION_KWARG = "vertex_location";
-
-// A hard coded description.
-//
-// Since `VertexAI` exposes one additional configuration parameter
-// (`vertex_location`), we custom-modify the description for it and add a link.
-//
-// # Note
-// The backend sends only strings for descriptions; the frontend only renders
-// the string and does not perform any parsing / rendering logic on it.
-// Therefore, the backend can't send "hyperlink"-able text. As a result, we
-// need some hardcoding here to intercept that custom-config-key and augment
-// it with a hyperlink.
-function vertex_location_description(description: string | null): JSX.Element {
-  return (
-    <p>
-      {description ? `${description} ` : ""}Please refer to the
-      <a
-        href="https://docs.onyx.app/gen_ai_configs/vertex_ai"
-        className="text-link hover:text-link-hover"
-      >
-        {` `}Vertex AI configuration docs{` `}
-      </a>
-      for all possible values.
-    </p>
-  );
-}
 
 export function LLMProviderUpdateForm({
   llmProviderDescriptor,
@@ -161,6 +133,14 @@ export function LLMProviderUpdateForm({
     groups: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
   });
+
+  const customLinkRenderer = ({ href, children }: any) => {
+    return (
+      <a href={href} className="text-link hover:text-link-hover">
+        {children}
+      </a>
+    );
+  };
 
   return (
     <Formik
@@ -330,22 +310,18 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => {
             if (customConfigKey.key_type === "text_input") {
-              const subtext =
-                customConfigKey.name === VERTEX_LOCATION_KWARG
-                  ? vertex_location_description(customConfigKey.description)
-                  : customConfigKey.description;
-
               return (
                 <div key={customConfigKey.name}>
                   <TextFormField
                     small={firstTimeConfiguration}
                     name={`custom_config.${customConfigKey.name}`}
-                    label={
-                      customConfigKey.is_required
-                        ? customConfigKey.display_name
-                        : `[Optional] ${customConfigKey.display_name}`
+                    optional={!customConfigKey.is_required}
+                    label={customConfigKey.display_name}
+                    subtext={
+                      <ReactMarkdown components={{ a: customLinkRenderer }}>
+                        {customConfigKey.description}
+                      </ReactMarkdown>
                     }
-                    subtext={subtext ?? undefined}
                     placeholder={customConfigKey.default_value || undefined}
                   />
                 </div>
