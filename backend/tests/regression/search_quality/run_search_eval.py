@@ -46,11 +46,9 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import MessageType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.engine.sql_engine import SqlEngine
-from onyx.db.search_settings import get_current_search_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -108,9 +106,6 @@ class SearchAnswerAnalyzer:
                 average_time_taken=0.0,
             )
         )
-
-        # get search related settings
-        self._rerank_settings = self._get_rerank_settings()
 
     def run_analysis(self, dataset_path: Path, export_path: Path) -> None:
         # load and save the dataset
@@ -419,7 +414,6 @@ class SearchAnswerAnalyzer:
         filters = IndexFilters(access_control_list=None, tenant_id=self.tenant_id)
         qa_request = OneShotQARequest(
             messages=messages,
-            prompt_id=0,  # default prompt
             persona_id=0,  # default persona
             retrieval_options=RetrievalDetails(
                 run_search=OptionalSearchSetting.ALWAYS,
@@ -428,7 +422,6 @@ class SearchAnswerAnalyzer:
                 enable_auto_detect_filters=False,
                 limit=self.config.max_search_results,
             ),
-            rerank_settings=self._rerank_settings,
             return_contexts=True,
             skip_gen_ai_answer_generation=self.config.search_only,
         )
@@ -597,25 +590,6 @@ class SearchAnswerAnalyzer:
                 if (n := self.metrics[cat].n_factual_correctness) > 0:
                     self.metrics[cat].factual_correctness /= n
 
-    def _get_rerank_settings(self) -> RerankingDetails | None:
-        """Fetch the tenant's reranking settings from the database."""
-        try:
-            with get_session_with_tenant(tenant_id=self.tenant_id) as db_session:
-                search_settings = get_current_search_settings(db_session)
-                if search_settings:
-                    rerank_settings = RerankingDetails.from_db_model(search_settings)
-                    if not self.config.rerank_all:
-                        return rerank_settings
-
-                    # override the num_rerank to the eval limit
-                    rerank_settings = rerank_settings.model_copy(
-                        update={"num_rerank": self.config.max_search_results}
-                    )
-                    return rerank_settings
-        except Exception as e:
-            logger.warning("Could not load rerank settings from DB: %s", e)
-        return None
-
 
 def run_search_eval(
     dataset_path: Path,
@@ -676,24 +650,24 @@ if __name__ == "__main__":
         "--num_search",
         type=int,
         default=50,
-        help="Maximum number of search results to check per query (default: %(default)s).",
+        help="Maximum number of documents to retrieve per search (default: %(default)s).",
     )
     parser.add_argument(
         "-a",
         "--num_answer",
         type=int,
         default=25,
-        help="Maximum number of search results to use for answer evaluation (default: %(default)s).",
+        help="Maximum number of documents to use for answer evaluation (default: %(default)s).",
     )
     parser.add_argument(
         "-w",
-        "--workers",
+        "--max_workers",
         type=int,
         default=10,
-        help="Maximum number of parallel search requests (0 = unlimited, default: %(default)s).",
+        help="Maximum number of concurrent search requests (0 = unlimited, default: %(default)s).",
     )
     parser.add_argument(
-        "-m",
+        "-r",
         "--max_req_rate",
         type=int,
         default=0,
@@ -721,13 +695,6 @@ if __name__ == "__main__":
         help="Only perform search and not answer evaluation (default: %(default)s).",
     )
     parser.add_argument(
-        "-r",
-        "--rerank_all",
-        action="store_true",
-        default=False,
-        help="Always rerank all search results (default: %(default)s).",
-    )
-    parser.add_argument(
         "-t",
         "--tenant_id",
         type=str,
@@ -748,12 +715,11 @@ if __name__ == "__main__":
             EvalConfig(
                 max_search_results=args.num_search,
                 max_answer_context=args.num_answer,
-                num_workers=args.workers,
+                num_workers=args.max_workers,
                 max_request_rate=args.max_req_rate,
                 request_timeout=args.timeout,
                 api_url=args.api_endpoint,
                 search_only=args.search_only,
-                rerank_all=args.rerank_all,
             ),
             args.tenant_id,
         )
