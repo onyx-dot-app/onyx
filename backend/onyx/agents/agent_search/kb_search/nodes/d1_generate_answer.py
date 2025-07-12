@@ -7,7 +7,9 @@ from langgraph.types import StreamWriter
 
 from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_close_steps
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_close_steps,
+)
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -52,6 +54,8 @@ def generate_answer(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.prompt_builder.raw_user_query
 
+    final_answer: str | None = None
+
     user = (
         graph_config.tooling.search_tool.user
         if graph_config.tooling.search_tool
@@ -69,7 +73,7 @@ def generate_answer(
 
     # DECLARE STEPS DONE
 
-    stream_write_close_steps(writer)
+    stream_write_kg_search_close_steps(writer)
 
     ## MAIN ANSWER
 
@@ -206,7 +210,7 @@ def generate_answer(
         )
     ]
     try:
-        run_with_timeout(
+        stream_results: tuple[list[str], list[float]] = run_with_timeout(
             KG_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.fast_llm,
@@ -223,7 +227,10 @@ def generate_answer(
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")
 
+    final_answer = "".join(stream_results[0])
+
     return MainOutput(
+        final_answer=final_answer,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

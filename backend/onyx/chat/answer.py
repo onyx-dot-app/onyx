@@ -12,7 +12,7 @@ from onyx.agents.agent_search.models import GraphTooling
 from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
-from onyx.agents.agent_search.run_graph import run_kb_graph
+from onyx.agents.agent_search.run_graph import run_dr_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
@@ -27,6 +27,7 @@ from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.constants import BASIC_KEY
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import RerankingDetails
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
@@ -138,12 +139,16 @@ class Answer:
             yield from self._processed_stream
             return
 
-        if self.graph_config.behavior.use_agentic_search and (
+        # TODO: add toggle in UI with customizable TimeBudget
+        if (
             self.graph_config.inputs.persona
             and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith("KG Beta")
+            and self.graph_config.inputs.persona.name.startswith(
+                TMP_DRALPHA_PERSONA_NAME
+            )
         ):
-            run_langgraph = run_kb_graph
+            run_langgraph = run_dr_graph
+
         elif self.graph_config.behavior.use_agentic_search:
             run_langgraph = run_agent_search_graph
         elif (
