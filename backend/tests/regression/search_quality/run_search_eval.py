@@ -130,7 +130,7 @@ class SearchAnswerAnalyzer:
         available_workers = Semaphore(self.config.num_workers)
         stop_event = Event()
 
-        def _submit_wrapper(tc: TestQuery):
+        def _submit_wrapper(tc: TestQuery) -> AnalysisSummary:
             try:
                 return self._run_and_analyze_one(tc, dataset_size)
             except Exception as e:
