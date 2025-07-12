@@ -662,6 +662,7 @@ configMap:
   QA_PROMPT_OVERRIDE: ""
   # Internet Search Tool
   BING_API_KEY: ""
+  EXA_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""

@@ -174,7 +174,6 @@ def get_test_config(
             # The docs retrieved by this flow are already relevance-filtered
             all_docs_useful=True
         ),
-        document_pruning_config=document_pruning_config,
         structured_response_format=None,
     )
 
@@ -198,7 +197,7 @@ def get_test_config(
         prompt_config=prompt_config,
         llm=primary_llm,
         fast_llm=fast_llm,
-        pruning_config=search_tool_config.document_pruning_config,
+        document_pruning_config=search_tool_config.document_pruning_config,
         answer_style_config=search_tool_config.answer_style_config,
         selected_sections=search_tool_config.selected_sections,
         chunks_above=search_tool_config.chunks_above,

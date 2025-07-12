@@ -94,7 +94,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         prompt_config: PromptConfig,
         llm: LLM,
         fast_llm: LLM,
-        pruning_config: DocumentPruningConfig,
+        document_pruning_config: DocumentPruningConfig,
         answer_style_config: AnswerStyleConfig,
         evaluation_type: LLMEvaluationType,
         # if specified, will not actually run a search and will instead return these
@@ -157,7 +157,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.answer_style_config = answer_style_config
         self.contextual_pruning_config = (
             ContextualPruningConfig.from_doc_pruning_config(
-                num_chunk_multiple=num_chunk_multiple, doc_pruning_config=pruning_config
+                num_chunk_multiple=num_chunk_multiple,
+                doc_pruning_config=document_pruning_config,
             )
         )
 

@@ -45,8 +45,9 @@ PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Internet Search 
+# Internet Search
 BING_API_KEY=<REPLACE THIS>
+EXA_API_KEY=<REPLACE THIS>
 
 
 # Enable the full set of Danswer Enterprise Edition features

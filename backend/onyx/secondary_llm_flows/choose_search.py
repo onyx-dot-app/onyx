@@ -11,6 +11,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
 from onyx.llm.utils import message_to_string
+from onyx.prompts.chat_prompts import AGGRESSIVE_INTERNET_SEARCH_TEMPLATE
 from onyx.prompts.chat_prompts import AGGRESSIVE_SEARCH_TEMPLATE
 from onyx.prompts.chat_prompts import NO_SEARCH
 from onyx.prompts.chat_prompts import REQUIRE_SEARCH_HINT
@@ -46,39 +47,63 @@ def check_if_need_search_multi_message(
     return True
 
 
+def _get_search_messages(
+    query: str,
+    history_str: str,
+    template: str,
+) -> list[dict[str, str]]:
+    messages = [
+        {
+            "role": "user",
+            "content": template.format(
+                final_query=query, chat_history=history_str
+            ).strip(),
+        },
+    ]
+    return messages
+
+
 def check_if_need_search(
     query: str,
     history: list[PreviousMessage],
     llm: LLM,
+    search_type: str = "internal",
 ) -> bool:
-    def _get_search_messages(
-        question: str,
-        history_str: str,
-    ) -> list[dict[str, str]]:
-        messages = [
-            {
-                "role": "user",
-                "content": AGGRESSIVE_SEARCH_TEMPLATE.format(
-                    final_query=question, chat_history=history_str
-                ).strip(),
-            },
-        ]
+    """
+    Determines if search is needed based on query and history.
 
-        return messages
+    Args:
+        query: The user's query
+        history: List of previous messages
+        llm: The language model to use for prediction
+        search_type: Type of search - "internal" for internal search, "internet" for internet search
 
-    # Choosing is globally disabled, use search
-    if DISABLE_LLM_CHOOSE_SEARCH:
+    Returns:
+        True if search is needed, False otherwise
+    """
+    # Choosing is globally disabled, use search (only for internal search)
+    if search_type == "internal" and DISABLE_LLM_CHOOSE_SEARCH:
         return True
+
+    # Select template and log message based on search type
+    if search_type == "internet":
+        template = AGGRESSIVE_INTERNET_SEARCH_TEMPLATE
+        log_message = "Run internet search prediction"
+    else:
+        template = AGGRESSIVE_SEARCH_TEMPLATE
+        log_message = "Run search prediction"
 
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
 
-    prompt_msgs = _get_search_messages(question=query, history_str=history_str)
+    prompt_msgs = _get_search_messages(
+        query=query, history_str=history_str, template=template
+    )
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    require_search_output = message_to_string(llm.invoke(filled_llm_prompt))
+    search_output = message_to_string(llm.invoke(filled_llm_prompt))
 
-    logger.debug(f"Run search prediction: {require_search_output}")
+    logger.debug(f"{log_message}: {search_output}")
 
-    return (SKIP_SEARCH.split()[0]).lower() not in require_search_output.lower()
+    return (SKIP_SEARCH.split()[0]).lower() not in search_output.lower()
