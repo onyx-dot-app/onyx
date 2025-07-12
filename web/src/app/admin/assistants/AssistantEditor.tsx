@@ -518,6 +518,13 @@ export function AssistantEditor({
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
 
+          if (
+            internetSearchTool &&
+            values.enabled_tools_map[internetSearchTool.id]
+          ) {
+            formikHelpers.setFieldValue("datetime_aware", true); // Auto-toggle so internet search has access to current date
+          }
+
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
             : false;

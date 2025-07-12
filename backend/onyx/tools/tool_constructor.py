@@ -14,7 +14,7 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.chat_configs import BING_API_KEY
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
@@ -124,6 +124,9 @@ class InternetSearchToolConfig(BaseModel):
             citation_config=CitationConfig(all_docs_useful=True)
         )
     )
+    document_pruning_config: DocumentPruningConfig = Field(
+        default_factory=DocumentPruningConfig
+    )
 
 
 class ImageGenerationToolConfig(BaseModel):
@@ -219,15 +222,18 @@ def construct_tools(
                 if not internet_search_tool_config:
                     internet_search_tool_config = InternetSearchToolConfig()
 
-                if not BING_API_KEY:
+                if not EXA_API_KEY:
                     raise ValueError(
-                        "Internet search tool requires a Bing API key, please contact your Onyx admin to get it added!"
+                        "Internet search tool requires an Exa AI API key, please contact your Onyx admin to get it added!"
                     )
                 tool_dict[db_tool_model.id] = [
                     InternetSearchTool(
-                        api_key=BING_API_KEY,
+                        api_key=EXA_API_KEY,
+                        db_session=db_session,
+                        llm=llm,
                         answer_style_config=internet_search_tool_config.answer_style_config,
                         prompt_config=prompt_config,
+                        pruning_config=internet_search_tool_config.document_pruning_config,
                     )
                 ]
 
