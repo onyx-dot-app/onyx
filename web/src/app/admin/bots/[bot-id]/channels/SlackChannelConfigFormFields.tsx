@@ -39,11 +39,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import { CheckFormField } from "@/components/ui/CheckField";
+import { DocumentSetSummary } from "@/lib/types";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
   isDefault: boolean;
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
   searchEnabledAssistants: MinimalPersonaSnapshot[];
   nonSearchAssistants: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
@@ -72,10 +73,37 @@ export function SlackChannelConfigFormFields({
   const [viewSyncEnabledAssistants, setViewSyncEnabledAssistants] =
     useState(false);
 
-  const documentSetContainsSync = (documentSet: DocumentSet) =>
-    documentSet.cc_pair_descriptors.some(
+  // Helper function to check if a document set contains sync connectors
+  const documentSetContainsSync = (
+    documentSet: DocumentSetSummary | DocumentSet
+  ) => {
+    // Check if it's a DocumentSetSummary (has cc_pair_summaries)
+    if ("cc_pair_summaries" in documentSet) {
+      return documentSet.cc_pair_summaries.some(
+        (summary) => summary.access_type === "sync"
+      );
+    }
+    // Otherwise it's a DocumentSet (has cc_pair_descriptors)
+    return documentSet.cc_pair_descriptors.some(
       (descriptor) => descriptor.access_type === "sync"
     );
+  };
+
+  // Helper function to check if a document set contains private connectors
+  const documentSetContainsPrivate = (
+    documentSet: DocumentSetSummary | DocumentSet
+  ) => {
+    // Check if it's a DocumentSetSummary (has cc_pair_summaries)
+    if ("cc_pair_summaries" in documentSet) {
+      return documentSet.cc_pair_summaries.some(
+        (summary) => summary.access_type === "private"
+      );
+    }
+    // Otherwise it's a DocumentSet (has cc_pair_descriptors)
+    return documentSet.cc_pair_descriptors.some(
+      (descriptor) => descriptor.access_type === "private"
+    );
+  };
 
   const [syncEnabledAssistants, availableAssistants] = useMemo(() => {
     const sync: MinimalPersonaSnapshot[] = [];
@@ -95,20 +123,19 @@ export function SlackChannelConfigFormFields({
 
   const unselectableSets = useMemo(() => {
     return documentSets.filter((ds) =>
-      ds.cc_pair_descriptors.some(
-        (descriptor) => descriptor.access_type === "sync"
-      )
+      ds.cc_pair_summaries.some((summary) => summary.access_type === "sync")
     );
   }, [documentSets]);
+
   const memoizedPrivateConnectors = useMemo(() => {
     const uniqueDescriptors = new Map();
     documentSets.forEach((ds) => {
-      ds.cc_pair_descriptors.forEach((descriptor) => {
+      ds.cc_pair_summaries.forEach((summary) => {
         if (
-          descriptor.access_type === "private" &&
-          !uniqueDescriptors.has(descriptor.id)
+          summary.access_type === "private" &&
+          !uniqueDescriptors.has(summary.id)
         ) {
-          uniqueDescriptors.set(descriptor.id, descriptor);
+          uniqueDescriptors.set(summary.id, summary);
         }
       });
     });
@@ -134,12 +161,6 @@ export function SlackChannelConfigFormFields({
     }
   }, [unselectableSets, values.document_sets, setFieldValue, setPopup]);
 
-  const documentSetContainsPrivate = (documentSet: DocumentSet) => {
-    return documentSet.cc_pair_descriptors.some(
-      (descriptor) => descriptor.access_type === "private"
-    );
-  };
-
   const shouldShowPrivacyAlert = useMemo(() => {
     if (values.knowledge_source === "document_sets") {
       const selectedSets = documentSets.filter((ds) =>
@@ -161,9 +182,7 @@ export function SlackChannelConfigFormFields({
   const selectableSets = useMemo(() => {
     return documentSets.filter(
       (ds) =>
-        !ds.cc_pair_descriptors.some(
-          (descriptor) => descriptor.access_type === "sync"
-        )
+        !ds.cc_pair_summaries.some((summary) => summary.access_type === "sync")
     );
   }, [documentSets]);
 

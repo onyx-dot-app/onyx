@@ -5,9 +5,11 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.db.models import DocumentSet as DocumentSetDBModel
+from onyx.server.documents.models import CCPairSummary
 from onyx.server.documents.models import ConnectorCredentialPairDescriptor
 from onyx.server.documents.models import ConnectorSnapshot
 from onyx.server.documents.models import CredentialSnapshot
+from onyx.server.federated.models import FederatedConnectorSummary
 
 
 class FederatedConnectorConfig(BaseModel):
@@ -24,6 +26,48 @@ class FederatedConnectorDescriptor(BaseModel):
     name: str
     source: str
     entities: dict[str, Any]
+
+
+class DocumentSetSummary(BaseModel):
+    """Simplified document set model with minimal data for list views"""
+
+    id: int
+    name: str
+    description: str | None
+    cc_pair_summaries: list[CCPairSummary]
+    is_up_to_date: bool
+    is_public: bool
+    users: list[UUID]
+    groups: list[int]
+    federated_connector_summaries: list[FederatedConnectorSummary] = Field(
+        default_factory=list
+    )
+
+    @classmethod
+    def from_document_set(cls, document_set: "DocumentSet") -> "DocumentSetSummary":
+        """Create a summary from a full DocumentSet model"""
+        return cls(
+            id=document_set.id,
+            name=document_set.name,
+            description=document_set.description,
+            cc_pair_summaries=[
+                CCPairSummary.from_cc_pair_descriptor(desc)
+                for desc in document_set.cc_pair_descriptors
+            ],
+            is_up_to_date=document_set.is_up_to_date,
+            is_public=document_set.is_public,
+            users=document_set.users,
+            groups=document_set.groups,
+            federated_connector_summaries=[
+                FederatedConnectorSummary(
+                    id=fc.id,
+                    name=fc.name,
+                    source=fc.source,
+                    entities=fc.entities,
+                )
+                for fc in document_set.federated_connectors
+            ],
+        )
 
 
 class DocumentSetCreationRequest(BaseModel):

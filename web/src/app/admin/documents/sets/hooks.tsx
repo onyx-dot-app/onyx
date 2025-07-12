@@ -1,5 +1,5 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { DocumentSet } from "@/lib/types";
+import { DocumentSetSummary } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 
 const DOCUMENT_SETS_URL = "/api/manage/document-set";
@@ -13,7 +13,7 @@ export function refreshDocumentSets() {
 export function useDocumentSets(getEditable: boolean = false) {
   const url = getEditable ? GET_EDITABLE_DOCUMENT_SETS_URL : DOCUMENT_SETS_URL;
 
-  const swrResponse = useSWR<DocumentSet[]>(url, errorHandlingFetcher, {
+  const swrResponse = useSWR<DocumentSetSummary[]>(url, errorHandlingFetcher, {
     refreshInterval: 5000, // 5 seconds
   });
 

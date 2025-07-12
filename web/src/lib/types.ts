@@ -269,6 +269,33 @@ export interface FederatedConnectorDescriptor {
   entities: Record<string, any>;
 }
 
+// Simplified interfaces with minimal data
+export interface CCPairSummary {
+  id: number;
+  name: string | null;
+  source: ValidSources;
+  access_type: AccessType;
+}
+
+export interface FederatedConnectorSummary {
+  id: number;
+  name: string;
+  source: string;
+  entities: Record<string, any>;
+}
+
+export interface DocumentSetSummary {
+  id: number;
+  name: string;
+  description: string;
+  cc_pair_summaries: CCPairSummary[];
+  is_up_to_date: boolean;
+  is_public: boolean;
+  users: string[];
+  groups: number[];
+  federated_connector_summaries: FederatedConnectorSummary[];
+}
+
 export interface DocumentSet {
   id: number;
   name: string;
