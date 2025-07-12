@@ -22,7 +22,8 @@ class TestQuery(BaseModel):
 class EvalConfig(BaseModel):
     max_search_results: int
     max_answer_context: int
-    num_workers: int
+    num_workers: int  # 0 = unlimited
+    max_request_rate: int  # 0 = unlimited
     request_timeout: int
     api_url: str
     search_only: bool

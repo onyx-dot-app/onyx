@@ -8,6 +8,8 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
+from threading import Semaphore
 from typing import cast
 
 import matplotlib.pyplot as plt  # type: ignore
@@ -84,6 +86,10 @@ class SearchAnswerAnalyzer:
         self.config = config
         self.tenant_id = tenant_id
 
+        # shared analysis results
+        self._lock = Lock()
+        self._progress_counter = 0
+        self._result_writer: LazyJsonWriter | None = None
         self.ranks: list[int | None] = []
         self.metrics: dict[str, CombinedMetrics] = defaultdict(
             lambda: CombinedMetrics(
@@ -110,55 +116,56 @@ class SearchAnswerAnalyzer:
         # load and save the dataset
         dataset = self._load_dataset(dataset_path)
         dataset_size = len(dataset)
-
-        # export the processed dataset
         dataset_export_path = export_path / "test_queries.json"
         with dataset_export_path.open("w") as f:
             dataset_serializable = [q.model_dump(mode="json") for q in dataset]
             json.dump(dataset_serializable, f, indent=4)
 
-        # create the result export file
         result_export_path = export_path / "search_results.json"
-        result_writer = LazyJsonWriter(result_export_path)
+        self._result_writer = LazyJsonWriter(result_export_path)
+
+        # set up rate limiting
+        interval = (
+            60.0 / self.config.max_request_rate
+            if self.config.max_request_rate > 0
+            else 0.0
+        )
+        available_workers = Semaphore(self.config.num_workers)
+
+        def _submit_wrapper(tc: TestQuery):
+            try:
+                return self._run_and_analyze_one(tc, dataset_size)
+            finally:
+                available_workers.release()
 
         # run the analysis
         logger.info("Starting analysis of %d queries...", dataset_size)
         logger.info("Using %d parallel workers", self.config.num_workers)
         logger.info("Exporting search results to %s", result_export_path)
 
-        with ThreadPoolExecutor(max_workers=self.config.num_workers) as executor:
-            futures = [
-                executor.submit(self._run_and_analyze_one, test_case)
-                for test_case in dataset
-            ]
+        with ThreadPoolExecutor(
+            max_workers=self.config.num_workers or None
+        ) as executor:
+            # submit requests at configured rate
+            futures = []
+            for tc in dataset:
+                available_workers.acquire()
+                fut = executor.submit(_submit_wrapper, tc)
+                futures.append(fut)
 
-            # process completed tasks as they finish
-            for completed_count, future in enumerate(as_completed(futures), 1):
+                if len(futures) != dataset_size and interval > 0:
+                    time.sleep(interval)
+
+            # ensure all tasks complete and surface any exceptions
+            for fut in as_completed(futures):
                 try:
-                    result = future.result()
+                    fut.result()
                 except Exception as e:
-                    print(f"[{completed_count}/{dataset_size}] ✗ Error: {e}")
-                    raise  # change to continue if you want to simply skip
+                    logger.error("Error during evaluation: %s", e)
+                    raise
 
-                # update metrics
-                self.ranks.append(result.rank)
-                result_writer.append(result.model_dump(mode="json"))
-                self._update_metrics(result)
-
-                # print progress with query info
-                question = (
-                    result.question[:50] + "..."
-                    if len(result.question) > 50
-                    else result.question
-                )
-                status = "✓ Found" if result.found else "✗ Not found"
-                rank_info = f" (rank {result.rank})" if result.found else ""
-                print(
-                    f"[{completed_count}/{dataset_size}] "
-                    f"{status}{rank_info}: {question}"
-                )
-
-        result_writer.close()
+        if self._result_writer:
+            self._result_writer.close()
         self._aggregate_metrics()
 
     def generate_detailed_report(self, export_path: Path) -> None:
@@ -462,7 +469,7 @@ class SearchAnswerAnalyzer:
             )
         raise RuntimeError(f"OneShot QA returned no documents for query {query}")
 
-    def _run_and_analyze_one(self, test_case: TestQuery) -> AnalysisSummary:
+    def _run_and_analyze_one(self, test_case: TestQuery, total: int) -> AnalysisSummary:
         result = self._perform_oneshot_qa(test_case.question)
 
         # compute rank
@@ -474,6 +481,19 @@ class SearchAnswerAnalyzer:
                 rank = i
                 found = True
                 break
+
+        # print search progress and result
+        with self._lock:
+            self._progress_counter += 1
+            completed = self._progress_counter
+            status = "✓ Found" if found else "✗ Not found"
+            rank_info = f" (rank {rank})" if found else ""
+            question_snippet = (
+                test_case.question[:50] + "..."
+                if len(test_case.question) > 50
+                else test_case.question
+            )
+            print(f"[{completed}/{total}] {status}{rank_info}: {question_snippet}")
 
         # get the search contents
         retrieved = search_docs_to_doc_contexts(result.top_documents, self.tenant_id)
@@ -509,7 +529,8 @@ class SearchAnswerAnalyzer:
                         e,
                     )
 
-        return AnalysisSummary(
+        # save results
+        analysis = AnalysisSummary(
             question=test_case.question,
             categories=test_case.categories,
             found=found,
@@ -523,6 +544,13 @@ class SearchAnswerAnalyzer:
             retrieved=retrieved,
             time_taken=result.time_taken,
         )
+        with self._lock:
+            self.ranks.append(analysis.rank)
+            if self._result_writer:
+                self._result_writer.append(analysis.model_dump(mode="json"))
+            self._update_metrics(analysis)
+
+        return analysis
 
     def _update_metrics(self, result: AnalysisSummary) -> None:
         for cat in result.categories + ["all"]:
@@ -662,7 +690,14 @@ if __name__ == "__main__":
         "--workers",
         type=int,
         default=10,
-        help="Number of parallel search requests (default: %(default)s).",
+        help="Maximum number of parallel search requests (0 = unlimited, default: %(default)s).",
+    )
+    parser.add_argument(
+        "-m",
+        "--max_req_rate",
+        type=int,
+        default=0,
+        help="Maximum number of search requests per minute (0 = unlimited, default: %(default)s).",
     )
     parser.add_argument(
         "-q",
@@ -714,6 +749,7 @@ if __name__ == "__main__":
                 max_search_results=args.num_search,
                 max_answer_context=args.num_answer,
                 num_workers=args.workers,
+                max_request_rate=args.max_req_rate,
                 request_timeout=args.timeout,
                 api_url=args.api_endpoint,
                 search_only=args.search_only,
