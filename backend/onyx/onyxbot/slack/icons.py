@@ -25,6 +25,8 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Jira.png"
     if source == DocumentSource.NOTION.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Notion.png"
+    if source == DocumentSource.OUTLINE.value:
+        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/web/public/Outline.png"
     if source == DocumentSource.ZENDESK.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Zendesk.png"
     if source == DocumentSource.GONG.value:
