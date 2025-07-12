@@ -1,0 +1,169 @@
+version: '3.8'
+
+services:
+  # API Server
+  api_server:
+    image: onyxdotapp/onyx-backend:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+      - redis
+      - vespa
+    environment:
+      # Database
+      DATABASE_URL: "postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
+      
+      # Redis
+      REDIS_HOST: ${REDISHOST}
+      REDIS_PORT: ${REDISPORT}
+      REDIS_PASSWORD: ${REDISAUTH}
+      
+      # Vespa
+      VESPA_HOST: vespa
+      VESPA_PORT: 8080
+      
+      # Auth - simplified for preview
+      AUTH_TYPE: "disabled"
+      INTERNAL_AUTH_TOKEN: ${INTERNAL_AUTH_TOKEN:-preview-token-123}
+      
+      # Preview environment settings
+      ENV_TYPE: "preview"
+      DOMAIN: ${RAILWAY_PUBLIC_DOMAIN}
+      WEB_PROTOCOL: "https"
+      
+      # Model settings - using minimal models
+      MODEL_SERVER_HOST: model_server
+      MODEL_SERVER_PORT: 8000
+      ENABLE_MINI_CHUNK: "true"
+      
+      # Other settings
+      POSTGRES_API_SERVER_POOL_SIZE: 5
+      POSTGRES_API_SERVER_POOL_OVERFLOW: 10
+      LOG_LEVEL: "info"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Background Worker
+  background:
+    image: onyxdotapp/onyx-backend:latest
+    depends_on:
+      - db
+      - redis
+      - vespa
+    environment:
+      DATABASE_URL: "postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
+      REDIS_HOST: ${REDISHOST}
+      REDIS_PORT: ${REDISPORT}
+      REDIS_PASSWORD: ${REDISAUTH}
+      VESPA_HOST: vespa
+      VESPA_PORT: 8080
+      MODEL_SERVER_HOST: model_server
+      MODEL_SERVER_PORT: 8000
+    command: celery -A onyx.background.celery.celery_run worker --beat --loglevel=info
+
+  # Web Server (Next.js Frontend)
+  web_server:
+    image: onyxdotapp/onyx-web-server:latest
+    build:
+      context: ../../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "https://${RAILWAY_PUBLIC_DOMAIN}/api"
+        NEXT_PUBLIC_ENVIRONMENT: "preview"
+    depends_on:
+      - api_server
+    environment:
+      NEXTAUTH_URL: "https://${RAILWAY_PUBLIC_DOMAIN}"
+      INTERNAL_AUTH_TOKEN: ${INTERNAL_AUTH_TOKEN:-preview-token-123}
+      NEXT_PUBLIC_API_URL: "https://${RAILWAY_PUBLIC_DOMAIN}/api"
+      DISABLE_AUTH: "true"
+    ports:
+      - "3000:3000"
+
+  # Vespa - without privileged mode
+  vespa:
+    image: vespaengine/vespa:latest
+    environment:
+      VESPA_CONFIGSERVERS: vespa
+      VESPA_CONFIGSERVER_JVMARGS: "-Xms1g -Xmx1g"
+      VESPA_NOOP_PRIVILEGED: "true"  # Skip privileged operations
+    volumes:
+      - vespa_data:/opt/vespa/var
+    ports:
+      - "19100:19100"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19071/state/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Single model server for preview (simplified)
+  model_server:
+    image: onyxdotapp/onyx-model-server:latest
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    environment:
+      CUDA_VISIBLE_DEVICES: ""  # CPU only for preview
+      INDEXING_ONLY: "false"
+      # Using smaller models for preview
+      INTENT_ENABLED: "false"
+      QA_ENABLED: "false"
+      HF_MODEL_SNAPSHOTS_PATH: /model_snapshots
+    volumes:
+      - model_data:/model_snapshots
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # Database (using Railway's Postgres)
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${PGDATABASE}
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # Redis (using Railway's Redis)
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDISAUTH}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  # Nginx Proxy
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ../../deployment/docker_compose/nginx-preview.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - api_server
+      - web_server
+    environment:
+      DOMAIN: ${RAILWAY_PUBLIC_DOMAIN}
+
+volumes:
+  postgres_data:
+  redis_data:
+  vespa_data:
+  model_data:
