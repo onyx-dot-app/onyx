@@ -112,11 +112,15 @@ from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_constructor import CodeInterpreterToolConfig
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_constructor import CustomToolConfig
 from onyx.tools.tool_constructor import ImageGenerationToolConfig
 from onyx.tools.tool_constructor import InternetSearchToolConfig
 from onyx.tools.tool_constructor import SearchToolConfig
+from onyx.tools.tool_implementations.code_interpreter.code_interpreter_tool import (
+    CODE_INTERPRETER_EXECUTION_ID,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     CUSTOM_TOOL_RESPONSE_ID,
 )
@@ -518,6 +522,11 @@ def _process_tool_response(
                 response=custom_tool_response.tool_result,
                 tool_name=custom_tool_response.tool_name,
             )
+    elif packet.id == CODE_INTERPRETER_EXECUTION_ID:
+        # Code interpreter results are handled in the tool's build_next_prompt method
+        # which updates the user prompt with the execution results
+        # The process will be visible in the final LLM response
+        pass
 
     return info_by_subq
 
@@ -939,6 +948,10 @@ def stream_chat_message_objects(
             ),
             image_generation_tool_config=ImageGenerationToolConfig(
                 additional_headers=litellm_additional_headers,
+            ),
+            code_interpreter_tool_config=CodeInterpreterToolConfig(
+                answer_style_config=answer_style_config,
+                latest_query_files=latest_query_files,
             ),
             custom_tool_config=CustomToolConfig(
                 chat_session_id=chat_session_id,

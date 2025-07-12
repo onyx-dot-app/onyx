@@ -154,6 +154,24 @@ def _build_content(
     for file in text_files:
         try:
             file_content = file.content.decode("utf-8")
+            lines = file_content.split("\n")
+            original_line_count = len(lines)
+            if original_line_count > 100 or len(file.content) > 512 * 1024:
+                # Truncate to first 100 lines or 512KB
+                truncated_lines = lines[:100]
+                truncated_content = "\n".join(truncated_lines)
+                if len(truncated_content.encode("utf-8")) > 512 * 1024:
+                    # Truncate by bytes if still too large
+                    truncated_content = truncated_content.encode("utf-8")[
+                        : 512 * 1024
+                    ].decode("utf-8", errors="ignore")
+                logger.info(
+                    f"File {file.filename} truncated for user message: {original_line_count} lines, {len(file.content)} bytes"
+                )
+                truncated_content += "\n\n[NOTE: File truncated for display. Only the first 100 lines or 512KB are shown. \
+                The Code Interpreter will process the truncated file.]"
+                file_content = truncated_content
+
         except UnicodeDecodeError:
             # Try to decode as binary
             try:
@@ -164,6 +182,7 @@ def _build_content(
                     f"Could not decode binary file content for file type: {file.file_type}"
                 )
                 # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
+
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
