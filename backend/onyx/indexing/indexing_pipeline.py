@@ -1025,7 +1025,7 @@ def index_doc_batch(
         db_session.commit()
 
     result = IndexingPipelineResult(
-        new_docs=len([r for r in insertion_records if r.already_existed is False]),
+        new_docs=len([r for r in insertion_records if not r.already_existed]),
         total_docs=len(filtered_documents),
         total_chunks=len(access_aware_chunks),
         failures=vector_db_write_failures + embedding_failures,

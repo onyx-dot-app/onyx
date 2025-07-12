@@ -1,5 +1,6 @@
 import gc
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -7,11 +8,23 @@ from pytz import UTC
 from simple_salesforce import Salesforce
 from simple_salesforce.bulk2 import SFBulk2Handler
 from simple_salesforce.bulk2 import SFBulk2Type
+from simple_salesforce.exceptions import SalesforceRefusedRequest
 
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    rate_limit_builder,
+)
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
+
+
+def is_salesforce_rate_limit_error(exception: Exception) -> bool:
+    """Check if an exception is a Salesforce rate limit error."""
+    return isinstance(
+        exception, SalesforceRefusedRequest
+    ) and "REQUEST_LIMIT_EXCEEDED" in str(exception)
 
 
 def _build_last_modified_time_filter_for_salesforce(
@@ -71,6 +84,14 @@ def get_object_by_id_query(
     return query
 
 
+@retry_builder(
+    tries=5,
+    delay=2,
+    backoff=2,
+    max_delay=60,
+    exceptions=(SalesforceRefusedRequest,),
+)
+@rate_limit_builder(max_calls=50, period=60)
 def _object_type_has_api_data(
     sf_client: Salesforce, sf_type: str, time_filter: str
 ) -> bool:
@@ -82,6 +103,15 @@ def _object_type_has_api_data(
         result = sf_client.query(query)
         if result["totalSize"] == 0:
             return False
+    except SalesforceRefusedRequest as e:
+        if is_salesforce_rate_limit_error(e):
+            logger.warning(
+                f"Salesforce rate limit exceeded for object type check: {sf_type}"
+            )
+            # Add additional delay for rate limit errors
+            time.sleep(3)
+        raise
+
     except Exception as e:
         if "OPERATION_TOO_LARGE" not in str(e):
             logger.warning(f"Object type {sf_type} doesn't support query: {e}")

@@ -1,7 +1,7 @@
 """add_indexing_coordination
 
 Revision ID: 2f95e36923e6
-Revises: 12635f6655b7
+Revises: 0816326d83aa
 Create Date: 2025-07-10 16:17:57.762182
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "2f95e36923e6"
-down_revision = "12635f6655b7"
+down_revision = "0816326d83aa"
 branch_labels = None
 depends_on = None
 
