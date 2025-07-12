@@ -466,6 +466,13 @@ def upsert_persona(
             persona_name=name, user=user, db_session=db_session
         )
 
+        # Check for duplicate names when creating new personas
+        # Deleted personas are allowed to be overwritten
+        if existing_persona and not existing_persona.deleted:
+            raise ValueError(
+                f"Assistant with name '{name}' already exists. Please rename your assistant."
+            )
+
     if existing_persona:
         # this checks if the user has permission to edit the persona
         # will raise an Exception if the user does not have permission
