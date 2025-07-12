@@ -28,17 +28,17 @@ cd path/to/onyx/backend/tests/regression/search_quality
 ```
 python run_search_eval.py
   -d --dataset          # Path to the test-set JSON file (default: ./test_queries.json)
-  -n --num_search       # Maximum number of search results to check per query (default: 50)
-  -a --num_answer       # Maximum number of search results to use for answer evaluation (default: 25)
-  -w --workers          # Number of parallel search requests (default: 10)
+  -n --num_search       # Maximum number of documents to retrieve per search (default: 50)
+  -a --num_answer       # Maximum number of documents to use for answer evaluation (default: 25)
+  -w --max_workers      # Maximum number of concurrent search requests (0 = unlimited, default: 10).
+  -r --max_req_rate     # Maximum number of search requests per minute (0 = unlimited, default: 0).
   -q --timeout          # Request timeout in seconds (default: 120)
   -e --api_endpoint     # Base URL of the Onyx API server (default: http://127.0.0.1:8080)
   -s --search_only      # Only perform search and not answer evaluation (default: false)
-  -r --rerank_all       # Always rerank all search results (default: false)
   -t --tenant_id        # Tenant ID to use for the evaluation (default: None)
 ```
 
-Note: If you only care about search quality, you should run with the `-s` flag for a significantly faster evaluation. Furthermore, you should set `-w` to 1 if running with federated search enabled to avoid hitting rate limits.
+Note: If you only care about search quality, you should run with the `-s` flag for a significantly faster evaluation. Furthermore, you should set `-r` to 1 if running with federated search enabled to avoid hitting rate limits.
 
 6. After the run, an `eval-YYYY-MM-DD-HH-MM-SS` folder is created containing:
 
@@ -47,4 +47,4 @@ Note: If you only care about search quality, you should run with the `-s` flag f
    * `results_by_category.csv` – aggregated metrics per category and for "all".
    * `search_position_chart.png` – bar-chart of ground-truth ranks.
 
-You can copy the generated `test_queries.json` back to the root folder for a slightly faster loading of the queries.
+You can replace `test_queries.json` with the generated one for a slightly faster loading of the queries the next time around.

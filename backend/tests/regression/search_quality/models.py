@@ -27,7 +27,6 @@ class EvalConfig(BaseModel):
     request_timeout: int
     api_url: str
     search_only: bool
-    rerank_all: bool
 
 
 class OneshotQAResult(BaseModel):
