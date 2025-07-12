@@ -2,6 +2,7 @@ import base64
 from collections.abc import Callable
 from io import BytesIO
 from typing import cast
+from typing import NamedTuple
 from uuid import UUID
 
 import requests
@@ -22,6 +23,14 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
+
+
+# Using functional syntax to avoid mypy type inference issues with 'index' field
+IndexedData = NamedTuple("IndexedData", [("index", int), ("data", str)])
+"""Represents data with its original index for maintaining order in parallel processing."""
+
+IndexedResult = NamedTuple("IndexedResult", [("index", int), ("file_id", str)])
+"""Represents a processing result with its original index."""
 
 
 def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
@@ -293,6 +302,35 @@ def save_file_from_base64(base64_string: str) -> str:
         return file_id
 
 
+def save_file_indexed(
+    indexed_url: IndexedData | None = None,
+    indexed_base64: IndexedData | None = None,
+) -> IndexedResult:
+    """Save a file from either indexed URL or base64 data, preserving the original index.
+
+    Args:
+        indexed_url: IndexedData with URL
+        indexed_base64: IndexedData with base64 data
+
+    Returns:
+        IndexedResult with the original index and new file_id
+
+    Raises:
+        ValueError: If neither or both parameters are provided
+    """
+    if indexed_url is not None and indexed_base64 is not None:
+        raise ValueError("Cannot specify both indexed_url and indexed_base64")
+
+    if indexed_url is not None:
+        file_id = save_file_from_url(indexed_url.data)
+        return IndexedResult(index=indexed_url.index, file_id=file_id)
+    elif indexed_base64 is not None:
+        file_id = save_file_from_base64(indexed_base64.data)
+        return IndexedResult(index=indexed_base64.index, file_id=file_id)
+    else:
+        raise ValueError("Must specify either indexed_url or indexed_base64")
+
+
 def save_file(
     url: str | None = None,
     base64_data: str | None = None,
@@ -331,6 +369,42 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
         (save_file, (None, base64_file)) for base64_file in base64_files
     ]
 
+    return run_functions_tuples_in_parallel(funcs)
+
+
+def save_files_indexed(
+    indexed_urls: list[IndexedData], indexed_base64_files: list[IndexedData]
+) -> list[IndexedResult]:
+    """Save multiple files while preserving original indices for proper mapping.
+
+    This function is designed to handle concurrent file saving while maintaining
+    the association between input data and output file IDs through explicit indexing.
+
+    Args:
+        indexed_urls: List of IndexedData with URLs and their original indices
+        indexed_base64_files: List of IndexedData with base64 data and their original indices
+
+    Returns:
+        List of IndexedResult containing original indices and corresponding file IDs
+
+    Example:
+        urls = [IndexedData(index=0, data="http://example.com/img1.png")]
+        base64 = [IndexedData(index=2, data="base64data...")]
+        results = save_files_indexed(urls, base64)
+        # Results: [IndexedResult(index=0, file_id="file1"), IndexedResult(index=2, file_id="file2")]
+    """
+    # Combine all tasks with their indices
+    funcs: list[
+        tuple[
+            Callable[[IndexedData | None, IndexedData | None], IndexedResult],
+            tuple[IndexedData | None, IndexedData | None],
+        ]
+    ] = [(save_file_indexed, (indexed_url, None)) for indexed_url in indexed_urls] + [
+        (save_file_indexed, (None, indexed_base64))
+        for indexed_base64 in indexed_base64_files
+    ]
+
+    # Run tasks in parallel and return results with preserved indices
     return run_functions_tuples_in_parallel(funcs)
 
 

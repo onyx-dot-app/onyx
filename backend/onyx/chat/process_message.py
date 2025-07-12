@@ -95,8 +95,9 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.utils import IndexedData
 from onyx.file_store.utils import load_all_chat_files
-from onyx.file_store.utils import save_files
+from onyx.file_store.utils import save_files_indexed
 from onyx.kg.models import KGException
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -108,6 +109,7 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.utils import get_json_line
+from onyx.tools.constants import IMAGE_GENERATION_TOOL_NAME
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
@@ -413,6 +415,43 @@ ChatPacket = (
 ChatPacketStream = Iterator[ChatPacket]
 
 
+def _collect_indexed_image_data(
+    img_generation_response: list[ImageGenerationResponse],
+) -> tuple[list[IndexedData], list[IndexedData]]:
+    """Collect indexed URLs and base64 files from image generation responses."""
+    indexed_urls = []
+    indexed_base64_files = []
+
+    for i, img in enumerate(img_generation_response):
+        if img.url:
+            indexed_urls.append(IndexedData(index=i, data=img.url))
+        elif img.image_data:
+            indexed_base64_files.append(IndexedData(index=i, data=img.image_data))
+
+    return indexed_urls, indexed_base64_files
+
+
+def _create_updated_image_responses(
+    img_generation_response: list[ImageGenerationResponse],
+    index_to_file_id: dict[int, str],
+) -> list[ImageGenerationResponse]:
+    """Create updated image responses with file URLs and cleared image_data."""
+    updated_responses = []
+    for i, img in enumerate(img_generation_response):
+        if i in index_to_file_id:
+            # Create new response with updated URL and cleared image_data
+            updated_img = ImageGenerationResponse(
+                revised_prompt=img.revised_prompt,
+                url=f"/api/chat/file/{index_to_file_id[i]}",
+                image_data=None,
+            )
+            updated_responses.append(updated_img)
+        else:
+            # Keep unchanged responses as-is (shouldn't happen in practice)
+            updated_responses.append(img)
+    return updated_responses
+
+
 def _process_tool_response(
     packet: ToolResponse,
     db_session: Session,
@@ -478,19 +517,33 @@ def _process_tool_response(
     elif packet.id == IMAGE_GENERATION_RESPONSE_ID:
         img_generation_response = cast(list[ImageGenerationResponse], packet.response)
 
-        file_ids = save_files(
-            urls=[img.url for img in img_generation_response if img.url],
-            base64_files=[
-                img.image_data for img in img_generation_response if img.image_data
-            ],
+        # Create indexed data for URLs and base64 files while preserving original order
+        indexed_urls, indexed_base64_files = _collect_indexed_image_data(
+            img_generation_response
         )
+        indexed_results = save_files_indexed(indexed_urls, indexed_base64_files)
+
+        # Create mapping from original response index to file ID
+        index_to_file_id = {result.index: result.file_id for result in indexed_results}
+
+        # Create new response objects with updated URLs and cleared image_data
+        updated_responses = _create_updated_image_responses(
+            img_generation_response, index_to_file_id
+        )
+
+        # Store cleaned responses for later tool_result cleaning
+        info.cleaned_image_responses = [resp.model_dump() for resp in updated_responses]
+
+        # Add file descriptors for the saved files
         info.ai_message_files.extend(
             [
-                FileDescriptor(id=str(file_id), type=ChatFileType.IMAGE)
-                for file_id in file_ids
+                FileDescriptor(id=str(result.file_id), type=ChatFileType.IMAGE)
+                for result in indexed_results
             ]
         )
-        yield FileChatDisplay(file_ids=[str(file_id) for file_id in file_ids])
+        yield FileChatDisplay(
+            file_ids=[str(result.file_id) for result in indexed_results]
+        )
     elif packet.id == INTERNET_SEARCH_RESPONSE_ID:
         (
             info.qa_docs_response,
@@ -1047,7 +1100,25 @@ def stream_chat_message_objects(
                     info = info_by_subq[
                         SubQuestionKey(level=level, question_num=level_question_num)
                     ]
-                    info.tool_result = packet
+
+                    # Create a cleaned version of the tool result for image generation tools
+                    # to avoid storing heavy base64 data in the database
+                    if packet.tool_name == IMAGE_GENERATION_TOOL_NAME:
+                        # Use the cleaned image responses with URLs that were created during _process_tool_response
+                        cleaned_tool_result = info.cleaned_image_responses
+
+                        # Create new ToolCallFinalResult with cleaned data (immutable)
+                        cleaned_packet = ToolCallFinalResult(
+                            tool_name=packet.tool_name,
+                            tool_args=packet.tool_args,
+                            tool_result=cleaned_tool_result,
+                            level=packet.level,
+                            level_question_num=packet.level_question_num,
+                        )
+                        info.tool_result = cleaned_packet
+                    else:
+                        # For non-image tools, store as-is
+                        info.tool_result = packet
                 yield cast(ChatPacket, packet)
 
     except ValueError as e:
