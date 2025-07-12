@@ -138,8 +138,11 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
             # if we've never indexed, we can't prune
             return False
 
-        # if never pruned, use the last time the connector indexed successfully
-        last_pruned = cc_pair.last_successful_index_time
+        # if never pruned, use the connector creation time. We could also
+        # compute the completion time of the first successful index attempt, but
+        # that is a reasonably heavy operation. This is a reasonable approximation —
+        # in the worst case, we'll prune a little bit earlier than we should.
+        last_pruned = cc_pair.connector.time_created
 
     next_prune = last_pruned + timedelta(seconds=cc_pair.connector.prune_freq)
     if datetime.now(timezone.utc) < next_prune:
