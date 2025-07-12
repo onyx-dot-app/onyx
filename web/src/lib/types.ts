@@ -296,18 +296,6 @@ export interface DocumentSetSummary {
   federated_connector_summaries: FederatedConnectorSummary[];
 }
 
-export interface DocumentSet {
-  id: number;
-  name: string;
-  description: string;
-  cc_pair_descriptors: CCPairDescriptor<any, any>[];
-  is_up_to_date: boolean;
-  is_public: boolean;
-  users: string[];
-  groups: number[];
-  federated_connectors: FederatedConnectorDescriptor[];
-}
-
 export interface Tag {
   tag_key: string;
   tag_value: string;
@@ -393,7 +381,7 @@ export interface UserGroup {
   users: User[];
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
-  document_sets: DocumentSet[];
+  document_sets: DocumentSetSummary[];
   personas: Persona[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;

@@ -5,7 +5,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
-  DocumentSet,
+  DocumentSetSummary,
   SlackChannelConfig,
   SlackBotResponseType,
 } from "@/lib/types";
@@ -29,7 +29,7 @@ export const SlackChannelConfigCreationForm = ({
   existingSlackChannelConfig,
 }: {
   slack_bot_id: number;
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
   personas: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   existingSlackChannelConfig?: SlackChannelConfig;

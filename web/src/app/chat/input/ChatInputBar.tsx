@@ -29,7 +29,7 @@ import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmPr
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
-import { DocumentSet, Tag } from "@/lib/types";
+import { DocumentSetSummary, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
@@ -193,7 +193,7 @@ interface ChatInputBarProps {
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   filterManager: FilterManager;
   availableSources: SourceMetadata[];
-  availableDocumentSets: DocumentSet[];
+  availableDocumentSets: DocumentSetSummary[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
   proSearchEnabled: boolean;

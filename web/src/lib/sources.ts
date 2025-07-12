@@ -418,9 +418,9 @@ export function getSourceMetadataForSources(sources: ValidSources[]) {
 export function getSourcesForPersona(persona: Persona): ValidSources[] {
   const personaSources: ValidSources[] = [];
   persona.document_sets.forEach((documentSet) => {
-    documentSet.cc_pair_descriptors.forEach((ccPair) => {
-      if (!personaSources.includes(ccPair.connector.source)) {
-        personaSources.push(ccPair.connector.source);
+    documentSet.cc_pair_summaries.forEach((ccPair) => {
+      if (!personaSources.includes(ccPair.source)) {
+        personaSources.push(ccPair.source);
       }
     });
   });

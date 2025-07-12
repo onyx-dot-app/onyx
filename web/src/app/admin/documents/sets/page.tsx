@@ -13,7 +13,6 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
-import { DocumentSet } from "@/lib/types";
 import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";

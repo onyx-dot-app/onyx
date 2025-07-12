@@ -3,7 +3,11 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSet, SlackChannelConfig, ValidSources } from "@/lib/types";
+import {
+  DocumentSetSummary,
+  SlackChannelConfig,
+  ValidSources,
+} from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import {
@@ -68,7 +72,7 @@ async function EditslackChannelConfigPage(props: {
     );
   }
   const response = await documentSetsResponse.json();
-  const documentSets = response as DocumentSet[];
+  const documentSets = response as DocumentSetSummary[];
 
   if (assistantsFetchError) {
     return (

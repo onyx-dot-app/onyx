@@ -2,7 +2,7 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
-import { DocumentSet, ValidSources } from "@/lib/types";
+import { DocumentSetSummary, ValidSources } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
 import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
 import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
@@ -40,7 +40,8 @@ async function NewChannelConfigPage(props: {
       />
     );
   }
-  const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
+  const documentSets =
+    (await documentSetsResponse.json()) as DocumentSetSummary[];
 
   if (assistantsResponse[1]) {
     return (
