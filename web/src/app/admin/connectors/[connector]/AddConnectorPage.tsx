@@ -29,7 +29,7 @@ import {
   connectorConfigs,
   createConnectorInitialValues,
   createConnectorValidationSchema,
-  defaultPruneFreqDays,
+  defaultPruneFreqHours,
   defaultRefreshFreqMinutes,
   isLoadState,
   Connector,
@@ -343,7 +343,7 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: (pruneFreq ?? defaultPruneFreqDays) * 60 * 60 * 24,
+          pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
           indexingStart: convertStringToDateTime(indexingStart),
           refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
         };

@@ -1397,14 +1397,20 @@ export function createConnectorValidationSchema(
     ),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(0, "Prune frequency must be non-negative"),
-    refreshFreq: Yup.number().min(0, "Refresh frequency must be non-negative"),
+    pruneFreq: Yup.number().min(
+      0.083,
+      "Prune frequency must be at least 0.083 hours (5 minutes)"
+    ),
+    refreshFreq: Yup.number().min(
+      1,
+      "Refresh frequency must be at least 1 minute"
+    ),
   });
 
   return object;
 }
 
-export const defaultPruneFreqDays = 30; // 30 days
+export const defaultPruneFreqHours = 720; // 30 days in hours // 30 days
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
 
 // CONNECTORS
