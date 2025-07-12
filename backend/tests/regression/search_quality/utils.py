@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from textwrap import indent
 from typing import Any
@@ -18,6 +19,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import Document
+from onyx.db.models import FederatedConnector
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -30,9 +32,33 @@ from tests.regression.search_quality.models import RetrievedDocument
 logger = setup_logger(__name__)
 
 
-def find_document(ground_truth: GroundTruth, db_session: Session) -> Document | None:
-    """Find a document by its link."""
-    # necessary preprocessing of links
+def get_federated_sources(db_session: Session) -> set[DocumentSource]:
+    """Get all federated sources from the database."""
+    return {
+        source
+        for connector in db_session.query(FederatedConnector).all()
+        if (source := connector.source.to_non_federated_source()) is not None
+    }
+
+
+def find_document_id(
+    ground_truth: GroundTruth,
+    federated_sources: set[DocumentSource],
+    db_session: Session,
+) -> str | None:
+    """Find a document by its link and return its id if found."""
+    # handle federated sources
+    if ground_truth.doc_source in federated_sources:
+        if ground_truth.doc_source == DocumentSource.SLACK:
+            groups = re.search(
+                r"archives\/([A-Z0-9]+)\/p([0-9]+)", ground_truth.doc_link
+            )
+            if groups:
+                channel_id = groups.group(1)
+                message_id = groups.group(2)
+                return f"{channel_id}__{message_id[:-6]}.{message_id[-6:]}"
+
+    # preprocess links
     doc_link = ground_truth.doc_link
     if ground_truth.doc_source == DocumentSource.GOOGLE_DRIVE:
         if "/edit" in doc_link:
@@ -52,7 +78,7 @@ def find_document(ground_truth: GroundTruth, db_session: Session) -> Document | 
             doc_link,
             docs[0].id,
         )
-    return docs[0]
+    return docs[0].id
 
 
 def get_doc_contents(

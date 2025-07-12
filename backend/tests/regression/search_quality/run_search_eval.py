@@ -59,7 +59,8 @@ from tests.regression.search_quality.models import EvalConfig
 from tests.regression.search_quality.models import OneshotQAResult
 from tests.regression.search_quality.models import TestQuery
 from tests.regression.search_quality.utils import compute_overall_scores
-from tests.regression.search_quality.utils import find_document
+from tests.regression.search_quality.utils import find_document_id
+from tests.regression.search_quality.utils import get_federated_sources
 from tests.regression.search_quality.utils import LazyJsonWriter
 from tests.regression.search_quality.utils import ragas_evaluate
 from tests.regression.search_quality.utils import search_docs_to_doc_contexts
@@ -383,6 +384,9 @@ class SearchAnswerAnalyzer:
         with dataset_path.open("r") as f:
             dataset_raw: list[dict] = json.load(f)
 
+        with get_session_with_tenant(tenant_id=self.tenant_id) as db_session:
+            federated_sources = get_federated_sources(db_session)
+
         dataset: list[TestQuery] = []
         for datum in dataset_raw:
             # validate the raw datum
@@ -400,9 +404,12 @@ class SearchAnswerAnalyzer:
             # validate and get the ground truth documents
             with get_session_with_tenant(tenant_id=self.tenant_id) as db_session:
                 for ground_truth in test_query.ground_truth:
-                    doc = find_document(ground_truth, db_session)
-                    if doc:
-                        test_query.ground_truth_docids.append(doc.id)
+                    if (
+                        doc_id := find_document_id(
+                            ground_truth, federated_sources, db_session
+                        )
+                    ) is not None:
+                        test_query.ground_truth_docids.append(doc_id)
 
             if len(test_query.ground_truth_docids) == 0:
                 logger.warning(
