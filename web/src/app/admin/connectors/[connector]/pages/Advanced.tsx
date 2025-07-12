@@ -3,7 +3,7 @@ import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/Field";
 import { TrashIcon } from "@/components/icons/icons";
 
-const AdvancedFormPage = () => {
+export default function AdvancedFormPage() {
   return (
     <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-text-800">
@@ -42,6 +42,4 @@ const AdvancedFormPage = () => {
       </div>
     </div>
   );
-};
-
-export default AdvancedFormPage;
+}

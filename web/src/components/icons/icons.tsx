@@ -30,6 +30,7 @@ import {
   FiCpu,
   FiInfo,
   FiBarChart2,
+  FiMail,
 } from "react-icons/fi";
 import { SiBookstack } from "react-icons/si";
 import { StaticImageData } from "next/image";
@@ -1005,6 +1006,11 @@ export const LightSettingsIcon = ({
     </svg>
   );
 };
+
+export const EmailIcon = ({
+  size = 24,
+  className = defaultTailwindCSSBlue,
+}: IconProps) => <FiMail size={size} className={className} />;
 
 //  COMPANY LOGOS
 
