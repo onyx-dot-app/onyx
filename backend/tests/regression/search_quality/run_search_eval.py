@@ -8,6 +8,7 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from threading import Event
 from threading import Lock
 from threading import Semaphore
 from typing import cast
@@ -119,45 +120,53 @@ class SearchAnswerAnalyzer:
         result_export_path = export_path / "search_results.json"
         self._result_writer = LazyJsonWriter(result_export_path)
 
-        # set up rate limiting
+        # set up rate limiting and threading primitives
         interval = (
             60.0 / self.config.max_request_rate
             if self.config.max_request_rate > 0
             else 0.0
         )
         available_workers = Semaphore(self.config.num_workers)
+        stop_event = Event()
 
         def _submit_wrapper(tc: TestQuery):
             try:
                 return self._run_and_analyze_one(tc, dataset_size)
+            except Exception as e:
+                logger.error("Error during analysis: %s", e)
+                stop_event.set()
+                raise
             finally:
                 available_workers.release()
 
         # run the analysis
-        logger.info("Starting analysis of %d queries...", dataset_size)
+        logger.info("Starting analysis of %d queries", dataset_size)
         logger.info("Using %d parallel workers", self.config.num_workers)
         logger.info("Exporting search results to %s", result_export_path)
 
         with ThreadPoolExecutor(
             max_workers=self.config.num_workers or None
         ) as executor:
-            # submit requests at configured rate
+            # submit requests at configured rate, break early if any error occurs
             futures = []
             for tc in dataset:
+                if stop_event.is_set():
+                    break
+
                 available_workers.acquire()
                 fut = executor.submit(_submit_wrapper, tc)
                 futures.append(fut)
 
-                if len(futures) != dataset_size and interval > 0:
+                if (
+                    len(futures) != dataset_size
+                    and interval > 0
+                    and not stop_event.is_set()
+                ):
                     time.sleep(interval)
 
-            # ensure all tasks complete and surface any exceptions
+            # ensure all tasks finish and surface any exceptions
             for fut in as_completed(futures):
-                try:
-                    fut.result()
-                except Exception as e:
-                    logger.error("Error during evaluation: %s", e)
-                    raise
+                fut.result()
 
         if self._result_writer:
             self._result_writer.close()
@@ -618,7 +627,6 @@ def run_search_eval(
         response.raise_for_status()
     except RequestException as e:
         raise RuntimeError(f"Could not connect to Onyx API: {e}")
-    logger.info("Onyx API is running")
 
     # create the export folder
     export_folder = current_dir / datetime.now().strftime("eval-%Y-%m-%d-%H-%M-%S")
