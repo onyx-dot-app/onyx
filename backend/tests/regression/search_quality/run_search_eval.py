@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import sys
 import time
 from collections import defaultdict
 from concurrent.futures import as_completed
@@ -17,14 +18,18 @@ from pydantic import ValidationError
 from requests.exceptions import RequestException
 from retry import retry
 
-# load env before app_config loads (env vars doesn't get loaded when running as a script)
+# add onyx/backend to path (not done when running as a script)
 current_dir = Path(__file__).parent
-env_dir = current_dir.parent.parent.parent.parent / ".vscode" / ".env"
-if not env_dir.exists():
+onyx_dir = current_dir.parent.parent.parent.parent
+sys.path.append(str(onyx_dir / "backend"))
+
+# load env before app_config loads (env vars doesn't get loaded when running as a script)
+env_path = onyx_dir / ".vscode" / ".env"
+if not env_path.exists():
     raise RuntimeError(
         "Could not find .env file. Please create one in the root .vscode directory."
     )
-load_dotenv(env_dir)
+load_dotenv(env_path)
 
 # pylint: disable=E402
 # flake8: noqa: E402
