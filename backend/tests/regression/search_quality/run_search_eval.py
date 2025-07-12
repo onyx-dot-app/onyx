@@ -21,12 +21,12 @@ from pydantic import ValidationError
 from requests.exceptions import RequestException
 from retry import retry
 
-# add onyx/backend to path (not done when running as a script)
+# add onyx/backend to path (since this isn't done automatically when running as a script)
 current_dir = Path(__file__).parent
 onyx_dir = current_dir.parent.parent.parent.parent
 sys.path.append(str(onyx_dir / "backend"))
 
-# load env before app_config loads (env vars doesn't get loaded when running as a script)
+# load env before app_config loads (since env doesn't get loaded when running as a script)
 env_path = onyx_dir / ".vscode" / ".env"
 if not env_path.exists():
     raise RuntimeError(
