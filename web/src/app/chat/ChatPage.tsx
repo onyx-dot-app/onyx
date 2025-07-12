@@ -202,6 +202,8 @@ export function ChatPage({
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
 
+  const [messageFiles, setMessageFiles] = useState<FileDescriptor[]>([]);
+
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
 
@@ -1237,6 +1239,13 @@ export function ChatPage({
     // If under the context limit, the files will be included in the chat history
     // so we don't need to keep them around.
     if (selectedDocumentTokens < maxTokens) {
+      setMessageFiles(
+        selectedFiles.map((selectedFile) => ({
+          id: selectedFile.id.toString(),
+          type: selectedFile.chat_file_type,
+          name: selectedFile.name,
+        }))
+      );
       setSelectedFiles([]);
     }
 
@@ -3350,6 +3359,7 @@ export function ChatPage({
                                 key={-2}
                                 messageId={-1}
                                 content={submittedMessage}
+                                files={messageFiles}
                               />
                             )}
 
