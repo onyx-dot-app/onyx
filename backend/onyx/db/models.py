@@ -531,6 +531,27 @@ class ConnectorCredentialPair(Base):
     )
 
 
+DocumentColumns = Literal[
+    "id",
+    "from_ingestion_api",
+    "boost",
+    "hidden",
+    "semantic_id",
+    "link",
+    "doc_updated_at",
+    "chunk_count",
+    "last_modified",
+    "last_synced",
+    "primary_owners",
+    "secondary_owners",
+    "external_user_emails",
+    "external_user_group_ids",
+    "is_public",
+    "kg_stage",
+    "kg_processing_time",
+]
+
+
 class Document(Base):
     __tablename__ = "document"
     # NOTE: if more sensitive data is added here for display, make sure to add user/group permission

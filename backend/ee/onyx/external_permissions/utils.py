@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import Any
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
@@ -62,7 +63,10 @@ def generic_doc_sync(
             )
 
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id=}")
-    existing_doc_ids = set(fetch_all_existing_docs_fn())
+    existing_docs: list[dict[str, Any]] = fetch_all_existing_docs_fn(
+        columns=["id"],
+    )
+    existing_doc_ids = set(doc["id"] for doc in existing_docs)
 
     missing_doc_ids = existing_doc_ids - newly_fetched_doc_ids
 

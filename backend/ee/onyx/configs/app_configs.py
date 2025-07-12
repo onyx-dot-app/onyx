@@ -72,6 +72,19 @@ GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 
 
 #####
+# GitHub
+#####
+# In seconds, default is 5 minutes
+GITHUB_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("GITHUB_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 5 minutes
+GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+
+#####
 # Slack
 #####
 SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
