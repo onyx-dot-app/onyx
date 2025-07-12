@@ -91,7 +91,7 @@ def export_query_history_task(
     with get_session_with_current_tenant() as db_session:
         try:
             stream.seek(0)
-            get_default_file_store(db_session).save_file(
+            get_default_file_store().save_file(
                 content=stream,
                 display_name=report_name,
                 file_origin=FileOrigin.QUERY_HISTORY_CSV,

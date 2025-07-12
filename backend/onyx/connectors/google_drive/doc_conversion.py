@@ -29,7 +29,6 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import extract_file_text
@@ -143,17 +142,15 @@ def _download_and_extract_sections_basic(
         # Store images for later processing
         sections: list[TextSection | ImageSection] = []
         try:
-            with get_session_with_current_tenant() as db_session:
-                section, embedded_id = store_image_and_create_section(
-                    db_session=db_session,
-                    image_data=response_call(),
-                    file_id=file_id,
-                    display_name=file_name,
-                    media_type=mime_type,
-                    file_origin=FileOrigin.CONNECTOR,
-                    link=link,
-                )
-                sections.append(section)
+            section, embedded_id = store_image_and_create_section(
+                image_data=response_call(),
+                file_id=file_id,
+                display_name=file_name,
+                media_type=mime_type,
+                file_origin=FileOrigin.CONNECTOR,
+                link=link,
+            )
+            sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process image {file_name}: {e}")
         return sections
@@ -216,16 +213,14 @@ def _download_and_extract_sections_basic(
 
         # Process embedded images in the PDF
         try:
-            with get_session_with_current_tenant() as db_session:
-                for idx, (img_data, img_name) in enumerate(images):
-                    section, embedded_id = store_image_and_create_section(
-                        db_session=db_session,
-                        image_data=img_data,
-                        file_id=f"{file_id}_img_{idx}",
-                        display_name=img_name or f"{file_name} - image {idx}",
-                        file_origin=FileOrigin.CONNECTOR,
-                    )
-                    pdf_sections.append(section)
+            for idx, (img_data, img_name) in enumerate(images):
+                section, embedded_id = store_image_and_create_section(
+                    image_data=img_data,
+                    file_id=f"{file_id}_img_{idx}",
+                    display_name=img_name or f"{file_name} - image {idx}",
+                    file_origin=FileOrigin.CONNECTOR,
+                )
+                pdf_sections.append(section)
         except Exception as e:
             logger.error(f"Failed to process PDF images in {file_name}: {e}")
         return pdf_sections

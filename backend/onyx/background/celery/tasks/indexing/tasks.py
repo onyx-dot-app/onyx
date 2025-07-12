@@ -1,58 +1,48 @@
-import multiprocessing
 import os
 import time
 import traceback
+from collections import defaultdict
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
-from enum import Enum
 from http import HTTPStatus
-from time import sleep
 from typing import Any
 from typing import cast
 
-import sentry_sdk
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.result import AsyncResult
-from celery.states import READY_STATES
 from pydantic import BaseModel
 from redis import Redis
 from redis.lock import Lock as RedisLock
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
-from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
 from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.indexing.utils import should_index
-from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
-from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
+from onyx.background.celery.tasks.indexing.utils import try_creating_docfetching_task
+from onyx.background.celery.tasks.models import DocProcessingContext
+from onyx.background.celery.tasks.models import IndexingWatchdogTerminalStatus
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
     get_index_attempts_with_old_checkpoints,
 )
-from onyx.background.indexing.job_client import SimpleJob
-from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.job_client import SimpleJobException
-from onyx.background.indexing.run_indexing import run_indexing_entrypoint
-from onyx.configs.app_configs import MANAGED_VESPA
-from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
-from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
-from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
-from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import Document
+from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -61,16 +51,30 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
+from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
+from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
+from onyx.db.index_attempt import IndexAttemptError
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
+from onyx.db.index_attempt import mark_attempt_partially_succeeded
+from onyx.db.index_attempt import mark_attempt_succeeded
+from onyx.db.indexing_coordination import IndexingCoordination
+from onyx.db.models import IndexAttempt
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.document_index.factory import get_default_document_index
+from onyx.file_store.document_batch_storage import get_document_batch_storage
+from onyx.httpx.httpx_pool import HttpxPool
+from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
+from onyx.natural_language_processing.search_nlp_models import (
+    InformationContentClassificationModel,
+)
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
@@ -78,11 +82,14 @@ from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import global_version
+from onyx.utils.logger import TaskAttemptSingleton
+from onyx.utils.middleware import make_randomized_onyx_request_id
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import SENTRY_DSN
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -105,115 +112,148 @@ def _get_fence_validation_block_expiration() -> int:
     return int(base_expiration * beat_multiplier)
 
 
-class IndexingWatchdogTerminalStatus(str, Enum):
-    """The different statuses the watchdog can finish with.
-
-    TODO: create broader success/failure/abort categories
+def validate_active_indexing_attempts(
+    tenant_id: str,
+    r_celery: Redis,
+    lock_beat: RedisLock,
+) -> None:
     """
+    Validates that active indexing attempts in the database have corresponding Celery tasks.
+    If an attempt has a celery_task_id but the task doesn't exist, mark the attempt as failed.
 
-    UNDEFINED = "undefined"
+    This replaces the Redis fence validation with database-based validation.
+    Race condition handling:
+    - We use a double-check pattern: check DB -> check Celery -> check DB again
+    - Only mark attempts as failed if they consistently have missing tasks
+    - Cancel tasks that have been waiting to start for too long
+    """
+    with get_session_with_current_tenant() as db_session:
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=6)
 
-    SUCCEEDED = "succeeded"
+        # Find all active indexing attempts that have Celery task IDs
+        # These should have corresponding tasks in Celery
+        active_attempts = (
+            db_session.execute(
+                select(IndexAttempt).where(
+                    IndexAttempt.status.in_(
+                        [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                    ),
+                    IndexAttempt.celery_task_id.isnot(None),
+                )
+            )
+            .scalars()
+            .all()
+        )
 
-    SPAWN_FAILED = "spawn_failed"  # connector spawn failed
-    SPAWN_NOT_ALIVE = (
-        "spawn_not_alive"  # spawn succeeded but process did not come alive
-    )
+        for attempt in active_attempts:
+            lock_beat.reacquire()
 
-    BLOCKED_BY_DELETION = "blocked_by_deletion"
-    BLOCKED_BY_STOP_SIGNAL = "blocked_by_stop_signal"
-    FENCE_NOT_FOUND = "fence_not_found"  # fence does not exist
-    FENCE_READINESS_TIMEOUT = (
-        "fence_readiness_timeout"  # fence exists but wasn't ready within the timeout
-    )
-    FENCE_MISMATCH = "fence_mismatch"  # task and fence metadata mismatch
-    TASK_ALREADY_RUNNING = "task_already_running"  # task appears to be running already
-    INDEX_ATTEMPT_MISMATCH = (
-        "index_attempt_mismatch"  # expected index attempt metadata not found in db
-    )
+            # Double-check the attempt still exists and has the same status
+            # This handles race conditions where the attempt might complete between queries
+            fresh_attempt = get_index_attempt(db_session, attempt.id)
+            if not fresh_attempt or fresh_attempt.status.is_terminal():
+                continue
 
-    CONNECTOR_VALIDATION_ERROR = (
-        "connector_validation_error"  # the connector validation failed
-    )
-    CONNECTOR_EXCEPTIONED = "connector_exceptioned"  # the connector itself exceptioned
-    WATCHDOG_EXCEPTIONED = "watchdog_exceptioned"  # the watchdog exceptioned
+            celery_task_id = fresh_attempt.celery_task_id
+            if not celery_task_id:
+                continue
 
-    # the watchdog received a termination signal
-    TERMINATED_BY_SIGNAL = "terminated_by_signal"
+            # Check if the Celery task actually exists
+            try:
+                result: AsyncResult = AsyncResult(celery_task_id)
 
-    # the watchdog terminated the task due to no activity
-    TERMINATED_BY_ACTIVITY_TIMEOUT = "terminated_by_activity_timeout"
+                # Check if this is an orphaned task:
+                # - PENDING state means Celery has never seen this task ID (definitely orphaned)
+                # - STARTED state means task is actively running (not orphaned)
+                # - SUCCESS/FAILURE states while attempt is IN_PROGRESS means orphaned (task finished but attempt wasn't updated)
+                task_state = result.state
 
-    # NOTE: this may actually be the same as SIGKILL, but parsed differently by python
-    # consolidate once we know more
-    OUT_OF_MEMORY = "out_of_memory"
+                task_logger.debug(
+                    f"Checking task state: "
+                    f"attempt={attempt.id} task_state={task_state} "
+                    f"attempt_status={fresh_attempt.status} "
+                    f"task_id={celery_task_id}"
+                )
 
-    PROCESS_SIGNAL_SIGKILL = "process_signal_sigkill"
+                # If task is actively running, it's not orphaned
+                if task_state in ["STARTED", "RETRY"]:
+                    task_logger.debug(f"Task is actively running: attempt={attempt.id}")
+                    continue
 
-    @property
-    def code(self) -> int:
-        _ENUM_TO_CODE: dict[IndexingWatchdogTerminalStatus, int] = {
-            IndexingWatchdogTerminalStatus.PROCESS_SIGNAL_SIGKILL: -9,
-            IndexingWatchdogTerminalStatus.OUT_OF_MEMORY: 137,
-            IndexingWatchdogTerminalStatus.CONNECTOR_VALIDATION_ERROR: 247,
-            IndexingWatchdogTerminalStatus.BLOCKED_BY_DELETION: 248,
-            IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL: 249,
-            IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND: 250,
-            IndexingWatchdogTerminalStatus.FENCE_READINESS_TIMEOUT: 251,
-            IndexingWatchdogTerminalStatus.FENCE_MISMATCH: 252,
-            IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING: 253,
-            IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH: 254,
-            IndexingWatchdogTerminalStatus.CONNECTOR_EXCEPTIONED: 255,
-        }
+                # If task is in terminal state but attempt is still IN_PROGRESS, it's orphaned
+                if (
+                    task_state in ["SUCCESS", "FAILURE", "REVOKED"]
+                    and fresh_attempt.status == IndexingStatus.IN_PROGRESS
+                ):
+                    task_logger.warning(
+                        f"Found orphaned task in terminal state: "
+                        f"attempt={attempt.id} task_state={task_state} attempt_status={fresh_attempt.status}"
+                    )
+                    # Fall through to mark as orphaned
+                elif task_state == "PENDING":
+                    # Task never started or was lost
+                    task_logger.warning(
+                        f"Found orphaned task in PENDING state: "
+                        f"attempt={attempt.id} task_state={task_state}"
+                    )
+                    # Fall through to mark as orphaned
+                else:
+                    # Task exists and is in a reasonable state for the attempt status
+                    task_logger.debug(
+                        f"Task is in reasonable state: "
+                        f"attempt={attempt.id} task_state={task_state} attempt_status={fresh_attempt.status}"
+                    )
+                    continue
 
-        return _ENUM_TO_CODE[self]
+                # Recent attempts are not orphaned
+                if (
+                    fresh_attempt.time_created >= cutoff_time
+                    and fresh_attempt.status == IndexingStatus.NOT_STARTED
+                ):
+                    task_logger.debug(f"Skipping recent attempt: attempt={attempt.id}")
+                    continue
 
-    @classmethod
-    def from_code(cls, code: int) -> "IndexingWatchdogTerminalStatus":
-        _CODE_TO_ENUM: dict[int, IndexingWatchdogTerminalStatus] = {
-            -9: IndexingWatchdogTerminalStatus.PROCESS_SIGNAL_SIGKILL,
-            137: IndexingWatchdogTerminalStatus.OUT_OF_MEMORY,
-            247: IndexingWatchdogTerminalStatus.CONNECTOR_VALIDATION_ERROR,
-            248: IndexingWatchdogTerminalStatus.BLOCKED_BY_DELETION,
-            249: IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL,
-            250: IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND,
-            251: IndexingWatchdogTerminalStatus.FENCE_READINESS_TIMEOUT,
-            252: IndexingWatchdogTerminalStatus.FENCE_MISMATCH,
-            253: IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING,
-            254: IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH,
-            255: IndexingWatchdogTerminalStatus.CONNECTOR_EXCEPTIONED,
-        }
+            except Exception:
+                # If we can't check the task status, be conservative and continue
+                task_logger.warning(
+                    f"Could not check Celery task status for attempt {attempt.id}, "
+                    f"task_id={celery_task_id}"
+                )
+                continue
 
-        if code in _CODE_TO_ENUM:
-            return _CODE_TO_ENUM[code]
+            # Task doesn't exist - mark the attempt as failed
+            task_logger.warning(
+                f"Found orphaned index attempt without corresponding Celery task: "
+                f"attempt={attempt.id} cc_pair={attempt.connector_credential_pair_id} "
+                f"search_settings={attempt.search_settings_id} task_id={celery_task_id} "
+                f"created={fresh_attempt.time_created}"
+            )
 
-        return IndexingWatchdogTerminalStatus.UNDEFINED
-
-
-class SimpleJobResult:
-    """The data we want to have when the watchdog finishes"""
-
-    def __init__(self) -> None:
-        self.status = IndexingWatchdogTerminalStatus.UNDEFINED
-        self.connector_source = None
-        self.exit_code = None
-        self.exception_str = None
-
-    status: IndexingWatchdogTerminalStatus
-    connector_source: str | None
-    exit_code: int | None
-    exception_str: str | None
-
-
-class ConnectorIndexingContext(BaseModel):
-    tenant_id: str
-    cc_pair_id: int
-    search_settings_id: int
-    index_attempt_id: int
+            try:
+                if (
+                    fresh_attempt.time_created < cutoff_time
+                    and fresh_attempt.status == IndexingStatus.NOT_STARTED
+                ):
+                    # cancel attempt that has not been started in a while
+                    mark_attempt_canceled(
+                        attempt.id,
+                        db_session,
+                        reason="Waited too long to start, likely error picking up task",
+                    )
+                else:
+                    mark_attempt_failed(
+                        attempt.id,
+                        db_session,
+                        failure_reason=f"Orphaned attempt - Celery task {celery_task_id} not found",
+                    )
+            except Exception:
+                task_logger.exception(
+                    f"Failed to mark orphaned attempt {attempt.id} as failed"
+                )
 
 
 class ConnectorIndexingLogBuilder:
-    def __init__(self, ctx: ConnectorIndexingContext):
+    def __init__(self, ctx: DocProcessingContext):
         self.ctx = ctx
 
     def build(self, msg: str, **kwargs: Any) -> str:
@@ -233,176 +273,210 @@ class ConnectorIndexingLogBuilder:
         return msg_final
 
 
-def monitor_ccpair_indexing_taskset(
-    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
+def monitor_indexing_attempt_progress(
+    attempt: IndexAttempt, tenant_id: str, db_session: Session
 ) -> None:
-    # if the fence doesn't exist, there's nothing to do
-    fence_key = key_bytes.decode("utf-8")
-    composite_id = RedisConnector.get_id_from_fence_key(fence_key)
-    if composite_id is None:
-        task_logger.warning(
-            f"Connector indexing: could not parse composite_id from {fence_key}"
-        )
+    """
+    TODO: rewrite this docstring
+    Monitor the progress of an indexing attempt using database coordination.
+    This replaces the Redis fence-based monitoring.
+
+    Race condition handling:
+    - Uses database coordination status to track progress
+    - Only updates CC pair status based on confirmed database state
+    - Handles concurrent completion gracefully
+    """
+    if not attempt.celery_task_id:
+        # Attempt hasn't been assigned a task yet
         return
 
-    # parse out metadata and initialize the helper class with it
-    parts = composite_id.split("/")
-    if len(parts) != 2:
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session, attempt.connector_credential_pair_id
+    )
+    if not cc_pair:
+        task_logger.warning(f"CC pair not found for attempt {attempt.id}")
         return
 
-    cc_pair_id = int(parts[0])
-    search_settings_id = int(parts[1])
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    redis_connector_index = redis_connector.new_index(search_settings_id)
-    if not redis_connector_index.fenced:
-        return
-
-    payload = redis_connector_index.payload
-    if not payload:
-        return
-
-    # if the CC Pair is `SCHEDULED`, moved it to `INITIAL_INDEXING`. A CC Pair
-    # should only ever be `SCHEDULED` if it's a new connector.
-    cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
-    if cc_pair is None:
-        raise RuntimeError(f"CC Pair {cc_pair_id} not found")
-
+    # Check if the CC Pair should be moved to INITIAL_INDEXING
     if cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED:
         cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
         db_session.commit()
 
-    elapsed_started_str = None
-    if payload.started:
-        elapsed_started = datetime.now(timezone.utc) - payload.started
-        elapsed_started_str = f"{elapsed_started.total_seconds():.2f}"
+    # Get coordination status to track progress
 
-    elapsed_submitted = datetime.now(timezone.utc) - payload.submitted
-
-    progress = redis_connector_index.get_progress()
-    if progress is not None:
-        task_logger.info(
-            f"Connector indexing progress: "
-            f"attempt={payload.index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id} "
-            f"progress={progress} "
-            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
-            f"elapsed_started={elapsed_started_str}"
-        )
-
-    if payload.index_attempt_id is None or payload.celery_task_id is None:
-        # the task is still setting up
-        return
-
-    # never use any blocking methods on the result from inside a task!
-    result: AsyncResult = AsyncResult(payload.celery_task_id)
-
-    # inner/outer/inner double check pattern to avoid race conditions when checking for
-    # bad state
-
-    # Verify: if the generator isn't complete, the task must not be in READY state
-    # inner = get_completion / generator_complete not signaled
-    # outer = result.state in READY state
-    status_int = redis_connector_index.get_completion()
-    if status_int is None:  # inner signal not set ... possible error
-        task_state = result.state
-        if (
-            task_state in READY_STATES
-        ):  # outer signal in terminal state ... possible error
-            # Now double check!
-            if redis_connector_index.get_completion() is None:
-                # inner signal still not set (and cannot change when outer result_state is READY)
-                # Task is finished but generator complete isn't set.
-                # We have a problem! Worker may have crashed.
-                task_result = str(result.result)
-                task_traceback = str(result.traceback)
-
-                msg = (
-                    f"Connector indexing aborted or exceptioned: "
-                    f"attempt={payload.index_attempt_id} "
-                    f"celery_task={payload.celery_task_id} "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={search_settings_id} "
-                    f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
-                    f"result.state={task_state} "
-                    f"result.result={task_result} "
-                    f"result.traceback={task_traceback}"
-                )
-                task_logger.warning(msg)
-
-                try:
-                    index_attempt = get_index_attempt(
-                        db_session, payload.index_attempt_id
-                    )
-                    if index_attempt:
-                        if (
-                            index_attempt.status != IndexingStatus.CANCELED
-                            and index_attempt.status != IndexingStatus.FAILED
-                        ):
-                            mark_attempt_failed(
-                                index_attempt_id=payload.index_attempt_id,
-                                db_session=db_session,
-                                failure_reason=msg,
-                            )
-                except Exception:
-                    task_logger.exception(
-                        "Connector indexing - Transient exception marking index attempt as failed: "
-                        f"attempt={payload.index_attempt_id} "
-                        f"tenant={tenant_id} "
-                        f"cc_pair={cc_pair_id} "
-                        f"search_settings={search_settings_id}"
-                    )
-
-                redis_connector_index.reset()
-        return
-
-    if redis_connector_index.watchdog_signaled():
-        # if the generator is complete, don't clean up until the watchdog has exited
-        task_logger.info(
-            f"Connector indexing - Delaying finalization until watchdog has exited: "
-            f"attempt={payload.index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id} "
-            f"progress={progress} "
-            f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
-            f"elapsed_started={elapsed_started_str}"
-        )
-
-        return
-
-    status_enum = HTTPStatus(status_int)
-
-    task_logger.info(
-        f"Connector indexing finished: "
-        f"attempt={payload.index_attempt_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id} "
-        f"progress={progress} "
-        f"status={status_enum.name} "
-        f"elapsed_submitted={elapsed_submitted.total_seconds():.2f} "
-        f"elapsed_started={elapsed_started_str}"
+    coordination_status = IndexingCoordination.get_coordination_status(
+        db_session, attempt.id
     )
 
-    redis_connector_index.reset()
+    if coordination_status.found:
+        task_logger.info(
+            f"Indexing attempt progress: "
+            f"attempt={attempt.id} "
+            f"cc_pair={attempt.connector_credential_pair_id} "
+            f"search_settings={attempt.search_settings_id} "
+            f"completed_batches={coordination_status.completed_batches} "
+            f"total_batches={coordination_status.total_batches or '?'} "
+            f"total_docs={coordination_status.total_docs} "
+            f"total_failures={coordination_status.total_failures}"
+        )
 
-    # mark the CC Pair as `ACTIVE` if the attempt was a success and the
-    # CC Pair is not active not already
-    # This should never technically be in this state, but we'll handle it anyway
-    index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
-    index_attempt_is_successful = index_attempt and index_attempt.status.is_successful()
-    if (
-        index_attempt_is_successful
-        and cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
-        or cc_pair.status == ConnectorCredentialPairStatus.INITIAL_INDEXING
-    ):
-        cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
-        db_session.commit()
+    # Check task completion using Celery
+    try:
+        check_indexing_completion(
+            attempt.id, attempt.connector_credential_pair_id, tenant_id
+        )
+    except Exception:
+        task_logger.exception(
+            f"Error checking Celery task status for attempt {attempt.id}"
+        )
 
-    # if the index attempt is successful, clear the repeated error state
-    if cc_pair.in_repeated_error_state and index_attempt_is_successful:
-        cc_pair.in_repeated_error_state = False
-        db_session.commit()
+
+def check_indexing_completion(
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+) -> None:
+
+    logger.info(
+        f"Checking for indexing completion: "
+        f"attempt={index_attempt_id} "
+        f"tenant={tenant_id}"
+    )
+
+    storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
+
+    try:
+        # Get current state from database instead of FileStore
+        with get_session_with_current_tenant() as db_session:
+            coordination_status = IndexingCoordination.get_coordination_status(
+                db_session, index_attempt_id
+            )
+
+        if not coordination_status.found:
+            raise RuntimeError(
+                f"Index attempt {index_attempt_id} not found in database"
+            )
+
+        # Check if indexing is complete and all batches are processed
+        batches_total = coordination_status.total_batches
+        batches_processed = coordination_status.completed_batches
+        indexing_completed = (
+            batches_total is not None and batches_processed >= batches_total
+        )
+
+        logger.info(
+            f"Indexing status: "
+            f"indexing_completed={indexing_completed} "
+            f"batches_processed={batches_processed}/{batches_total or '?'} "
+            f"total_docs={coordination_status.total_docs} "
+            f"total_chunks={coordination_status.total_chunks} "
+            f"total_failures={coordination_status.total_failures}"
+        )
+
+        # Update progress tracking and check for stalls
+        with get_session_with_current_tenant() as db_session:
+            # Update progress tracking
+            timed_out = not IndexingCoordination.update_progress_tracking(
+                db_session, index_attempt_id, batches_processed
+            )
+
+            # Check for stalls (3-6 hour timeout)
+            if timed_out:
+                logger.error(
+                    f"Indexing attempt {index_attempt_id} has been indexing for 3-6 hours without progress. "
+                    f"Marking it as failed."
+                )
+                mark_attempt_failed(
+                    index_attempt_id, db_session, failure_reason="Stalled indexing"
+                )
+
+        # check again on the next check_for_indexing task
+        # TODO: on the cloud this is currently 25 minutes at most, which
+        # is honestly too slow. We should either increase the frequency of
+        # this task or change where we check for completion.
+        if not indexing_completed:
+            return
+
+        # If processing is complete, handle completion
+        logger.info(
+            f"All batches for index attempt {index_attempt_id} have been processed."
+        )
+
+        # All processing is complete
+        total_failures = coordination_status.total_failures
+
+        with get_session_with_current_tenant() as db_session:
+            if total_failures == 0:
+                attempt = mark_attempt_succeeded(index_attempt_id, db_session)
+                logger.info(f"Index attempt {index_attempt_id} completed successfully")
+            else:
+                attempt = mark_attempt_partially_succeeded(index_attempt_id, db_session)
+                logger.info(
+                    f"Index attempt {index_attempt_id} completed with {total_failures} failures"
+                )
+
+            # Update CC pair status if successful
+            cc_pair = get_connector_credential_pair_from_id(
+                db_session, attempt.connector_credential_pair_id
+            )
+            if cc_pair is None:
+                raise RuntimeError(
+                    f"CC pair {attempt.connector_credential_pair_id} not found in database"
+                )
+
+            if attempt.status.is_successful():
+                if cc_pair.status in [
+                    ConnectorCredentialPairStatus.SCHEDULED,
+                    ConnectorCredentialPairStatus.INITIAL_INDEXING,
+                ]:
+                    cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
+                    db_session.commit()
+
+                # Clear repeated error state on success
+                if cc_pair.in_repeated_error_state:
+                    cc_pair.in_repeated_error_state = False
+                    db_session.commit()
+                redis_connector = RedisConnector(
+                    tenant_id, attempt.connector_credential_pair_id
+                )
+                redis_connector_index = redis_connector.new_index(
+                    attempt.search_settings_id
+                )
+                redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
+
+        # Clean up FileStore storage (still needed for document batches during transition)
+        try:
+            storage.cleanup_all_batches()
+        except Exception:
+            logger.exception("Failed to clean up document batches - continuing")
+
+        logger.info(f"Database coordination completed for attempt {index_attempt_id}")
+
+    except Exception as e:
+        logger.exception(
+            f"Failed to monitor document processing completion: "
+            f"attempt={index_attempt_id} "
+            f"error={str(e)}"
+        )
+
+        # Mark the attempt as failed if monitoring fails
+        try:
+            with get_session_with_current_tenant() as db_session:
+                mark_attempt_failed(
+                    index_attempt_id,
+                    db_session,
+                    failure_reason=f"Processing monitoring failed: {str(e)}",
+                    full_exception_trace=traceback.format_exc(),
+                )
+
+        except Exception:
+            logger.exception("Failed to mark attempt as failed")
+
+        # Try to clean up storage
+        try:
+            storage.cleanup_all_batches()
+        except Exception:
+            logger.exception("Failed to cleanup storage after monitoring failure")
 
 
 @shared_task(
@@ -411,8 +485,18 @@ def monitor_ccpair_indexing_taskset(
     bind=True,
 )
 def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
-    """a lightweight task used to kick off indexing tasks.
-    Occcasionally does some validation of existing state to clear up error conditions"""
+    """a lightweight task used to kick off the pipeline of indexing tasks.
+    Occcasionally does some validation of existing state to clear up error conditions.
+
+    This task is the entrypoint for the full "indexing pipeline", which is composed
+    of two tasks: "docfetching" and "docprocessing". More details in
+    the docfetching task (OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK).
+
+    For cc pairs that should be indexed (see should_index()), this task
+    calls try_creating_docfetching_task, which creates a docfetching task.
+    All the logic for determining what state the indexing pipeline is in
+    w.r.t previous failed attempt, checkpointing, etc is handled in the docfetching task.
+    """
 
     time_start = time.monotonic()
     task_logger.warning("check_for_indexing - Starting")
@@ -509,7 +593,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         for cc_pair_id in cc_pair_ids:
             lock_beat.reacquire()
 
-            redis_connector = RedisConnector(tenant_id, cc_pair_id)
             with get_session_with_current_tenant() as db_session:
                 search_settings_list = get_active_search_settings_list(db_session)
                 for search_settings_instance in search_settings_list:
@@ -524,13 +607,32 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                         continue
 
-                    redis_connector_index = redis_connector.new_index(
-                        search_settings_instance.id
+                    # Check if there's already an active indexing attempt for this CC pair + search settings
+                    # This prevents race conditions where multiple indexing attempts could be created
+                    # We check for any non-terminal status (NOT_STARTED, IN_PROGRESS)
+                    existing_attempts = (
+                        db_session.execute(
+                            select(IndexAttempt).where(
+                                IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                                IndexAttempt.search_settings_id
+                                == search_settings_instance.id,
+                                IndexAttempt.status.in_(
+                                    [
+                                        IndexingStatus.NOT_STARTED,
+                                        IndexingStatus.IN_PROGRESS,
+                                    ]
+                                ),
+                            )
+                        )
+                        .scalars()
+                        .all()
                     )
-                    if redis_connector_index.fenced:
+
+                    if existing_attempts:
                         task_logger.debug(
-                            f"check_for_indexing - Skipping fenced connector: "
-                            f"cc_pair={cc_pair_id} search_settings={search_settings_instance.id}"
+                            f"check_for_indexing - Skipping due to active indexing attempt: "
+                            f"cc_pair={cc_pair_id} search_settings={search_settings_instance.id} "
+                            f"active_attempts={[a.id for a in existing_attempts]}"
                         )
                         continue
 
@@ -556,12 +658,12 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             f"secondary_index_building={len(search_settings_list) > 1}"
                         )
                         continue
-                    else:
-                        task_logger.debug(
-                            f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
-                            f"search_settings={search_settings_instance.id}, "
-                            f"secondary_index_building={len(search_settings_list) > 1}"
-                        )
+
+                    task_logger.debug(
+                        f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
+                        f"search_settings={search_settings_instance.id}, "
+                        f"secondary_index_building={len(search_settings_list) > 1}"
+                    )
 
                     reindex = False
                     if search_settings_instance.status.is_current():
@@ -583,7 +685,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
                     # using a task queue and only allowing one task per cc_pair/search_setting
                     # prevents us from starving out certain attempts
-                    attempt_id = try_creating_indexing_task(
+                    attempt_id = try_creating_docfetching_task(
                         self.app,
                         cc_pair,
                         search_settings_instance,
@@ -611,22 +713,36 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
         # 2/3: VALIDATE
 
-        # Fail any index attempts in the DB that don't have fences
-        # This shouldn't ever happen!
+        # Check for inconsistent index attempts - active attempts without task IDs
+        # This can happen if attempt creation fails partway through
         with get_session_with_current_tenant() as db_session:
-            unfenced_attempt_ids = get_unfenced_index_attempt_ids(
-                db_session, redis_client
+            inconsistent_attempts = (
+                db_session.execute(
+                    select(IndexAttempt).where(
+                        IndexAttempt.status.in_(
+                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                        ),
+                        IndexAttempt.celery_task_id.is_(None),
+                    )
+                )
+                .scalars()
+                .all()
             )
 
-            for attempt_id in unfenced_attempt_ids:
+            for attempt in inconsistent_attempts:
                 lock_beat.reacquire()
 
-                attempt = get_index_attempt(db_session, attempt_id)
-                if not attempt:
+                # Double-check the attempt still has the inconsistent state
+                fresh_attempt = get_index_attempt(db_session, attempt.id)
+                if (
+                    not fresh_attempt
+                    or fresh_attempt.celery_task_id
+                    or fresh_attempt.status.is_terminal()
+                ):
                     continue
 
                 failure_reason = (
-                    f"Unfenced index attempt found in DB: "
+                    f"Inconsistent index attempt found - active status without Celery task: "
                     f"index_attempt={attempt.id} "
                     f"cc_pair={attempt.connector_credential_pair_id} "
                     f"search_settings={attempt.search_settings_id}"
@@ -639,15 +755,17 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         lock_beat.reacquire()
         # we want to run this less frequently than the overall task
         if not redis_client.exists(OnyxRedisSignals.BLOCK_VALIDATE_INDEXING_FENCES):
-            # clear any indexing fences that don't have associated celery tasks in progress
-            # tasks can be in the queue in redis, in reserved tasks (prefetched by the worker),
-            # or be currently executing
+            # Check for orphaned index attempts that have Celery task IDs but no actual running tasks
+            # This can happen if workers crash or tasks are terminated unexpectedly
+            # We reuse the same Redis signal name for backwards compatibility
             try:
-                validate_indexing_fences(
-                    tenant_id, redis_client_replica, redis_client_celery, lock_beat
+                validate_active_indexing_attempts(
+                    tenant_id, redis_client_celery, lock_beat
                 )
             except Exception:
-                task_logger.exception("Exception while validating indexing fences")
+                task_logger.exception(
+                    "Exception while validating active indexing attempts"
+                )
 
             redis_client.set(
                 OnyxRedisSignals.BLOCK_VALIDATE_INDEXING_FENCES,
@@ -655,24 +773,30 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 ex=_get_fence_validation_block_expiration(),
             )
 
-        # 3/3: FINALIZE
+        # 3/3: FINALIZE - Monitor active indexing attempts using database
         lock_beat.reacquire()
-        keys = cast(
-            set[Any], redis_client_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES)
-        )
-        for key in keys:
-            key_bytes = cast(bytes, key)
-
-            if not redis_client.exists(key_bytes):
-                redis_client.srem(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
-                continue
-
-            key_str = key_bytes.decode("utf-8")
-            if key_str.startswith(RedisConnectorIndex.FENCE_PREFIX):
-                with get_session_with_current_tenant() as db_session:
-                    monitor_ccpair_indexing_taskset(
-                        tenant_id, key_bytes, redis_client_replica, db_session
+        with get_session_with_current_tenant() as db_session:
+            # Monitor all active indexing attempts directly from the database
+            # This replaces the Redis fence-based monitoring
+            active_attempts = (
+                db_session.execute(
+                    select(IndexAttempt).where(
+                        IndexAttempt.status.in_(
+                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                        )
                     )
+                )
+                .scalars()
+                .all()
+            )
+
+            for attempt in active_attempts:
+                try:
+                    monitor_indexing_attempt_progress(attempt, tenant_id, db_session)
+                except Exception:
+                    task_logger.exception(f"Error monitoring attempt {attempt.id}")
+
+                lock_beat.reacquire()
 
     except SoftTimeLimitExceeded:
         task_logger.info(
@@ -694,638 +818,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     time_elapsed = time.monotonic() - time_start
     task_logger.info(f"check_for_indexing finished: elapsed={time_elapsed:.2f}")
     return tasks_created
-
-
-def connector_indexing_task(
-    index_attempt_id: int,
-    cc_pair_id: int,
-    search_settings_id: int,
-    is_ee: bool,
-    tenant_id: str,
-) -> int | None:
-    """Indexing task. For a cc pair, this task pulls all document IDs from the source
-    and compares those IDs to locally stored documents and deletes all locally stored IDs missing
-    from the most recently pulled document ID list
-
-    acks_late must be set to False. Otherwise, celery's visibility timeout will
-    cause any task that runs longer than the timeout to be redispatched by the broker.
-    There appears to be no good workaround for this, so we need to handle redispatching
-    manually.
-
-    Returns None if the task did not run (possibly due to a conflict).
-    Otherwise, returns an int >= 0 representing the number of indexed docs.
-
-    NOTE: if an exception is raised out of this task, the primary worker will detect
-    that the task transitioned to a "READY" state but the generator_complete_key doesn't exist.
-    This will cause the primary worker to abort the indexing attempt and clean up.
-    """
-
-    # Since connector_indexing_proxy_task spawns a new process using this function as
-    # the entrypoint, we init Sentry here.
-    if SENTRY_DSN:
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            traces_sample_rate=0.1,
-        )
-        logger.info("Sentry initialized")
-    else:
-        logger.debug("Sentry DSN not provided, skipping Sentry initialization")
-
-    logger.info(
-        f"Indexing spawned task starting: "
-        f"attempt={index_attempt_id} "
-        f"tenant={tenant_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
-    )
-
-    n_final_progress: int | None = None
-
-    # 20 is the documented default for httpx max_keepalive_connections
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-        )
-    else:
-        httpx_init_vespa_pool(20)
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    redis_connector_index = redis_connector.new_index(search_settings_id)
-
-    r = get_redis_client()
-
-    if redis_connector.delete.fenced:
-        raise SimpleJobException(
-            f"Indexing will not start because connector deletion is in progress: "
-            f"attempt={index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"fence={redis_connector.delete.fence_key}",
-            code=IndexingWatchdogTerminalStatus.BLOCKED_BY_DELETION.code,
-        )
-
-    if redis_connector.stop.fenced:
-        raise SimpleJobException(
-            f"Indexing will not start because a connector stop signal was detected: "
-            f"attempt={index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"fence={redis_connector.stop.fence_key}",
-            code=IndexingWatchdogTerminalStatus.BLOCKED_BY_STOP_SIGNAL.code,
-        )
-
-    # this wait is needed to avoid a race condition where
-    # the primary worker sends the task and it is immediately executed
-    # before the primary worker can finalize the fence
-    start = time.monotonic()
-    while True:
-        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise SimpleJobException(
-                f"connector_indexing_task - timed out waiting for fence to be ready: "
-                f"fence={redis_connector.permissions.fence_key}",
-                code=IndexingWatchdogTerminalStatus.FENCE_READINESS_TIMEOUT.code,
-            )
-
-        if not redis_connector_index.fenced:  # The fence must exist
-            raise SimpleJobException(
-                f"connector_indexing_task - fence not found: fence={redis_connector_index.fence_key}",
-                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
-            )
-
-        payload = redis_connector_index.payload  # The payload must exist
-        if not payload:
-            raise SimpleJobException(
-                "connector_indexing_task: payload invalid or not found",
-                code=IndexingWatchdogTerminalStatus.FENCE_NOT_FOUND.code,
-            )
-
-        if payload.index_attempt_id is None or payload.celery_task_id is None:
-            logger.info(
-                f"connector_indexing_task - Waiting for fence: fence={redis_connector_index.fence_key}"
-            )
-            sleep(1)
-            continue
-
-        if payload.index_attempt_id != index_attempt_id:
-            raise SimpleJobException(
-                f"connector_indexing_task - id mismatch. Task may be left over from previous run.: "
-                f"task_index_attempt={index_attempt_id} "
-                f"payload_index_attempt={payload.index_attempt_id}",
-                code=IndexingWatchdogTerminalStatus.FENCE_MISMATCH.code,
-            )
-
-        logger.info(
-            f"connector_indexing_task - Fence found, continuing...: fence={redis_connector_index.fence_key}"
-        )
-        break
-
-    # set thread_local=False since we don't control what thread the indexing/pruning
-    # might run our callback with
-    lock: RedisLock = r.lock(
-        redis_connector_index.generator_lock_key,
-        timeout=CELERY_INDEXING_LOCK_TIMEOUT,
-        thread_local=False,
-    )
-
-    acquired = lock.acquire(blocking=False)
-    if not acquired:
-        logger.warning(
-            f"Indexing task already running, exiting...: "
-            f"index_attempt={index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
-        )
-
-        raise SimpleJobException(
-            f"Indexing task already running, exiting...: "
-            f"index_attempt={index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}",
-            code=IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING.code,
-        )
-
-    payload.started = datetime.now(timezone.utc)
-    redis_connector_index.set_fence(payload)
-
-    try:
-        with get_session_with_current_tenant() as db_session:
-            attempt = get_index_attempt(db_session, index_attempt_id)
-            if not attempt:
-                raise SimpleJobException(
-                    f"Index attempt not found: index_attempt={index_attempt_id}",
-                    code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
-                )
-
-            cc_pair = get_connector_credential_pair_from_id(
-                db_session=db_session,
-                cc_pair_id=cc_pair_id,
-            )
-
-            if not cc_pair:
-                raise SimpleJobException(
-                    f"cc_pair not found: cc_pair={cc_pair_id}",
-                    code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
-                )
-
-            if not cc_pair.connector:
-                raise SimpleJobException(
-                    f"Connector not found: cc_pair={cc_pair_id} connector={cc_pair.connector_id}",
-                    code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
-                )
-
-            if not cc_pair.credential:
-                raise SimpleJobException(
-                    f"Credential not found: cc_pair={cc_pair_id} credential={cc_pair.credential_id}",
-                    code=IndexingWatchdogTerminalStatus.INDEX_ATTEMPT_MISMATCH.code,
-                )
-
-        # define a callback class
-        callback = IndexingCallback(
-            os.getppid(),
-            redis_connector,
-            lock,
-            r,
-            redis_connector_index,
-        )
-
-        logger.info(
-            f"Indexing spawned task running entrypoint: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
-        )
-
-        # This is where the heavy/real work happens
-        run_indexing_entrypoint(
-            index_attempt_id,
-            tenant_id,
-            cc_pair_id,
-            is_ee,
-            callback=callback,
-        )
-
-        # get back the total number of indexed docs and return it
-        n_final_progress = redis_connector_index.get_progress()
-        redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
-    except ConnectorValidationError:
-        raise SimpleJobException(
-            f"Indexing task failed: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}",
-            code=IndexingWatchdogTerminalStatus.CONNECTOR_VALIDATION_ERROR.code,
-        )
-
-    except Exception as e:
-        logger.exception(
-            f"Indexing spawned task failed: attempt={index_attempt_id} "
-            f"tenant={tenant_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
-        )
-
-        # special bulletproofing ... truncate long exception messages
-        # for exception types that require more args, this will fail
-        # thus the try/except
-        try:
-            sanitized_e = type(e)(str(e)[:1024])
-            sanitized_e.__traceback__ = e.__traceback__
-            raise sanitized_e
-        except Exception:
-            raise e
-
-    finally:
-        if lock.owned():
-            lock.release()
-
-    logger.info(
-        f"Indexing spawned task finished: attempt={index_attempt_id} "
-        f"cc_pair={cc_pair_id} "
-        f"search_settings={search_settings_id}"
-    )
-    return n_final_progress
-
-
-def process_job_result(
-    job: SimpleJob,
-    connector_source: str | None,
-    redis_connector_index: RedisConnectorIndex,
-    log_builder: ConnectorIndexingLogBuilder,
-) -> SimpleJobResult:
-    result = SimpleJobResult()
-    result.connector_source = connector_source
-
-    if job.process:
-        result.exit_code = job.process.exitcode
-
-    if job.status != "error":
-        result.status = IndexingWatchdogTerminalStatus.SUCCEEDED
-        return result
-
-    ignore_exitcode = False
-
-    # In EKS, there is an edge case where successful tasks return exit
-    # code 1 in the cloud due to the set_spawn_method not sticking.
-    # We've since worked around this, but the following is a safe way to
-    # work around this issue. Basically, we ignore the job error state
-    # if the completion signal is OK.
-    status_int = redis_connector_index.get_completion()
-    if status_int:
-        status_enum = HTTPStatus(status_int)
-        if status_enum == HTTPStatus.OK:
-            ignore_exitcode = True
-
-    if ignore_exitcode:
-        result.status = IndexingWatchdogTerminalStatus.SUCCEEDED
-        task_logger.warning(
-            log_builder.build(
-                "Indexing watchdog - spawned task has non-zero exit code "
-                "but completion signal is OK. Continuing...",
-                exit_code=str(result.exit_code),
-            )
-        )
-    else:
-        if result.exit_code is not None:
-            result.status = IndexingWatchdogTerminalStatus.from_code(result.exit_code)
-
-        result.exception_str = job.exception()
-
-    return result
-
-
-@shared_task(
-    name=OnyxCeleryTask.CONNECTOR_INDEXING_PROXY_TASK,
-    bind=True,
-    acks_late=False,
-    track_started=True,
-)
-def connector_indexing_proxy_task(
-    self: Task,
-    index_attempt_id: int,
-    cc_pair_id: int,
-    search_settings_id: int,
-    tenant_id: str,
-) -> None:
-    """celery out of process task execution strategy is pool=prefork, but it uses fork,
-    and forking is inherently unstable.
-
-    To work around this, we use pool=threads and proxy our work to a spawned task.
-
-    TODO(rkuo): refactor this so that there is a single return path where we canonically
-    log the result of running this function.
-
-    NOTE: we try/except all db access in this function because as a watchdog, this function
-    needs to be extremely stable.
-    """
-    start = time.monotonic()
-
-    result = SimpleJobResult()
-
-    ctx = ConnectorIndexingContext(
-        tenant_id=tenant_id,
-        cc_pair_id=cc_pair_id,
-        search_settings_id=search_settings_id,
-        index_attempt_id=index_attempt_id,
-    )
-
-    log_builder = ConnectorIndexingLogBuilder(ctx)
-
-    task_logger.info(
-        log_builder.build(
-            "Indexing watchdog - starting",
-            mp_start_method=str(multiprocessing.get_start_method()),
-        )
-    )
-
-    if not self.request.id:
-        task_logger.error("self.request.id is None!")
-
-    client = SimpleJobClient()
-    task_logger.info(f"submitting connector_indexing_task with tenant_id={tenant_id}")
-
-    job = client.submit(
-        connector_indexing_task,
-        index_attempt_id,
-        cc_pair_id,
-        search_settings_id,
-        global_version.is_ee_version(),
-        tenant_id,
-    )
-
-    if not job or not job.process:
-        result.status = IndexingWatchdogTerminalStatus.SPAWN_FAILED
-        task_logger.info(
-            log_builder.build(
-                "Indexing watchdog - finished",
-                status=str(result.status.value),
-                exit_code=str(result.exit_code),
-            )
-        )
-        return
-
-    # Ensure the process has moved out of the starting state
-    num_waits = 0
-    while True:
-        if num_waits > 15:
-            result.status = IndexingWatchdogTerminalStatus.SPAWN_NOT_ALIVE
-            task_logger.info(
-                log_builder.build(
-                    "Indexing watchdog - finished",
-                    status=str(result.status.value),
-                    exit_code=str(result.exit_code),
-                )
-            )
-            job.release()
-            return
-
-        if job.process.is_alive() or job.process.exitcode is not None:
-            break
-
-        sleep(1)
-        num_waits += 1
-
-    task_logger.info(
-        log_builder.build(
-            "Indexing watchdog - spawn succeeded",
-            pid=str(job.process.pid),
-        )
-    )
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    redis_connector_index = redis_connector.new_index(search_settings_id)
-
-    # Track the last time memory info was emitted
-    last_memory_emit_time = 0.0
-
-    # track the last ttl and the time it was observed
-    last_activity_ttl_observed: float = time.monotonic()
-    last_activity_ttl: int = 0
-
-    try:
-        with get_session_with_current_tenant() as db_session:
-            index_attempt = get_index_attempt(
-                db_session=db_session, index_attempt_id=index_attempt_id
-            )
-            if not index_attempt:
-                raise RuntimeError("Index attempt not found")
-
-            result.connector_source = (
-                index_attempt.connector_credential_pair.connector.source.value
-            )
-
-        redis_connector_index.set_active()  # renew active signal
-
-        # prime the connector active signal (renewed inside the connector)
-        redis_connector_index.set_connector_active()
-
-        while True:
-            sleep(5)
-
-            now = time.monotonic()
-
-            # renew watchdog signal (this has a shorter timeout than set_active)
-            redis_connector_index.set_watchdog(True)
-
-            # renew active signal
-            redis_connector_index.set_active()
-
-            # if the job is done, clean up and break
-            if job.done():
-                try:
-                    result = process_job_result(
-                        job, result.connector_source, redis_connector_index, log_builder
-                    )
-                except Exception:
-                    task_logger.exception(
-                        log_builder.build(
-                            "Indexing watchdog - spawned task exceptioned"
-                        )
-                    )
-                finally:
-                    job.release()
-                    break
-
-            # log the memory usage for tracking down memory leaks / connector-specific memory issues
-            pid = job.process.pid
-            if pid is not None:
-                # Only emit memory info once per minute (60 seconds)
-                current_time = time.monotonic()
-                if current_time - last_memory_emit_time >= 60.0:
-                    emit_process_memory(
-                        pid,
-                        "indexing_worker",
-                        {
-                            "cc_pair_id": cc_pair_id,
-                            "search_settings_id": search_settings_id,
-                            "index_attempt_id": index_attempt_id,
-                        },
-                    )
-                    last_memory_emit_time = current_time
-
-            # if a termination signal is detected, break (exit point will clean up)
-            if self.request.id and redis_connector_index.terminating(self.request.id):
-                task_logger.warning(
-                    log_builder.build("Indexing watchdog - termination signal detected")
-                )
-
-                result.status = IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL
-                break
-
-            # if activity timeout is detected, break (exit point will clean up)
-            ttl = redis_connector_index.connector_active_ttl()
-            if ttl < 0:
-                # verify expectations around ttl
-                last_observed = last_activity_ttl_observed - now
-                if now > last_activity_ttl_observed + last_activity_ttl:
-                    task_logger.warning(
-                        log_builder.build(
-                            "Indexing watchdog - activity timeout exceeded",
-                            last_observed=f"{last_observed:.2f}s",
-                            last_ttl=f"{last_activity_ttl}",
-                            timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
-                        )
-                    )
-
-                    result.status = (
-                        IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT
-                    )
-                    break
-                else:
-                    task_logger.warning(
-                        log_builder.build(
-                            "Indexing watchdog - activity timeout expired unexpectedly, "
-                            "waiting for last observed TTL before exiting",
-                            last_observed=f"{last_observed:.2f}s",
-                            last_ttl=f"{last_activity_ttl}",
-                            timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
-                        )
-                    )
-            else:
-                last_activity_ttl_observed = now
-                last_activity_ttl = ttl
-
-            # if the spawned task is still running, restart the check once again
-            # if the index attempt is not in a finished status
-            try:
-                with get_session_with_current_tenant() as db_session:
-                    index_attempt = get_index_attempt(
-                        db_session=db_session, index_attempt_id=index_attempt_id
-                    )
-
-                    if not index_attempt:
-                        continue
-
-                    if not index_attempt.is_finished():
-                        continue
-
-            except Exception:
-                task_logger.exception(
-                    log_builder.build(
-                        "Indexing watchdog - transient exception looking up index attempt"
-                    )
-                )
-                continue
-
-    except Exception as e:
-        result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
-        if isinstance(e, ConnectorValidationError):
-            # No need to expose full stack trace for validation errors
-            result.exception_str = str(e)
-        else:
-            result.exception_str = traceback.format_exc()
-
-    # handle exit and reporting
-    elapsed = time.monotonic() - start
-    if result.exception_str is not None:
-        # print with exception
-        try:
-            with get_session_with_current_tenant() as db_session:
-                failure_reason = (
-                    f"Spawned task exceptioned: exit_code={result.exit_code}"
-                )
-                mark_attempt_failed(
-                    ctx.index_attempt_id,
-                    db_session,
-                    failure_reason=failure_reason,
-                    full_exception_trace=result.exception_str,
-                )
-        except Exception:
-            task_logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt as failed"
-                )
-            )
-
-        normalized_exception_str = "None"
-        if result.exception_str:
-            normalized_exception_str = result.exception_str.replace(
-                "\n", "\\n"
-            ).replace('"', '\\"')
-
-        task_logger.warning(
-            log_builder.build(
-                "Indexing watchdog - finished",
-                source=result.connector_source,
-                status=result.status.value,
-                exit_code=str(result.exit_code),
-                exception=f'"{normalized_exception_str}"',
-                elapsed=f"{elapsed:.2f}s",
-            )
-        )
-
-        redis_connector_index.set_watchdog(False)
-        raise RuntimeError(f"Exception encountered: traceback={result.exception_str}")
-
-    # print without exception
-    if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
-        try:
-            with get_session_with_current_tenant() as db_session:
-                logger.exception(
-                    f"Marking attempt {index_attempt_id} as canceled due to termination signal"
-                )
-                mark_attempt_canceled(
-                    index_attempt_id,
-                    db_session,
-                    "Connector termination signal detected",
-                )
-        except Exception:
-            task_logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt as canceled"
-                )
-            )
-
-        job.cancel()
-    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
-        try:
-            with get_session_with_current_tenant() as db_session:
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session,
-                    "Indexing watchdog - activity timeout exceeded: "
-                    f"attempt={index_attempt_id} "
-                    f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
-                )
-        except Exception:
-            logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt as failed"
-                )
-            )
-        job.cancel()
-    else:
-        pass
-
-    task_logger.info(
-        log_builder.build(
-            "Indexing watchdog - finished",
-            source=result.connector_source,
-            status=str(result.status.value),
-            exit_code=str(result.exit_code),
-            elapsed=f"{elapsed:.2f}s",
-        )
-    )
-
-    redis_connector_index.set_watchdog(False)
-    return
 
 
 # primary
@@ -1401,3 +893,346 @@ def cleanup_checkpoint_task(
             f"index_attempt_id={index_attempt_id} "
             f"elapsed={elapsed:.2f}"
         )
+
+
+class DocumentProcessingBatch(BaseModel):
+    """Data structure for a document processing batch."""
+
+    batch_id: str
+    index_attempt_id: int
+    cc_pair_id: int
+    tenant_id: str
+    batch_num: int
+
+
+def _check_failure_threshold(
+    total_failures: int,
+    document_count: int,
+    batch_num: int,
+    last_failure: ConnectorFailure | None,
+) -> None:
+    """Check if we've hit the failure threshold and raise an appropriate exception if so.
+
+    We consider the threshold hit if:
+    1. We have more than 3 failures AND
+    2. Failures account for more than 10% of processed documents
+    """
+    failure_ratio = total_failures / (document_count or 1)
+
+    FAILURE_THRESHOLD = 3
+    FAILURE_RATIO_THRESHOLD = 0.1
+    if total_failures > FAILURE_THRESHOLD and failure_ratio > FAILURE_RATIO_THRESHOLD:
+        logger.error(
+            f"Connector run failed with '{total_failures}' errors "
+            f"after '{batch_num}' batches."
+        )
+        if last_failure and last_failure.exception:
+            raise last_failure.exception from last_failure.exception
+
+        raise RuntimeError(
+            f"Connector run encountered too many errors, aborting. "
+            f"Last error: {last_failure}"
+        )
+
+
+def _resolve_indexing_errors(
+    cc_pair_id: int,
+    failures: list[ConnectorFailure],
+    document_batch: list[Document],
+) -> None:
+    with get_session_with_current_tenant() as db_session_temp:
+        # get previously unresolved errors
+        unresolved_errors = get_index_attempt_errors_for_cc_pair(
+            cc_pair_id=cc_pair_id,
+            unresolved_only=True,
+            db_session=db_session_temp,
+        )
+        doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = defaultdict(
+            list
+        )
+        for error in unresolved_errors:
+            if error.document_id:
+                doc_id_to_unresolved_errors[error.document_id].append(error)
+        # resolve errors for documents that were successfully indexed
+        failed_document_ids = [
+            failure.failed_document.document_id
+            for failure in failures
+            if failure.failed_document
+        ]
+        successful_document_ids = [
+            document.id
+            for document in document_batch
+            if document.id not in failed_document_ids
+        ]
+        for document_id in successful_document_ids:
+            if document_id not in doc_id_to_unresolved_errors:
+                continue
+
+            logger.info(f"Resolving IndexAttemptError for document '{document_id}'")
+            for error in doc_id_to_unresolved_errors[document_id]:
+                error.is_resolved = True
+                db_session_temp.add(error)
+        db_session_temp.commit()
+
+
+@shared_task(
+    name=OnyxCeleryTask.DOCPROCESSING_TASK,
+    bind=True,
+)
+def docprocessing_task(
+    self: Task,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+) -> None:
+    """Process a batch of documents through the indexing pipeline.
+
+    This task retrieves documents from storage and processes them through
+    the indexing pipeline (embedding + vector store indexing).
+    """
+
+    start_time = time.monotonic()
+
+    # set the indexing attempt ID so that all log messages from this process
+    # will have it added as a prefix
+    TaskAttemptSingleton.set_cc_and_index_id(index_attempt_id, cc_pair_id)
+    if tenant_id:
+        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+    task_logger.info(
+        f"Processing document batch: "
+        f"attempt={index_attempt_id} "
+        f"batch_num={batch_num} "
+    )
+
+    # Get the document batch storage
+    storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
+
+    redis_connector = RedisConnector(tenant_id, cc_pair_id)
+    r = get_redis_client(tenant_id=tenant_id)
+
+    # dummy lock to satisfy linter
+    per_batch_lock: RedisLock | None = None
+    try:
+        # Retrieve documents from storage
+        documents = storage.get_batch(batch_num)
+        if not documents:
+            task_logger.error(f"No documents found for batch {batch_num}")
+            return
+
+        with get_session_with_current_tenant() as db_session:
+            # matches parts of _run_indexing
+            index_attempt = get_index_attempt(
+                db_session,
+                index_attempt_id,
+                eager_load_cc_pair=True,
+                eager_load_search_settings=True,
+            )
+            if not index_attempt:
+                raise RuntimeError(f"Index attempt {index_attempt_id} not found")
+
+            if index_attempt.search_settings is None:
+                raise ValueError("Search settings must be set for indexing")
+
+            if (
+                index_attempt.celery_task_id is None
+                or index_attempt.status.is_terminal()
+            ):
+                raise RuntimeError(f"Index attempt {index_attempt_id} is not running")
+
+            redis_connector_index = redis_connector.new_index(
+                index_attempt.search_settings.id
+            )
+
+            cross_batch_db_lock: RedisLock = r.lock(
+                redis_connector_index.db_lock_key,
+                timeout=CELERY_INDEXING_LOCK_TIMEOUT,
+                thread_local=False,
+            )
+            # set thread_local=False since we don't control what thread the indexing/pruning
+            # might run our callback with
+            per_batch_lock = cast(
+                RedisLock,
+                r.lock(
+                    redis_connector_index.lock_key_by_batch(batch_num),
+                    timeout=CELERY_INDEXING_LOCK_TIMEOUT,
+                    thread_local=False,
+                ),
+            )
+
+            acquired = per_batch_lock.acquire(blocking=False)
+            if not acquired:
+                logger.warning(
+                    f"Indexing batch task already running, exiting...: "
+                    f"index_attempt={index_attempt_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={index_attempt.search_settings.id} "
+                    f"batch_num={batch_num}"
+                )
+
+                raise SimpleJobException(
+                    f"Indexing batch task already running, exiting...: "
+                    f"index_attempt={index_attempt_id} "
+                    f"cc_pair={cc_pair_id} "
+                    f"search_settings={index_attempt.search_settings.id} "
+                    f"batch_num={batch_num}",
+                    code=IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING.code,
+                )
+
+            callback = IndexingCallback(
+                os.getppid(),
+                redis_connector,
+                per_batch_lock,
+                r,
+                redis_connector_index,
+            )
+            # Set up indexing pipeline components
+            embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+                search_settings=index_attempt.search_settings,
+                callback=callback,
+            )
+
+            information_content_classification_model = (
+                InformationContentClassificationModel()
+            )
+
+            document_index = get_default_document_index(
+                index_attempt.search_settings,
+                None,
+                httpx_client=HttpxPool.get("vespa"),
+            )
+
+            indexing_pipeline = build_indexing_pipeline(
+                embedder=embedding_model,
+                information_content_classification_model=information_content_classification_model,
+                document_index=document_index,
+                ignore_time_skip=True,  # Documents are already filtered during extraction
+                db_session=db_session,
+                tenant_id=tenant_id,
+                callback=callback,
+            )
+
+            # Set up metadata for this batch
+            index_attempt_metadata = IndexAttemptMetadata(
+                attempt_id=index_attempt_id,
+                connector_id=index_attempt.connector_credential_pair.connector.id,
+                credential_id=index_attempt.connector_credential_pair.credential.id,
+                request_id=make_randomized_onyx_request_id("DIP"),
+                structured_id=f"{tenant_id}:{cc_pair_id}:{index_attempt_id}:{batch_num}",
+                batch_num=batch_num,
+            )
+
+            # Process documents through indexing pipeline
+            task_logger.info(
+                f"Processing {len(documents)} documents through indexing pipeline"
+            )
+
+            per_batch_lock.reacquire()
+            # real work happens here!
+            index_pipeline_result = indexing_pipeline(
+                document_batch=documents,
+                index_attempt_metadata=index_attempt_metadata,
+            )
+            per_batch_lock.reacquire()
+
+        # Update batch completion and document counts atomically using database coordination
+
+        with get_session_with_current_tenant() as db_session, cross_batch_db_lock:
+            IndexingCoordination.update_batch_completion_and_docs(
+                db_session=db_session,
+                index_attempt_id=index_attempt_id,
+                total_docs_indexed=index_pipeline_result.total_docs,
+                new_docs_indexed=index_pipeline_result.new_docs,
+                failures=len(index_pipeline_result.failures),
+                total_chunks=index_pipeline_result.total_chunks,
+            )
+
+        with cross_batch_db_lock:
+            _resolve_indexing_errors(
+                cc_pair_id,
+                index_pipeline_result.failures,
+                documents,
+            )
+
+        # Record failures in the database
+        if index_pipeline_result.failures:
+            with get_session_with_current_tenant() as db_session:
+                for failure in index_pipeline_result.failures:
+                    create_index_attempt_error(
+                        index_attempt_id,
+                        cc_pair_id,
+                        failure,
+                        db_session,
+                    )
+            # Use database state instead of FileStore for failure checking
+            with get_session_with_current_tenant() as db_session:
+                coordination_status = IndexingCoordination.get_coordination_status(
+                    db_session, index_attempt_id
+                )
+                _check_failure_threshold(
+                    coordination_status.total_failures,
+                    coordination_status.total_docs,
+                    batch_num,
+                    index_pipeline_result.failures[-1],
+                )
+
+        if callback:
+            # _run_indexing for legacy reasons
+            callback.progress("_run_indexing", len(documents))
+
+        # redis_connector_index.set_generator_complete(HTTPStatus.OK.value)
+        # Add telemetry for indexing progress using database coordination status
+        with get_session_with_current_tenant() as db_session:
+            coordination_status = IndexingCoordination.get_coordination_status(
+                db_session, index_attempt_id
+            )
+
+        optional_telemetry(
+            record_type=RecordType.INDEXING_PROGRESS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "cc_pair_id": cc_pair_id,
+                "current_docs_indexed": coordination_status.total_docs,
+                "current_chunks_indexed": coordination_status.total_chunks,
+                "source": index_attempt.connector_credential_pair.connector.source.value,
+                "completed_batches": coordination_status.completed_batches,
+                "total_batches": coordination_status.total_batches,
+            },
+            tenant_id=tenant_id,
+        )
+        # Clean up this batch after successful processing
+        storage.delete_batch_by_num(batch_num)
+
+        elapsed_time = time.monotonic() - start_time
+        task_logger.info(
+            f"Completed document batch processing: "
+            f"batch_num={batch_num} "
+            f"docs={len(documents)} "
+            f"chunks={index_pipeline_result.total_chunks} "
+            f"failures={len(index_pipeline_result.failures)} "
+            f"elapsed={elapsed_time:.2f}s"
+        )
+
+    except Exception:
+        task_logger.exception(
+            f"Document batch processing failed: "
+            f"batch_num={batch_num} "
+            f"attempt={index_attempt_id} "
+        )
+
+        # on failure, signal completion with an error to unblock the watchdog
+        with get_session_with_current_tenant() as db_session:
+            index_attempt = get_index_attempt(db_session, index_attempt_id)
+            if index_attempt and index_attempt.search_settings:
+                redis_connector_index = redis_connector.new_index(
+                    index_attempt.search_settings.id
+                )
+                redis_connector_index.set_generator_complete(
+                    HTTPStatus.INTERNAL_SERVER_ERROR.value
+                )
+
+        raise
+    finally:
+        if per_batch_lock and per_batch_lock.owned():
+            per_batch_lock.release()

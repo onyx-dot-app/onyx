@@ -30,7 +30,6 @@ def mock_filestore_record() -> MagicMock:
 
 
 @patch("onyx.connectors.file.connector.get_default_file_store")
-@patch("onyx.connectors.file.connector.get_session_with_current_tenant")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )

@@ -229,7 +229,7 @@ def delete_messages_and_files_from_chat_session(
         delete_tool_call_for_message_id(message_id=id, db_session=db_session)
         delete_search_doc_message_relationship(message_id=id, db_session=db_session)
 
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         for file_info in files or []:
             file_store.delete_file(file_id=file_info.get("id"))
 

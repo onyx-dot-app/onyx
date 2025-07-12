@@ -538,6 +538,27 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
+celery_worker_docfetching:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-docfetching
+  deploymentLabels:
+    app: celery-worker-docfetching
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 redis:
   enabled: true
@@ -683,7 +704,7 @@ configMap:
   GONG_CONNECTOR_START_TIME: ""
   NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP: ""
   # Worker Parallelism
-  CELERY_WORKER_INDEXING_CONCURRENCY: ""
+  CELERY_WORKER_DOCPROCESSING_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   # OnyxBot SlackBot Configs

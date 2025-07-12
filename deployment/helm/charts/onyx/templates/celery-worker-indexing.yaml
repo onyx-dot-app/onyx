@@ -43,12 +43,12 @@ spec:
             [
               "celery",
               "-A",
-              "onyx.background.celery.versioned_apps.indexing",
+              "onyx.background.celery.versioned_apps.docprocessing",
               "worker",
               "--loglevel=INFO",
               "--hostname=indexing@%n",
               "-Q",
-              "connector_indexing",
+              "docprocessing",
             ]
           resources:
             {{- toYaml .Values.celery_worker_indexing.resources | nindent 12 }}
