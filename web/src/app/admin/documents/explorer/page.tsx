@@ -6,7 +6,6 @@ import { fetchValidFilterInfo } from "@/lib/search/utilsSS";
 const Page = async (props: {
   searchParams: Promise<{ [key: string]: string }>;
 }) => {
-  const searchParams = await props.searchParams;
   const { connectors, documentSets } = await fetchValidFilterInfo();
 
   return (
@@ -16,11 +15,7 @@ const Page = async (props: {
         title="Document Explorer"
       />
 
-      <Explorer
-        initialSearchValue={searchParams.query}
-        connectors={connectors}
-        documentSets={documentSets}
-      />
+      <Explorer connectors={connectors} documentSets={documentSets} />
     </div>
   );
 };
