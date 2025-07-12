@@ -67,8 +67,8 @@ class OnyxSalesforce(Salesforce):
 
     @retry_builder(
         tries=5,
-        delay=2,
-        backoff=2,
+        delay=20,
+        backoff=1.5,
         max_delay=60,
         exceptions=(SalesforceRefusedRequest,),
     )
@@ -88,8 +88,8 @@ class OnyxSalesforce(Salesforce):
 
     @retry_builder(
         tries=5,
-        delay=2,
-        backoff=2,
+        delay=20,
+        backoff=1.5,
         max_delay=60,
         exceptions=(SalesforceRefusedRequest,),
     )

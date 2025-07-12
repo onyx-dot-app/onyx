@@ -1612,9 +1612,7 @@ class SearchSettings(Base):
 
     @property
     def final_embedding_dim(self) -> int:
-        if self.reduced_dimension:
-            return self.reduced_dimension
-        return self.model_dim
+        return self.reduced_dimension or self.model_dim
 
     @staticmethod
     def can_use_large_chunks(
