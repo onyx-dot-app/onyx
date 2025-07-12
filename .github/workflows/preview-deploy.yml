@@ -1,0 +1,162 @@
+name: Deploy Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+      
+      - name: Deploy to Railway
+        id: deploy
+        run: |
+          # Create a unique environment name for this PR
+          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          
+          # Deploy using Railway CLI
+          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          railway environment $ENV_NAME
+          
+          # Deploy the services
+          railway up --detach --environment=$ENV_NAME
+          
+          # Wait for deployment to complete and get URL
+          sleep 30
+          
+          # Get the deployment URL
+          DEPLOY_URL=$(railway status --json | jq -r '.url // empty')
+          
+          # If no URL from status, construct it
+          if [ -z "$DEPLOY_URL" ]; then
+            DEPLOY_URL="https://${ENV_NAME}.up.railway.app"
+          fi
+          
+          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          echo "Preview URL: $DEPLOY_URL"
+      
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for services to be ready..."
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if curl -f -s "${{ steps.deploy.outputs.DEPLOY_URL }}/health" > /dev/null; then
+              echo "Services are ready!"
+              break
+            fi
+            
+            echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS: Services not ready yet..."
+            sleep 10
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "Services failed to become ready"
+            exit 1
+          fi
+      
+      - name: Trigger Keystone Tests
+        id: keystone-tests
+        run: |
+          # Call Keystone API to trigger tests
+          # Replace with your actual Keystone API endpoint
+          RESPONSE=$(curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.KEYSTONE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "test_suite_id": "${{ secrets.KEYSTONE_TEST_SUITE_ID }}",
+              "base_url": "${{ steps.deploy.outputs.DEPLOY_URL }}",
+              "environment": "preview",
+              "pr_number": ${{ github.event.pull_request.number }},
+              "commit_sha": "${{ github.event.pull_request.head.sha }}"
+            }' \
+            https://api.keystone.com/v1/test-runs)
+          
+          TEST_RUN_ID=$(echo $RESPONSE | jq -r '.id')
+          echo "TEST_RUN_ID=$TEST_RUN_ID" >> $GITHUB_OUTPUT
+      
+      - name: Comment PR with deployment info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployUrl = '${{ steps.deploy.outputs.DEPLOY_URL }}';
+            const testRunId = '${{ steps.keystone-tests.outputs.TEST_RUN_ID }}';
+            
+            const body = `### 🚀 Preview Environment Deployed!
+            
+            **Preview URL:** ${deployUrl}
+            **Branch:** \`${{ github.event.pull_request.head.ref }}\`
+            **Commit:** \`${{ github.event.pull_request.head.sha.substring(0, 7) }}\`
+            
+            ### 🧪 Automated Tests
+            **Status:** Running...
+            **Test Run ID:** ${testRunId}
+            **View Results:** [Keystone Dashboard](https://app.keystone.com/runs/${testRunId})
+            
+            ---
+            
+            The preview environment will be automatically destroyed when this PR is closed.`;
+            
+            // Find and update existing comment or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Preview Environment Deployed')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+  cleanup-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.app/install.sh | sh
+          echo "$HOME/.railway/bin" >> $GITHUB_PATH
+      
+      - name: Delete preview environment
+        run: |
+          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          
+          railway link ${{ secrets.RAILWAY_PROJECT_ID }}
+          railway environment delete $ENV_NAME --yes || true
+          
+          echo "Preview environment $ENV_NAME deleted"
