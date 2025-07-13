@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from types import SimpleNamespace
 
@@ -398,6 +399,10 @@ def reset_vespa_multitenant() -> None:
 
 
 def reset_all() -> None:
+    if os.environ.get("SKIP_RESET", "").lower() == "true":
+        logger.info("Skipping reset.")
+        return
+
     logger.info("Resetting Postgres...")
     reset_postgres()
     logger.info("Resetting Vespa...")
