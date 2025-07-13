@@ -12,12 +12,13 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { FilterManager } from "@/lib/hooks";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { DocumentSet, Tag } from "@/lib/types";
+import { DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FileResponse, FolderResponse } from "../my-documents/DocumentsContext";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { RegenerationRequest } from "./messagePreprocessor";
 import { ReadonlyURLSearchParams } from "next/navigation";
+import { ChatState, RegenerationState } from "../types";
 
 // FIFO Queue for handling streaming packets (matching original implementation)
 class CurrentMessageFIFO {
@@ -66,7 +67,7 @@ export interface MessageSubmissionDependencies {
   resetInputBar: () => void;
 
   // Streaming processing
-  updateChatState: (state: string, sessionId?: string | null) => void;
+  updateChatState: (state: ChatState, sessionId?: string | null) => void;
   setAgenticGenerating: (generating: boolean) => void;
   updateCanContinue: (canContinue: boolean, sessionId: string) => void;
   upsertToCompleteMessageMap: (params: {
@@ -98,7 +99,7 @@ export interface MessageSubmissionDependencies {
   selectedFolders: FolderResponse[];
   selectedFiles: FileResponse[];
   filterManager: FilterManager;
-  availableSources: SourceMetadata[];
+  availableSources: ValidSources[];
   documentSets: DocumentSet[];
   tags: Tag[];
   settings: {
@@ -108,8 +109,8 @@ export interface MessageSubmissionDependencies {
   proSearchEnabled: boolean;
   retrievalEnabled: boolean;
   updateRegenerationState: (
-    state: { regenerating: boolean; finalMessageIndex?: number },
-    sessionId: string
+    state: RegenerationState | null,
+    sessionId?: string | null
   ) => void;
   markSessionMessageSent: (sessionId: string) => void;
   setLoadingError: (error: string | null) => void;

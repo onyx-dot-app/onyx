@@ -28,9 +28,10 @@ import {
 import { getLastSuccessfulMessageId, PacketType } from "../lib";
 import { Persona } from "../../admin/assistants/interfaces";
 import { RegenerationRequest } from "./messagePreprocessor";
+import { ChatState } from "../types";
 
 export interface StreamingProcessorDependencies {
-  updateChatState: (state: string, sessionId?: string) => void;
+  updateChatState: (state: ChatState, sessionId?: string) => void;
   getCurrentChatState: () => string;
   setAgenticGenerating: (generating: boolean) => void;
   updateCanContinue: (canContinue: boolean, sessionId: string) => void;

@@ -4,11 +4,12 @@ import { ReadonlyURLSearchParams } from "next/navigation";
 import { Persona } from "../../admin/assistants/interfaces";
 import { BackendMessage } from "../interfaces";
 import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { ChatState } from "../types";
 
 export interface PostProcessorDependencies {
   setAgenticGenerating: (generating: boolean) => void;
   resetRegenerationState: (sessionId: string) => void;
-  updateChatState: (state: string, sessionId?: string) => void;
+  updateChatState: (state: ChatState, sessionId?: string) => void;
   setSelectedMessageForDocDisplay: (messageId: number | null) => void;
   setAlternativeGeneratingAssistant: (assistant: Persona | null) => void;
   setSubmittedMessage: (message: string) => void;
