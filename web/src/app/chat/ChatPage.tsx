@@ -370,17 +370,14 @@ export function useModal() {
 function ModalRenderer({
   state,
   onClose,
-  shouldShowWelcomeModal,
 }: {
   state: ModalState;
   onClose: () => void;
-  shouldShowWelcomeModal: boolean;
 }) {
   if (!state.isVisible) return null;
 
   switch (state.type) {
     case ModalType.API_KEY:
-      if (shouldShowWelcomeModal) return null;
       const apiKeyData = state.data?.apiKey;
       if (!apiKeyData?.setPopup) return null;
       return <ApiKeyModal hide={onClose} setPopup={apiKeyData.setPopup} />;
@@ -2805,11 +2802,7 @@ export function ChatPage({
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 
       {/* Centralized Modal Renderer */}
-      <ModalRenderer
-        state={modalState}
-        onClose={modalActions.closeModal}
-        shouldShowWelcomeModal={shouldShowWelcomeModal ?? false}
-      />
+      <ModalRenderer state={modalState} onClose={modalActions.closeModal} />
 
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
