@@ -127,6 +127,7 @@ import AssistantModal from "../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 import { useChatState } from "./hooks/useChatState";
+import { useMessageSubmission } from "./hooks/useMessageSubmission";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
@@ -168,6 +169,8 @@ export enum ModalType {
 }
 
 // Modal Data Types
+// Ideally most state & data doesn't need to be passed via action, but to start we're only extracting
+// the modal visibility/ shared state logic, keeping the messy state management logic that already exists
 interface ModalData {
   // API Key Modal
   apiKey?: {
@@ -1528,743 +1531,6 @@ export function ChatPage({
     setLoadingError(null);
   };
 
-  const onSubmit = async ({
-    messageIdToResend,
-    messageOverride,
-    queryOverride,
-    forceSearch,
-    isSeededChat,
-    alternativeAssistantOverride = null,
-    modelOverride,
-    regenerationRequest,
-    overrideFileDescriptors,
-  }: {
-    messageIdToResend?: number;
-    messageOverride?: string;
-    queryOverride?: string;
-    forceSearch?: boolean;
-    isSeededChat?: boolean;
-    alternativeAssistantOverride?: Persona | null;
-    modelOverride?: LlmDescriptor;
-    regenerationRequest?: RegenerationRequest | null;
-    overrideFileDescriptors?: FileDescriptor[];
-  } = {}) => {
-    navigatingAway.current = false;
-    let frozenSessionId = getCurrentSessionId();
-    updateCanContinue(false, frozenSessionId);
-    setUncaughtError(null);
-    setLoadingError(null);
-
-    // Mark that we've sent a message for this session in the current page load
-    markSessionMessageSent(frozenSessionId);
-
-    // Check if the last message was an error and remove it before proceeding with a new message
-    // Ensure this isn't a regeneration or resend, as those operations should preserve the history leading up to the point of regeneration/resend.
-    let currentMap = currentMessageMap(completeMessageDetail);
-    let currentHistory = buildLatestMessageChain(currentMap);
-    let lastMessage = currentHistory[currentHistory.length - 1];
-
-    if (
-      lastMessage &&
-      lastMessage.type === "error" &&
-      !messageIdToResend &&
-      !regenerationRequest
-    ) {
-      const newMap = new Map(currentMap);
-      const parentId = lastMessage.parentMessageId;
-
-      // Remove the error message itself
-      newMap.delete(lastMessage.messageId);
-
-      // Remove the parent message + update the parent of the parent to no longer
-      // link to the parent
-      if (parentId !== null && parentId !== undefined) {
-        const parentOfError = newMap.get(parentId);
-        if (parentOfError) {
-          const grandparentId = parentOfError.parentMessageId;
-          if (grandparentId !== null && grandparentId !== undefined) {
-            const grandparent = newMap.get(grandparentId);
-            if (grandparent) {
-              // Update grandparent to no longer link to parent
-              const updatedGrandparent = {
-                ...grandparent,
-                childrenMessageIds: (
-                  grandparent.childrenMessageIds || []
-                ).filter((id) => id !== parentId),
-                latestChildMessageId:
-                  grandparent.latestChildMessageId === parentId
-                    ? null
-                    : grandparent.latestChildMessageId,
-              };
-              newMap.set(grandparentId, updatedGrandparent);
-            }
-          }
-          // Remove the parent message
-          newMap.delete(parentId);
-        }
-      }
-      // Update the state immediately so subsequent logic uses the cleaned map
-      updateCompleteMessageDetail(frozenSessionId, newMap);
-      console.log("Removed previous error message ID:", lastMessage.messageId);
-
-      // update state for the new world (with the error message removed)
-      currentHistory = buildLatestMessageChain(newMap);
-      currentMap = newMap;
-      lastMessage = currentHistory[currentHistory.length - 1];
-    }
-
-    if (getCurrentChatState() != "input") {
-      if (getCurrentChatState() == "uploading") {
-        setPopup({
-          message: "Please wait for the content to upload",
-          type: "error",
-        });
-      } else {
-        setPopup({
-          message: "Please wait for the response to complete",
-          type: "error",
-        });
-      }
-
-      return;
-    }
-
-    setAlternativeGeneratingAssistant(alternativeAssistantOverride);
-
-    clientScrollToBottom();
-
-    let currChatSessionId: string;
-    const isNewSession = chatSessionIdRef.current === null;
-
-    const searchParamBasedChatSessionName =
-      searchParams?.get(SEARCH_PARAM_NAMES.TITLE) || null;
-
-    if (isNewSession) {
-      currChatSessionId = await createChatSession(
-        liveAssistant?.id || 0,
-        searchParamBasedChatSessionName
-      );
-    } else {
-      currChatSessionId = chatSessionIdRef.current as string;
-    }
-    frozenSessionId = currChatSessionId;
-    // update the selected model for the chat session if one is specified so that
-    // it persists across page reloads. Do not `await` here so that the message
-    // request can continue and this will just happen in the background.
-    // NOTE: only set the model override for the chat session once we send a
-    // message with it. If the user switches models and then starts a new
-    // chat session, it is unexpected for that model to be used when they
-    // return to this session the next day.
-    let finalLLM = modelOverride || llmManager.currentLlm;
-    updateLlmOverrideForChatSession(
-      currChatSessionId,
-      structureValue(
-        finalLLM.name || "",
-        finalLLM.provider || "",
-        finalLLM.modelName || ""
-      )
-    );
-
-    updateStatesWithNewSessionId(currChatSessionId);
-
-    const controller = new AbortController();
-
-    setAbortControllers((prev) =>
-      new Map(prev).set(currChatSessionId, controller)
-    );
-
-    const messageToResend = messageHistory.find(
-      (message) => message.messageId === messageIdToResend
-    );
-    if (messageIdToResend) {
-      updateRegenerationState(
-        { regenerating: true, finalMessageIndex: messageIdToResend },
-        getCurrentSessionId()
-      );
-    }
-    const messageToResendParent =
-      messageToResend?.parentMessageId !== null &&
-      messageToResend?.parentMessageId !== undefined
-        ? currentMap.get(messageToResend.parentMessageId)
-        : null;
-    const messageToResendIndex = messageToResend
-      ? messageHistory.indexOf(messageToResend)
-      : null;
-
-    if (!messageToResend && messageIdToResend !== undefined) {
-      setPopup({
-        message:
-          "Failed to re-send message - please refresh the page and try again.",
-        type: "error",
-      });
-      resetRegenerationState(getCurrentSessionId());
-      updateChatState("input", frozenSessionId);
-      return;
-    }
-    let currMessage = messageToResend ? messageToResend.message : message;
-    if (messageOverride) {
-      currMessage = messageOverride;
-    }
-
-    setSubmittedMessage(currMessage);
-
-    updateChatState("loading");
-
-    const currMessageHistory =
-      messageToResendIndex !== null
-        ? currentHistory.slice(0, messageToResendIndex)
-        : currentHistory;
-
-    let parentMessage =
-      messageToResendParent ||
-      (currMessageHistory.length > 0
-        ? currMessageHistory[currMessageHistory.length - 1]
-        : null) ||
-      (currentMap.size === 1 ? Array.from(currentMap.values())[0] : null);
-
-    let currentAssistantId;
-    if (alternativeAssistantOverride) {
-      currentAssistantId = alternativeAssistantOverride.id;
-    } else if (alternativeAssistant) {
-      currentAssistantId = alternativeAssistant.id;
-    } else {
-      if (liveAssistant) {
-        currentAssistantId = liveAssistant.id;
-      } else {
-        currentAssistantId = 0; // Fallback if no assistant is live
-      }
-    }
-
-    resetInputBar();
-    let messageUpdates: Message[] | null = null;
-
-    let answer = "";
-    let second_level_answer = "";
-
-    const stopReason: StreamStopReason | null = null;
-    let query: string | null = null;
-    let retrievalType: RetrievalType =
-      selectedDocuments.length > 0
-        ? RetrievalType.SelectedDocs
-        : RetrievalType.None;
-    let documents: OnyxDocument[] = selectedDocuments;
-    let aiMessageImages: FileDescriptor[] | null = null;
-    let agenticDocs: OnyxDocument[] | null = null;
-    let error: string | null = null;
-    let stackTrace: string | null = null;
-
-    let sub_questions: SubQuestionDetail[] = [];
-    let is_generating: boolean = false;
-    let second_level_generating: boolean = false;
-    let finalMessage: BackendMessage | null = null;
-    let toolCall: ToolCallMetadata | null = null;
-    let isImprovement: boolean | undefined = undefined;
-    let isStreamingQuestions = true;
-    let includeAgentic = false;
-    let secondLevelMessageId: number | null = null;
-    let isAgentic: boolean = false;
-    let files: FileDescriptor[] = [];
-
-    let initialFetchDetails: null | {
-      user_message_id: number;
-      assistant_message_id: number;
-      frozenMessageMap: Map<number, Message>;
-    } = null;
-    try {
-      const mapKeys = Array.from(currentMap.keys());
-      const lastSuccessfulMessageId =
-        getLastSuccessfulMessageId(currMessageHistory);
-
-      const stack = new CurrentMessageFIFO();
-
-      updateCurrentMessageFIFO(stack, {
-        signal: controller.signal,
-        message: currMessage,
-        alternateAssistantId: currentAssistantId,
-        fileDescriptors: overrideFileDescriptors || currentMessageFiles,
-        parentMessageId:
-          regenerationRequest?.parentMessage.messageId ||
-          lastSuccessfulMessageId,
-        chatSessionId: currChatSessionId,
-        filters: buildFilters(
-          filterManager.selectedSources,
-          filterManager.selectedDocumentSets,
-          filterManager.timeRange,
-          filterManager.selectedTags
-        ),
-        selectedDocumentIds: selectedDocuments
-          .filter(
-            (document) =>
-              document.db_doc_id !== undefined && document.db_doc_id !== null
-          )
-          .map((document) => document.db_doc_id as number),
-        queryOverride,
-        forceSearch,
-        userFolderIds: selectedFolders.map((folder) => folder.id),
-        userFileIds: selectedFiles
-          .filter((file) => file.id !== undefined && file.id !== null)
-          .map((file) => file.id),
-
-        regenerate: regenerationRequest !== undefined,
-        modelProvider:
-          modelOverride?.name || llmManager.currentLlm.name || undefined,
-        modelVersion:
-          modelOverride?.modelName ||
-          llmManager.currentLlm.modelName ||
-          searchParams?.get(SEARCH_PARAM_NAMES.MODEL_VERSION) ||
-          undefined,
-        temperature: llmManager.temperature || undefined,
-        systemPromptOverride:
-          searchParams?.get(SEARCH_PARAM_NAMES.SYSTEM_PROMPT) || undefined,
-        useExistingUserMessage: isSeededChat,
-        useLanggraph:
-          settings?.settings.pro_search_enabled &&
-          proSearchEnabled &&
-          retrievalEnabled,
-      });
-
-      const delay = (ms: number) => {
-        return new Promise((resolve) => setTimeout(resolve, ms));
-      };
-
-      await delay(50);
-      while (!stack.isComplete || !stack.isEmpty()) {
-        if (stack.isEmpty()) {
-          await delay(0.5);
-        }
-
-        if (!stack.isEmpty() && !controller.signal.aborted) {
-          const packet = stack.nextPacket();
-          if (!packet) {
-            continue;
-          }
-          console.log("Packet:", JSON.stringify(packet));
-
-          if (!initialFetchDetails) {
-            if (!Object.hasOwn(packet, "user_message_id")) {
-              console.error(
-                "First packet should contain message response info "
-              );
-              if (Object.hasOwn(packet, "error")) {
-                const error = (packet as StreamingError).error;
-                setLoadingError(error);
-                updateChatState("input");
-                return;
-              }
-              continue;
-            }
-
-            const messageResponseIDInfo = packet as MessageResponseIDInfo;
-
-            const user_message_id = messageResponseIDInfo.user_message_id!;
-            const assistant_message_id =
-              messageResponseIDInfo.reserved_assistant_message_id;
-
-            // we will use tempMessages until the regenerated message is complete
-            messageUpdates = [
-              {
-                messageId: regenerationRequest
-                  ? regenerationRequest?.parentMessage?.messageId!
-                  : user_message_id,
-                message: currMessage,
-                type: "user",
-                files: files,
-                toolCall: null,
-                parentMessageId: parentMessage?.messageId || SYSTEM_MESSAGE_ID,
-              },
-            ];
-
-            if (parentMessage && !regenerationRequest) {
-              messageUpdates.push({
-                ...parentMessage,
-                childrenMessageIds: (
-                  parentMessage.childrenMessageIds || []
-                ).concat([user_message_id]),
-                latestChildMessageId: user_message_id,
-              });
-            }
-
-            const { messageMap: currentFrozenMessageMap } =
-              upsertToCompleteMessageMap({
-                messages: messageUpdates,
-                chatSessionId: currChatSessionId,
-                completeMessageMapOverride: currentMap,
-              });
-            currentMap = currentFrozenMessageMap;
-
-            initialFetchDetails = {
-              frozenMessageMap: currentMap,
-              assistant_message_id,
-              user_message_id,
-            };
-
-            resetRegenerationState();
-          } else {
-            const { user_message_id, frozenMessageMap } = initialFetchDetails;
-            if (Object.hasOwn(packet, "agentic_message_ids")) {
-              const agenticMessageIds = (packet as AgenticMessageResponseIDInfo)
-                .agentic_message_ids;
-              const level1MessageId = agenticMessageIds.find(
-                (item) => item.level === 1
-              )?.message_id;
-              if (level1MessageId) {
-                secondLevelMessageId = level1MessageId;
-                includeAgentic = true;
-              }
-            }
-
-            // Update chat state to streaming if currently loading
-            if (getCurrentChatState() === "loading") {
-              updateChatState("streaming", chatSessionIdRef.current);
-            }
-
-            if (Object.hasOwn(packet, "level")) {
-              if ((packet as any).level === 1) {
-                second_level_generating = true;
-              }
-            }
-            if (Object.hasOwn(packet, "user_files")) {
-              const userFiles = (packet as UserKnowledgeFilePacket).user_files;
-              // Ensure files are unique by id
-              const newUserFiles = userFiles.filter(
-                (newFile) =>
-                  !files.some((existingFile) => existingFile.id === newFile.id)
-              );
-              files = files.concat(newUserFiles);
-            }
-            if (Object.hasOwn(packet, "is_agentic")) {
-              isAgentic = (packet as any).is_agentic;
-            }
-
-            if (Object.hasOwn(packet, "refined_answer_improvement")) {
-              isImprovement = (packet as RefinedAnswerImprovement)
-                .refined_answer_improvement;
-            }
-
-            if (Object.hasOwn(packet, "stream_type")) {
-              if ((packet as any).stream_type == "main_answer") {
-                is_generating = false;
-                second_level_generating = true;
-              }
-            }
-
-            // // Continuously refine the sub_questions based on the packets that we receive
-            if (
-              Object.hasOwn(packet, "stop_reason") &&
-              Object.hasOwn(packet, "level_question_num")
-            ) {
-              if ((packet as StreamStopInfo).stream_type == "main_answer") {
-                updateChatState("streaming", frozenSessionId);
-              }
-              if (
-                (packet as StreamStopInfo).stream_type == "sub_questions" &&
-                (packet as StreamStopInfo).level_question_num == undefined
-              ) {
-                isStreamingQuestions = false;
-              }
-              sub_questions = constructSubQuestions(
-                sub_questions,
-                packet as StreamStopInfo
-              );
-            } else if (Object.hasOwn(packet, "sub_question")) {
-              updateChatState("toolBuilding", frozenSessionId);
-              isAgentic = true;
-              is_generating = true;
-              sub_questions = constructSubQuestions(
-                sub_questions,
-                packet as SubQuestionPiece
-              );
-              setAgenticGenerating(true);
-            } else if (Object.hasOwn(packet, "sub_query")) {
-              sub_questions = constructSubQuestions(
-                sub_questions,
-                packet as SubQueryPiece
-              );
-            } else if (
-              Object.hasOwn(packet, "answer_piece") &&
-              Object.hasOwn(packet, "answer_type") &&
-              (packet as AgentAnswerPiece).answer_type === "agent_sub_answer"
-            ) {
-              sub_questions = constructSubQuestions(
-                sub_questions,
-                packet as AgentAnswerPiece
-              );
-            } else if (Object.hasOwn(packet, "answer_piece")) {
-              // Mark every sub_question's is_generating as false
-              sub_questions = sub_questions.map((subQ) => ({
-                ...subQ,
-                is_generating: false,
-              }));
-
-              if (
-                Object.hasOwn(packet, "level") &&
-                (packet as any).level === 1
-              ) {
-                second_level_answer += (packet as AnswerPiecePacket)
-                  .answer_piece;
-              } else {
-                answer += (packet as AnswerPiecePacket).answer_piece;
-              }
-            } else if (
-              Object.hasOwn(packet, "top_documents") &&
-              Object.hasOwn(packet, "level_question_num") &&
-              (packet as DocumentsResponse).level_question_num != undefined
-            ) {
-              const documentsResponse = packet as DocumentsResponse;
-              sub_questions = constructSubQuestions(
-                sub_questions,
-                documentsResponse
-              );
-
-              if (
-                documentsResponse.level_question_num === 0 &&
-                documentsResponse.level == 0
-              ) {
-                documents = (packet as DocumentsResponse).top_documents;
-              } else if (
-                documentsResponse.level_question_num === 0 &&
-                documentsResponse.level == 1
-              ) {
-                agenticDocs = (packet as DocumentsResponse).top_documents;
-              }
-            } else if (Object.hasOwn(packet, "top_documents")) {
-              documents = (packet as DocumentInfoPacket).top_documents;
-              retrievalType = RetrievalType.Search;
-
-              if (documents && documents.length > 0) {
-                // point to the latest message (we don't know the messageId yet, which is why
-                // we have to use -1)
-                setSelectedMessageForDocDisplay(user_message_id);
-              }
-            } else if (Object.hasOwn(packet, "tool_name")) {
-              // Will only ever be one tool call per message
-              toolCall = {
-                tool_name: (packet as ToolCallMetadata).tool_name,
-                tool_args: (packet as ToolCallMetadata).tool_args,
-                tool_result: (packet as ToolCallMetadata).tool_result,
-              };
-
-              if (!toolCall.tool_name.includes("agent")) {
-                if (
-                  !toolCall.tool_result ||
-                  toolCall.tool_result == undefined
-                ) {
-                  updateChatState("toolBuilding", frozenSessionId);
-                } else {
-                  updateChatState("streaming", frozenSessionId);
-                }
-
-                // This will be consolidated in upcoming tool calls udpate,
-                // but for now, we need to set query as early as possible
-                if (toolCall.tool_name == SEARCH_TOOL_NAME) {
-                  query = toolCall.tool_args["query"];
-                }
-              } else {
-                toolCall = null;
-              }
-            } else if (Object.hasOwn(packet, "file_ids")) {
-              aiMessageImages = (packet as FileChatDisplay).file_ids.map(
-                (fileId) => {
-                  return {
-                    id: fileId,
-                    type: ChatFileType.IMAGE,
-                  };
-                }
-              );
-            } else if (
-              Object.hasOwn(packet, "error") &&
-              (packet as any).error != null
-            ) {
-              if (
-                sub_questions.length > 0 &&
-                sub_questions
-                  .filter((q) => q.level === 0)
-                  .every((q) => q.is_stopped === true)
-              ) {
-                setUncaughtError((packet as StreamingError).error);
-                updateChatState("input");
-                setAgenticGenerating(false);
-                setAlternativeGeneratingAssistant(null);
-                setSubmittedMessage("");
-
-                throw new Error((packet as StreamingError).error);
-              } else {
-                error = (packet as StreamingError).error;
-                stackTrace = (packet as StreamingError).stack_trace;
-              }
-            } else if (Object.hasOwn(packet, "message_id")) {
-              finalMessage = packet as BackendMessage;
-            } else if (Object.hasOwn(packet, "stop_reason")) {
-              const stop_reason = (packet as StreamStopInfo).stop_reason;
-              if (stop_reason === StreamStopReason.CONTEXT_LENGTH) {
-                updateCanContinue(true, frozenSessionId);
-              }
-            }
-
-            // on initial message send, we insert a dummy system message
-            // set this as the parent here if no parent is set
-            parentMessage =
-              parentMessage || frozenMessageMap?.get(SYSTEM_MESSAGE_ID)!;
-
-            const updateFn = (messages: Message[]) => {
-              const replacementsMap = regenerationRequest
-                ? new Map([
-                    [
-                      regenerationRequest?.parentMessage?.messageId,
-                      regenerationRequest?.parentMessage?.messageId,
-                    ],
-                    [
-                      regenerationRequest?.messageId,
-                      initialFetchDetails?.assistant_message_id,
-                    ],
-                  ] as [number, number][])
-                : null;
-
-              const newMessageDetails = upsertToCompleteMessageMap({
-                messages: messages,
-                replacementsMap: replacementsMap,
-                // Pass the latest map state
-                completeMessageMapOverride: currentMap,
-                chatSessionId: frozenSessionId!,
-              });
-              currentMap = newMessageDetails.messageMap;
-              return newMessageDetails;
-            };
-
-            const systemMessageId = Math.min(...mapKeys);
-            updateFn([
-              {
-                messageId: regenerationRequest
-                  ? regenerationRequest?.parentMessage?.messageId!
-                  : initialFetchDetails.user_message_id!,
-                message: currMessage,
-                type: "user",
-                files: files,
-                toolCall: null,
-                // in the frontend, every message should have a parent ID
-                parentMessageId: lastSuccessfulMessageId ?? systemMessageId,
-                childrenMessageIds: [
-                  ...(regenerationRequest?.parentMessage?.childrenMessageIds ||
-                    []),
-                  initialFetchDetails.assistant_message_id!,
-                ],
-                latestChildMessageId: initialFetchDetails.assistant_message_id,
-              },
-              {
-                isStreamingQuestions: isStreamingQuestions,
-                is_generating: is_generating,
-                isImprovement: isImprovement,
-                messageId: initialFetchDetails.assistant_message_id!,
-                message: error || answer,
-                second_level_message: second_level_answer,
-                type: error ? "error" : "assistant",
-                retrievalType,
-                query: finalMessage?.rephrased_query || query,
-                documents: documents,
-                citations: finalMessage?.citations || {},
-                files: finalMessage?.files || aiMessageImages || [],
-                toolCall: finalMessage?.tool_call || toolCall,
-                parentMessageId: regenerationRequest
-                  ? regenerationRequest?.parentMessage?.messageId!
-                  : initialFetchDetails.user_message_id,
-                alternateAssistantID: alternativeAssistant?.id,
-                stackTrace: stackTrace,
-                overridden_model: finalMessage?.overridden_model,
-                stopReason: stopReason,
-                sub_questions: sub_questions,
-                second_level_generating: second_level_generating,
-                agentic_docs: agenticDocs,
-                is_agentic: isAgentic,
-              },
-              ...(includeAgentic
-                ? [
-                    {
-                      messageId: secondLevelMessageId!,
-                      message: second_level_answer,
-                      type: "assistant" as const,
-                      files: [],
-                      toolCall: null,
-                      parentMessageId:
-                        initialFetchDetails.assistant_message_id!,
-                    },
-                  ]
-                : []),
-            ]);
-          }
-        }
-      }
-    } catch (e: any) {
-      console.log("Error:", e);
-      const errorMsg = e.message;
-      const newMessageDetails = upsertToCompleteMessageMap({
-        messages: [
-          {
-            messageId:
-              initialFetchDetails?.user_message_id || TEMP_USER_MESSAGE_ID,
-            message: currMessage,
-            type: "user",
-            files: currentMessageFiles,
-            toolCall: null,
-            parentMessageId: parentMessage?.messageId || SYSTEM_MESSAGE_ID,
-          },
-          {
-            messageId:
-              initialFetchDetails?.assistant_message_id ||
-              TEMP_ASSISTANT_MESSAGE_ID,
-            message: errorMsg,
-            type: "error",
-            files: aiMessageImages || [],
-            toolCall: null,
-            parentMessageId:
-              initialFetchDetails?.user_message_id || TEMP_USER_MESSAGE_ID,
-          },
-        ],
-        completeMessageMapOverride: currentMap,
-      });
-      currentMap = newMessageDetails.messageMap;
-    }
-    console.log("Finished streaming");
-    setAgenticGenerating(false);
-    resetRegenerationState(getCurrentSessionId());
-
-    updateChatState("input");
-    if (isNewSession) {
-      console.log("Setting up new session");
-      if (finalMessage) {
-        setSelectedMessageForDocDisplay(finalMessage.message_id);
-      }
-
-      if (!searchParamBasedChatSessionName) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        await nameChatSession(currChatSessionId);
-        refreshChatSessions();
-      }
-
-      // NOTE: don't switch pages if the user has navigated away from the chat
-      if (
-        currChatSessionId === chatSessionIdRef.current ||
-        chatSessionIdRef.current === null
-      ) {
-        const newUrl = buildChatUrl(searchParams, currChatSessionId, null);
-        // newUrl is like /chat?chatId=10
-        // current page is like /chat
-
-        if (pathname == "/chat" && !navigatingAway.current) {
-          router.push(newUrl, { scroll: false });
-        }
-      }
-    }
-    if (
-      finalMessage?.context_docs &&
-      finalMessage.context_docs.top_documents.length > 0 &&
-      retrievalType === RetrievalType.Search
-    ) {
-      setSelectedMessageForDocDisplay(finalMessage.message_id);
-    }
-    setAlternativeGeneratingAssistant(null);
-    setSubmittedMessage("");
-  };
-
   const onFeedback = async (
     messageId: number,
     feedbackType: FeedbackType,
@@ -2519,6 +1785,71 @@ export function ChatPage({
   }, [pathname]);
 
   const navigatingAway = useRef(false);
+
+  // Moved all submission logic to new service layer, accessed via useMessageSubmission hook
+  // We can pass in the dependencies to the hook for now, which keeps this file cleaner, and
+  // in the future we can add better state management/ abstractions to remove the need for these props
+  const messageSubmissionDependencies = {
+    // Session management
+    liveAssistant,
+    searchParams,
+    llmManager,
+    chatSessionIdRef,
+    updateStatesWithNewSessionId,
+    setAbortControllers,
+
+    // Message preprocessing
+    currentMessageMap,
+    completeMessageDetail,
+    updateCompleteMessageDetail,
+    messageHistory,
+    setPopup,
+    getCurrentChatState,
+    setAlternativeGeneratingAssistant,
+    clientScrollToBottom,
+    resetInputBar,
+
+    // Streaming processing
+    updateChatState,
+    setAgenticGenerating,
+    updateCanContinue,
+    upsertToCompleteMessageMap,
+    setSelectedMessageForDocDisplay,
+    setUncaughtError,
+    setSubmittedMessage,
+
+    // Post processing
+    resetRegenerationState,
+    refreshChatSessions,
+    router,
+    pathname,
+    navigatingAway,
+
+    // Other dependencies
+    alternativeAssistant,
+    message,
+    currentMessageFiles,
+    selectedDocuments,
+    selectedFolders,
+    selectedFiles,
+    filterManager,
+    availableSources,
+    documentSets,
+    tags,
+    settings,
+    proSearchEnabled,
+    retrievalEnabled,
+    updateRegenerationState,
+    markSessionMessageSent,
+    setLoadingError,
+    getCurrentSessionId,
+  };
+
+  const { submitMessage } = useMessageSubmission(messageSubmissionDependencies);
+
+  // Using wrapper for now to avoid renaming uses and possibly breaking other code/ increasing scope
+  const onSubmit = submitMessage;
+
   // Keep a ref to abortControllers to ensure we always have the latest value
   const abortControllersRef = useRef(abortControllers);
   useEffect(() => {
