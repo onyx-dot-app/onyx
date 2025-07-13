@@ -273,6 +273,9 @@ def choose_tool(
         writer,
     ).ai_message_chunk
 
+    if tool_message is None:
+        raise ValueError("No tool message emitted by LLM")
+
     # If no tool calls are emitted by the LLM, we should not choose a tool
     if len(tool_message.tool_calls) == 0:
         logger.debug("No tool calls emitted by LLM")

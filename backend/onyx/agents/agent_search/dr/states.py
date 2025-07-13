@@ -1,4 +1,3 @@
-from enum import Enum
 from operator import add
 from typing import Annotated
 from typing import TypedDict
@@ -6,9 +5,12 @@ from typing import TypedDict
 from pydantic import BaseModel
 
 from onyx.agents.agent_search.core_state import CoreState
+from onyx.agents.agent_search.dr.models import DRPath
+from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.context.search.models import InferenceSection
 
 
 ### States ###
@@ -18,22 +20,11 @@ class LoggerUpdate(BaseModel):
     log_messages: Annotated[list[str], add] = []
 
 
-class DRPath(str, Enum):
-    SEARCH = "SEARCH"
-    KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
-    CLOSER = "CLOSER"
-
-
-class OrchestratorStep(BaseModel):
-    tool: DRPath
-    questions: list[str]
-
-
 class OrchestrationUpdate(LoggerUpdate):
     query_path: Annotated[list[DRPath], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
-    plan_of_record: Annotated[list[list[OrchestratorStep]], add] = []
+    plan_of_record: Annotated[list[OrchestrationPlan], add] = []
     used_time_budget: int = 0
 
 
@@ -57,10 +48,9 @@ class AnswerUpdate(LoggerUpdate):
     parallelization_nr: int = 0
     instructions: str | None = None
     answers: Annotated[list[str], add] = []
-    cited_references: Annotated[list[str], add] = []
-    iteration_answers: dict[int, dict[int, dict[str, str]]] = (
-        {}
-    )  # it, par, {Q, A} TODO: Annotated?
+    iteration_responses: Annotated[
+        list[dict[int, dict[int, dict[str, str | list[InferenceSection]]]]], add
+    ] = []
 
 
 class FinalUpdate(LoggerUpdate):
