@@ -6,6 +6,18 @@ import { PostProcessor } from "./postProcessor";
 import { sendMessage, SendMessageParams, PacketType } from "../lib";
 import { buildFilters } from "@/lib/search/utils";
 import { SEARCH_PARAM_NAMES } from "../searchParams";
+import { Persona } from "../../admin/assistants/interfaces";
+import { Message, FileDescriptor } from "../interfaces";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
+import { FilterManager } from "@/lib/hooks";
+import { SourceMetadata } from "@/lib/search/interfaces";
+import { DocumentSet, Tag } from "@/lib/types";
+import { OnyxDocument } from "@/lib/search/interfaces";
+import { FileResponse, FolderResponse } from "../my-documents/DocumentsContext";
+import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { RegenerationRequest } from "./messagePreprocessor";
+import { ReadonlyURLSearchParams } from "next/navigation";
 
 // FIFO Queue for handling streaming packets (matching original implementation)
 class CurrentMessageFIFO {
@@ -28,9 +40,9 @@ class CurrentMessageFIFO {
 
 export interface MessageSubmissionDependencies {
   // Session management
-  liveAssistant: any;
-  searchParams: any;
-  llmManager: any;
+  liveAssistant: Persona | undefined;
+  searchParams: ReadonlyURLSearchParams | null;
+  llmManager: LlmManager;
   chatSessionIdRef: React.MutableRefObject<string | null>;
   updateStatesWithNewSessionId: (newSessionId: string) => void;
   setAbortControllers: React.Dispatch<
@@ -39,27 +51,33 @@ export interface MessageSubmissionDependencies {
 
   // Message preprocessing
   currentMessageMap: (
-    messageDetail: Map<string | null, Map<number, any>>
-  ) => Map<number, any>;
-  completeMessageDetail: Map<string | null, Map<number, any>>;
+    messageDetail: Map<string | null, Map<number, Message>>
+  ) => Map<number, Message>;
+  completeMessageDetail: Map<string | null, Map<number, Message>>;
   updateCompleteMessageDetail: (
     sessionId: string | null,
-    messageMap: Map<number, any>
+    messageMap: Map<number, Message>
   ) => void;
-  messageHistory: any[];
-  setPopup: (popup: any) => void;
+  messageHistory: Message[];
+  setPopup: (popup: PopupSpec | null) => void;
   getCurrentChatState: () => string;
-  setAlternativeGeneratingAssistant: (assistant: any) => void;
+  setAlternativeGeneratingAssistant: (assistant: Persona | null) => void;
   clientScrollToBottom: () => void;
   resetInputBar: () => void;
 
   // Streaming processing
-  updateChatState: (state: any, sessionId?: string | null) => void;
+  updateChatState: (state: string, sessionId?: string | null) => void;
   setAgenticGenerating: (generating: boolean) => void;
   updateCanContinue: (canContinue: boolean, sessionId: string) => void;
-  upsertToCompleteMessageMap: (params: any) => {
+  upsertToCompleteMessageMap: (params: {
+    messages: Message[];
+    replacementsMap?: Map<number, number> | null;
+    completeMessageMapOverride?: Map<number, Message> | null;
+    chatSessionId?: string;
+    makeLatestChildMessage?: boolean;
+  }) => {
     sessionId: string;
-    messageMap: Map<number, any>;
+    messageMap: Map<number, Message>;
   };
   setSelectedMessageForDocDisplay: (messageId: number | null) => void;
   setUncaughtError: (error: string | null) => void;
@@ -68,25 +86,31 @@ export interface MessageSubmissionDependencies {
   // Post processing
   resetRegenerationState: (sessionId: string) => void;
   refreshChatSessions: () => void;
-  router: any;
+  router: AppRouterInstance;
   pathname: string;
   navigatingAway: React.MutableRefObject<boolean>;
 
   // Other dependencies
-  alternativeAssistant: any;
+  alternativeAssistant: Persona | null;
   message: string;
-  currentMessageFiles: any[];
-  selectedDocuments: any[];
-  selectedFolders: any[];
-  selectedFiles: any[];
-  filterManager: any;
-  availableSources: any[];
-  documentSets: any[];
-  tags: any[];
-  settings: any;
+  currentMessageFiles: FileDescriptor[];
+  selectedDocuments: OnyxDocument[];
+  selectedFolders: FolderResponse[];
+  selectedFiles: FileResponse[];
+  filterManager: FilterManager;
+  availableSources: SourceMetadata[];
+  documentSets: DocumentSet[];
+  tags: Tag[];
+  settings: {
+    isMobile?: boolean;
+    settings?: { pro_search_enabled?: boolean };
+  } | null;
   proSearchEnabled: boolean;
   retrievalEnabled: boolean;
-  updateRegenerationState: (state: any, sessionId: string) => void;
+  updateRegenerationState: (
+    state: { regenerating: boolean; finalMessageIndex?: number },
+    sessionId: string
+  ) => void;
   markSessionMessageSent: (sessionId: string) => void;
   setLoadingError: (error: string | null) => void;
   getCurrentSessionId: () => string;
@@ -98,10 +122,10 @@ export interface MessageSubmissionParams {
   queryOverride?: string;
   forceSearch?: boolean;
   isSeededChat?: boolean;
-  alternativeAssistantOverride?: any;
-  modelOverride?: any;
-  regenerationRequest?: any;
-  overrideFileDescriptors?: any[];
+  alternativeAssistantOverride?: Persona | null;
+  modelOverride?: LlmDescriptor;
+  regenerationRequest?: RegenerationRequest | null;
+  overrideFileDescriptors?: FileDescriptor[];
 }
 
 export class MessageSubmissionService {
@@ -167,10 +191,10 @@ export class MessageSubmissionService {
     });
   }
 
-  private getLastSuccessfulMessageId(messageHistory: any[]): number | null {
+  private getLastSuccessfulMessageId(messageHistory: Message[]): number | null {
     // This should be implemented based on the actual logic
     return messageHistory.length > 0
-      ? messageHistory[messageHistory.length - 1]?.messageId
+      ? messageHistory[messageHistory.length - 1]?.messageId || null
       : null;
   }
 
@@ -330,13 +354,17 @@ export class MessageSubmissionService {
         undefined,
       useExistingUserMessage: isSeededChat,
       useLanggraph:
-        this.deps.settings?.settings.pro_search_enabled &&
+        this.deps.settings?.settings?.pro_search_enabled &&
         this.deps.proSearchEnabled &&
         this.deps.retrievalEnabled,
     };
 
     // Process streaming
-    let initialFetchDetails: any = null;
+    let initialFetchDetails: {
+      user_message_id: number;
+      assistant_message_id: number;
+      frozenMessageMap: Map<number, Message>;
+    } | null = null;
     let currentMapCopy = new Map(currentMap);
 
     try {
@@ -364,7 +392,7 @@ export class MessageSubmissionService {
           if (!initialFetchDetails) {
             initialFetchDetails = this.streamingProcessor.processInitialPacket(
               packet,
-              regenerationRequest,
+              regenerationRequest || null,
               currMessage,
               parentMessage,
               currentMapCopy,
@@ -383,7 +411,7 @@ export class MessageSubmissionService {
 
             // Update messages
             currentMapCopy = this.messageUpdater.updateMessages({
-              regenerationRequest,
+              regenerationRequest: regenerationRequest || null,
               initialFetchDetails,
               streamingState: newStreamingState,
               currMessage,
@@ -399,9 +427,9 @@ export class MessageSubmissionService {
           }
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.log("Error:", e);
-      const errorMsg = e.message;
+      const errorMsg = e instanceof Error ? e.message : String(e);
 
       // Handle error by creating error messages
       this.deps.upsertToCompleteMessageMap({
