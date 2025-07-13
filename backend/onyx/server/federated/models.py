@@ -70,7 +70,7 @@ class FederatedConnectorSummary(BaseModel):
 
     id: int
     name: str
-    source: str  # Using str to match FederatedConnectorDescriptor pattern
+    source: FederatedConnectorSource
     entities: dict[str, Any]
 
     @classmethod
