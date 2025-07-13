@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.states import FinalUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.utils import aggregate_context
+from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -14,7 +14,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -39,27 +38,13 @@ def closer(
         "---base_question---", base_question
     ).replace("---iteration_responses_string---", iteration_responses_string)
 
-    msg = [
-        HumanMessage(
-            content=final_answer_prompt,
-        )
-    ]
-
-    primary_llm = config["metadata"]["config"].tooling.primary_llm
-
-    try:
-        llm_response = run_with_timeout(
-            25,
-            primary_llm.invoke,
-            prompt=msg,
-            timeout_override=45,
-            max_tokens=1500,
-        )
-
-        final_answer = str(llm_response.content).replace("```json\n", "")
-
-    except Exception as e:
-        raise ValueError(f"Error in closer: {e}")
+    final_answer = get_answer_from_llm(
+        llm=config["metadata"]["config"].tooling.primary_llm,
+        prompt=final_answer_prompt,
+        timeout=60,
+        max_tokens=1500,
+        timeout_override=60,
+    )
 
     logger.debug(final_answer)
 

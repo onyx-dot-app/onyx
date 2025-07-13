@@ -20,6 +20,8 @@ from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import FAST_DR_DECISION_PROMPT
@@ -146,6 +148,17 @@ def orchestrator(
             except Exception as e:
                 logger.error(f"Error in plan generation: {e}")
                 raise e
+
+            write_custom_event(
+                "basic_response",
+                AgentAnswerPiece(
+                    answer_piece=f"\n\nHIGH_LEVEL PLAN: {plan_information.plan}\n\n\n",
+                    level=0,
+                    level_question_num=0,
+                    answer_type="agent_level_answer",
+                ),
+                writer,
+            )
         else:
             plan_information = state.plan_of_record[-1]
 
