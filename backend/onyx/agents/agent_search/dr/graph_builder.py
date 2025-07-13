@@ -8,8 +8,8 @@ from onyx.agents.agent_search.dr.nodes.dr_a2_closer import closer
 from onyx.agents.agent_search.dr.nodes.dr_i1_search import search
 from onyx.agents.agent_search.dr.nodes.dr_i2_kg import kg_query
 from onyx.agents.agent_search.dr.states import DRPath
-from onyx.agents.agent_search.kb_search.states import MainInput
-from onyx.agents.agent_search.kb_search.states import MainState
+from onyx.agents.agent_search.dr.states import MainInput
+from onyx.agents.agent_search.dr.states import MainState
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

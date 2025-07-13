@@ -22,17 +22,30 @@ def kg_query(state: MainState, config: RunnableConfig) -> AnswerUpdate:
     iteration_nr = state.iteration_nr
     search_query = state.query_list[0]  # TODO: fix this
 
+    logger.debug(f"Conducting a knowledge graph search for: {search_query}")
+
     kb_graph = kb_graph_builder().compile()
 
+    # TODO: change this
+    original_question = config["metadata"][
+        "config"
+    ].inputs.prompt_builder.raw_user_query
     kg_config = config.copy()
     kg_config["metadata"]["config"].behavior.use_agentic_search = True
+    kg_config["metadata"]["config"].inputs.prompt_builder.raw_user_query = search_query
 
     kb_results = kb_graph.invoke(input=state, config=kg_config)
     full_answer = kb_results.get("final_answer") or "No answer provided"
 
+    config["metadata"][
+        "config"
+    ].inputs.prompt_builder.raw_user_query = original_question
+
     return AnswerUpdate(
         answers=[kb_results.get("final_answer") or ""],
-        iteration_answers={iteration_nr: {0: {"Q": search_query, "A": full_answer}}},
+        iteration_responses=[
+            {iteration_nr: {0: {"Q": search_query, "A": full_answer}}}
+        ],
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

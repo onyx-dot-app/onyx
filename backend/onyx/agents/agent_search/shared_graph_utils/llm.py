@@ -2,11 +2,13 @@ from datetime import datetime
 from typing import Literal
 
 from langchain.schema.language_model import LanguageModelInput
+from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.llm.interfaces import LLM
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 
 def stream_llm_answer(
@@ -66,3 +68,69 @@ def stream_llm_answer(
         response.append(content)
 
     return response, dispatch_timings
+
+
+def get_answer_from_llm(
+    llm: LLM,
+    prompt: str,
+    timeout: int = 25,
+    timeout_override: int = 5,
+    max_tokens: int = 500,
+    stream: bool = False,
+    writer: StreamWriter = lambda _: None,
+    agent_answer_level: int = 0,
+    agent_answer_question_num: int = 0,
+    agent_answer_type: Literal[
+        "agent_sub_answer", "agent_level_answer"
+    ] = "agent_level_answer",
+    json_string_flag: bool = False,
+) -> str:
+    msg = [
+        HumanMessage(
+            content=prompt,
+        )
+    ]
+
+    if stream:
+        # TODO - adjust for new UI. This is currently not working for current UI/Basic Search
+        stream_response, _ = run_with_timeout(
+            timeout,
+            lambda: stream_llm_answer(
+                llm=llm,
+                prompt=msg,
+                event_name="sub_answers",
+                writer=writer,
+                agent_answer_level=agent_answer_level,
+                agent_answer_question_num=agent_answer_question_num,
+                agent_answer_type=agent_answer_type,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+            ),
+        )
+
+        content = "".join(stream_response)
+    else:
+        llm_response = run_with_timeout(
+            timeout,
+            llm.invoke,
+            prompt=msg,
+            timeout_override=timeout_override,
+            max_tokens=max_tokens,
+        )
+
+        content = str(llm_response.content)
+
+    cleaned_response = (
+        str(content).replace("```json\n", "").replace("\n```", "").replace("\n", "")
+    )
+
+    if json_string_flag:
+        cleaned_response = (
+            str(llm_response.content).replace("\n```", "").replace("\n", "")
+        )
+
+        first_bracket = cleaned_response.find("{")
+        last_bracket = cleaned_response.rfind("}")
+        cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
+
+    return cleaned_response

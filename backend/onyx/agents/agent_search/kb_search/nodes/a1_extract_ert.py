@@ -83,7 +83,6 @@ def extract_ert(
     # Stream structure of substeps out to the UI
     stream_write_kg_search_structure(writer)
 
-    # Now specify core activities in the step (step 1)
     stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     # Create temporary views. TODO: move into parallel step, if ultimately materialized

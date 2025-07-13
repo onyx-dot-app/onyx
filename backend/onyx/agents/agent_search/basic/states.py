@@ -21,6 +21,7 @@ class BasicInput(BaseModel):
     # Langgraph needs a nonempty input, but we pass in all static
     # data through a RunnableConfig.
     unused: bool = True
+    query_override: str | None = None
 
 
 ## Graph Output State
