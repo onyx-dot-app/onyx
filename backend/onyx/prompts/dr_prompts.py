@@ -491,6 +491,9 @@ GUIDANCE:
  - note that the sub-answers to the sub-questions are designed to be high-level, mostly \
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
+- make sure that a the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
+- do not make anything up! Only use the information provided in the documents, or, \
+if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
 - Please cite your sources inline in format [2], [4], etc! The numbers of the documents \
 are provided above.

@@ -155,7 +155,7 @@ def search(
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
-            answer_piece=f"\n\nSUB-QUESTION: {search_query}\n\nANSWER: {search_answer}\n\n",
+            answer_piece=f"\n\nSUB-QUESTION (SEARCH): {search_query}\n\n-> answered!\n\n",
             level=0,
             level_question_num=0,
             answer_type="agent_level_answer",
@@ -163,12 +163,24 @@ def search(
         writer,
     )
 
+    # handle citations
+
     citation_numbers = get_cited_document_numbers(search_answer)
+    citation_number_replacement_dict = {
+        original_index: start_1_based_index + 1
+        for start_1_based_index, original_index in enumerate(citation_numbers)
+    }
 
     cited_documents: list[InferenceSection] = []
 
     for citation_number in citation_numbers:
         cited_documents.append(retrieved_docs[citation_number - 1])
+
+    # change citations from search answer
+    for original_index, replacement_index in citation_number_replacement_dict.items():
+        search_answer = search_answer.replace(
+            f"[{original_index}]", f"[{replacement_index}]"
+        )
 
     return AnswerUpdate(
         answers=[search_answer],
