@@ -26,6 +26,8 @@ import {
   RefinedAnswerImprovement,
 } from "@/lib/search/interfaces";
 import { getLastSuccessfulMessageId, PacketType } from "../lib";
+import { Persona } from "../../admin/assistants/interfaces";
+import { RegenerationRequest } from "./messagePreprocessor";
 
 export interface StreamingProcessorDependencies {
   updateChatState: (state: string, sessionId?: string) => void;
@@ -41,7 +43,7 @@ export interface StreamingProcessorDependencies {
   setSelectedMessageForDocDisplay: (messageId: number | null) => void;
   setUncaughtError: (error: string | null) => void;
   setLoadingError: (error: string | null) => void;
-  setAlternativeGeneratingAssistant: (assistant: any) => void;
+  setAlternativeGeneratingAssistant: (assistant: Persona | null) => void;
   setSubmittedMessage: (message: string) => void;
   resetRegenerationState: (sessionId: string) => void;
 }
@@ -105,7 +107,7 @@ export class StreamingProcessor {
 
   processInitialPacket(
     packet: PacketType,
-    regenerationRequest: any,
+    regenerationRequest: RegenerationRequest | null,
     currMessage: string,
     parentMessage: Message | null,
     currentMap: Map<number, Message>,
@@ -196,7 +198,7 @@ export class StreamingProcessor {
 
     // Handle level information
     if (Object.hasOwn(packet, "level")) {
-      if ((packet as any).level === 1) {
+      if ((packet as { level: number }).level === 1) {
         newState.second_level_generating = true;
       }
     }
@@ -213,7 +215,7 @@ export class StreamingProcessor {
 
     // Handle agentic flag
     if (Object.hasOwn(packet, "is_agentic")) {
-      newState.isAgentic = (packet as any).is_agentic;
+      newState.isAgentic = (packet as { is_agentic: boolean }).is_agentic;
     }
 
     // Handle refined answer improvement
@@ -225,7 +227,7 @@ export class StreamingProcessor {
 
     // Handle stream type
     if (Object.hasOwn(packet, "stream_type")) {
-      if ((packet as any).stream_type == "main_answer") {
+      if ((packet as { stream_type: string }).stream_type == "main_answer") {
         newState.is_generating = false;
         newState.second_level_generating = true;
       }
@@ -280,7 +282,10 @@ export class StreamingProcessor {
         is_generating: false,
       }));
 
-      if (Object.hasOwn(packet, "level") && (packet as any).level === 1) {
+      if (
+        Object.hasOwn(packet, "level") &&
+        (packet as { level: number }).level === 1
+      ) {
         newState.second_level_answer += (
           packet as AnswerPiecePacket
         ).answer_piece;
@@ -350,7 +355,7 @@ export class StreamingProcessor {
       );
     } else if (
       Object.hasOwn(packet, "error") &&
-      (packet as any).error != null
+      (packet as { error: string | null }).error != null
     ) {
       // Handle errors
       if (

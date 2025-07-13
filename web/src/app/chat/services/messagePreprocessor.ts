@@ -1,5 +1,7 @@
 import { Message } from "../interfaces";
 import { buildLatestMessageChain, getLastSuccessfulMessageId } from "../lib";
+import { Persona } from "../../admin/assistants/interfaces";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 
 export interface MessagePreprocessorDependencies {
   currentMessageMap: (
@@ -11,9 +13,9 @@ export interface MessagePreprocessorDependencies {
     messageMap: Map<number, Message>
   ) => void;
   messageHistory: Message[];
-  setPopup: (popup: any) => void;
+  setPopup: (popup: PopupSpec | null) => void;
   getCurrentChatState: () => string;
-  setAlternativeGeneratingAssistant: (assistant: any) => void;
+  setAlternativeGeneratingAssistant: (assistant: Persona | null) => void;
   clientScrollToBottom: () => void;
   resetInputBar: () => void;
 }
@@ -40,11 +42,11 @@ export class MessagePreprocessor {
   preprocessMessage(params: {
     messageIdToResend?: number;
     messageOverride?: string;
-    alternativeAssistantOverride?: any;
+    alternativeAssistantOverride?: Persona | null;
     regenerationRequest?: RegenerationRequest | null;
     message: string;
-    alternativeAssistant: any;
-    liveAssistant: any;
+    alternativeAssistant: Persona | null;
+    liveAssistant: Persona | undefined;
     frozenSessionId: string;
   }): PreprocessingResult {
     const {
@@ -86,7 +88,7 @@ export class MessagePreprocessor {
       throw new Error("Invalid chat state");
     }
 
-    setAlternativeGeneratingAssistant(alternativeAssistantOverride);
+    setAlternativeGeneratingAssistant(alternativeAssistantOverride || null);
     clientScrollToBottom();
 
     // Get current message state

@@ -1,16 +1,19 @@
 import { RetrievalType } from "../interfaces";
 import { buildChatUrl, nameChatSession } from "../lib";
 import { ReadonlyURLSearchParams } from "next/navigation";
+import { Persona } from "../../admin/assistants/interfaces";
+import { BackendMessage } from "../interfaces";
+import { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 export interface PostProcessorDependencies {
   setAgenticGenerating: (generating: boolean) => void;
   resetRegenerationState: (sessionId: string) => void;
   updateChatState: (state: string, sessionId?: string) => void;
   setSelectedMessageForDocDisplay: (messageId: number | null) => void;
-  setAlternativeGeneratingAssistant: (assistant: any) => void;
+  setAlternativeGeneratingAssistant: (assistant: Persona | null) => void;
   setSubmittedMessage: (message: string) => void;
   refreshChatSessions: () => void;
-  router: any;
+  router: AppRouterInstance;
   pathname: string;
   searchParams: ReadonlyURLSearchParams | null;
   navigatingAway: React.MutableRefObject<boolean>;
@@ -20,7 +23,7 @@ export interface PostProcessorDependencies {
 export interface PostProcessingParams {
   isNewSession: boolean;
   sessionId: string;
-  finalMessage: any;
+  finalMessage: BackendMessage | null;
   retrievalType: RetrievalType;
   searchParamBasedChatSessionName: string | null;
 }

@@ -1,5 +1,12 @@
-import { Message } from "../interfaces";
+import { Message, FileDescriptor } from "../interfaces";
 import { getLastSuccessfulMessageId } from "../lib";
+import { OnyxDocument } from "@/lib/search/interfaces";
+import { RetrievalType } from "../interfaces";
+import { ToolCallMetadata } from "../interfaces";
+import { SubQuestionDetail } from "../interfaces";
+import { BackendMessage } from "../interfaces";
+import { Persona } from "../../admin/assistants/interfaces";
+import { RegenerationRequest } from "./messagePreprocessor";
 
 export interface MessageUpdaterDependencies {
   upsertToCompleteMessageMap: (params: {
@@ -11,7 +18,7 @@ export interface MessageUpdaterDependencies {
 }
 
 export interface MessageUpdateParams {
-  regenerationRequest: any;
+  regenerationRequest: RegenerationRequest | null;
   initialFetchDetails: {
     user_message_id: number;
     assistant_message_id: number;
@@ -21,29 +28,29 @@ export interface MessageUpdateParams {
     answer: string;
     second_level_answer: string;
     query: string | null;
-    retrievalType: any;
-    documents: any[];
-    aiMessageImages: any[] | null;
-    agenticDocs: any[] | null;
+    retrievalType: RetrievalType;
+    documents: OnyxDocument[];
+    aiMessageImages: FileDescriptor[] | null;
+    agenticDocs: OnyxDocument[] | null;
     error: string | null;
     stackTrace: string | null;
-    sub_questions: any[];
+    sub_questions: SubQuestionDetail[];
     is_generating: boolean;
     second_level_generating: boolean;
-    finalMessage: any;
-    toolCall: any;
+    finalMessage: BackendMessage | null;
+    toolCall: ToolCallMetadata | null;
     isImprovement: boolean | undefined;
     isStreamingQuestions: boolean;
     includeAgentic: boolean;
     secondLevelMessageId: number | null;
     isAgentic: boolean;
-    files: any[];
+    files: FileDescriptor[];
   };
   currMessage: string;
   parentMessage: Message | null;
   currentMap: Map<number, Message>;
   frozenSessionId: string;
-  alternativeAssistant: any;
+  alternativeAssistant: Persona | null;
   mapKeys: number[];
 }
 
