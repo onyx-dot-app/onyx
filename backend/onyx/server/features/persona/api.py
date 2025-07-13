@@ -52,6 +52,7 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
+from onyx.server.settings.store import load_settings
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -201,6 +202,20 @@ def create_persona(
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
+    settings = load_settings()
+    if not settings.user_knowledge_enabled:
+        if (
+            persona_upsert_request.user_file_ids
+            and len(persona_upsert_request.user_file_ids) > 0
+        ) or (
+            persona_upsert_request.user_folder_ids
+            and len(persona_upsert_request.user_folder_ids) > 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="User Knowledge is disabled. Cannot create assistant with user files or folders.",
+            )
+
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
@@ -248,6 +263,20 @@ def update_persona(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
+    # Check if user knowledge is disabled
+    settings = load_settings()
+    if not settings.user_knowledge_enabled:
+        if (
+            persona_upsert_request.user_file_ids
+            and len(persona_upsert_request.user_file_ids) > 0
+        ) or (
+            persona_upsert_request.user_folder_ids
+            and len(persona_upsert_request.user_folder_ids) > 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="User Knowledge is disabled. Cannot update assistant with user files or folders.",
+            )
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
