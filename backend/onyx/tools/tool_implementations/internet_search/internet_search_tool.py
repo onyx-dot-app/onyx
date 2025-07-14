@@ -23,6 +23,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
+from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.utils import inference_section_from_chunks
@@ -31,7 +32,6 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
-from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.indexing.models import IndexChunk
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
@@ -56,6 +56,9 @@ from onyx.tools.tool_implementations.internet_search.providers import (
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     build_next_prompt_for_search_like_tool,
+)
+from onyx.tools.tool_implementations.search_like_tool_utils import (
+    documents_to_indexing_documents,
 )
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
@@ -197,7 +200,7 @@ class InternetSearchTool(Tool[None]):
         force_run: bool = False,
     ) -> dict[str, Any] | None:
         if not force_run and not check_if_need_search(
-            query, history, llm, search_type="internet"
+            query, history, llm, search_type=SearchType.INTERNET
         ):
             return None
 
@@ -251,8 +254,7 @@ class InternetSearchTool(Tool[None]):
         chunker = Chunker(
             tokenizer=embedding_model.embedding_model.tokenizer,
         )
-
-        prepped_results = process_image_sections(results)
+        prepped_results = documents_to_indexing_documents(results)
 
         chunks = chunker.chunk(prepped_results)
 

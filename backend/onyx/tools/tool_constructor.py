@@ -138,6 +138,8 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
+# Note: this is not very clear / not the way things should generally be done. (+impure function)
+# TODO: refactor the tool config flow to be easier
 def _configure_document_pruning_for_tool_config(
     tool_config: SearchToolConfig | InternetSearchToolConfig,
     tools: list[Tool],

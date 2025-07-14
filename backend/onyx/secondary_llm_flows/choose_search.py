@@ -6,13 +6,14 @@ from onyx.chat.chat_utils import combine_message_chain
 from onyx.chat.prompt_builder.utils import translate_onyx_msg_to_langchain
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.model_configs import GEN_AI_HISTORY_CUTOFF
+from onyx.context.search.enums import SearchType
 from onyx.db.models import ChatMessage
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
 from onyx.llm.utils import message_to_string
-from onyx.prompts.chat_prompts import AGGRESSIVE_INTERNET_SEARCH_TEMPLATE
-from onyx.prompts.chat_prompts import AGGRESSIVE_SEARCH_TEMPLATE
+from onyx.prompts.chat_prompts import AggressiveSearchTemplateParams
+from onyx.prompts.chat_prompts import build_aggressive_search_template
 from onyx.prompts.chat_prompts import NO_SEARCH
 from onyx.prompts.chat_prompts import REQUIRE_SEARCH_HINT
 from onyx.prompts.chat_prompts import REQUIRE_SEARCH_SYSTEM_MSG
@@ -47,27 +48,11 @@ def check_if_need_search_multi_message(
     return True
 
 
-def _get_search_messages(
-    query: str,
-    history_str: str,
-    template: str,
-) -> list[dict[str, str]]:
-    messages = [
-        {
-            "role": "user",
-            "content": template.format(
-                final_query=query, chat_history=history_str
-            ).strip(),
-        },
-    ]
-    return messages
-
-
 def check_if_need_search(
     query: str,
     history: list[PreviousMessage],
     llm: LLM,
-    search_type: str = "internal",
+    search_type: SearchType = SearchType.KEYWORD,
 ) -> bool:
     """
     Determines if search is needed based on query and history.
@@ -76,30 +61,35 @@ def check_if_need_search(
         query: The user's query
         history: List of previous messages
         llm: The language model to use for prediction
-        search_type: Type of search - "internal" for internal search, "internet" for internet search
+        search_type: INTERNET enum for internetsearch. Keyword and semantic are treated the same.
 
     Returns:
         True if search is needed, False otherwise
     """
     # Choosing is globally disabled, use search (only for internal search)
-    if search_type == "internal" and DISABLE_LLM_CHOOSE_SEARCH:
+    if search_type == SearchType.KEYWORD and DISABLE_LLM_CHOOSE_SEARCH:
         return True
 
-    # Select template and log message based on search type
-    if search_type == "internet":
-        template = AGGRESSIVE_INTERNET_SEARCH_TEMPLATE
+    # Select log message based on search type
+    if search_type == SearchType.INTERNET:
         log_message = "Run internet search prediction"
     else:
-        template = AGGRESSIVE_SEARCH_TEMPLATE
         log_message = "Run search prediction"
 
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
 
-    prompt_msgs = _get_search_messages(
-        query=query, history_str=history_str, template=template
+    # Note: Internet and internal search use the same prompt
+    prompt_template = build_aggressive_search_template(
+        AggressiveSearchTemplateParams(chat_history=history_str, final_query=query)
     )
+    prompt_msgs = [
+        {
+            "role": "user",
+            "content": prompt_template,
+        },
+    ]
 
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
     search_output = message_to_string(llm.invoke(filled_llm_prompt))

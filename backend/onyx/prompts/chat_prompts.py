@@ -1,3 +1,5 @@
+from pydantic import BaseModel
+
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 
@@ -54,11 +56,24 @@ SKIP_SEARCH = "Skip Search"
 YES_SEARCH = "Yes Search"
 
 
-def _create_aggressive_search_template(search_tool_type: str) -> str:
-    """Create an aggressive search template with parameterized search tool type."""
+class AggressiveSearchTemplateParams(BaseModel):
+    chat_history: str
+    final_query: str
+
+
+def build_aggressive_search_template(params: AggressiveSearchTemplateParams) -> str:
+    """
+    Build the aggressive search template with type-safe parameters.
+
+    Args:
+        params: Pydantic model containing chat_history and final_query
+
+    Returns:
+        Formatted template string
+    """
     return f"""
 Given the conversation history and a follow up query, determine if the system should call \
-an external {search_tool_type} search tool to better answer the latest user input.
+an external search tool to better answer the latest user input.
 Your default response is {YES_SEARCH}.
 
 Respond "{SKIP_SEARCH}" if either:
@@ -68,20 +83,15 @@ additional information or details would provide little or no value.
 
 Conversation History:
 {GENERAL_SEP_PAT}
-{{chat_history}}
+{params.chat_history}
 {GENERAL_SEP_PAT}
 
 If you are at all unsure, respond with {YES_SEARCH}.
 Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
 
 Follow Up Input:
-{{final_query}}
+{params.final_query}
 """.strip()
-
-
-AGGRESSIVE_SEARCH_TEMPLATE = _create_aggressive_search_template("")
-
-AGGRESSIVE_INTERNET_SEARCH_TEMPLATE = _create_aggressive_search_template("internet")
 
 
 # TODO, templatize this so users don't need to make code changes to use this

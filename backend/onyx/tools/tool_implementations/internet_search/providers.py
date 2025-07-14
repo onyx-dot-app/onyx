@@ -8,13 +8,15 @@ from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.tools.tool_implementations.internet_search.models import InternetSearchResult
 from onyx.tools.tool_implementations.internet_search.models import ProviderConfig
+from onyx.tools.tool_implementations.internet_search.models import ProviderType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
+
 PROVIDER_CONFIGS = {
-    "bing": ProviderConfig(
+    ProviderType.BING.value: ProviderConfig(
         api_key=BING_API_KEY or "",
         api_base="https://api.bing.microsoft.com/v7.0/search",
         headers={
@@ -33,7 +35,7 @@ PROVIDER_CONFIGS = {
             "published_date": "datePublished",
         },
     ),
-    "exa": ProviderConfig(
+    ProviderType.EXA.value: ProviderConfig(
         api_key=EXA_API_KEY or "",
         api_base="https://api.exa.ai/search",
         headers={
@@ -232,9 +234,9 @@ def get_default_provider() -> InternetSearchProvider | None:
     """Get the default internet search provider"""
     providers = get_available_providers()
 
-    for provider_name in ["bing", "exa"]:
-        if provider_name in providers:
-            return providers[provider_name]
+    for provider_type in [ProviderType.BING, ProviderType.EXA]:
+        if provider_type.value in providers:
+            return providers[provider_type.value]
 
     logger.warning("No internet search providers found")
     return None

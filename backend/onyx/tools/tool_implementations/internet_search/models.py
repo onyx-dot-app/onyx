@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Any
 from typing import Literal
 
@@ -29,6 +30,13 @@ class InternetSearchResult(BaseModel):
         if len(v) > MAX_CONTENT_LENGTH:
             return v[:MAX_CONTENT_LENGTH] + "... [Content truncated due to length]"
         return v
+
+
+class ProviderType(Enum):
+    """Enum for internet search provider types"""
+
+    BING = "bing"
+    EXA = "exa"
 
 
 class ProviderConfig(BaseModel):
