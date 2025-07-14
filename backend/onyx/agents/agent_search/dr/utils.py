@@ -1,8 +1,7 @@
 import re
-from typing import cast
 
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
-from onyx.context.search.models import InferenceSection
 
 
 def get_cited_document_numbers(answer: str) -> list[int]:
@@ -13,76 +12,57 @@ def get_cited_document_numbers(answer: str) -> list[int]:
 
 
 def aggregate_context(
-    iteration_responses: list[
-        dict[int, dict[int, dict[str, str | list[InferenceSection]]]]
-    ],
+    iteration_responses: list[IterationAnswer],
 ) -> str:
     """
     Aggregate the context from the sub-answers and cited documents.
     """
-    document_counter = 1
-    question_counter = 1
+    document_counter = 0
+    question_counter = 0
 
     context_components: list[str] = []
 
     for iteration_response in iteration_responses:
-        for iteration_num, iteration_response_dict in iteration_response.items():
-            for question_num, response_dict in iteration_response_dict.items():
-                question_text = response_dict["Q"]
-                answer_text = response_dict["A"]
-                cited_document_list = response_dict["C"]
+        question_text = iteration_response.question
+        answer_text = iteration_response.answer
+        cited_document_list = iteration_response.cited_documents
 
-                if cited_document_list:
-                    citation_text_components = ["CITED DOCUMENTS for this question:"]
-                    for cited_document in cited_document_list:
+        if cited_document_list:
+            citation_text_components = ["CITED DOCUMENTS for this question:"]
+            for cited_document in cited_document_list:
+                document_counter += 1
+                citation_text_components.append(
+                    build_document_context(cited_document, document_counter)
+                )
+            citation_text = "\n\n---\n".join(citation_text_components)
+        else:
+            citation_text = "No citations provided for this answer. Take provided answer at face value."
 
-                        cited_document = cast(InferenceSection, cited_document)
-
-                        chunk_text = build_document_context(
-                            cited_document, document_counter
-                        )
-
-                        citation_text_components.append(chunk_text)
-
-                        document_counter += 1
-
-                    citation_text = "\n\n---\n".join(citation_text_components)
-
-                else:
-                    citation_text = """No citations provided for this answer. Take \
-provided answer at face value."""
-
-                context_components.append(f"Question Number: {question_counter}")
-                context_components.append(f"Question: {question_text}")
-                context_components.append(f"Answer: {answer_text}")
-                context_components.append(citation_text)
-                context_components.append("\n\n---\n\n")
-
-                question_counter += 1
+        question_counter += 1
+        context_components.append(f"Question Number: {question_counter}")
+        context_components.append(f"Question: {question_text}")
+        context_components.append(f"Answer: {answer_text}")
+        context_components.append(citation_text)
+        context_components.append("\n\n---\n\n")
 
     return "\n".join(context_components)
 
 
 def get_answers_history_from_iteration_responses(
-    iteration_responses: list[
-        dict[int, dict[int, dict[str, str | list[InferenceSection]]]]
-    ],
+    iteration_responses: list[IterationAnswer],
 ) -> str:
     """
     Get the answers history from the iteration responses.
     """
-
-    answer_history_list: list[str] = []
-
-    for iteration_response in iteration_responses:
-        for iteration_num, iteration_response_dict in iteration_response.items():
-            for question_num, response_dict in iteration_response_dict.items():
-                question_text = response_dict["Q"]
-                answer_text = response_dict["A"]
-
-                answer_history_list.append(
-                    f"""Iteration: {iteration_num}\nIteration Question Number: \
-{question_num}\nQuestion: {question_text}\nAnswer: {answer_text}"""
-                )
-
-    return "\n".join(answer_history_list)
+    return "\n".join(
+        (
+            f"Iteration: {iteration_response.iteration_nr}\n"
+            f"Iteration Question Number: {iteration_response.parallelization_nr}\n"
+            f"Question: {iteration_response.question}\n"
+            f"Answer: {iteration_response.answer}"
+        )
+        for iteration_response in sorted(
+            iteration_responses,
+            key=lambda x: (x.iteration_nr, x.parallelization_nr),
+        )
+    )

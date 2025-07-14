@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel
 
+from onyx.context.search.models import InferenceSection
+
 
 class DRPath(str, Enum):
     SEARCH = "SEARCH"
@@ -14,12 +16,6 @@ class OrchestratorStep(BaseModel):
     questions: list[str]
 
 
-class OrchestratorDecisons(BaseModel):
-    reasoning: str
-    next_step: OrchestratorStep
-    plan_of_record: str
-
-
 class OrchestratorDecisonsNoPlan(BaseModel):
     reasoning: str
     next_step: OrchestratorStep
@@ -28,3 +24,11 @@ class OrchestratorDecisonsNoPlan(BaseModel):
 class OrchestrationPlan(BaseModel):
     reasoning: str
     plan: str
+
+
+class IterationAnswer(BaseModel):
+    iteration_nr: int
+    parallelization_nr: int
+    question: str
+    answer: str
+    cited_documents: list[InferenceSection]

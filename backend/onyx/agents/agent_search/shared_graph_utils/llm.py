@@ -107,7 +107,6 @@ def get_answer_from_llm(
                 max_tokens=max_tokens,
             ),
         )
-
         content = "".join(stream_response)
     else:
         llm_response = run_with_timeout(
@@ -117,18 +116,13 @@ def get_answer_from_llm(
             timeout_override=timeout_override,
             max_tokens=max_tokens,
         )
-
         content = str(llm_response.content)
 
-    cleaned_response = (
-        str(content).replace("```json\n", "").replace("\n```", "").replace("\n", "")
-    )
-
+    cleaned_response = content
     if json_string_flag:
         cleaned_response = (
-            str(llm_response.content).replace("\n```", "").replace("\n", "")
+            str(content).replace("```json\n", "").replace("\n```", "").replace("\n", "")
         )
-
         first_bracket = cleaned_response.find("{")
         last_bracket = cleaned_response.rfind("}")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]

@@ -60,6 +60,7 @@ def orchestrator(
     all_relationship_types = get_relationship_types_str(active=True)
 
     iteration_nr = state.iteration_nr
+    plan_information = None
 
     if iteration_nr >= MAX_DR_ITERATION_DEPTH - 1:
         query_path = DRPath.CLOSER
@@ -119,9 +120,6 @@ def orchestrator(
         # plan_of_record = state.plan_of_record[-1]
 
     else:
-
-        plan_information = None
-
         if iteration_nr == 0:
             plan_generation_prompt = (
                 PLAN_GENERATION_PROMPT.replace(

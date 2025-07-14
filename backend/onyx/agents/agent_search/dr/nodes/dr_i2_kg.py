@@ -2,6 +2,7 @@ from datetime import datetime
 
 from langchain_core.runnables import RunnableConfig
 
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
@@ -44,7 +45,13 @@ def kg_query(state: MainState, config: RunnableConfig) -> AnswerUpdate:
     return AnswerUpdate(
         answers=[kb_results.get("final_answer") or ""],
         iteration_responses=[
-            {iteration_nr: {0: {"Q": search_query, "A": full_answer}}}
+            IterationAnswer(
+                iteration_nr=iteration_nr,
+                parallelization_nr=0,
+                question=search_query,
+                answer=full_answer,
+                cited_documents=[],  # TODO: add citations
+            )
         ],
         log_messages=[
             get_langgraph_node_log_string(

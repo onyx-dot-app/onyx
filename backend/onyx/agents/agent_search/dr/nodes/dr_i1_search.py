@@ -5,6 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.access.access import get_acl_for_user
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.utils import get_cited_document_numbers
@@ -164,11 +165,10 @@ def search(
     )
 
     # handle citations
-
     citation_numbers = get_cited_document_numbers(search_answer)
     citation_number_replacement_dict = {
-        original_index: start_1_based_index + 1
-        for start_1_based_index, original_index in enumerate(citation_numbers)
+        original_index: start_1_based_index
+        for start_1_based_index, original_index in enumerate(citation_numbers, 1)
     }
 
     cited_documents: list[InferenceSection] = []
@@ -185,11 +185,13 @@ def search(
     return AnswerUpdate(
         answers=[search_answer],
         iteration_responses=[
-            {
-                iteration_nr: {
-                    0: {"Q": search_query, "A": search_answer, "C": cited_documents}
-                }
-            }
+            IterationAnswer(
+                iteration_nr=iteration_nr,
+                parallelization_nr=0,
+                question=search_query,
+                answer=search_answer,
+                cited_documents=cited_documents,
+            )
         ],
         log_messages=[
             get_langgraph_node_log_string(

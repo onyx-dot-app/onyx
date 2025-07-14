@@ -6,11 +6,11 @@ from pydantic import BaseModel
 
 from onyx.agents.agent_search.core_state import CoreState
 from onyx.agents.agent_search.dr.models import DRPath
+from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
-from onyx.context.search.models import InferenceSection
 
 
 ### States ###
@@ -28,29 +28,12 @@ class OrchestrationUpdate(LoggerUpdate):
     used_time_budget: int = 0
 
 
-class SubAgentState(LoggerUpdate):
-    iteration_nr: int = 0
-    parallelization_nr: int = 0
-
-
-class SubAgentUpdate(LoggerUpdate):
-    iteration_nr: int = 0
-    parallelization_nr: int = 0
-    iteration_answers: dict[int, dict[int, dict[str, str]]] = {}
-
-
-class SearchAgentState(SubAgentState):
-    pass
-
-
 class AnswerUpdate(LoggerUpdate):
     iteration_nr: int = 0
     parallelization_nr: int = 0
     instructions: str | None = None
     answers: Annotated[list[str], add] = []
-    iteration_responses: Annotated[
-        list[dict[int, dict[int, dict[str, str | list[InferenceSection]]]]], add
-    ] = []
+    iteration_responses: Annotated[list[IterationAnswer], add] = []
 
 
 class FinalUpdate(LoggerUpdate):
