@@ -1,14 +1,28 @@
+import re
 from datetime import datetime
+from typing import cast
 from typing import Literal
+from typing import Type
+from typing import TypeVar
 
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import HumanMessage
 from langgraph.types import StreamWriter
+from litellm import get_supported_openai_params
+from litellm import supports_response_schema
+from pydantic import BaseModel
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import ToolChoiceOptions
 from onyx.utils.threadpool_concurrency import run_with_timeout
+
+
+SchemaType = TypeVar("SchemaType", bound=BaseModel)
+
+# match ```json{...}``` or ```{...}```
+JSON_PATTERN = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 def stream_llm_answer(
@@ -68,6 +82,54 @@ def stream_llm_answer(
         response.append(content)
 
     return response, dispatch_timings
+
+
+def invoke_llm_json(
+    llm: LLM,
+    prompt: LanguageModelInput,
+    schema: Type[SchemaType],
+    tools: list[dict] | None = None,
+    tool_choice: ToolChoiceOptions | None = None,
+    timeout_override: int | None = None,
+    max_tokens: int | None = None,
+) -> SchemaType:
+    """
+    Invoke an LLM, forcing it to respond in a specified JSON format if possible,
+    and return an object of that schema.
+    """
+
+    # check if the model supports response_format: json_schema
+    supports_json = "response_format" in (
+        get_supported_openai_params(llm.config.model_name, llm.config.model_provider)
+        or []
+    ) and supports_response_schema(llm.config.model_name, llm.config.model_provider)
+
+    response_content = str(
+        llm.invoke(
+            prompt,
+            tools=tools,
+            tool_choice=tool_choice,
+            timeout_override=timeout_override,
+            max_tokens=max_tokens,
+            **cast(
+                dict, {"structured_response_format": schema} if supports_json else {}
+            ),
+        ).content
+    )
+
+    if not supports_json:
+        # remove newlines as they often lead to json decoding errors
+        response_content = response_content.replace("\n", " ")
+        # hope the prompt is structured in a way a json is outputted...
+        json_block_match = JSON_PATTERN.search(response_content)
+        if json_block_match:
+            response_content = json_block_match.group(1)
+        else:
+            first_bracket = response_content.find("{")
+            last_bracket = response_content.rfind("}")
+            response_content = response_content[first_bracket : last_bracket + 1]
+
+    return schema.model_validate_json(response_content)
 
 
 def get_answer_from_llm(
