@@ -24,7 +24,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import FAST_DR_DECISION_PROMPT
+from onyx.prompts.dr_prompts import FAST_PLAN_GENERATION_PROMPT
 from onyx.prompts.dr_prompts import ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT
 from onyx.prompts.dr_prompts import PLAN_GENERATION_PROMPT
 from onyx.utils.logger import setup_logger
@@ -69,7 +69,7 @@ def orchestrator(
     elif time_budget == TimeBudget.FAST:
         if iteration_nr == 0:
             decision_prompt = (
-                FAST_DR_DECISION_PROMPT.replace(
+                FAST_PLAN_GENERATION_PROMPT.replace(
                     "---possible_entities---", all_entity_types
                 )
                 .replace("---possible_relationships---", all_relationship_types)
@@ -117,7 +117,6 @@ def orchestrator(
             query_path = DRPath.CLOSER
 
         query_list = [question] if query_path != DRPath.CLOSER else []
-        # plan_of_record = state.plan_of_record[-1]
 
     else:
         if iteration_nr == 0:
