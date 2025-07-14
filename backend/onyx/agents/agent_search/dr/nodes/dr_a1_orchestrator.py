@@ -16,7 +16,7 @@ from onyx.agents.agent_search.dr.utils import (
 )
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import TimeBudget
-from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
+from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -129,23 +129,17 @@ def orchestrator(
                 .replace("---question---", question)
             )
 
-            cleaned_response = get_answer_from_llm(
-                graph_config.tooling.primary_llm,
-                plan_generation_prompt,
-                timeout=25,
-                timeout_override=25,
-                max_tokens=1500,
-                stream=False,
-                json_string_flag=False,
-            )
-
             try:
-                plan_information = OrchestrationPlan.model_validate_json(
-                    cleaned_response
+                plan_information = invoke_llm_json(
+                    llm=graph_config.tooling.primary_llm,
+                    prompt=plan_generation_prompt,
+                    schema=OrchestrationPlan,
+                    timeout_override=25,
+                    max_tokens=1500,
                 )
             except Exception as e:
                 logger.error(f"Error in plan generation: {e}")
-                raise e
+                raise
 
             write_custom_event(
                 "basic_response",
@@ -171,46 +165,20 @@ def orchestrator(
             .replace("---current_plan_of_record_string---", plan_information.plan)
         )
 
-        cleaned_response = get_answer_from_llm(
-            graph_config.tooling.primary_llm,
-            decision_prompt,
-            timeout=15,
-            timeout_override=15,
-            max_tokens=500,
-            stream=False,
-            json_string_flag=True,
-        )
-
         try:
-            # orchestrator_action = OrchestratorDecisons.model_validate_json(
-            #     cleaned_response
-            # )
-            # next_step = orchestrator_action.next_step
-            # plan_of_record = orchestrator_action.plan_of_record
-            # query_path = next_step.tool
-            # query_list = next_step.questions
-
-            orchestrator_action = OrchestratorDecisonsNoPlan.model_validate_json(
-                cleaned_response
+            orchestrator_action = invoke_llm_json(
+                llm=graph_config.tooling.primary_llm,
+                prompt=decision_prompt,
+                schema=OrchestratorDecisonsNoPlan,
+                timeout_override=15,
+                max_tokens=500,
             )
             next_step = orchestrator_action.next_step
             query_path = next_step.tool
             query_list = next_step.questions
-
         except Exception as e:
             logger.error(f"Error in approach extraction: {e}")
-            raise e
-
-    # write_custom_event(
-    #     "basic_response",
-    #     AgentAnswerPiece(
-    #         answer_piece="PLAN OF RECORD:\n" + str(plan_of_record),
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+            raise
 
     if plan_information:
         return OrchestrationUpdate(
