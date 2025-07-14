@@ -1088,24 +1088,6 @@ export function ChatPage({
     });
   };
 
-  // UI FUNCTION: Show chat sharing modal for specific chat session
-  const openShareModal = (chatSession: ChatSession) => {
-    modalActions.openSharedChatModal({
-      assistantId: liveAssistant?.id,
-      message: message,
-      modelOverride: llmManager.currentLlm,
-      chatSessionId: chatSession.id,
-      existingSharedStatus: chatSession.shared_status,
-      onClose: () => modalActions.closeModal(),
-      onShare: (shared) =>
-        setChatSessionSharedStatus(
-          shared
-            ? ChatSessionSharedStatus.Public
-            : ChatSessionSharedStatus.Private
-        ),
-    });
-  };
-
   interface RegenerationRequest {
     messageId: number;
     parentMessage: Message;
@@ -1223,6 +1205,23 @@ export function ChatPage({
       openApiKeyModal();
     }
   }, [shouldShowWelcomeModal, openApiKeyModal]);
+
+  const openShareModal = (chatSession: ChatSession) => {
+    modalActions.openSharedChatModal({
+      assistantId: liveAssistant?.id,
+      message: message,
+      modelOverride: llmManager.currentLlm,
+      chatSessionId: chatSession.id,
+      existingSharedStatus: chatSession.shared_status,
+      onClose: () => modalActions.closeModal(),
+      onShare: (shared) =>
+        setChatSessionSharedStatus(
+          shared
+            ? ChatSessionSharedStatus.Public
+            : ChatSessionSharedStatus.Private
+        ),
+    });
+  };
 
   const openUserSettingsModal = useCallback(() => {
     modalActions.openUserSettingsModal({
