@@ -16,6 +16,10 @@ services:
     restart: always
     environment:
       - CUSTOM_ANALYTICS_SECRET_KEY=${CUSTOM_ANALYTICS_SECRET_KEY}
+      # Langfuse
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://217.198.9.110:3004}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-74076f76-9e36-4a65-93f0-dfc78c17b0ce}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-7535a7c1-e421-4587-97d0-864aaa83ef23}
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-disabled}
       - SESSION_EXPIRE_TIME_SECONDS=${SESSION_EXPIRE_TIME_SECONDS:-}
