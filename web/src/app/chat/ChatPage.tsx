@@ -1970,7 +1970,7 @@ export function ChatPage({
       liveAssistant ?? null,
       llmManager.currentLlm
     );
-    const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
+    const llmAcceptsImages = true;//modelSupportsImageInput(llmProviders, llmModel);
 
     const imageFiles = acceptedFiles.filter((file) =>
       file.type.startsWith("image/")

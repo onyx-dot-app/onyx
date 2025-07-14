@@ -28,6 +28,15 @@ import { useUser } from "@/components/user/UserProvider";
 import { TruncatedText } from "@/components/ui/truncatedText";
 import { ChatInputOption } from "./ChatInputOption";
 
+
+// added exceptions
+const VISION_WARNING_EXCEPTIONS = [
+  "gemma3:12b-it-fp16", 
+  // add other exception models here
+];
+
+
+
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
   llmManager: LlmManager;
@@ -186,6 +195,12 @@ export default function LLMPopover({
               !requiresImageGeneration ||
               modelSupportsImageInput(llmProviders, name)
             ) {
+
+	      const shouldShowVisionWarning = 			//this is a new const i added
+              	llmManager.imageFilesPresent &&
+              	!modelSupportsImageInput(llmProviders, name) &&
+              	!VISION_WARNING_EXCEPTIONS.includes(name);
+
               return (
                 <button
                   key={index}
@@ -215,9 +230,10 @@ export default function LLMPopover({
                       );
                     }
                   })()}
-                  {llmManager.imageFilesPresent &&
-                    !modelSupportsImageInput(llmProviders, name) && (
-                      <TooltipProvider>
+                  { //llmManager.imageFilesPresent &&
+                    //!modelSupportsImageInput(llmProviders, name) && (
+                    shouldShowVisionWarning && (				//added this line in place of above  
+		      <TooltipProvider>
                         <Tooltip delayDuration={0}>
                           <TooltipTrigger className="my-auto flex items-center ml-auto">
                             <FiAlertTriangle className="text-alert" size={16} />

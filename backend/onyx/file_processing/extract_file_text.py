@@ -28,9 +28,9 @@ from pypdf.errors import PdfStreamError
 
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.html_utils import parse_html_page_basic
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import unstructured_to_text
+from onyx.file_processing.unstructured import unstructured_to_text  # Updated import
 from onyx.file_store.file_store import FileStore
 from onyx.utils.logger import setup_logger
 
@@ -456,14 +456,14 @@ def extract_file_text(
     }
 
     try:
-        if get_unstructured_api_key():
-            try:
-                return unstructured_to_text(file, file_name)
-            except Exception as unstructured_error:
-                logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. "
-                    "Falling back to normal processing."
-                )
+        # Always try Unstructured first
+        return unstructured_to_text(file, file_name)
+    except Exception as unstructured_error:
+        logger.error(
+            f"Failed to process with Unstructured: {str(unstructured_error)}. "
+            "Falling back to normal processing."
+        )
+
         if extension is None:
             extension = get_file_ext(file_name)
 
@@ -509,95 +509,96 @@ def extract_text_and_images(
     """
 
     try:
-        # Attempt unstructured if env var is set
-        if get_unstructured_api_key():
-            # If the user doesn't want embedded images, unstructured is fine
-            file.seek(0)
-            text_content = unstructured_to_text(file, file_name)
-            return ExtractionResult(
-                text_content=text_content, embedded_images=[], metadata={}
-            )
-
-        extension = get_file_ext(file_name)
-
-        # docx example for embedded images
-        if extension == ".docx":
-            file.seek(0)
-            text_content, images = docx_to_text_and_images(file)
-            return ExtractionResult(
-                text_content=text_content, embedded_images=images, metadata={}
-            )
-
-        # PDF example: we do not show complicated PDF image extraction here
-        # so we simply extract text for now and skip images.
-        if extension == ".pdf":
-            file.seek(0)
-            text_content, pdf_metadata, images = read_pdf_file(
-                file, pdf_pass, extract_images=True
-            )
-            return ExtractionResult(
-                text_content=text_content, embedded_images=images, metadata=pdf_metadata
-            )
-
-        # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
-        # You can do something similar to docx if needed.
-        if extension == ".pptx":
-            file.seek(0)
-            return ExtractionResult(
-                text_content=pptx_to_text(file, file_name=file_name),
-                embedded_images=[],
-                metadata={},
-            )
-
-        if extension == ".xlsx":
-            file.seek(0)
-            return ExtractionResult(
-                text_content=xlsx_to_text(file, file_name=file_name),
-                embedded_images=[],
-                metadata={},
-            )
-
-        if extension == ".eml":
-            file.seek(0)
-            return ExtractionResult(
-                text_content=eml_to_text(file), embedded_images=[], metadata={}
-            )
-
-        if extension == ".epub":
-            file.seek(0)
-            return ExtractionResult(
-                text_content=epub_to_text(file), embedded_images=[], metadata={}
-            )
-
-        if extension == ".html":
-            file.seek(0)
-            return ExtractionResult(
-                text_content=parse_html_page_basic(file),
-                embedded_images=[],
-                metadata={},
-            )
-
-        # If we reach here and it's a recognized text extension
-        if is_text_file_extension(file_name):
-            file.seek(0)
-            encoding = detect_encoding(file)
-            text_content_raw, file_metadata = read_text_file(
-                file, encoding=encoding, ignore_onyx_metadata=False
-            )
-            return ExtractionResult(
-                text_content=text_content_raw,
-                embedded_images=[],
-                metadata=file_metadata,
-            )
-
-        # If it's an image file or something else, we do not parse embedded images from them
-        # just return empty text
+        # Always try Unstructured first for text extraction
         file.seek(0)
-        return ExtractionResult(text_content="", embedded_images=[], metadata={})
+        text_content = unstructured_to_text(file, file_name)
+        return ExtractionResult(
+            text_content=text_content, embedded_images=[], metadata={}
+        )
+    except Exception as unstructured_error:
+        logger.error(
+            f"Failed to process with Unstructured: {str(unstructured_error)}. "
+            "Falling back to custom extraction methods."
+        )
 
-    except Exception as e:
-        logger.exception(f"Failed to extract text/images from {file_name}: {e}")
-        return ExtractionResult(text_content="", embedded_images=[], metadata={})
+    extension = get_file_ext(file_name)
+
+    # docx example for embedded images
+    if extension == ".docx":
+        file.seek(0)
+        text_content, images = docx_to_text_and_images(file)
+        return ExtractionResult(
+            text_content=text_content, embedded_images=images, metadata={}
+        )
+
+    # PDF example: we do not show complicated PDF image extraction here
+    # so we simply extract text for now and skip images.
+    if extension == ".pdf":
+        file.seek(0)
+        text_content, pdf_metadata, images = read_pdf_file(
+            file,
+            pdf_pass,
+            extract_images=get_image_extraction_and_analysis_enabled(),
+        )
+        return ExtractionResult(
+            text_content=text_content, embedded_images=images, metadata=pdf_metadata
+        )
+
+    # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
+    # You can do something similar to docx if needed.
+    if extension == ".pptx":
+        file.seek(0)
+        return ExtractionResult(
+            text_content=pptx_to_text(file, file_name=file_name),
+            embedded_images=[],
+            metadata={},
+        )
+
+    if extension == ".xlsx":
+        file.seek(0)
+        return ExtractionResult(
+            text_content=xlsx_to_text(file, file_name=file_name),
+            embedded_images=[],
+            metadata={},
+        )
+
+    if extension == ".eml":
+        file.seek(0)
+        return ExtractionResult(
+            text_content=eml_to_text(file), embedded_images=[], metadata={}
+        )
+
+    if extension == ".epub":
+        file.seek(0)
+        return ExtractionResult(
+            text_content=epub_to_text(file), embedded_images=[], metadata={}
+        )
+
+    if extension == ".html":
+        file.seek(0)
+        return ExtractionResult(
+            text_content=parse_html_page_basic(file),
+            embedded_images=[],
+            metadata={},
+        )
+
+    # If we reach here and it's a recognized text extension
+    if is_text_file_extension(file_name):
+        file.seek(0)
+        encoding = detect_encoding(file)
+        text_content_raw, file_metadata = read_text_file(
+            file, encoding=encoding, ignore_onyx_metadata=False
+        )
+        return ExtractionResult(
+            text_content=text_content_raw,
+            embedded_images=[],
+            metadata=file_metadata,
+        )
+
+    # If it's an image file or something else, we do not parse embedded images from them
+    # just return empty text
+    file.seek(0)
+    return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
 
 def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
