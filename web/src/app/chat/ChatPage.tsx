@@ -198,11 +198,9 @@ export function ChatPage({
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
 
-  // IN PROGRESS: Centralized modal state management
+  // Centralized modal state management
   const { state: modalState, actions: modalActions } = useModal();
 
-  // UI STATE: Document selection modal visibility
-  const [isDocSelectionModalOpen, setIsDocSelectionModalOpen] = useState(false);
   // UI STATE: Pro search feature toggle state
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
   const toggleProSearch = useCallback(() => {
@@ -214,14 +212,6 @@ export function ChatPage({
   }, [proSearchEnabled]);
 
   const isInitialLoad = useRef(true);
-  // UI STATE: User settings modal visibility
-  const [isUserSettingsModalOpen, setIsUserSettingsModalOpen] = useState(false);
-
-  // UI STATE: API key configuration modal visibility
-  // const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(
-  //   !shouldShowWelcomeModal
-  // );
-  // REMOVED: Now handled by centralized modal management. Initially open if welcome modal is not shown. See `useEffect` near Popup.
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
@@ -587,16 +577,6 @@ export function ChatPage({
   }, [submittedMessage, currentSessionChatState]);
 
   const filterManager = useFilters();
-  // UI STATE: Chat search modal visibility (for searching through chat history)
-  const [isChatSearchModalOpen, setIsChatSearchModalOpen] = useState(false);
-
-  // UI STATE: Feedback modal - currently active feedback form for a specific message
-  const [currentFeedback, setCurrentFeedback] = useState<
-    [FeedbackType, number] | null
-  >(null);
-
-  // UI STATE: Chat sharing modal visibility (for sharing chat sessions)
-  const [isSharingModalOpen, setIsSharingModalOpen] = useState<boolean>(false);
 
   // UI STATE: Scroll position indicator - whether user has scrolled above the "horizon" (shows scroll-to-bottom button)
   const [aboveHorizon, setAboveHorizon] = useState(false);
@@ -863,9 +843,6 @@ export function ChatPage({
   // UI STATE: Loading error message display
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
-  // Virtualization + Scrolling related effects and functions
-  const scrollInitialized = useRef(false);
-
   const imageFileInMessageHistory = useMemo(() => {
     return messageHistory
       .filter((message) => message.type === "user")
@@ -913,16 +890,8 @@ export function ChatPage({
     }
   }, [retrievalEnabled]);
 
-  // UI STATE: Stack trace modal content (for displaying error details)
-  // existence of this state is used to determine if the modal should be displayed
-  const [stackTraceModalContent, setStackTraceModalContent] = useState<
-    string | null
-  >(null);
-
   // UI REF: Inner sidebar element for document results display
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
-  // UI STATE: Settings modal visibility (general settings, not user-specific)
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   const currentPersona = alternativeAssistant || liveAssistant;
 
@@ -937,7 +906,7 @@ export function ChatPage({
     setAboveHorizon(scrollDist.current > HORIZON_DISTANCE);
   }, []);
 
-  // slack chat redirect wuz here
+  // Slack chat redirect effect
   useSlackChatRedirect(
     (_error) =>
       setPopup({
@@ -1098,11 +1067,6 @@ export function ChatPage({
 
   useSidebarShortcut(router, toggleSidebar);
 
-  // UI STATE: Shared chat session modal - currently displayed chat session for sharing
-  // existence of this state is used to determine if the modal should be displayed
-  const [sharedChatSession, setSharedChatSession] =
-    useState<ChatSession | null>();
-
   const handleResubmitLastMessage = () => {
     // Grab the last user-type message
     const lastUserMsg = messageHistory
@@ -1126,10 +1090,21 @@ export function ChatPage({
 
   // UI FUNCTION: Show chat sharing modal for specific chat session
   const openShareModal = (chatSession: ChatSession) => {
-    setSharedChatSession(chatSession);
+    modalActions.openSharedChatModal({
+      assistantId: liveAssistant?.id,
+      message: message,
+      modelOverride: llmManager.currentLlm,
+      chatSessionId: chatSession.id,
+      existingSharedStatus: chatSession.shared_status,
+      onClose: () => modalActions.closeModal(),
+      onShare: (shared) =>
+        setChatSessionSharedStatus(
+          shared
+            ? ChatSessionSharedStatus.Public
+            : ChatSessionSharedStatus.Private
+        ),
+    });
   };
-  // UI STATE: Assistants modal visibility (for managing and selecting assistants)
-  const [isAssistantsModalOpen, setIsAssistantsModalOpen] = useState(false);
 
   interface RegenerationRequest {
     messageId: number;
@@ -1231,26 +1206,115 @@ export function ChatPage({
     currentMessageMap,
   ]);
 
+  // ======== Modal Action Handlers ========
+  // This is step 1 of migrating modals from ChatPage.tsx to ModalRenderer.tsx
+  // In the future, we can reference these dependencies and state to determine what ought to be
+  // pulled out into a shared context/ global state
+  const openApiKeyModal = useCallback(() => {
+    modalActions.openApiKeyModal({
+      hide: () => modalActions.closeModal(),
+      setPopup: setPopup,
+    });
+  }, [modalActions, setPopup]);
+
   // Initialize API Key modal on mount if needed
   useEffect(() => {
     if (!shouldShowWelcomeModal) {
-      modalActions.openApiKeyModal({
-        hide: () => modalActions.closeModal(),
-        setPopup: setPopup,
+      openApiKeyModal();
+    }
+  }, [shouldShowWelcomeModal, openApiKeyModal]);
+
+  const openUserSettingsModal = useCallback(() => {
+    modalActions.openUserSettingsModal({
+      setPopup: setPopup,
+      setCurrentLlm: (newLlm) => llmManager.updateCurrentLlm(newLlm),
+      defaultModel: user?.preferences.default_model!,
+      llmProviders: llmProviders,
+      onClose: () => modalActions.closeModal(),
+    });
+  }, [
+    modalActions,
+    setPopup,
+    llmManager,
+    user?.preferences.default_model,
+    llmProviders,
+  ]);
+
+  const openChatSearchModal = useCallback(() => {
+    modalActions.openChatSearchModal({
+      onCloseModal: () => modalActions.closeModal(),
+    });
+  }, [modalActions]);
+
+  const openAssistantsModal = useCallback(() => {
+    modalActions.openAssistantsModal({
+      hideModal: () => modalActions.closeModal(),
+    });
+  }, [modalActions]);
+
+  const openSharingModal = useCallback(() => {
+    if (chatSessionIdRef.current !== null) {
+      modalActions.openSharingModal({
+        message: message,
+        assistantId: liveAssistant?.id,
+        modelOverride: llmManager.currentLlm,
+        chatSessionId: chatSessionIdRef.current,
+        existingSharedStatus: chatSessionSharedStatus,
+        onClose: () => modalActions.closeModal(),
       });
     }
-  }, [shouldShowWelcomeModal, modalActions, setPopup]);
+  }, [
+    modalActions,
+    message,
+    liveAssistant?.id,
+    llmManager.currentLlm,
+    chatSessionSharedStatus,
+  ]);
+
+  const openDocSelectionModal = useCallback(() => {
+    modalActions.openDocSelectionModal({
+      setPresentingDocument: setPresentingDocument,
+      buttonContent: "Set as Context",
+      onClose: () => modalActions.closeModal(),
+      onSave: () => modalActions.closeModal(),
+    });
+  }, [modalActions, setPresentingDocument]);
+
+  const openStackTraceModal = useCallback(
+    (exceptionTrace: string) => {
+      modalActions.openStackTraceModal({
+        exceptionTrace: exceptionTrace,
+        onOutsideClick: () => modalActions.closeModal(),
+      });
+    },
+    [modalActions]
+  );
+
+  const createFeedbackModalHandler = useCallback(
+    (messageId: number, feedbackType: FeedbackType) => {
+      return () => {
+        modalActions.openFeedbackModal({
+          feedbackType: feedbackType,
+          messageId: messageId,
+          onClose: () => modalActions.closeModal(),
+          onSubmit: ({ message: feedbackMessage, predefinedFeedback }) => {
+            onFeedback(
+              messageId,
+              feedbackType,
+              feedbackMessage,
+              predefinedFeedback
+            );
+            modalActions.closeModal();
+          },
+        });
+      };
+    },
+    [modalActions, onFeedback]
+  );
 
   return (
     <>
       <HealthCheckBanner />
-
-      {/* {isApiKeyModalOpen && !shouldShowWelcomeModal && (
-        <ApiKeyModal
-          hide={() => setIsApiKeyModalOpen(false)}
-          setPopup={setPopup}
-        />
-      )} */}
 
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 
@@ -1262,52 +1326,6 @@ export function ChatPage({
       {popup}
 
       <ChatPopup />
-
-      {currentFeedback && (
-        <FeedbackModal
-          feedbackType={currentFeedback[0]}
-          onClose={() => setCurrentFeedback(null)}
-          onSubmit={({ message, predefinedFeedback }) => {
-            onFeedback(
-              currentFeedback[1],
-              currentFeedback[0],
-              message,
-              predefinedFeedback
-            );
-            setCurrentFeedback(null);
-          }}
-        />
-      )}
-
-      {(isSettingsModalOpen || isUserSettingsModalOpen) && (
-        <UserSettingsModal
-          setPopup={setPopup}
-          setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
-          defaultModel={user?.preferences.default_model!}
-          llmProviders={llmProviders}
-          onClose={() => {
-            setIsUserSettingsModalOpen(false);
-            setIsSettingsModalOpen(false);
-          }}
-        />
-      )}
-
-      {isDocSelectionModalOpen && (
-        <FilePickerModal
-          setPresentingDocument={setPresentingDocument}
-          buttonContent="Set as Context"
-          isOpen={true}
-          onClose={() => setIsDocSelectionModalOpen(false)}
-          onSave={() => {
-            setIsDocSelectionModalOpen(false);
-          }}
-        />
-      )}
-
-      <ChatSearchModal
-        open={isChatSearchModalOpen}
-        onCloseModal={() => setIsChatSearchModalOpen(false)}
-      />
 
       {retrievalEnabled && documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
@@ -1353,46 +1371,6 @@ export function ChatPage({
         />
       )}
 
-      {stackTraceModalContent && (
-        <ExceptionTraceModal
-          onOutsideClick={() => setStackTraceModalContent(null)}
-          exceptionTrace={stackTraceModalContent}
-        />
-      )}
-
-      {sharedChatSession && (
-        <ShareChatSessionModal
-          assistantId={liveAssistant?.id}
-          message={message}
-          modelOverride={llmManager.currentLlm}
-          chatSessionId={sharedChatSession.id}
-          existingSharedStatus={sharedChatSession.shared_status}
-          onClose={() => setSharedChatSession(null)}
-          onShare={(shared) =>
-            setChatSessionSharedStatus(
-              shared
-                ? ChatSessionSharedStatus.Public
-                : ChatSessionSharedStatus.Private
-            )
-          }
-        />
-      )}
-
-      {isSharingModalOpen && chatSessionIdRef.current !== null && (
-        <ShareChatSessionModal
-          message={message}
-          assistantId={liveAssistant?.id}
-          modelOverride={llmManager.currentLlm}
-          chatSessionId={chatSessionIdRef.current}
-          existingSharedStatus={chatSessionSharedStatus}
-          onClose={() => setIsSharingModalOpen(false)}
-        />
-      )}
-
-      {isAssistantsModalOpen && (
-        <AssistantModal hideModal={() => setIsAssistantsModalOpen(false)} />
-      )}
-
       <div className="fixed inset-0 flex flex-col text-text-dark">
         <div className="h-[100dvh] overflow-y-hidden">
           <div className="w-full">
@@ -1417,11 +1395,9 @@ export function ChatPage({
             >
               <div className="w-full relative">
                 <HistorySidebar
-                  toggleChatSessionSearchModal={() =>
-                    setIsChatSearchModalOpen((open) => !open)
-                  }
+                  toggleChatSessionSearchModal={openChatSearchModal}
                   liveAssistant={liveAssistant}
-                  setShowAssistantsModal={setIsAssistantsModalOpen}
+                  setShowAssistantsModal={openAssistantsModal}
                   explicitlyUntoggle={explicitlyUntoggle}
                   reset={reset}
                   page="chat"
@@ -1523,13 +1499,13 @@ export function ChatPage({
               {liveAssistant && (
                 <FunctionalHeader
                   // careful when defining callbacks inline as this can cause a rerender of subcomponent on every parent render
-                  showUserSettingsModal={() => setIsUserSettingsModalOpen(true)}
+                  showUserSettingsModal={openUserSettingsModal}
                   sidebarToggled={sidebarVisible}
                   reset={() => setMessage("")}
                   page="chat"
                   setSharingModalOpen={
                     chatSessionIdRef.current !== null
-                      ? setIsSharingModalOpen
+                      ? openSharingModal
                       : undefined
                   }
                   documentSidebarVisible={
@@ -1944,10 +1920,10 @@ export function ChatPage({
                                           currentSessionChatState != "input"
                                             ? undefined
                                             : (feedbackType: FeedbackType) =>
-                                                setCurrentFeedback([
-                                                  feedbackType,
+                                                createFeedbackModalHandler(
                                                   message.messageId as number,
-                                                ])
+                                                  feedbackType
+                                                )()
                                         }
                                       />
                                     ) : (
@@ -2049,10 +2025,10 @@ export function ChatPage({
                                           currentSessionChatState != "input"
                                             ? undefined
                                             : (feedbackType) =>
-                                                setCurrentFeedback([
-                                                  feedbackType,
+                                                createFeedbackModalHandler(
                                                   message.messageId as number,
-                                                ])
+                                                  feedbackType
+                                                )()
                                         }
                                         handleSearchQueryEdit={
                                           i === messageHistory.length - 1 &&
@@ -2132,7 +2108,7 @@ export function ChatPage({
                                           showStackTrace={
                                             message.stackTrace
                                               ? () =>
-                                                  setStackTraceModalContent(
+                                                  openStackTraceModal(
                                                     message.stackTrace!
                                                   )
                                               : undefined
@@ -2244,15 +2220,8 @@ export function ChatPage({
                                 clearSelectedDocuments();
                               }}
                               retrievalEnabled={retrievalEnabled}
-                              showDocSelectionModal={() =>
-                                setIsDocSelectionModalOpen(true)
-                              }
-                              showConfigureAPIKey={() =>
-                                modalActions.openApiKeyModal({
-                                  hide: () => modalActions.closeModal(),
-                                  setPopup: setPopup,
-                                })
-                              }
+                              showDocSelectionModal={openDocSelectionModal}
+                              showConfigureAPIKey={openApiKeyModal}
                               selectedDocuments={selectedDocuments}
                               message={message}
                               setMessage={setMessage}
