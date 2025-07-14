@@ -434,7 +434,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
-
+  DrupalWiki = "drupal_wiki",
   // Federated Connectors
   FederatedSlack = "federated_slack",
 }
