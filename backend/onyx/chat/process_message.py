@@ -44,6 +44,9 @@ from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
+from onyx.chat.prompt_builder.citations_prompt import (
+    compute_max_document_tokens_for_persona,
+)
 from onyx.chat.user_files.parse_user_files import parse_user_files
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
@@ -131,13 +134,13 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
     INTERNET_SEARCH_RESPONSE_ID,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    internet_search_response_to_search_docs,
+    InternetSearchTool,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+from onyx.tools.tool_implementations.internet_search.models import (
     InternetSearchResponse,
 )
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+from onyx.tools.tool_implementations.internet_search.utils import (
+    internet_search_response_to_search_docs,
 )
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
@@ -277,6 +280,9 @@ def _handle_search_tool_response_summary(
     )
 
 
+# TODO: this takes the entire internet search response and sends it to LLM --> not correct
+# TODO: Internet search yields first an InternetSearchResponse to populate search results
+# and then yields a list of LlmDocs that should be added to context
 def _handle_internet_search_tool_response_summary(
     packet: ToolResponse,
     db_session: Session,
@@ -910,6 +916,16 @@ def stream_chat_message_objects(
             structured_response_format=new_msg_req.structured_response_format,
         )
 
+        # Temp to get a pruning config for internet search
+        available_tokens = compute_max_document_tokens_for_persona(
+            db_session=db_session,
+            persona=persona,
+            actual_user_input=message_text,
+        )
+
+        internet_pruning_config = document_pruning_config.copy()
+        internet_pruning_config.max_tokens = available_tokens
+
         tool_dict = construct_tools(
             persona=persona,
             prompt_config=prompt_config,
@@ -936,6 +952,7 @@ def stream_chat_message_objects(
             ),
             internet_search_tool_config=InternetSearchToolConfig(
                 answer_style_config=answer_style_config,
+                document_pruning_config=internet_pruning_config,
             ),
             image_generation_tool_config=ImageGenerationToolConfig(
                 additional_headers=litellm_additional_headers,
