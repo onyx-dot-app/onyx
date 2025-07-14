@@ -1,30 +1,17 @@
 "use client";
 
 import {
-  redirect,
-  usePathname,
   useRouter,
   useSearchParams,
-  ReadonlyURLSearchParams,
+  usePathname,
+  redirect,
 } from "next/navigation";
 import {
-  BackendChatSession,
-  BackendMessage,
   ChatFileType,
   ChatSession,
   ChatSessionSharedStatus,
   FileDescriptor,
-  FileChatDisplay,
   Message,
-  MessageResponseIDInfo,
-  RetrievalType,
-  StreamingError,
-  ToolCallMetadata,
-  SubQuestionDetail,
-  constructSubQuestions,
-  DocumentsResponse,
-  AgenticMessageResponseIDInfo,
-  UserKnowledgeFilePacket,
 } from "./interfaces";
 
 import Prism from "prismjs";
@@ -94,19 +81,19 @@ import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
-import { useSidebarVisibility } from "@/components/chat/hooks";
+
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
   SIDEBAR_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
 import FixedLogo from "@/components/logo/FixedLogo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "./tools/constants";
+import { SEARCH_TOOL_ID } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import BlurBackground from "../../components/chat/BlurBackground";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
-import { useAssistants } from "@/components/context/AssistantsContext";
+
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
@@ -123,6 +110,14 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 import { useChatState } from "./hooks/useChatState";
 import { useMessageSubmission } from "./hooks/useMessageSubmission";
+import { useModal } from "./hooks/useModal";
+import { useInitialSessionFetch } from "./hooks/useInitialSessionFetch";
+import { useScreenSize, useSlackChatRedirect } from "./hooks/useUIUtils";
+import { useAssistantManagement } from "./hooks/useAssistantManagement";
+import { useScrollManagement } from "./hooks/useScrollManagement";
+import { useSidebarManagement } from "./hooks/useSidebarManagement";
+import { useDocumentManagement } from "./hooks/useDocumentManagement";
+import { ModalRenderer } from "./components/ModalRenderer";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
@@ -144,644 +139,6 @@ export enum UploadIntent {
   ATTACH_TO_MESSAGE, // For files uploaded via ChatInputBar (paste, drag/drop)
   ADD_TO_DOCUMENTS, // For files uploaded via FilePickerModal or similar (just add to repo)
 }
-
-// ================================ CONSTRUCTION ZONE ================================
-
-// ===== CENTRALIZED MODAL MANAGEMENT =====
-// Modal Types Enum
-export enum ModalType {
-  NONE = "NONE",
-  API_KEY = "API_KEY",
-  USER_SETTINGS = "USER_SETTINGS",
-  SETTINGS = "SETTINGS",
-  DOC_SELECTION = "DOC_SELECTION",
-  CHAT_SEARCH = "CHAT_SEARCH",
-  SHARING = "SHARING",
-  ASSISTANTS = "ASSISTANTS",
-  STACK_TRACE = "STACK_TRACE",
-  FEEDBACK = "FEEDBACK",
-  SHARED_CHAT = "SHARED_CHAT",
-}
-
-// Modal Data Types
-// Ideally most state & data doesn't need to be passed via action, but to start we're only extracting
-// the modal visibility/ shared state logic, keeping the messy state management logic that already exists
-interface ModalData {
-  // API Key Modal
-  apiKey?: {
-    hide: () => void;
-    setPopup: (popup: any) => void;
-  };
-
-  // Settings Modals
-  settings?: {
-    setPopup: (popup: any) => void;
-    setCurrentLlm: (llm: any) => void;
-    defaultModel: string;
-    llmProviders: any[];
-    onClose: () => void;
-  };
-
-  // Document Selection Modal
-  docSelection?: {
-    setPresentingDocument: (doc: any) => void;
-    buttonContent: string;
-    onClose: () => void;
-    onSave: () => void;
-  };
-
-  // Chat Search Modal
-  chatSearch?: {
-    onCloseModal: () => void;
-  };
-
-  // Sharing Modal
-  sharing?: {
-    assistantId?: number;
-    message: string;
-    modelOverride: any;
-    chatSessionId: string;
-    existingSharedStatus: any;
-    onClose: () => void;
-    onShare?: (shared: boolean) => void;
-  };
-
-  // Assistants Modal
-  assistants?: {
-    hideModal: () => void;
-  };
-
-  // Stack Trace Modal
-  stackTrace?: {
-    exceptionTrace: string;
-    onOutsideClick: () => void;
-  };
-
-  // Feedback Modal
-  feedback?: {
-    feedbackType: FeedbackType;
-    messageId: number;
-    onClose: () => void;
-    onSubmit: (data: any) => void;
-  };
-
-  // Shared Chat Modal
-  sharedChat?: {
-    assistantId?: number;
-    message: string;
-    modelOverride: any;
-    chatSessionId: string;
-    existingSharedStatus: any;
-    onClose: () => void;
-    onShare: (shared: boolean) => void;
-  };
-}
-
-// Modal State Interface
-interface ModalState {
-  isVisible: boolean;
-  type: ModalType;
-  data?: ModalData;
-}
-
-// Modal Actions
-type ModalAction =
-  | { type: "MODAL_OPEN"; payload: { type: ModalType; data?: ModalData } }
-  | { type: "MODAL_CLOSE" }
-  | { type: "MODAL_UPDATE_DATA"; payload: Partial<ModalData> };
-
-// Modal Reducer
-const modalReducer = (state: ModalState, action: ModalAction): ModalState => {
-  switch (action.type) {
-    case "MODAL_OPEN":
-      return {
-        isVisible: true,
-        type: action.payload.type,
-        data: action.payload.data,
-      };
-
-    case "MODAL_CLOSE":
-      return {
-        isVisible: false,
-        type: ModalType.NONE,
-        data: undefined,
-      };
-
-    case "MODAL_UPDATE_DATA":
-      return {
-        ...state,
-        data: { ...state.data, ...action.payload },
-      };
-
-    default:
-      return state;
-  }
-};
-
-// Modal Hook with Convenience Methods
-export function useModal() {
-  const [state, dispatch] = useReducer(modalReducer, {
-    isVisible: false,
-    type: ModalType.NONE,
-    data: undefined,
-  });
-
-  const modalActions = useMemo(
-    () => ({
-      // Generic actions
-      openModal: (type: ModalType, data?: ModalData) =>
-        dispatch({ type: "MODAL_OPEN", payload: { type, data } }),
-      closeModal: () => dispatch({ type: "MODAL_CLOSE" }),
-      updateModalData: (data: Partial<ModalData>) =>
-        dispatch({ type: "MODAL_UPDATE_DATA", payload: data }),
-
-      // Convenience methods for each modal type
-      openApiKeyModal: (data: ModalData["apiKey"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.API_KEY, data: { apiKey: data } },
-        }),
-
-      openUserSettingsModal: (data: ModalData["settings"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.USER_SETTINGS, data: { settings: data } },
-        }),
-
-      openSettingsModal: (data: ModalData["settings"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.SETTINGS, data: { settings: data } },
-        }),
-
-      openDocSelectionModal: (data: ModalData["docSelection"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: {
-            type: ModalType.DOC_SELECTION,
-            data: { docSelection: data },
-          },
-        }),
-
-      openChatSearchModal: (data: ModalData["chatSearch"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.CHAT_SEARCH, data: { chatSearch: data } },
-        }),
-
-      openSharingModal: (data: ModalData["sharing"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.SHARING, data: { sharing: data } },
-        }),
-
-      openAssistantsModal: (data: ModalData["assistants"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.ASSISTANTS, data: { assistants: data } },
-        }),
-
-      openStackTraceModal: (data: ModalData["stackTrace"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.STACK_TRACE, data: { stackTrace: data } },
-        }),
-
-      openFeedbackModal: (data: ModalData["feedback"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.FEEDBACK, data: { feedback: data } },
-        }),
-
-      openSharedChatModal: (data: ModalData["sharedChat"]) =>
-        dispatch({
-          type: "MODAL_OPEN",
-          payload: { type: ModalType.SHARED_CHAT, data: { sharedChat: data } },
-        }),
-    }),
-    [dispatch]
-  );
-
-  return { state, actions: modalActions };
-}
-
-// Modal Renderer Component
-function ModalRenderer({
-  state,
-  onClose,
-}: {
-  state: ModalState;
-  onClose: () => void;
-}) {
-  if (!state.isVisible) return null;
-
-  switch (state.type) {
-    case ModalType.API_KEY:
-      const apiKeyData = state.data?.apiKey;
-      if (!apiKeyData?.setPopup) return null;
-      return <ApiKeyModal hide={onClose} setPopup={apiKeyData.setPopup} />;
-
-    case ModalType.USER_SETTINGS:
-    case ModalType.SETTINGS:
-      const settingsData = state.data?.settings;
-      if (
-        !settingsData?.setPopup ||
-        !settingsData?.setCurrentLlm ||
-        !settingsData?.defaultModel ||
-        !settingsData?.llmProviders
-      )
-        return null;
-      return (
-        <UserSettingsModal
-          setPopup={settingsData.setPopup}
-          setCurrentLlm={settingsData.setCurrentLlm}
-          defaultModel={settingsData.defaultModel}
-          llmProviders={settingsData.llmProviders}
-          onClose={onClose}
-        />
-      );
-
-    case ModalType.DOC_SELECTION:
-      const docSelectionData = state.data?.docSelection;
-      if (
-        !docSelectionData?.setPresentingDocument ||
-        !docSelectionData?.buttonContent ||
-        !docSelectionData?.onSave
-      )
-        return null;
-      return (
-        <FilePickerModal
-          setPresentingDocument={docSelectionData.setPresentingDocument}
-          buttonContent={docSelectionData.buttonContent}
-          isOpen={true}
-          onClose={onClose}
-          onSave={docSelectionData.onSave}
-        />
-      );
-
-    case ModalType.CHAT_SEARCH:
-      return <ChatSearchModal open={true} onCloseModal={onClose} />;
-
-    case ModalType.SHARING:
-      const sharingData = state.data?.sharing;
-      if (
-        !sharingData?.message ||
-        !sharingData?.modelOverride ||
-        !sharingData?.chatSessionId ||
-        !sharingData?.existingSharedStatus
-      )
-        return null;
-      return (
-        <ShareChatSessionModal
-          assistantId={sharingData.assistantId}
-          message={sharingData.message}
-          modelOverride={sharingData.modelOverride}
-          chatSessionId={sharingData.chatSessionId}
-          existingSharedStatus={sharingData.existingSharedStatus}
-          onClose={onClose}
-          onShare={sharingData.onShare}
-        />
-      );
-
-    case ModalType.ASSISTANTS:
-      return <AssistantModal hideModal={onClose} />;
-
-    case ModalType.STACK_TRACE:
-      const stackTraceData = state.data?.stackTrace;
-      if (!stackTraceData?.exceptionTrace) return null;
-      return (
-        <ExceptionTraceModal
-          onOutsideClick={onClose}
-          exceptionTrace={stackTraceData.exceptionTrace}
-        />
-      );
-
-    case ModalType.FEEDBACK:
-      const feedbackData = state.data?.feedback;
-      if (!feedbackData?.feedbackType || !feedbackData?.onSubmit) return null;
-      return (
-        <FeedbackModal
-          feedbackType={feedbackData.feedbackType}
-          onClose={onClose}
-          onSubmit={feedbackData.onSubmit}
-        />
-      );
-
-    case ModalType.SHARED_CHAT:
-      const sharedChatData = state.data?.sharedChat;
-      if (
-        !sharedChatData?.message ||
-        !sharedChatData?.modelOverride ||
-        !sharedChatData?.chatSessionId ||
-        !sharedChatData?.existingSharedStatus ||
-        !sharedChatData?.onShare
-      )
-        return null;
-      return (
-        <ShareChatSessionModal
-          assistantId={sharedChatData.assistantId}
-          message={sharedChatData.message}
-          modelOverride={sharedChatData.modelOverride}
-          chatSessionId={sharedChatData.chatSessionId}
-          existingSharedStatus={sharedChatData.existingSharedStatus}
-          onClose={onClose}
-          onShare={sharedChatData.onShare}
-        />
-      );
-
-    default:
-      return null;
-  }
-}
-
-// ===== INITIAL SESSION FETCH HOOK =====
-//   As with most of the code I've extracted, the actual state is still messy and passed through props
-//   The next refactor step is to clean up all state and access it through a context, service, etc. rather than props
-interface UseInitialSessionFetchDependencies {
-  // Session state
-  existingChatSessionId: string | null;
-  defaultAssistantId: number | undefined;
-  searchParams: ReadonlyURLSearchParams | null;
-
-  // Refs
-  chatSessionIdRef: React.MutableRefObject<string | null>;
-  loadedIdSessionRef: React.MutableRefObject<string | null>;
-  textAreaRef: React.RefObject<HTMLTextAreaElement>;
-  isInitialLoad: React.MutableRefObject<boolean>;
-  submitOnLoadPerformed: React.MutableRefObject<boolean>;
-
-  // State setters
-  setIsFetchingChatMessages: (fetching: boolean) => void;
-  setSelectedAssistantFromId: (assistantId: number) => void;
-  setSelectedAssistant: (assistant: Persona | undefined) => void;
-  updateCompleteMessageDetail: (
-    sessionId: string | null,
-    messageMap: Map<number, Message>
-  ) => void;
-  setChatSessionSharedStatus: (status: ChatSessionSharedStatus) => void;
-  setSelectedMessageForDocDisplay: (messageId: number | null) => void;
-  setHasPerformedInitialScroll: (performed: boolean) => void;
-
-  // UI state
-  hasPerformedInitialScroll: boolean;
-  messageHistory: Message[];
-  getCurrentChatAnswering: () => boolean;
-
-  // Functions
-  clientScrollToBottom: (fast?: boolean) => void;
-  onSubmit: (params?: any) => Promise<void>;
-  nameChatSession: (sessionId: string) => Promise<void>;
-  refreshChatSessions: () => void;
-
-  // Filter management
-  filterManager: any;
-  setCurrentMessageFiles: (files: FileDescriptor[]) => void;
-  clearSelectedDocuments: () => void;
-
-  // Available assistants
-  availableAssistants: Persona[];
-}
-
-// NOTE: There is probably more "session fetch" logic that can be extracted into a service, which might
-//       be better organized into some combined utilities or service (maybe even brought into sessionManager)
-function useInitialSessionFetch(deps: UseInitialSessionFetchDependencies) {
-  useEffect(() => {
-    const priorChatSessionId = deps.chatSessionIdRef.current;
-    const loadedSessionId = deps.loadedIdSessionRef.current;
-    deps.chatSessionIdRef.current = deps.existingChatSessionId;
-    deps.loadedIdSessionRef.current = deps.existingChatSessionId;
-
-    deps.textAreaRef.current?.focus();
-
-    // only clear things if we're going from one chat session to another
-    const isChatSessionSwitch =
-      deps.existingChatSessionId !== priorChatSessionId;
-    if (isChatSessionSwitch) {
-      // de-select documents
-
-      // reset all filters
-      deps.filterManager.setSelectedDocumentSets([]);
-      deps.filterManager.setSelectedSources([]);
-      deps.filterManager.setSelectedTags([]);
-      deps.filterManager.setTimeRange(null);
-
-      // remove uploaded files
-      deps.setCurrentMessageFiles([]);
-
-      // if switching from one chat to another, then need to scroll again
-      // if we're creating a brand new chat, then don't need to scroll
-      if (deps.chatSessionIdRef.current !== null) {
-        deps.clearSelectedDocuments();
-        deps.setHasPerformedInitialScroll(false);
-      }
-    }
-
-    async function initialSessionFetch() {
-      if (deps.existingChatSessionId === null) {
-        deps.setIsFetchingChatMessages(false);
-        if (deps.defaultAssistantId !== undefined) {
-          deps.setSelectedAssistantFromId(deps.defaultAssistantId);
-        } else {
-          deps.setSelectedAssistant(undefined);
-        }
-        deps.updateCompleteMessageDetail(null, new Map());
-        deps.setChatSessionSharedStatus(ChatSessionSharedStatus.Private);
-
-        // if we're supposed to submit on initial load, then do that here
-        if (
-          shouldSubmitOnLoad(deps.searchParams) &&
-          !deps.submitOnLoadPerformed.current
-        ) {
-          deps.submitOnLoadPerformed.current = true;
-          await deps.onSubmit();
-        }
-        return;
-      }
-
-      deps.setIsFetchingChatMessages(true);
-      const response = await fetch(
-        `/api/chat/get-chat-session/${deps.existingChatSessionId}`
-      );
-
-      const session = await response.json();
-      const chatSession = session as BackendChatSession;
-      deps.setSelectedAssistantFromId(chatSession.persona_id);
-
-      const newMessageMap = processRawChatHistory(chatSession.messages);
-      const newMessageHistory = buildLatestMessageChain(newMessageMap);
-
-      // Update message history except for edge where where
-      // last message is an error and we're on a new chat.
-      // This corresponds to a "renaming" of chat, which occurs after first message
-      // stream
-      if (
-        (deps.messageHistory[deps.messageHistory.length - 1]?.type !==
-          "error" ||
-          loadedSessionId != null) &&
-        !deps.getCurrentChatAnswering()
-      ) {
-        const latestMessageId =
-          newMessageHistory[newMessageHistory.length - 1]?.messageId;
-
-        deps.setSelectedMessageForDocDisplay(
-          latestMessageId !== undefined ? latestMessageId : null
-        );
-
-        deps.updateCompleteMessageDetail(
-          chatSession.chat_session_id,
-          newMessageMap
-        );
-      }
-
-      deps.setChatSessionSharedStatus(chatSession.shared_status);
-
-      // go to bottom. If initial load, then do a scroll,
-      // otherwise just appear at the bottom
-
-      // Note: scrollInitialized is managed outside this hook scope
-
-      if (!deps.hasPerformedInitialScroll) {
-        if (deps.isInitialLoad.current) {
-          deps.setHasPerformedInitialScroll(true);
-          deps.isInitialLoad.current = false;
-        }
-        deps.clientScrollToBottom();
-
-        setTimeout(() => {
-          deps.setHasPerformedInitialScroll(true);
-        }, 100);
-      } else if (isChatSessionSwitch) {
-        deps.setHasPerformedInitialScroll(true);
-        deps.clientScrollToBottom(true);
-      }
-
-      deps.setIsFetchingChatMessages(false);
-
-      // if this is a seeded chat, then kick off the AI message generation
-      if (
-        newMessageHistory.length === 1 &&
-        newMessageHistory[0] !== undefined &&
-        !deps.submitOnLoadPerformed.current &&
-        deps.searchParams?.get(SEARCH_PARAM_NAMES.SEEDED) === "true"
-      ) {
-        deps.submitOnLoadPerformed.current = true;
-        const seededMessage = newMessageHistory[0].message;
-        await deps.onSubmit({
-          isSeededChat: true,
-          messageOverride: seededMessage,
-        });
-        // force re-name if the chat session doesn't have one
-        if (!chatSession.description) {
-          await deps.nameChatSession(deps.existingChatSessionId);
-          deps.refreshChatSessions();
-        }
-      } else if (newMessageHistory.length === 2 && !chatSession.description) {
-        await deps.nameChatSession(deps.existingChatSessionId);
-        deps.refreshChatSessions();
-      }
-    }
-
-    initialSessionFetch();
-  }, [
-    deps.existingChatSessionId,
-    deps.searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
-  ]);
-}
-
-// ===== EXISTING HOOKS =====
-
-function useScreenSize() {
-  const [screenSize, setScreenSize] = useState({
-    width: typeof window !== "undefined" ? window.innerWidth : 0,
-    height: typeof window !== "undefined" ? window.innerHeight : 0,
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setScreenSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  return screenSize;
-}
-
-/**
- * @param onError - Function to call when an redirect fails
- * @param setIsLoading - Function to notify the parent that the redirect is in progress
- */
-function useSlackChatRedirect(
-  onError: (error: any) => void,
-  setIsLoading: (isLoading: boolean) => void
-) {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  const slackChatId = searchParams?.get("slackChatId");
-
-  useEffect(() => {
-    const handleSlackChatRedirect = async () => {
-      if (!slackChatId) return;
-
-      // Notify the parent that the redirect is in progress
-      setIsLoading(true);
-
-      try {
-        const response = await fetch("/api/chat/seed-chat-session-from-slack", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            chat_session_id: slackChatId,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to seed chat from Slack");
-        }
-
-        const data = await response.json();
-
-        router.push(data.redirect_url);
-      } catch (error) {
-        console.error("Error seeding chat from Slack:", error);
-
-        onError(error);
-      }
-    };
-
-    handleSlackChatRedirect();
-  }, [searchParams, router]);
-}
-
-// There are a number of UI states that are interrelated and can be improved in refactor
-// For example, the following states are interrelated:
-// Modal visibility:
-// - isDocSelectionModalOpen
-// - isUserSettingsModalOpen
-// - isApiKeyModalOpen
-// - isChatSearchModalOpen
-// - isSharingModalOpen
-// - isSettingsModalOpen
-// - isAssistantsModalOpen
-// Existence based visibility modals, should be same system:
-// - stackTraceModalContent
-// - sharedChatSession
-// - currentFeedback
-//
-// Other UI visibility:
-// - ...
-//
-//
-// We could use a reducer with modal visibility actions, possibly join with other visibility states
-
-// ================================ END CONSTRUCTION ZONE ================================
 
 export function ChatPage({
   toggle,
@@ -846,8 +203,6 @@ export function ChatPage({
 
   // UI STATE: Document selection modal visibility
   const [isDocSelectionModalOpen, setIsDocSelectionModalOpen] = useState(false);
-  // UI STATE: Document sidebar visibility (shows search results and selected documents)
-  const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   // UI STATE: Pro search feature toggle state
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
   const toggleProSearch = useCallback(() => {
@@ -870,9 +225,6 @@ export function ChatPage({
 
   const { user, isAdmin } = useUser();
   const existingChatIdRaw = searchParams?.get("chatId");
-
-  // UI STATE: History sidebar visibility (shows chat history and navigation)
-  const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
   const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
 
@@ -898,83 +250,83 @@ export function ChatPage({
   const loadedIdSessionRef = useRef<string | null>(existingChatSessionId);
 
   // --- Assistant Management ---
-  const { assistants: availableAssistants, pinnedAssistants } = useAssistants();
-
   const existingChatSessionAssistantId = selectedChatSession?.persona_id;
-  const [selectedAssistant, setSelectedAssistant] = useState<
-    Persona | undefined
-  >(
-    // NOTE: look through available assistants here, so that even if the user
-    // has hidden this assistant it still shows the correct assistant when
-    // going back to an old chat session
-    existingChatSessionAssistantId !== undefined
-      ? availableAssistants.find(
-          (assistant) => assistant.id === existingChatSessionAssistantId
-        )
-      : defaultAssistantId !== undefined
-        ? availableAssistants.find(
-            (assistant) => assistant.id === defaultAssistantId
-          )
-        : undefined
-  );
-
-  const setSelectedAssistantFromId = (assistantId: number) => {
-    // NOTE: also intentionally look through available assistants here, so that
-    // even if the user has hidden an assistant they can still go back to it
-    // for old chats
-    setSelectedAssistant(
-      availableAssistants.find((assistant) => assistant.id === assistantId)
-    );
-  };
-
-  // UI STATE: Alternative assistant selection (for @mentions and switching assistants)
-  const [alternativeAssistant, setAlternativeAssistant] =
-    useState<Persona | null>(null);
-
-  // Current assistant is decided based on this ordering
-  // 1. Alternative assistant (assistant selected explicitly by user)
-  // 2. Selected assistant (assistnat default in this chat session)
-  // 3. First pinned assistants (ordered list of pinned assistants)
-  // 4. Available assistants (ordered list of available assistants)
-  // Relevant test: `live_assistant.spec.ts`
-  const liveAssistant: Persona | undefined = useMemo(
-    () =>
-      alternativeAssistant ||
-      selectedAssistant ||
-      pinnedAssistants[0] ||
-      availableAssistants[0],
-    [
-      alternativeAssistant,
-      selectedAssistant,
-      pinnedAssistants,
-      availableAssistants,
-    ]
-  );
-
-  const noAssistants = liveAssistant == null || liveAssistant == undefined;
-
-  // this is for "@"ing assistants
-
-  // this is used to track which assistant is being used to generate the current message
-  // for example, this would come into play when:
-  // 1. default assistant is `Onyx`
-  // 2. we "@"ed the `GPT` assistant and sent a message
-  // 3. while the `GPT` assistant message is generating, we "@" the `Paraphrase` assistant
-  // UI STATE: Currently generating assistant (tracks which assistant is actively responding)
-  const [alternativeGeneratingAssistant, setAlternativeGeneratingAssistant] =
-    useState<Persona | null>(null);
+  const {
+    selectedAssistant,
+    setSelectedAssistant,
+    setSelectedAssistantFromId,
+    alternativeAssistant,
+    setAlternativeAssistant,
+    liveAssistant,
+    noAssistants,
+    alternativeGeneratingAssistant,
+    setAlternativeGeneratingAssistant,
+    availableAssistants,
+    pinnedAssistants,
+  } = useAssistantManagement({
+    existingChatSessionAssistantId,
+    defaultAssistantId,
+  });
 
   // --- End Assistant Management ---
 
-  // UI STATE: Document viewer modal - currently displayed document for reading
-  const [presentingDocument, setPresentingDocument] =
-    useState<MinimalOnyxDocument | null>(null);
+  // --- Sidebar Management ---
+  const {
+    showHistorySidebar,
+    setShowHistorySidebar,
+    documentSidebarVisible,
+    setDocumentSidebarVisible,
+    untoggled,
+    sidebarElementRef,
+    explicitlyUntoggle,
+    toggleSidebar,
+    removeToggle,
+    toggleDocumentSidebar,
+  } = useSidebarManagement({
+    sidebarVisible,
+    toggle,
+    user,
+    settings,
+  });
 
   const llmManager = useLlmManager(
     llmProviders,
     selectedChatSession,
     liveAssistant
   );
+
+  // just choose a conservative default, this will be updated in the
+  // background on initial load / on persona change
+  const [maxTokens, setMaxTokens] = useState<number>(4096);
+
+  // fetch # of allowed document tokens for the selected Persona
+  useEffect(() => {
+    async function fetchMaxTokens() {
+      const response = await fetch(
+        `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`
+      );
+      if (response.ok) {
+        const maxTokens = (await response.json()).max_tokens as number;
+        setMaxTokens(maxTokens);
+      }
+    }
+    fetchMaxTokens();
+  }, [liveAssistant]);
+
+  // --- Document Management ---
+  const {
+    presentingDocument,
+    setPresentingDocument,
+    selectedDocuments,
+    setSelectedDocuments,
+    selectedDocumentTokens,
+    setSelectedDocumentTokens,
+    masterFlexboxRef,
+    maxDocumentSidebarWidth,
+    adjustDocumentSidebarWidth,
+    clearSelectedDocuments,
+    toggleDocumentSelection,
+  } = useDocumentManagement({ maxTokens });
 
   const availableSources: ValidSources[] = useMemo(() => {
     return ccPairs.map((ccPair) => ccPair.source);
@@ -1233,23 +585,6 @@ export function ChatPage({
       );
     }
   }, [submittedMessage, currentSessionChatState]);
-  // just choose a conservative default, this will be updated in the
-  // background on initial load / on persona change
-  const [maxTokens, setMaxTokens] = useState<number>(4096);
-
-  // fetch # of allowed document tokens for the selected Persona
-  useEffect(() => {
-    async function fetchMaxTokens() {
-      const response = await fetch(
-        `/api/chat/max-selected-document-tokens?persona_id=${liveAssistant?.id}`
-      );
-      if (response.ok) {
-        const maxTokens = (await response.json()).max_tokens as number;
-        setMaxTokens(maxTokens);
-      }
-    }
-    fetchMaxTokens();
-  }, [liveAssistant]);
 
   const filterManager = useFilters();
   // UI STATE: Chat search modal visibility (for searching through chat history)
@@ -1266,84 +601,24 @@ export function ChatPage({
   // UI STATE: Scroll position indicator - whether user has scrolled above the "horizon" (shows scroll-to-bottom button)
   const [aboveHorizon, setAboveHorizon] = useState(false);
 
-  // UI REFS: DOM element references for scroll management and layout
-  const scrollableDivRef = useRef<HTMLDivElement>(null); // Main scrollable chat container
-  const lastMessageRef = useRef<HTMLDivElement>(null); // Reference to last message for scroll positioning
-  const inputRef = useRef<HTMLDivElement>(null); // Input bar container for height calculations
-  const endDivRef = useRef<HTMLDivElement>(null); // End marker for scroll-to-bottom functionality
-  const endPaddingRef = useRef<HTMLDivElement>(null); // Bottom padding that adjusts with input height
+  // UI STATE: Agentic generation indicator (shows when AI is using multi-step reasoning)
+  const [agenticGenerating, setAgenticGenerating] = useState(false);
 
-  const previousHeight = useRef<number>(
-    inputRef.current?.getBoundingClientRect().height!
-  );
-  const scrollDist = useRef<number>(0);
+  const autoScrollEnabled =
+    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
 
-  // UI FUNCTION: Handle input bar resize with smooth scrolling and padding adjustments
-  const handleInputResize = () => {
-    setTimeout(() => {
-      if (
-        inputRef.current &&
-        lastMessageRef.current &&
-        !waitForScrollRef.current
-      ) {
-        const newHeight: number =
-          inputRef.current?.getBoundingClientRect().height!;
-        const heightDifference = newHeight - previousHeight.current;
-        if (
-          previousHeight.current &&
-          heightDifference != 0 &&
-          endPaddingRef.current &&
-          scrollableDivRef &&
-          scrollableDivRef.current
-        ) {
-          endPaddingRef.current.style.transition = "height 0.3s ease-out";
-          endPaddingRef.current.style.height = `${Math.max(
-            newHeight - 50,
-            0
-          )}px`;
-
-          if (autoScrollEnabled) {
-            scrollableDivRef?.current.scrollBy({
-              left: 0,
-              top: Math.max(heightDifference, 0),
-              behavior: "smooth",
-            });
-          }
-        }
-        previousHeight.current = newHeight;
-      }
-    }, 100);
-  };
-
-  // UI FUNCTION: Scroll chat to bottom with smooth animation and visibility checks
-  const clientScrollToBottom = (fast?: boolean) => {
-    waitForScrollRef.current = true;
-
-    setTimeout(() => {
-      if (!endDivRef.current || !scrollableDivRef.current) {
-        console.error("endDivRef or scrollableDivRef not found");
-        return;
-      }
-
-      const rect = endDivRef.current.getBoundingClientRect();
-      const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-
-      if (isVisible) return;
-
-      // Check if all messages are currently rendered
-      // If all messages are already rendered, scroll immediately
-      endDivRef.current.scrollIntoView({
-        behavior: fast ? "auto" : "smooth",
-      });
-
-      setHasPerformedInitialScroll(true);
-    }, 50);
-
-    // Reset waitForScrollRef after 1.5 seconds
-    setTimeout(() => {
-      waitForScrollRef.current = false;
-    }, 1500);
-  };
+  // --- Scroll Management ---
+  const {
+    scrollableDivRef,
+    lastMessageRef,
+    inputRef,
+    endDivRef,
+    endPaddingRef,
+    waitForScrollRef,
+    scrollDist,
+    handleInputResize,
+    clientScrollToBottom,
+  } = useScrollManagement({ autoScrollEnabled });
 
   // UI CONSTANT: Debounce time for scroll events (milliseconds)
   const debounceNumber = 100; // time for debouncing
@@ -1359,29 +634,6 @@ export function ChatPage({
   useEffect(() => {
     handleInputResize();
   }, [message]);
-
-  // used for resizing of the document sidebar
-  // UI REF: Master flexbox container for responsive layout calculations
-  const masterFlexboxRef = useRef<HTMLDivElement>(null);
-  // UI STATE: Document sidebar maximum width (responsive layout constraint)
-  const [maxDocumentSidebarWidth, setMaxDocumentSidebarWidth] = useState<
-    number | null
-  >(null);
-  // UI FUNCTION: Calculate responsive document sidebar width based on screen size
-  const adjustDocumentSidebarWidth = () => {
-    if (masterFlexboxRef.current && document.documentElement.clientWidth) {
-      // numbers below are based on the actual width the center section for different
-      // screen sizes. `1700` corresponds to the custom "3xl" tailwind breakpoint
-      // NOTE: some buffer is needed to account for scroll bars
-      if (document.documentElement.clientWidth > 1700) {
-        setMaxDocumentSidebarWidth(masterFlexboxRef.current.clientWidth - 950);
-      } else if (document.documentElement.clientWidth > 1420) {
-        setMaxDocumentSidebarWidth(masterFlexboxRef.current.clientWidth - 760);
-      } else {
-        setMaxDocumentSidebarWidth(masterFlexboxRef.current.clientWidth - 660);
-      }
-    }
-  };
 
   // UI EFFECT: Auto-hide document sidebar when no documents are selected or retrieval is disabled
   useEffect(() => {
@@ -1457,18 +709,14 @@ export function ChatPage({
     documentSidebarInitialWidth = Math.min(700, maxDocumentSidebarWidth);
   }
 
+  const [uncaughtError, setUncaughtError] = useState<string | null>(null);
+
   const continueGenerating = () => {
     onSubmit({
       messageOverride:
         "Continue Generating (pick up exactly where you left off)",
     });
   };
-  const [uncaughtError, setUncaughtError] = useState<string | null>(null);
-  // UI STATE: Agentic generation indicator (shows when AI is using multi-step reasoning)
-  const [agenticGenerating, setAgenticGenerating] = useState(false);
-
-  const autoScrollEnabled =
-    (user?.preferences?.auto_scroll && !agenticGenerating) ?? false;
 
   useScrollonStream({
     chatState: currentSessionChatState,
@@ -1612,55 +860,8 @@ export function ChatPage({
     updateChatState("input", getCurrentSessionId());
   };
 
-  // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
-  // UI STATE: Sidebar untoggle animation state (prevents flickering during sidebar transitions)
-  const [untoggled, setUntoggled] = useState(false);
   // UI STATE: Loading error message display
   const [loadingError, setLoadingError] = useState<string | null>(null);
-
-  // UI FUNCTION: Explicitly close history sidebar with animation delay
-  const explicitlyUntoggle = () => {
-    setShowHistorySidebar(false);
-
-    setUntoggled(true);
-    setTimeout(() => {
-      setUntoggled(false);
-    }, 200);
-  };
-  // UI FUNCTION: Toggle history sidebar with cookie persistence
-  const toggleSidebar = () => {
-    if (user?.is_anonymous_user) {
-      return;
-    }
-    Cookies.set(
-      SIDEBAR_TOGGLED_COOKIE_NAME,
-      String(!sidebarVisible).toLocaleLowerCase()
-    ),
-      {
-        path: "/",
-      };
-
-    toggle();
-  };
-  // UI FUNCTION: Remove sidebar toggle state (close sidebar)
-  const removeToggle = () => {
-    setShowHistorySidebar(false);
-    toggle(false);
-  };
-
-  // UI REFS: Scroll and sidebar management
-  const waitForScrollRef = useRef(false); // Prevents scroll conflicts during animations
-  const sidebarElementRef = useRef<HTMLDivElement>(null); // History sidebar container
-
-  useSidebarVisibility({
-    sidebarVisible,
-    sidebarElementRef,
-    showDocSidebar: showHistorySidebar,
-    setShowDocSidebar: setShowHistorySidebar,
-    setToggled: removeToggle,
-    mobile: settings?.isMobile,
-    isAnonymousUser: user?.is_anonymous_user,
-  });
 
   // Virtualization + Scrolling related effects and functions
   const scrollInitialized = useRef(false);
@@ -1722,13 +923,6 @@ export function ChatPage({
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   // UI STATE: Settings modal visibility (general settings, not user-specific)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-
-  // UI STATE: Selected documents for context (displayed in document sidebar)
-  const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
-    []
-  );
-  // UI STATE: Token count for selected documents (for context limit management)
-  const [selectedDocumentTokens, setSelectedDocumentTokens] = useState(0);
 
   const currentPersona = alternativeAssistant || liveAssistant;
 
@@ -1937,15 +1131,6 @@ export function ChatPage({
   // UI STATE: Assistants modal visibility (for managing and selecting assistants)
   const [isAssistantsModalOpen, setIsAssistantsModalOpen] = useState(false);
 
-  // UI FUNCTION: Toggle document sidebar visibility
-  const toggleDocumentSidebar = () => {
-    if (!documentSidebarVisible) {
-      setDocumentSidebarVisible(true);
-    } else {
-      setDocumentSidebarVisible(false);
-    }
-  };
-
   interface RegenerationRequest {
     messageId: number;
     parentMessage: Message;
@@ -1974,13 +1159,6 @@ export function ChatPage({
         <NoAssistantModal isAdmin={isAdmin} />
       </>
     );
-
-  // UI FUNCTION: Clear selected documents and reset token count
-  const clearSelectedDocuments = useCallback(() => {
-    setSelectedDocuments([]);
-    setSelectedDocumentTokens(0);
-    clearSelectedItems();
-  }, [clearSelectedItems]);
 
   // UI EFFECT: Initial session fetch and setup
   useInitialSessionFetch({
@@ -2013,15 +1191,6 @@ export function ChatPage({
     clearSelectedDocuments,
     availableAssistants,
   });
-
-  // UI FUNCTION: Toggle document selection in document sidebar
-  const toggleDocumentSelection = useCallback((document: OnyxDocument) => {
-    setSelectedDocuments((prev) =>
-      prev.some((d) => d.document_id === document.document_id)
-        ? prev.filter((d) => d.document_id !== document.document_id)
-        : [...prev, document]
-    );
-  }, []);
 
   const stopGenerating = useCallback(() => {
     const currentSession = getCurrentSessionId();
