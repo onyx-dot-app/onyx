@@ -155,6 +155,7 @@ class DocumentSource(str, Enum):
     PRODUCTBOARD = "productboard"
     FILE = "file"
     NOTION = "notion"
+    OUTLINE = "outline"
     ZULIP = "zulip"
     LINEAR = "linear"
     HUBSPOT = "hubspot"

@@ -1338,6 +1338,13 @@ export const NotionIcon = ({
   <LogoIcon size={size} className={className} src="/Notion.png" />
 );
 
+export const OutlineIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src="/Outline.png" />
+);
+
 export const GuruIcon = ({
   size = 16,
   className = defaultTailwindCSS,
