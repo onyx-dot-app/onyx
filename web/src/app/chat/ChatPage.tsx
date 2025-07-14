@@ -1604,7 +1604,7 @@ export function ChatPage({
                             !loadingError &&
                             !submittedMessage && (
                               <div className="h-full  w-[95%] mx-auto flex flex-col justify-center items-center">
-                                <ChatIntro selectedPersona={liveAssistant} />
+                                <ChatIntro selectedPersona={liveAssistant!} />
 
                                 {currentPersona && (
                                   <StarterMessages
@@ -1918,7 +1918,7 @@ export function ChatPage({
                                               : message.messageId
                                           );
                                         }}
-                                        currentPersona={liveAssistant}
+                                        currentPersona={liveAssistant!}
                                         alternativeAssistant={
                                           currentAlternativeAssistant
                                         }
@@ -2018,7 +2018,7 @@ export function ChatPage({
                                             message.messageId
                                           );
                                         }}
-                                        currentPersona={liveAssistant}
+                                        currentPersona={liveAssistant!}
                                         alternativeAssistant={
                                           currentAlternativeAssistant
                                         }
@@ -2123,7 +2123,7 @@ export function ChatPage({
                                       setPresentingDocument={
                                         setPresentingDocument
                                       }
-                                      currentPersona={liveAssistant}
+                                      currentPersona={liveAssistant!}
                                       messageId={message.messageId}
                                       content={
                                         <ErrorBanner
@@ -2165,7 +2165,7 @@ export function ChatPage({
                                 <AIMessage
                                   setPresentingDocument={setPresentingDocument}
                                   key={-3}
-                                  currentPersona={liveAssistant}
+                                  currentPersona={liveAssistant!}
                                   alternativeAssistant={
                                     alternativeGeneratingAssistant ??
                                     alternativeAssistant
@@ -2189,7 +2189,7 @@ export function ChatPage({
                               <div key={-1}>
                                 <AIMessage
                                   setPresentingDocument={setPresentingDocument}
-                                  currentPersona={liveAssistant}
+                                  currentPersona={liveAssistant!}
                                   messageId={-1}
                                   content={
                                     <p className="text-red-700 text-sm my-auto">
@@ -2261,7 +2261,7 @@ export function ChatPage({
                               chatState={currentSessionChatState}
                               alternativeAssistant={alternativeAssistant}
                               selectedAssistant={
-                                selectedAssistant || liveAssistant
+                                selectedAssistant || liveAssistant!
                               }
                               setAlternativeAssistant={setAlternativeAssistant}
                               setFiles={setCurrentMessageFiles}
