@@ -412,6 +412,8 @@ class AnswerPostInfo(BaseModel):
     dropped_indices: list[int] | None = None
     tool_result: ToolCallFinalResult | None = None
     message_specific_citations: MessageSpecificCitations | None = None
+    # Store cleaned image responses with URLs for later tool_result cleaning
+    cleaned_image_responses: list[Any] | None = None
 
     class Config:
         arbitrary_types_allowed = True

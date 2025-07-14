@@ -19,6 +19,7 @@ from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import message_to_string
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.constants import GENERAL_SEP_PAT
+from onyx.tools.constants import IMAGE_GENERATION_TOOL_NAME
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -29,7 +30,6 @@ from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-
 
 logger = setup_logger()
 
@@ -82,7 +82,7 @@ class ImageShape(str, Enum):
 
 # override_kwargs is not supported for image generation tools
 class ImageGenerationTool(Tool[None]):
-    _NAME = "run_image_generation"
+    _NAME = IMAGE_GENERATION_TOOL_NAME
     _DESCRIPTION = "Generate an image from a prompt."
     _DISPLAY_NAME = "Image Generation"
 
