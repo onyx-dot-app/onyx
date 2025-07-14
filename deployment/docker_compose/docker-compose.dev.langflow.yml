@@ -15,6 +15,7 @@ services:
       - inference_model_server
     restart: always
     environment:
+      - CUSTOM_ANALYTICS_SECRET_KEY=${CUSTOM_ANALYTICS_SECRET_KEY}
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-disabled}
       - SESSION_EXPIRE_TIME_SECONDS=${SESSION_EXPIRE_TIME_SECONDS:-}
