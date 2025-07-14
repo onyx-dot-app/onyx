@@ -71,7 +71,6 @@ Please answer ONLY with '{SEARCH}', '{KNOWLEDGE_GRAPH}', or '{CLOSER}'.
 ANSWER:
 """
 
-
 PLAN_GENERATION_PROMPT = f"""
 You are a great Assistant that is an expert at analyzing a question and breaking it up into a \
 series of high-level, answerable sub-questions.
@@ -99,7 +98,6 @@ Here are the relationship types that are available in the knowledge graph:
 {SEPARATOR_LINE}
 ---possible_relationships---
 {SEPARATOR_LINE}
-
 
 
 Here is the question that you need to convert into a series of too calls with questions to the tools:
@@ -160,19 +158,7 @@ considering the answers you already got, and guided by the initial plan.
 (You are on iteration ---iteration_nr---. Consider that when you consider the previous answers and the \
 initial plan (which may have gotten modified)).
 
-You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
-
-- The "SEARCH" tool is used to answer questions that can be answered by one or more standard \
-'fact-like' searches using connected documents. Note that time-ordering does not work well with \
-the {SEARCH} tool, and - if the entities in question are in the Knowledge Graph - you should \
-use the {KNOWLEDGE_GRAPH} tool below instead.
-
-- On the other hand, while the "{KNOWLEDGE_GRAPH}" tool also generates answers based on generated \
-documents, it is doing so in a very entity/relationship-centric way, for example first identifying \
-the entities and relationships in a question and then analyzing the documents correcponding to the \
-entities to answer the question. The {KNOWLEDGE_GRAPH} tool can also answer aggregation-type questions \
-like 'how many jiras did each employee close last month?'. HOWEVER, the {KNOWLEDGE_GRAPH} tool \
-can only be used for entity types and relationship types that are available in the knowledge graph!
+{DR_TOOLS_DESCRIPTIONS}
 
 Here are the entity types that are available in the knowledge graph:
 {SEPARATOR_LINE}
@@ -183,10 +169,6 @@ Here are the relationship types that are available in the knowledge graph:
 {SEPARATOR_LINE}
 ---possible_relationships---
 {SEPARATOR_LINE}
-
-- Lastly, the "CLOSER" tool is not really a tool but the signal that all of the information required to \
-answer the question has been gathered, and we can move to final answering.
-
 
 Here is the overall question that you need to answer:
 {SEPARATOR_LINE}
@@ -207,11 +189,10 @@ Here is the answer history so far (if any):
 
 
 HINTS:
-- please first consider whether you can answer the question with the information you already have. \
-Look also whether the plan suggested you are done.If you can, you can use the "CLOSER" tool.
-- if you think more information is needed because a sub-question was not sufficiently answered, \
+   - please first consider whether you can answer the question with the information you already have. \
+Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
+   - if you think more information is needed because a sub-question was not sufficiently answered, \
 you can generate a modified version of the previous step, thus effectively modifying the plan.
-Note:
    - please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
    - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
@@ -219,13 +200,12 @@ to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all
    - also consider whether the user query implies whether a standard search query should be used or a \
 knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
-- if the {SEARCH} tool is chosen, remember that you can iterate and do multiple search queries. \
-Therefore, if there are multiple objects in the question, or there are ambiguous terms, you want \
-prepare the plan for multiple search queries over multiple generation with the goal of having \
-each search query be quite specific! So if the question is for example like 'compare A vs B', \
-then you probably want to generate at least two searches, one focussed on A and a second on B. \
-(Note though that the fact that later A and B will be compared in this example, the question about A \
-may get informed as in 'find features of A for comparison with another entity' )
+   - if the {SEARCH} tool is chosen, remember that you can send multiple search queries in parallel. \
+Use this to your advantage to do multiple investigations on separate topics to save time, or to do multiple \
+in depth investigations on a single topic at once. For example, if the question is like "compare A and B", \
+you can send two search queries in parallel, one focussed on A and a second on B. Likewise, if the question \
+is like "give me a detailed report on A", you can do multiple queries like "what is A", "what does A do", \
+etc. Note: try to keep the number of parallel queries reasonable.
 
 
 Please format your answer as a json dictionary in the following format:
@@ -323,9 +303,10 @@ written as a search query. Format it as a list of strings.>"}}
 
 
 BASIC_SEARCH_PROMPT = f"""
-You are a helpful assistant that can answer a specific search query based on a list of documents and \
-also considering the base question that ultimately needs to be answered. (So keep the base question \
-in mind when you answer the specific search query. But answer the specific search query IS THE TASK.)
+You are a helpful assistant that can use the provided documents, the specific search query, and the \
+user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \
+answer to the specific search query. Although your response should pertain mainly to the specific search \
+query, also keep in mind the base query to provide valuable insights for answering the base query too.
 
 Here is the specific search query:
 {SEPARATOR_LINE}
@@ -343,17 +324,17 @@ And here is the list of documents that you must use to answer the specific searc
 {SEPARATOR_LINE}
 
 Note:
- - only use documents that are relevant to the specific search query AND you KNOW apply to the \
+   - only use documents that are relevant to the specific search query AND you KNOW apply to the \
 context of the question. It is critical to avoid hallucinations as well as taking information \
 out of context.
- - while the base question is important, really focus on answering the specific search query. \
+   - clearly indicate any assumptions you make in your answer.
+   - while the base question is important, really focus on answering the specific search query. \
 That is your task.
- - CRITICAL: cite the sources (by document number) at the end! Please use the \
-format [1], [4], [6], etc.
- - only provide a SHORT answer that i) provides the requested information if the question \
- was very specific, ii) cites the relevant documents at the end, and iii) provides \
-a BRIEF HIGH_LEVEL summary of the information in the cited documents, \
- and cites the documents that are most relevent to the question sent to you.
+   - CRITICAL: cite the sources (by document number) at the end! Please use the format [1][4][6], etc.
+   - only provide a SHORT answer that i) provides the requested information if the question was very \
+specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL summary of \
+the information in the cited documents, and cite the documents that are most relevent to the question \
+sent to you.
 
 ANSWER:
 """
@@ -381,7 +362,7 @@ main content should be in the cited documents for each sub-question.
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
-- Please cite your sources inline in format [2], [4], etc! The numbers of the documents \
+- Please cite your sources inline in format [2][4], etc! The numbers of the documents \
 are provided above.
 
 ANSWER:
