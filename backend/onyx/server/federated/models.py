@@ -65,6 +65,26 @@ class FederatedConnectorDetail(BaseModel):
     document_sets: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class FederatedConnectorSummary(BaseModel):
+    """Simplified federated connector information with just essential data"""
+
+    id: int
+    name: str
+    source: FederatedConnectorSource
+    entities: dict[str, Any]
+
+    @classmethod
+    def from_federated_connector_detail(
+        cls, detail: FederatedConnectorDetail, entities: dict[str, Any]
+    ) -> "FederatedConnectorSummary":
+        return cls(
+            id=detail.id,
+            name=detail.name,
+            source=detail.source,
+            entities=entities,
+        )
+
+
 class FederatedConnectorUpdateRequest(BaseModel):
     credentials: FederatedConnectorCredentials | None = None
 

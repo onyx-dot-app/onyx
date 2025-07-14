@@ -14,10 +14,10 @@ const AdvancedFormPage = () => {
         description={`
           Checks all documents against the source to delete those that no longer exist.
           Note: This process checks every document, so be cautious when increasing frequency.
-          Default is 30 days.
+          Default is 720 hours (30 days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes).
           Enter 0 to disable pruning for this connector.
         `}
-        label="Prune Frequency (days)"
+        label="Prune Frequency (hours)"
         name="pruneFreq"
       />
 

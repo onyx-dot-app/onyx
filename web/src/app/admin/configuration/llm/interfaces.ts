@@ -4,8 +4,11 @@ export interface CustomConfigKey {
   description: string | null;
   is_required: boolean;
   is_secret: boolean;
-  key_type: "text_input" | "file_input";
+  key_type: CustomConfigKeyType;
+  default_value?: string;
 }
+
+export type CustomConfigKeyType = "text_input" | "file_input";
 
 export interface ModelConfigurationUpsertRequest {
   name: string;

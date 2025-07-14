@@ -1,3 +1,4 @@
+import ReactMarkdown from "react-markdown";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Text from "@/components/ui/text";
@@ -16,7 +17,6 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
-  ModelConfiguration,
   ModelConfigurationUpsertRequest,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
@@ -133,6 +133,14 @@ export function LLMProviderUpdateForm({
     groups: Yup.array().of(Yup.number()),
     selected_model_names: Yup.array().of(Yup.string()),
   });
+
+  const customLinkRenderer = ({ href, children }: any) => {
+    return (
+      <a href={href} className="text-link hover:text-link-hover">
+        {children}
+      </a>
+    );
+  };
 
   return (
     <Formik
@@ -307,12 +315,14 @@ export function LLMProviderUpdateForm({
                   <TextFormField
                     small={firstTimeConfiguration}
                     name={`custom_config.${customConfigKey.name}`}
-                    label={
-                      customConfigKey.is_required
-                        ? customConfigKey.display_name
-                        : `[Optional] ${customConfigKey.display_name}`
+                    optional={!customConfigKey.is_required}
+                    label={customConfigKey.display_name}
+                    subtext={
+                      <ReactMarkdown components={{ a: customLinkRenderer }}>
+                        {customConfigKey.description}
+                      </ReactMarkdown>
                     }
-                    subtext={customConfigKey.description || undefined}
+                    placeholder={customConfigKey.default_value || undefined}
                   />
                 </div>
               );

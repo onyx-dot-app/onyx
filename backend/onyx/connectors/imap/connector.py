@@ -12,6 +12,7 @@ from typing import Any
 from typing import cast
 
 import bs4
+from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -33,6 +34,13 @@ logger = setup_logger()
 _DEFAULT_IMAP_PORT_NUMBER = int(os.environ.get("IMAP_PORT", 993))
 _IMAP_OKAY_STATUS = "OK"
 _PAGE_SIZE = 100
+_USERNAME_KEY = "imap_username"
+_PASSWORD_KEY = "imap_password"
+
+
+class CurrentMailbox(BaseModel):
+    mailbox: str
+    todo_email_ids: list[str]
 
 
 # An email has a list of mailboxes.
@@ -47,7 +55,7 @@ _PAGE_SIZE = 100
 # For initial checkpointing, set both fields to `None`.
 class ImapCheckpoint(ConnectorCheckpoint):
     todo_mailboxes: list[str] | None = None
-    todo_email_ids: list[str] | None = None
+    current_mailbox: CurrentMailbox | None = None
 
 
 class LoginState(str, Enum):
@@ -69,16 +77,6 @@ class ImapConnector(
         self._port = port
         self._mailboxes = mailboxes
         self._credentials: dict[str, Any] | None = None
-        self._mail_client: imaplib.IMAP4_SSL | None = None
-        self._login_state: LoginState = LoginState.LoggedOut
-
-    @property
-    def mail_client(self) -> imaplib.IMAP4_SSL:
-        if not self._mail_client:
-            raise RuntimeError(
-                "No mail-client has been initialized; call `set_credentials_provider` first"
-            )
-        return self._mail_client
 
     @property
     def credentials(self) -> dict[str, Any]:
@@ -88,7 +86,25 @@ class ImapConnector(
             )
         return self._credentials
 
-    def _login(self) -> None:
+    def _get_mail_client(self) -> imaplib.IMAP4_SSL:
+        """
+        Returns a new `imaplib.IMAP4_SSL` instance.
+
+        The `imaplib.IMAP4_SSL` object is supposed to be an "ephemeral" object; it's not something that you can login,
+        logout, then log back into again. I.e., the following will fail:
+
+        ```py
+        mail_client.login(..)
+        mail_client.logout();
+        mail_client.login(..)
+        ```
+
+        Therefore, you need a fresh, new instance in order to operate with IMAP. This function gives one to you.
+
+        # Notes
+        This function will throw an error if the credentials have not yet been set.
+        """
+
         def get_or_raise(name: str) -> str:
             value = self.credentials.get(name)
             if not value:
@@ -99,21 +115,16 @@ class ImapConnector(
                 )
             return value
 
-        if self._login_state == LoginState.LoggedIn:
-            return
+        username = get_or_raise(_USERNAME_KEY)
+        password = get_or_raise(_PASSWORD_KEY)
 
-        username = get_or_raise("username")
-        password = get_or_raise("password")
+        mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
+        status, _data = mail_client.login(user=username, password=password)
 
-        self._login_state = LoginState.LoggedIn
-        self.mail_client.login(user=username, password=password)
+        if status != _IMAP_OKAY_STATUS:
+            raise RuntimeError(f"Failed to log into imap server; {status=}")
 
-    def _logout(self) -> None:
-        if self._login_state == LoginState.LoggedOut:
-            return
-
-        self._login_state = LoginState.LoggedOut
-        self.mail_client.logout()
+        return mail_client
 
     def _load_from_checkpoint(
         self,
@@ -125,7 +136,7 @@ class ImapConnector(
         checkpoint = cast(ImapCheckpoint, copy.deepcopy(checkpoint))
         checkpoint.has_more = True
 
-        self._login()
+        mail_client = self._get_mail_client()
 
         if checkpoint.todo_mailboxes is None:
             # This is the dummy checkpoint.
@@ -134,7 +145,7 @@ class ImapConnector(
                 checkpoint.todo_mailboxes = _sanitize_mailbox_names(self._mailboxes)
             else:
                 fetched_mailboxes = _fetch_all_mailboxes_for_email_account(
-                    mail_client=self.mail_client
+                    mail_client=mail_client
                 )
                 if not fetched_mailboxes:
                     raise RuntimeError(
@@ -144,26 +155,38 @@ class ImapConnector(
 
             return checkpoint
 
-        if not checkpoint.todo_email_ids:
+        if (
+            not checkpoint.current_mailbox
+            or not checkpoint.current_mailbox.todo_email_ids
+        ):
             if not checkpoint.todo_mailboxes:
                 checkpoint.has_more = False
                 return checkpoint
 
             mailbox = checkpoint.todo_mailboxes.pop()
-            checkpoint.todo_email_ids = _fetch_email_ids_in_mailbox(
-                mail_client=self.mail_client,
+            email_ids = _fetch_email_ids_in_mailbox(
+                mail_client=mail_client,
                 mailbox=mailbox,
                 start=start,
                 end=end,
             )
+            checkpoint.current_mailbox = CurrentMailbox(
+                mailbox=mailbox,
+                todo_email_ids=email_ids,
+            )
 
-        current_todos = cast(
-            list, copy.deepcopy(checkpoint.todo_email_ids[:_PAGE_SIZE])
+        _select_mailbox(
+            mail_client=mail_client, mailbox=checkpoint.current_mailbox.mailbox
         )
-        checkpoint.todo_email_ids = checkpoint.todo_email_ids[_PAGE_SIZE:]
+        current_todos = cast(
+            list, copy.deepcopy(checkpoint.current_mailbox.todo_email_ids[:_PAGE_SIZE])
+        )
+        checkpoint.current_mailbox.todo_email_ids = (
+            checkpoint.current_mailbox.todo_email_ids[_PAGE_SIZE:]
+        )
 
         for email_id in current_todos:
-            email_msg = _fetch_email(mail_client=self.mail_client, email_id=email_id)
+            email_msg = _fetch_email(mail_client=mail_client, email_id=email_id)
             if not email_msg:
                 logger.warn(f"Failed to fetch message {email_id=}; skipping")
                 continue
@@ -184,8 +207,7 @@ class ImapConnector(
         raise NotImplementedError("Use `set_credentials_provider` instead")
 
     def validate_connector_settings(self) -> None:
-        self._login()
-        self._logout()
+        self._get_mail_client()
 
     # impls for CredentialsConnector
 
@@ -193,7 +215,6 @@ class ImapConnector(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
         self._credentials = credentials_provider.get_credentials()
-        self._mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
 
     # impls for CheckpointedConnector
 
@@ -264,15 +285,19 @@ def _fetch_all_mailboxes_for_email_account(mail_client: imaplib.IMAP4_SSL) -> li
     return mailboxes
 
 
+def _select_mailbox(mail_client: imaplib.IMAP4_SSL, mailbox: str) -> None:
+    status, _ids = mail_client.select(mailbox=mailbox, readonly=True)
+    if status != _IMAP_OKAY_STATUS:
+        raise RuntimeError(f"Failed to select {mailbox=}")
+
+
 def _fetch_email_ids_in_mailbox(
     mail_client: imaplib.IMAP4_SSL,
     mailbox: str,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[str]:
-    status, _ids = mail_client.select(mailbox=mailbox, readonly=True)
-    if status != _IMAP_OKAY_STATUS:
-        raise RuntimeError(f"Failed to select {mailbox=}")
+    _select_mailbox(mail_client=mail_client, mailbox=mailbox)
 
     start_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%d-%b-%Y")
     end_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime("%d-%b-%Y")
@@ -308,17 +333,29 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    _sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
-    parsed_recipients = _parse_addrs(raw_header=email_headers.recipients)
+    sender_name, sender_addr = _parse_singular_addr(raw_header=email_headers.sender)
+    parsed_recipients = (
+        _parse_addrs(raw_header=email_headers.recipients)
+        if email_headers.recipients
+        else []
+    )
+
+    expert_info_map = {
+        recipient_addr: BasicExpertInfo(
+            display_name=recipient_name, email=recipient_addr
+        )
+        for recipient_name, recipient_addr in parsed_recipients
+    }
+    if sender_addr not in expert_info_map:
+        expert_info_map[sender_addr] = BasicExpertInfo(
+            display_name=sender_name, email=sender_addr
+        )
 
     email_body = _parse_email_body(email_msg=email_msg, email_headers=email_headers)
-    primary_owners = [
-        BasicExpertInfo(display_name=recipient_name, email=recipient_addr)
-        for recipient_name, recipient_addr in parsed_recipients
-    ]
+    primary_owners = list(expert_info_map.values())
     external_access = (
         ExternalAccess(
-            external_user_emails=set(addr for _name, addr in parsed_recipients),
+            external_user_emails=set(expert_info_map.keys()),
             external_user_group_ids=set(),
             is_public=False,
         )
@@ -433,8 +470,8 @@ if __name__ == "__main__":
             tenant_id=None,
             connector_name=DocumentSource.IMAP,
             credential_json={
-                "username": username,
-                "password": password,
+                _USERNAME_KEY: username,
+                _PASSWORD_KEY: password,
             },
         )
     )

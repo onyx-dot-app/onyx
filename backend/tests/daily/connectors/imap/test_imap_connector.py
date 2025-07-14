@@ -36,8 +36,8 @@ def imap_connector() -> ImapConnector:
             tenant_id=None,
             connector_name=DocumentSource.IMAP,
             credential_json={
-                "username": username,
-                "password": password,
+                "imap_username": username,
+                "imap_password": password,
             },
         )
     )

@@ -63,6 +63,8 @@ def get_federated_retrieval_functions(
     federated_retrieval_infos: list[FederatedRetrievalInfo] = []
     federated_oauth_tokens = list_federated_connector_oauth_tokens(db_session, user_id)
     for oauth_token in federated_oauth_tokens:
+        # if source filters are specified by the user, skip federated connectors that are
+        # not in the source_types
         if (
             source_types is not None
             and oauth_token.federated_connector.source.to_non_federated_source()
@@ -73,6 +75,12 @@ def get_federated_retrieval_functions(
         document_set_associations = federated_connector_id_to_document_sets[
             oauth_token.federated_connector_id
         ]
+
+        # if document set names are specified by the user, skip federated connectors that are
+        # not associated with any of the document sets
+        if document_set_names and not document_set_associations:
+            continue
+
         if document_set_associations:
             entities = document_set_associations[0].entities
         else:

@@ -4,7 +4,7 @@ import { UserProvider } from "../user/UserProvider";
 import { ProviderContextProvider } from "../chat/ProviderContext";
 import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 import { ModalProvider } from "./ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
@@ -13,7 +13,7 @@ interface AppProviderProps {
   children: React.ReactNode;
   user: User | null;
   settings: CombinedSettings;
-  assistants: Persona[];
+  assistants: MinimalPersonaSnapshot[];
   hasAnyConnectors: boolean;
   hasImageCompatibleModel: boolean;
   authTypeMetadata: AuthTypeMetadata;

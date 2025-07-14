@@ -13,7 +13,7 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
-import { DocumentSet } from "@/lib/types";
+import { DocumentSetSummary } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
@@ -105,7 +105,7 @@ const EditRow = ({
   documentSet,
   isEditable,
 }: {
-  documentSet: DocumentSet;
+  documentSet: DocumentSetSummary;
   isEditable: boolean;
 }) => {
   const router = useRouter();
@@ -155,11 +155,11 @@ const EditRow = ({
 };
 
 interface DocumentFeedbackTableProps {
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
   refresh: () => void;
   refreshEditable: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
-  editableDocumentSets: DocumentSet[];
+  editableDocumentSets: DocumentSetSummary[];
 }
 
 const DocumentSetTable = ({
@@ -222,43 +222,47 @@ const DocumentSetTable = ({
                   <TableCell>
                     <div>
                       {/* Regular Connectors */}
-                      {documentSet.cc_pair_descriptors.map(
-                        (ccPairDescriptor, ind) => {
+                      {documentSet.cc_pair_summaries.map(
+                        (ccPairSummary, ind) => {
                           return (
                             <div
                               className={
-                                ind !==
-                                documentSet.cc_pair_descriptors.length - 1
+                                ind !== documentSet.cc_pair_summaries.length - 1
                                   ? "mb-3"
                                   : ""
                               }
-                              key={ccPairDescriptor.id}
+                              key={ccPairSummary.id}
                             >
-                              <ConnectorTitle
-                                connector={ccPairDescriptor.connector}
-                                ccPairName={ccPairDescriptor.name}
-                                ccPairId={ccPairDescriptor.id}
-                                showMetadata={false}
-                              />
+                              <div className="text-blue-500 dark:text-blue-100 flex w-fit">
+                                <SourceIcon
+                                  sourceType={ccPairSummary.source}
+                                  iconSize={16}
+                                />
+                                <div className="ml-1 my-auto text-xs font-medium truncate">
+                                  {ccPairSummary.name || "Unnamed"}
+                                </div>
+                              </div>
                             </div>
                           );
                         }
                       )}
 
                       {/* Federated Connectors */}
-                      {documentSet.federated_connectors &&
-                        documentSet.federated_connectors.length > 0 && (
+                      {documentSet.federated_connector_summaries &&
+                        documentSet.federated_connector_summaries.length >
+                          0 && (
                           <>
-                            {documentSet.cc_pair_descriptors.length > 0 && (
+                            {documentSet.cc_pair_summaries.length > 0 && (
                               <div className="mb-3" />
                             )}
-                            {documentSet.federated_connectors.map(
+                            {documentSet.federated_connector_summaries.map(
                               (federatedConnector, ind) => {
                                 return (
                                   <div
                                     className={
                                       ind !==
-                                      documentSet.federated_connectors.length -
+                                      documentSet.federated_connector_summaries
+                                        .length -
                                         1
                                         ? "mb-3"
                                         : ""
@@ -282,9 +286,10 @@ const DocumentSetTable = ({
                       <Badge variant="success" icon={FiCheckCircle}>
                         Up to Date
                       </Badge>
-                    ) : documentSet.cc_pair_descriptors.length > 0 ||
-                      (documentSet.federated_connectors &&
-                        documentSet.federated_connectors.length > 0) ? (
+                    ) : documentSet.cc_pair_summaries.length > 0 ||
+                      (documentSet.federated_connector_summaries &&
+                        documentSet.federated_connector_summaries.length >
+                          0) ? (
                       <Badge variant="in_progress" icon={FiClock}>
                         Syncing
                       </Badge>
