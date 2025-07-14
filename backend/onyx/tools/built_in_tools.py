@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Persona
 from onyx.db.models import Tool as ToolDBModel
+from onyx.tools.tool_implementations.code_interpreter.code_interpreter_tool import (
+    CodeInterpreterTool,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -35,6 +38,16 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         description="The Search Action allows the Assistant to search through connected knowledge to help build an answer.",
         in_code_tool_id=SearchTool.__name__,
         display_name=SearchTool._DISPLAY_NAME,
+    ),
+    InCodeToolInfo(
+        cls=CodeInterpreterTool,
+        description=(
+            "The Code Interpreter Action allows the assistant to execute Python code for data analysis and computational tasks. "
+            "The action will be used when users upload data files (CSV, Excel, JSON, etc.) and ask for analysis, insights, "
+            "visualizations, or when they need mathematical calculations, statistical analysis, or data processing."
+        ),
+        in_code_tool_id=CodeInterpreterTool.__name__,
+        display_name=CodeInterpreterTool._DISPLAY_NAME,
     ),
     InCodeToolInfo(
         cls=ImageGenerationTool,

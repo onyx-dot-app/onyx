@@ -6,6 +6,7 @@ import {
   FiChevronLeft,
   FiTool,
   FiGlobe,
+  FiCode,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
@@ -31,6 +32,7 @@ import {
   IMAGE_GENERATION_TOOL_NAME,
   SEARCH_TOOL_NAME,
   INTERNET_SEARCH_TOOL_NAME,
+  CODE_INTERPRETER_TOOL_NAME,
 } from "../tools/constants";
 import { ToolRunDisplay } from "../tools/ToolRunningAnimation";
 import { Hoverable, HoverableIcon } from "@/components/Hoverable";
@@ -87,6 +89,7 @@ const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
   INTERNET_SEARCH_TOOL_NAME,
   IMAGE_GENERATION_TOOL_NAME,
+  CODE_INTERPRETER_TOOL_NAME,
 ];
 
 function FileDisplay({
@@ -591,6 +594,20 @@ export const AIMessage = ({
                           }
                           toolLogo={
                             <FiGlobe size={15} className="my-auto mr-1" />
+                          }
+                          isRunning={!toolCall.tool_result}
+                        />
+                      )}
+                    {toolCall &&
+                      toolCall.tool_name === CODE_INTERPRETER_TOOL_NAME && (
+                        <ToolRunDisplay
+                          toolName={
+                            toolCall.tool_result
+                              ? `Code execution completed`
+                              : `Executing code...`
+                          }
+                          toolLogo={
+                            <FiCode size={15} className="my-auto mr-1" />
                           }
                           isRunning={!toolCall.tool_result}
                         />

@@ -102,6 +102,10 @@ function findInternetSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "InternetSearchTool");
 }
 
+function findCodeInterpreterTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "CodeInterpreterTool");
+}
+
 function SubLabel({ children }: { children: string | JSX.Element }) {
   return (
     <div
@@ -208,17 +212,20 @@ export function AssistantEditor({
   const searchTool = findSearchTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
+  const codeInterpreterTool = findCodeInterpreterTool(tools);
 
   const customTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
-      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
+      tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== codeInterpreterTool?.in_code_tool_id
   );
 
   const availableTools = [
     ...customTools,
     ...(searchTool ? [searchTool] : []),
+    ...(codeInterpreterTool ? [codeInterpreterTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
   ];
@@ -1117,6 +1124,15 @@ export function AssistantEditor({
                         </>
                       )}
 
+                      {codeInterpreterTool && (
+                        <>
+                          <BooleanFormField
+                            name={`enabled_tools_map.${codeInterpreterTool.id}`}
+                            label={codeInterpreterTool.display_name}
+                            subtext="Execute Python code for data analysis, file processing, and computational tasks. Perfect for analyzing CSV/Excel files, creating visualizations, and performing statistical analysis."
+                          />
+                        </>
+                      )}
                       {customTools.length > 0 &&
                         customTools.map((tool) => (
                           <BooleanFormField

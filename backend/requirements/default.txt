@@ -11,6 +11,7 @@ chonkie==1.0.10
 dask==2023.8.1
 ddtrace==3.10.0
 discord.py==2.4.0
+e2b-code-interpreter==0.0.1
 distributed==2023.8.1
 fastapi==0.115.12
 fastapi-users==14.0.1

@@ -31,6 +31,9 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.code_interpreter.code_interpreter_tool import (
+    CodeInterpreterTool,
+)
 from onyx.tools.tool_implementations.custom.custom_tool import (
     build_custom_tools_from_openapi_schema_and_headers,
 )
@@ -130,6 +133,13 @@ class ImageGenerationToolConfig(BaseModel):
     additional_headers: dict[str, str] | None = None
 
 
+class CodeInterpreterToolConfig(BaseModel):
+    answer_style_config: AnswerStyleConfig = Field(
+        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
+    )
+    latest_query_files: list[InMemoryChatFile] | None = None
+
+
 class CustomToolConfig(BaseModel):
     chat_session_id: UUID | None = None
     message_id: int | None = None
@@ -147,6 +157,7 @@ def construct_tools(
     search_tool_config: SearchToolConfig | None = None,
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
+    code_interpreter_tool_config: CodeInterpreterToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs"""
@@ -228,6 +239,21 @@ def construct_tools(
                         api_key=BING_API_KEY,
                         answer_style_config=internet_search_tool_config.answer_style_config,
                         prompt_config=prompt_config,
+                    )
+                ]
+
+            # Handle Code Interpreter Tool
+            elif tool_cls.__name__ == CodeInterpreterTool.__name__:
+                if not code_interpreter_tool_config:
+                    code_interpreter_tool_config = CodeInterpreterToolConfig()
+
+                tool_dict[db_tool_model.id] = [
+                    CodeInterpreterTool(
+                        answer_style_config=code_interpreter_tool_config.answer_style_config,
+                        prompt_config=prompt_config,
+                        llm=llm,
+                        fast_llm=fast_llm,
+                        files=code_interpreter_tool_config.latest_query_files,
                     )
                 ]
 
