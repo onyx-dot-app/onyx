@@ -60,6 +60,23 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
+
+def _validate_user_knowledge_enabled(
+    persona_upsert_request: PersonaUpsertRequest, action: str
+) -> None:
+    """Check if user knowledge is enabled when user files/folders are provided."""
+    settings = load_settings()
+    if not settings.user_knowledge_enabled:
+        if (
+            persona_upsert_request.user_file_ids
+            or persona_upsert_request.user_folder_ids
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or folders.",
+            )
+
+
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
 
@@ -202,19 +219,7 @@ def create_persona(
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
-    settings = load_settings()
-    if not settings.user_knowledge_enabled:
-        if (
-            persona_upsert_request.user_file_ids
-            and len(persona_upsert_request.user_file_ids) > 0
-        ) or (
-            persona_upsert_request.user_folder_ids
-            and len(persona_upsert_request.user_folder_ids) > 0
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="User Knowledge is disabled. Cannot create assistant with user files or folders.",
-            )
+    _validate_user_knowledge_enabled(persona_upsert_request, "create")
 
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
@@ -263,20 +268,7 @@ def update_persona(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
-    # Check if user knowledge is disabled
-    settings = load_settings()
-    if not settings.user_knowledge_enabled:
-        if (
-            persona_upsert_request.user_file_ids
-            and len(persona_upsert_request.user_file_ids) > 0
-        ) or (
-            persona_upsert_request.user_folder_ids
-            and len(persona_upsert_request.user_folder_ids) > 0
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="User Knowledge is disabled. Cannot update assistant with user files or folders.",
-            )
+    _validate_user_knowledge_enabled(persona_upsert_request, "update")
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
