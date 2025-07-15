@@ -30,7 +30,7 @@ def jira_connector() -> JiraConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> None:
+def test_jira_connector_basic(patched: None, jira_connector: JiraConnector) -> None:
     docs = load_all_docs_from_checkpoint_connector(
         connector=jira_connector,
         start=0,

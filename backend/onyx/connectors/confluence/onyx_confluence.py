@@ -46,13 +46,11 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
+_DEFAULT_PAGINATION_LIMIT = 2
 
 
 class ConfluenceRateLimitError(Exception):
     pass
-
-
-_DEFAULT_PAGINATION_LIMIT = 1000
 
 
 class OnyxConfluence:
@@ -548,37 +546,29 @@ class OnyxConfluence:
                 )
                 raise e
 
-            # yield the results individually
+            # Yield the results individually.
             results = cast(list[dict[str, Any]], next_response.get("results", []))
-            # make sure we don't update the start by more than the amount
+            # Make sure we don't update the start by more than the amount
             # of results we were able to retrieve. The Confluence API has a
             # weird behavior where if you pass in a limit that is too large for
             # the configured server, it will artificially limit the amount of
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
-            old_url_suffix = url_suffix
-            updated_start = get_start_param_from_url(old_url_suffix)
-            url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
-            for i, result in enumerate(results):
-                updated_start += 1
-                if url_suffix and next_page_callback and i == len(results) - 1:
-                    # update the url if we're on the last result in the page
-                    if not self._is_cloud:
-                        # If confluence claims there are more results, we update the start param
-                        # based on how many results were returned and try again.
-                        url_suffix = update_param_in_path(
-                            url_suffix, "start", str(updated_start)
-                        )
-                    # notify the caller of the new url
-                    next_page_callback(url_suffix)
-                yield result
+            yield from results
 
-            # we've observed that Confluence sometimes returns a next link despite giving
+            updated_start = get_start_param_from_url(url_suffix) + len(results)
+            url_suffix = update_param_in_path(url_suffix, "start", str(updated_start))
+
+            # Notify the caller of the new url.
+            if next_page_callback:
+                next_page_callback(url_suffix)
+
+            # We've observed that Confluence sometimes returns a next link despite giving
             # 0 results. This is a bug with Confluence, so we need to check for it and
             # stop paginating.
             if url_suffix and not results:
                 logger.info(
-                    f"No results found for call '{old_url_suffix}' despite next link "
+                    f"No results found for call '{url_suffix}' despite next link "
                     "being present. Stopping pagination."
                 )
                 break
@@ -613,7 +603,10 @@ class OnyxConfluence:
         """
         try:
             yield from self._paginate_url(
-                cql_url, limit=limit, next_page_callback=next_page_callback
+                cql_url,
+                limit=limit,
+                next_page_callback=next_page_callback,
+                # force_offset_pagination=True,
             )
         except Exception as e:
             logger.exception(f"Error in paginated_page_retrieval: {e}")
