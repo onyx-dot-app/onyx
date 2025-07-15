@@ -11,7 +11,7 @@ def confluence_connector_config() -> dict[str, Any]:
     page_id = os.environ.get("CONFLUENCE_PAGE_ID")
     is_cloud = os.environ.get("CONFLUENCE_IS_CLOUD", "").lower() == "true"
 
-    assert url_base
+    assert url_base, "CONFLUENCE_URL environment variable is required"
 
     return {
         "wiki_base": url_base,
