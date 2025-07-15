@@ -189,7 +189,7 @@ webserver:
     servicePort: 3000
     targetPort: http
 
-  resources: 
+  resources:
     requests:
       cpu: 200m
       memory: 512Mi
@@ -256,7 +256,7 @@ api:
     targetPort: api-server-port
     portName: api-server-port
 
-  resources: 
+  resources:
     requests:
       cpu: 1000m
       memory: 1Gi
@@ -500,8 +500,8 @@ celery_worker_user_files_indexing:
   securityContext:
     privileged: true
     runAsUser: 0
-  resources: 
-    requests: 
+  resources:
+    requests:
       cpu: 2000m
       memory: 6Gi
     limits:
