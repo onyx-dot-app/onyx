@@ -52,12 +52,30 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
+from onyx.server.settings.store import load_settings
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _validate_user_knowledge_enabled(
+    persona_upsert_request: PersonaUpsertRequest, action: str
+) -> None:
+    """Check if user knowledge is enabled when user files/folders are provided."""
+    settings = load_settings()
+    if not settings.user_knowledge_enabled:
+        if (
+            persona_upsert_request.user_file_ids
+            or persona_upsert_request.user_folder_ids
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or folders.",
+            )
+
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
@@ -201,6 +219,8 @@ def create_persona(
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
+    _validate_user_knowledge_enabled(persona_upsert_request, "create")
+
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
@@ -248,6 +268,7 @@ def update_persona(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
+    _validate_user_knowledge_enabled(persona_upsert_request, "update")
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
