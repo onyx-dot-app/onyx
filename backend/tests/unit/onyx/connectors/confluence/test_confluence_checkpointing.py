@@ -12,7 +12,6 @@ import pytest
 from requests.exceptions import HTTPError
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.connector import ConfluenceCheckpoint
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -152,12 +151,7 @@ def test_load_from_checkpoint_happy_path(
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
         # First page response
-        MagicMock(
-            json=lambda: {
-                "results": [mock_page1, mock_page2],
-                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
-            }
-        ),
+        MagicMock(json=lambda: {"results": [mock_page1, mock_page2]}),
         # links and attachemnts responses
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
@@ -178,27 +172,34 @@ def test_load_from_checkpoint_happy_path(
         confluence_connector, 0, end_time
     )
 
-    # Check that the documents were returned
-    assert len(outputs) == 2
+    actual_length = len(outputs)
+    # We expect 3 batches -even though the API only should fetch 2 batches (since there are 3 docs in total)-
+    # because the way pagination has been updated to act.
+    #
+    # Since `search/user` and `user/memberof` perform offset-based pagination, they'll always return a "new" endpoint to hit.
+    # However, that doesn't actually mean that there is more to fetch. Therefore, we get 3 batches, with the last one being empty.
+    expected_length = 3
+    assert actual_length == expected_length
 
-    checkpoint_output1 = outputs[0]
-    assert len(checkpoint_output1.items) == 2
-    document1 = checkpoint_output1.items[0]
-    assert isinstance(document1, Document)
-    assert document1.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/1"
-    document2 = checkpoint_output1.items[1]
-    assert isinstance(document2, Document)
-    assert document2.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
-    assert checkpoint_output1.next_checkpoint == ConfluenceCheckpoint(
-        has_more=True, next_page_url="rest/api/content/search?cql=type%3Dpage&start=2"
-    )
+    checkpoint_output_0 = outputs[0]
+    assert len(checkpoint_output_0.items) == 2
+    document_0 = checkpoint_output_0.items[0]
+    assert isinstance(document_0, Document)
+    assert document_0.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/1"
+    document_1 = checkpoint_output_0.items[1]
+    assert isinstance(document_1, Document)
+    assert document_1.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
 
-    checkpoint_output2 = outputs[1]
-    assert len(checkpoint_output2.items) == 1
-    document3 = checkpoint_output2.items[0]
-    assert isinstance(document3, Document)
-    assert document3.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/3"
-    assert not checkpoint_output2.next_checkpoint.has_more
+    checkpoint_output_1 = outputs[1]
+    assert len(checkpoint_output_1.items) == 1
+    document_2 = checkpoint_output_1.items[0]
+    assert isinstance(document_2, Document)
+    assert document_2.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/3"
+    assert checkpoint_output_1.next_checkpoint.has_more
+
+    checkpoint_output_2 = outputs[2]
+    assert not checkpoint_output_2.items
+    assert not checkpoint_output_2.next_checkpoint.has_more
 
 
 def test_load_from_checkpoint_with_page_processing_error(
@@ -217,12 +218,7 @@ def test_load_from_checkpoint_with_page_processing_error(
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
         # First page response
-        MagicMock(
-            json=lambda: {
-                "results": [mock_page1, mock_page2],
-                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
-            }
-        ),
+        MagicMock(json=lambda: {"results": [mock_page1, mock_page2]}),
         # Comments for page 1
         MagicMock(json=lambda: {"results": []}),
         # Attachments for page 1
@@ -232,12 +228,7 @@ def test_load_from_checkpoint_with_page_processing_error(
         # Attachments for page 2
         MagicMock(json=lambda: {"results": []}),
         # Second page response (empty)
-        MagicMock(
-            json=lambda: {
-                "results": [],
-                "_links": {},
-            }
-        ),
+        MagicMock(json=lambda: {"results": []}),
     ]
 
     # Mock _convert_page_to_document to fail for the second page
@@ -306,12 +297,7 @@ def test_retrieve_all_slim_documents(
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
         # First page response
-        MagicMock(
-            json=lambda: {
-                "results": [mock_page1, mock_page2],
-                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
-            }
-        ),
+        MagicMock(json=lambda: {"results": [mock_page1, mock_page2]}),
         # links and attachments responses
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
@@ -405,12 +391,7 @@ def test_checkpoint_progress(
     confluence_client.get = get_mock  # type: ignore
     get_mock.side_effect = [
         # First page response
-        MagicMock(
-            json=lambda: {
-                "results": [mock_page1, mock_page2],
-                "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
-            }
-        ),
+        MagicMock(json=lambda: {"results": [mock_page1, mock_page2]}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
@@ -426,10 +407,6 @@ def test_checkpoint_progress(
 
     first_checkpoint = outputs[0].next_checkpoint
 
-    assert (
-        first_checkpoint.next_page_url
-        == "rest/api/content/search?cql=type%3Dpage&start=2"
-    )
     assert not outputs[-1].next_checkpoint.has_more
 
     assert len(outputs[0].items) == 2
@@ -442,12 +419,7 @@ def test_checkpoint_progress(
     # Reset the mock to return the same pages
     get_mock.side_effect = [
         # First page response
-        MagicMock(
-            json=lambda: {
-                "results": [mock_page3],
-                "_links": {"next": "rest/api/content/search?cql=type=page&start=3"},
-            }
-        ),
+        MagicMock(json=lambda: {"results": [mock_page3]}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
