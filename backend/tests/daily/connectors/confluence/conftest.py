@@ -11,7 +11,7 @@ def confluence_connector_config() -> dict[str, Any]:
     page_id = os.environ.get("CONFLUENCE_PAGE_ID")
     is_cloud = os.environ.get("CONFLUENCE_IS_CLOUD", "").lower() == "true"
 
-    assert url_base
+    assert url_base, "CONFLUENCE_URL environment variable is required"
 
     return {
         "wiki_base": url_base,
@@ -26,8 +26,8 @@ def confluence_credential_json() -> dict[str, Any]:
     username = os.environ.get("CONFLUENCE_USERNAME")
     access_token = os.environ.get("CONFLUENCE_ACCESS_TOKEN")
 
-    assert username
-    assert access_token
+    assert username, "CONFLUENCE_USERNAME environment variable is required"
+    assert access_token, "CONFLUENCE_ACCESS_TOKEN environment variable is required"
 
     return {
         "confluence_username": username,
