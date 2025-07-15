@@ -38,3 +38,8 @@ class IterationAnswer(BaseModel):
     question: str
     answer: str
     cited_documents: list[InferenceSection]
+
+
+class AggregatedDRContext(BaseModel):
+    context: str
+    cited_documents: list[InferenceSection]

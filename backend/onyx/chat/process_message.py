@@ -855,6 +855,9 @@ def stream_chat_message_objects(
                 is_kg_beta and is_basic_search
             )
 
+            if is_kg_beta:
+                is_agentic_overwrite = False
+
             return create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=(
