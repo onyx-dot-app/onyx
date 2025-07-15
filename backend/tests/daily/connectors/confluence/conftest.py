@@ -26,8 +26,8 @@ def confluence_credential_json() -> dict[str, Any]:
     username = os.environ.get("CONFLUENCE_USERNAME")
     access_token = os.environ.get("CONFLUENCE_ACCESS_TOKEN")
 
-    assert username
-    assert access_token
+    assert username, "CONFLUENCE_USERNAME environment variable is required"
+    assert access_token, "CONFLUENCE_ACCESS_TOKEN environment variable is required"
 
     return {
         "confluence_username": username,
