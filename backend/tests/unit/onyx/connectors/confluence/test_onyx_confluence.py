@@ -381,6 +381,8 @@ def test_paginated_cql_retrieval_handles_pagination_error(
     page2_initial_path = f"{base_path}&limit={test_limit}&start={test_limit}"
     # Page 3 starts after the problematic page 2 is processed (start=test_limit * 2)
     page3_path = f"{base_path}&limit={test_limit}&start={test_limit * 2}"
+    # Page 4 starts where page 3 left off (start=test_limit * 2 + 2)
+    page4_path = f"{base_path}&limit={test_limit}&start={(test_limit * 2) + 2}"
 
     # --- Mock Responses ---
     # Page 1: Success (4 items)
@@ -446,6 +448,13 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         url=page3_path,
     )
 
+    # Empty page: Success (0 items)
+    page4_response = _create_mock_response(
+        200,
+        {"results": [], "size": 0},
+        url=page3_path,
+    )
+
     # --- Side Effect Logic ---
     mock_get_call_paths: list[str] = []
     call_counts: dict[str, int] = {}  # Track calls
@@ -485,6 +494,9 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         elif path == page3_path:
             print(f"-> Returning page 3 success for {path}")
             return page3_response
+        elif path == page4_path:
+            print(f"-> Returning page 4 success for {path}")
+            return page4_response
         # Fallback
         else:
             print(f"!!! Unexpected GET path in mock: {path}")
@@ -520,7 +532,7 @@ def test_paginated_cql_retrieval_handles_pagination_error(
     assert results == expected_results
 
     # Verify log for the skipped item failure
-    assert f"Error in confluence call to /{page2_limit1_item2_path}" in caplog.text
+    assert f"Error in confluence call to {page2_limit1_item2_path}" in caplog.text
 
     # Verify sequence of calls
     expected_calls = [
@@ -533,6 +545,7 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         page2_limit1_item4_path,  # Page 2 retry item 4 success
         # _paginate_url continues to next calculated page (page 3)
         page3_path,  # Page 3 success
+        page4_path,  # Page 4 success
     ]
     assert mock_get_call_paths == expected_calls
 
