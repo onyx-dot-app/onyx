@@ -1,11 +1,15 @@
 from datetime import datetime
+from typing import cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
 from onyx.agents.agent_search.dr.states import FinalUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.utils import aggregate_context
+from onyx.agents.agent_search.dr.utils import get_chat_history_string
+from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -29,19 +33,30 @@ def closer(
     # (right now, answers from each step are concatenated onto each other)
     # Also, add missing fields once usage in UI is clear.
 
-    base_question = config["metadata"]["config"].inputs.prompt_builder.raw_user_query
+    graph_config = cast(GraphConfig, config["metadata"]["config"])
+    base_question = graph_config.inputs.prompt_builder.raw_user_query
+
+    chat_history_string = (
+        get_chat_history_string(
+            graph_config.inputs.prompt_builder.message_history,
+            MAX_CHAT_HISTORY_MESSAGES,
+        )
+        or "(No chat history yet available)"
+    )
 
     iteration_responses_string = aggregate_context(state.iteration_responses)
 
-    final_answer_prompt = FINAL_ANSWER_PROMPT.replace(
-        "---base_question---", base_question
-    ).replace("---iteration_responses_string---", iteration_responses_string)
+    final_answer_prompt = (
+        FINAL_ANSWER_PROMPT.replace("---base_question---", base_question)
+        .replace("---iteration_responses_string---", iteration_responses_string)
+        .replace("---chat_history_string---", chat_history_string)
+    )
 
     try:
         _ = run_with_timeout(
             80,
             lambda: stream_llm_answer(
-                llm=config["metadata"]["config"].tooling.primary_llm,
+                llm=graph_config.tooling.primary_llm,
                 prompt=final_answer_prompt,
                 event_name="basic_response",
                 writer=writer,

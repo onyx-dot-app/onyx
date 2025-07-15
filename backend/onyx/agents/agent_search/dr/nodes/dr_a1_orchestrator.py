@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
 from onyx.agents.agent_search.dr.constants import MAX_DR_ITERATION_DEPTH
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.dr.models import OrchestratorDecisonsNoPlan
@@ -14,6 +15,7 @@ from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.dr.utils import (
     get_answers_history_from_iteration_responses,
 )
+from onyx.agents.agent_search.dr.utils import get_chat_history_string
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import TimeBudget
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
@@ -46,15 +48,18 @@ def orchestrator(
     question = graph_config.inputs.prompt_builder.raw_user_query
     time_budget = graph_config.behavior.time_budget
 
-    answer_history = get_answers_history_from_iteration_responses(
-        state.iteration_responses
-    )
     answer_history_string = (
-        str(answer_history) if answer_history else "(No answer history yet available)"
+        get_answers_history_from_iteration_responses(state.iteration_responses)
+        or "(No answer history yet available)"
     )
 
-    # TODO: do not hardcode this
-    time_budget = TimeBudget.DEEP
+    chat_history_string = (
+        get_chat_history_string(
+            graph_config.inputs.prompt_builder.message_history,
+            MAX_CHAT_HISTORY_MESSAGES,
+        )
+        or "(No chat history yet available)"
+    )
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
@@ -74,6 +79,7 @@ def orchestrator(
                 )
                 .replace("---possible_relationships---", all_relationship_types)
                 .replace("---question---", question)
+                .replace("---chat_history_string---", chat_history_string)
             )
 
             msg = [
@@ -104,7 +110,7 @@ def orchestrator(
                 else:
                     response_text = cleaned_response.strip()
 
-                query_path = DRPath(response_text.lower())
+                query_path = DRPath(response_text)
             except ValueError:
                 logger.warning(
                     f"Could not parse LLM response: '{response_text}'. Defaulting to SEARCH."
@@ -126,6 +132,7 @@ def orchestrator(
                 )
                 .replace("---possible_relationships---", all_relationship_types)
                 .replace("---question---", question)
+                .replace("---chat_history_string---", chat_history_string)
             )
 
             try:
@@ -151,7 +158,8 @@ def orchestrator(
                 writer,
             )
         else:
-            plan_information = state.plan_of_record[-1]
+            # won't be None for DEEP TimeBudget
+            plan_information = cast(OrchestrationPlan, state.plan_of_record)
 
         decision_prompt = (
             SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
@@ -162,6 +170,7 @@ def orchestrator(
             .replace("---question---", question)
             .replace("---iteration_nr---", str(iteration_nr + 1))
             .replace("---current_plan_of_record_string---", plan_information.plan)
+            .replace("---chat_history_string---", chat_history_string)
         )
 
         try:
@@ -179,32 +188,17 @@ def orchestrator(
             logger.error(f"Error in approach extraction: {e}")
             raise
 
-    if plan_information:
-        return OrchestrationUpdate(
-            query_path=[query_path],
-            query_list=query_list,
-            iteration_nr=iteration_nr + 1,
-            log_messages=[
-                get_langgraph_node_log_string(
-                    graph_component="main",
-                    node_name="orchestrator",
-                    node_start_time=node_start_time,
-                )
-            ],
-            plan_of_record=[plan_information],
-            used_time_budget=0,  # TODO: maybe do remaining instead?
-        )
-    else:
-        return OrchestrationUpdate(
-            query_path=[query_path],
-            query_list=query_list,
-            iteration_nr=iteration_nr + 1,
-            log_messages=[
-                get_langgraph_node_log_string(
-                    graph_component="main",
-                    node_name="orchestrator",
-                    node_start_time=node_start_time,
-                )
-            ],
-            used_time_budget=0,  # TODO: maybe do remaining instead?
-        )
+    return OrchestrationUpdate(
+        query_path=[query_path],
+        query_list=query_list,
+        iteration_nr=iteration_nr + 1,
+        log_messages=[
+            get_langgraph_node_log_string(
+                graph_component="main",
+                node_name="orchestrator",
+                node_start_time=node_start_time,
+            )
+        ],
+        plan_of_record=plan_information,
+        used_time_budget=0,  # TODO: maybe do remaining instead?
+    )

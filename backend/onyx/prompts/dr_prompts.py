@@ -11,7 +11,7 @@ KNOWLEDGE_GRAPH = DRPath.KNOWLEDGE_GRAPH.value
 SEARCH = DRPath.SEARCH.value
 CLOSER = DRPath.CLOSER.value
 
-DR_TOOLS_DESCRIPTIONS = f"""
+DR_TOOLS_DESCRIPTIONS = f"""\
 You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 - The "{SEARCH}" tool is used to answer questions that can be answered using the information \
@@ -37,15 +37,10 @@ types that are available in the knowledge graph!
 previous iterations to generate a comprehensive final answer. It should always be called exactly once \
 at the very end to consolidate the gathered information, run any comparisons if needed, and pick out \
 the most relevant information to answer the question. You can also skip straight to the {CLOSER} \
-if there is sufficient information to answer the question.
+if there is sufficient information in the provided history to answer the question.
 """
 
-
-FAST_PLAN_GENERATION_PROMPT = f"""
-You need to route a user query request to the appropriate tool.
-
-{DR_TOOLS_DESCRIPTIONS}
-
+KG_TYPES_DESCRIPTIONS = f"""\
 Here are the entity types that are available in the knowledge graph:
 {SEPARATOR_LINE}
 ---possible_entities---
@@ -55,11 +50,30 @@ Here are the relationship types that are available in the knowledge graph:
 {SEPARATOR_LINE}
 ---possible_relationships---
 {SEPARATOR_LINE}
+"""
 
-And finally here is the user query that you need to route:
+
+FAST_PLAN_GENERATION_PROMPT = f"""
+You need to route a user query request to the appropriate tool, given the following tool \
+descriptions, as well as previous chat context.
+
+{DR_TOOLS_DESCRIPTIONS}
+
+{KG_TYPES_DESCRIPTIONS}
+
+Here is the user query that you need to route:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
+
+Finally, here are the past few chat messages for reference (if any). \
+Note that the chat history may already contain the answer to the user question, in which case you can \
+skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
+In any case, do not confuse the below with the user query. It is only there to provide context.
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
 
 HINTS:
    - please look at the user query and the entity types and relationship types in the knowledge graph \
@@ -69,6 +83,7 @@ to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all
    - also consider whether the user query implies whether a standard search query should be used or a \
 knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
+   - again, use the chat history (if provided) to see if you can skip straight to the {CLOSER}.
 
 
 Please answer ONLY with '{SEARCH}', '{KNOWLEDGE_GRAPH}', or '{CLOSER}'.
@@ -94,37 +109,32 @@ Assume that all steps will be executed sequentially, so the answers of earlier s
 at later steps. To capture that, you can refer to earlier results in later steps. (Example of a 'later'\
 question: 'find information for each result of step 3.')
 
-
 {DR_TOOLS_DESCRIPTIONS}
 
-Here are the entity types that are available in the knowledge graph:
-{SEPARATOR_LINE}
----possible_entities---
-{SEPARATOR_LINE}
+{KG_TYPES_DESCRIPTIONS}
 
-Here are the relationship types that are available in the knowledge graph:
-{SEPARATOR_LINE}
----possible_relationships---
-{SEPARATOR_LINE}
-
-
-Here is the question that you need to convert into a series of too calls with questions to the tools:
+Here is the question that you must device a plan for answering:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
 
+Finally, here are the past few chat messages for reference (if any). \
+Note that the chat history may already contain the answer to the user question, in which case you can \
+skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
+In any case, do not confuse the below with the user query. It is only there to provide context.
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
 
-Examples:
-   - again, as future steps can depend on earlier ones, the questions should be fairly high-level. \
+
+HINTS:
+   - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
 For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
    --
    1) identify the main problem that Nike has
    2) find jiras that address the problem identified in step 1
    3) generate the final answer
    --
-
-
-HINTS:
    - please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.\
 (This is important to ask well-structured questions, although the tool itself wil not be shown later.)
@@ -134,9 +144,8 @@ to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all
 knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
    - use parallel calls to the {SEARCH} tool to your advantage to save time!
-   - again, referencing results from earlier steps is absolutely allowed and encouraged!
-   - the plan must be complete! I.e., all steps should be included that are believed \
-to be necessary to answer the question, including the final call to the {CLOSER} tool.
+   - again, use the chat history (if provided) to see if you can skip straight to the {CLOSER} tool to generate \
+the final answer. If so, simply state 'generate the final answer' in your plan.
 
 Please format your answer as a json dictionary in the following format:
 {{
@@ -163,15 +172,7 @@ considering the answers you already got, and guided by the initial plan.
 
 {DR_TOOLS_DESCRIPTIONS}
 
-Here are the entity types that are available in the knowledge graph:
-{SEPARATOR_LINE}
----possible_entities---
-{SEPARATOR_LINE}
-
-Here are the relationship types that are available in the knowledge graph:
-{SEPARATOR_LINE}
----possible_relationships---
-{SEPARATOR_LINE}
+{KG_TYPES_DESCRIPTIONS}
 
 Here is the overall question that you need to answer:
 {SEPARATOR_LINE}
@@ -188,6 +189,14 @@ Here is the high-level plan:
 Here is the answer history so far (if any):
 {SEPARATOR_LINE}
 ---answer_history_string---
+{SEPARATOR_LINE}
+
+Finally, here are the past few chat messages for reference (if any). \
+Note that the chat history may already contain the answer to the user question, in which case you can \
+skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
+In any case, do not confuse the below with the user query. It is only there to provide context.
+{SEPARATOR_LINE}
+---chat_history_string---
 {SEPARATOR_LINE}
 
 
@@ -209,8 +218,8 @@ whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge 
    - you can only send one request to each tool.
 
 YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
-the original question, the high-level plan, the tools you have available,and the answers you have so far. \
-Make sure that the answer is \
+the original question, the high-level plan, the tools you have available, and the answers you have so far \
+(either from previous iterations or from the chat history). Make sure that the answer is \
 specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
 new targetted information that gets us to be able to answer the original question. (Note again, that sending \
 the request to the CLOSER tool is an option if you think the information is sufficient.)
@@ -224,87 +233,6 @@ guided by the question you need to answer, the answers you have so far, and the 
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH}, the question should be \
 written as a search query.>"}}
-}}
-"""
-
-ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT = f"""
-Overall, you need to answer a user query. To do so, you have various tools at your disposal that you \
-can call iteratively. And an initial plan that should guide your thinking.
-
-You may already have some answers to earlier questions calls you generated in previous iterations, and you also \
-have a high-level plan given to you.
-
-Your task is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
-considering the answers you already got, and guided by the initial plan.
-
-(You are on iteration ---iteration_nr---. Consider that when you consider the previous answers and the \
-initial plan (which may have gotten modified)).
-
-{DR_TOOLS_DESCRIPTIONS}
-
-Here are the entity types that are available in the knowledge graph:
-{SEPARATOR_LINE}
----possible_entities---
-{SEPARATOR_LINE}
-
-Here are the relationship types that are available in the knowledge graph:
-{SEPARATOR_LINE}
----possible_relationships---
-{SEPARATOR_LINE}
-
-Here is the overall question that you need to answer:
-{SEPARATOR_LINE}
----question---
-{SEPARATOR_LINE}
-
-The current iteration is ---iteration_nr---:
-
-Here is the high-level plan:
-{SEPARATOR_LINE}
----current_plan_of_record_string---
-{SEPARATOR_LINE}
-
-Here is the answer history so far (if any):
-{SEPARATOR_LINE}
----answer_history_string---
-{SEPARATOR_LINE}
-
-
-HINTS:
-   - please first consider whether you can answer the question with the information you already have. \
-Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
-   - if you think more information is needed because a sub-question was not sufficiently answered, \
-you can generate a modified version of the previous step, thus effectively modifying the plan.
-   - please look at the user query and the entity types and relationship types in the knowledge graph \
-to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
-   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
-'search for this'-type of question, then also use '{SEARCH}'.
-   - also consider whether the user query implies whether a standard search query should be used or a \
-knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
-whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
-   - if the {SEARCH} tool is chosen, remember that you can send multiple search queries in parallel. \
-Use this to your advantage to do multiple investigations on separate topics to save time, or to do multiple \
-in depth investigations on a single topic at once. For example, if the question is like "compare A and B", \
-you can send two search queries in parallel, one focussed on A and a second on B. Likewise, if the question \
-is like "give me a detailed report on A", you can do multiple queries like "what is A", "what does A do", \
-etc. Note: try to keep the number of parallel queries reasonable.
-
-YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
-the original question, the high-level plan, the tools you have available,and the answers you have so far. \
-Make sure that the answer is \
-specic to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
-new targetted information that gets us to be able to answer the original question. (Note again, that sending \
-the request to the CLOSER tool is an option if you think the information is sufficient.)
-
-
-Please format your answer as a json dictionary in the following format:
-{{
-   "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
-guided by the question you need to answer, the answers you have so far, and the plan of record.>",
-   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {CLOSER}>",
-                  "questions": "<the list of questions you want to pose to the tool. Note that the \
-questions should be appropriate for the tool. For example, if the tool is {SEARCH}, the question should be \
-written as a search query. Format it as a list of strings.>"}}
 }}
 """
 
@@ -450,6 +378,13 @@ Here is the list of sub-questions, their answers, and the corresponding document
 {SEPARATOR_LINE}
 ---iteration_responses_string---
 {SEPARATOR_LINE}
+
+Finally, here is the previous chat history (if any), which may contain relevant information \
+to answer the question:
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
 
 GUIDANCE:
  - note that the sub-answers to the sub-questions are designed to be high-level, mostly \
