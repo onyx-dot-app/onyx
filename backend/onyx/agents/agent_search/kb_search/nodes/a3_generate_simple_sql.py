@@ -211,7 +211,8 @@ def generate_simple_sql(
 
     ## STEP 3 - articulate goals
 
-    stream_write_kg_search_activities(writer, _KG_STEP_NR)
+    if state.individual_flow:
+        stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     if graph_config.tooling.search_tool is None:
         raise ValueError("Search tool is not set")
@@ -532,19 +533,20 @@ def generate_simple_sql(
 
         main_sql_statement = sql_statement
 
-    if reasoning:
+    if reasoning and state.individual_flow:
         stream_write_kg_search_answer_explicit(
             writer, step_nr=_KG_STEP_NR, answer=reasoning
         )
 
-    if sql_statement_display:
-        stream_write_step_answer_explicit(
+    if sql_statement_display and state.individual_flow:
+        stream_write_kg_search_answer_explicit(
             writer,
             step_nr=_KG_STEP_NR,
             answer=f" \n Generated SQL: {sql_statement_display}",
         )
 
-    stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
+    if state.individual_flow:
+        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     # Update path if too many results are retrieved
 

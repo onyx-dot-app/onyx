@@ -43,11 +43,12 @@ def consolidate_individual_deep_search(
 
     step_answer = "All research is complete. Consolidating results..."
 
-    stream_write_kg_search_answer_explicit(
-        writer, answer=step_answer, level=0, step_nr=_KG_STEP_NR
-    )
+    if state.individual_flow:
+        stream_write_kg_search_answer_explicit(
+            writer, answer=step_answer, level=0, step_nr=_KG_STEP_NR
+        )
 
-    stream_kg_search_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
+        stream_kg_search_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
 
     return ConsolidatedResearchUpdate(
         consolidated_research_object_results_str=consolidated_research_object_results_str,
