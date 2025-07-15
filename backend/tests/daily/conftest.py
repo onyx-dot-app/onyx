@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from onyx.main import fetch_versioned_implementation
 from onyx.utils.logger import setup_logger
-from tests.integration.common_utils.reset import reset_all
 
 logger = setup_logger()
 
@@ -24,9 +23,3 @@ def client() -> Generator[TestClient, Any, None]:
     )()
     client = TestClient(app)
     yield client
-
-
-@pytest.fixture
-def reset() -> None:
-    """Reset both Postgres and Vespa databases for clean test state."""
-    reset_all()
