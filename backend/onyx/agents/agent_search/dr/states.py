@@ -11,6 +11,7 @@ from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.context.search.models import InferenceSection
 
 
 ### States ###
@@ -37,7 +38,8 @@ class AnswerUpdate(LoggerUpdate):
 
 
 class FinalUpdate(LoggerUpdate):
-    pass
+    final_answer: str | None = None
+    all_cited_documents: list[InferenceSection] = []
 
 
 ## Graph Input State
@@ -54,10 +56,13 @@ class MainState(
     ToolChoiceUpdate,
     OrchestrationUpdate,
     AnswerUpdate,
+    FinalUpdate,
 ):
     pass
 
 
-## Graph Output State - presently not used
+## Graph Output State
 class MainOutput(TypedDict):
     log_messages: list[str]
+    final_answer: str | None
+    all_cited_documents: list[InferenceSection]

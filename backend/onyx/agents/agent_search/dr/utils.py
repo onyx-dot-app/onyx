@@ -3,8 +3,10 @@ import re
 from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 
+from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
+from onyx.context.search.models import InferenceSection
 
 
 def get_cited_document_numbers(answer: str) -> list[int]:
@@ -16,7 +18,7 @@ def get_cited_document_numbers(answer: str) -> list[int]:
 
 def aggregate_context(
     iteration_responses: list[IterationAnswer],
-) -> str:
+) -> AggregatedDRContext:
     """
     Aggregate the context from the sub-answers and cited documents.
     """
@@ -24,6 +26,7 @@ def aggregate_context(
     question_counter = 0
 
     context_components: list[str] = []
+    cited_documents: list[InferenceSection] = []
 
     for iteration_response in iteration_responses:
         question_text = iteration_response.question
@@ -37,7 +40,16 @@ def aggregate_context(
                 citation_text_components.append(
                     build_document_context(cited_document, document_counter)
                 )
+                if cited_document.center_chunk.score is not None:
+                    cited_document.center_chunk.score -= (
+                        iteration_response.iteration_nr - 1
+                    )
+                for chunk in cited_document.chunks:
+                    if chunk.score is not None:
+                        chunk.score -= iteration_response.iteration_nr - 1
+                cited_documents.append(cited_document)
             citation_text = "\n\n---\n".join(citation_text_components)
+
         else:
             citation_text = "No citations provided for this answer. Take provided answer at face value."
 
@@ -48,7 +60,10 @@ def aggregate_context(
         context_components.append(citation_text)
         context_components.append("\n\n---\n\n")
 
-    return "\n".join(context_components)
+    return AggregatedDRContext(
+        context="\n".join(context_components),
+        cited_documents=cited_documents,
+    )
 
 
 def get_answers_history_from_iteration_responses(

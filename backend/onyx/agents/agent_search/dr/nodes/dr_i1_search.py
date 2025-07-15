@@ -152,16 +152,6 @@ def search(
 
     # Run LLM
 
-    # search_answer = get_answer_from_llm(
-    #     graph_config.tooling.primary_llm,
-    #     search_prompt,
-    #     timeout=40,
-    #     timeout_override=40,
-    #     max_tokens=1500,
-    #     stream=False,
-    #     json_string_flag=True,
-    # )
-
     search_answer_json = invoke_llm_json(
         llm=graph_config.tooling.primary_llm,
         prompt=search_prompt,

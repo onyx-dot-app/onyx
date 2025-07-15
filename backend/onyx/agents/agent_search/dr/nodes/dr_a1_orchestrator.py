@@ -48,6 +48,8 @@ def orchestrator(
     question = graph_config.inputs.prompt_builder.raw_user_query
     time_budget = graph_config.behavior.time_budget
 
+    graph_config.behavior.use_agentic_search = False
+
     answer_history_string = (
         get_answers_history_from_iteration_responses(state.iteration_responses)
         or "(No answer history yet available)"
