@@ -78,7 +78,7 @@ export default function Page() {
       )}
 
       {!isLoading && !error && (
-        <MainContent personas={personas || []} refreshPersonas={refresh} />
+        <MainContent personas={personas} refreshPersonas={refresh} />
       )}
     </div>
   );

@@ -12,8 +12,8 @@ export const useAdminPersonas = (options?: UseAdminPersonasOptions) => {
   const { includeDeleted = false, getEditable = false } = options || {};
 
   const url = buildApiPath("/api/admin/persona", {
-    include_deleted: includeDeleted.toString(),
-    get_editable: getEditable.toString(),
+    include_deleted: includeDeleted,
+    get_editable: getEditable,
   });
 
   const { data, error, isLoading, mutate } = useSWR<Persona[]>(
@@ -22,7 +22,7 @@ export const useAdminPersonas = (options?: UseAdminPersonasOptions) => {
   );
 
   return {
-    personas: data,
+    personas: data || [],
     error,
     isLoading,
     refresh: mutate,
