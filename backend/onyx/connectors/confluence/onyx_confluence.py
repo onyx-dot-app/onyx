@@ -603,8 +603,10 @@ class OnyxConfluence:
         """
         The content/search endpoint can be used to fetch pages, attachments, and comments.
         """
-        cql_url = self.build_cql_url(cql, expand)
-        yield from self._paginate_url(cql_url, limit)
+        cql_url = self.build_cql_url(cql=cql, expand=expand)
+        yield from self._paginate_url(
+            url_suffix=cql_url, limit=limit, force_offset_pagination=True
+        )
 
     def paginated_page_retrieval(
         self,
