@@ -5,12 +5,8 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSetSummary, ValidSources } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
 import { fetchAssistantsSS } from "@/lib/assistants/fetchAssistantsSS";
-import {
-  getStandardAnswerCategoriesIfEE,
-  StandardAnswerCategoryResponse,
-} from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
+import { getStandardAnswerCategoriesIfEE } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { redirect } from "next/navigation";
-import { Persona } from "../../../../assistants/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 
 async function NewChannelConfigPage(props: {
@@ -32,8 +28,8 @@ async function NewChannelConfigPage(props: {
     standardAnswerCategoryResponse,
   ] = await Promise.all([
     fetchSS("/manage/document-set") as Promise<Response>,
-    fetchAssistantsSS() as Promise<[Persona[], string | null]>,
-    getStandardAnswerCategoriesIfEE() as Promise<StandardAnswerCategoryResponse>,
+    fetchAssistantsSS(),
+    getStandardAnswerCategoriesIfEE(),
   ]);
 
   if (!documentSetsResponse.ok) {

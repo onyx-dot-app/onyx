@@ -34,3 +34,9 @@
     * k -n onyx get pvc
     * k -n onyx delete pvc vespa-storage-da-vespa-0
   * If you didn't disable Postgres persistence earlier, you may want to delete that PVC too.
+
+## Resourcing
+In the helm charts, we have resource suggestions for all Onyx-owned components. 
+These are simply initial suggestions, and may need to be tuned for your specific use case.
+
+Please talk to us in Slack if you have any questions!
