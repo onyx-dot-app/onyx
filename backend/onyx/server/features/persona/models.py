@@ -9,7 +9,7 @@ from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
-from onyx.server.features.document_set.models import DocumentSet
+from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
@@ -25,9 +25,12 @@ class MinimalPersonaSnapshot(BaseModel):
     id: int
     name: str
     description: str
+    # Used for retrieval capability checking
     tools: list[ToolSnapshot]
     starter_messages: list[StarterMessage] | None
-    document_sets: list[DocumentSet]
+
+    # only show document sets in the UI that the assistant has access to
+    document_sets: list[DocumentSetSummary]
     llm_model_version_override: str | None
     llm_model_provider_override: str | None
 
@@ -41,7 +44,10 @@ class MinimalPersonaSnapshot(BaseModel):
     is_default_persona: bool
     builtin_persona: bool
 
+    # Used for filtering
     labels: list["PersonaLabelSnapshot"]
+
+    # Used to display ownership
     owner: MinimalUserSnapshot | None
 
     @classmethod
@@ -54,7 +60,7 @@ class MinimalPersonaSnapshot(BaseModel):
             tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             starter_messages=persona.starter_messages,
             document_sets=[
-                DocumentSet.from_model(document_set)
+                DocumentSetSummary.from_model(document_set)
                 for document_set in persona.document_sets
             ],
             llm_model_version_override=persona.llm_model_version_override,
@@ -167,7 +173,7 @@ class PersonaSnapshot(BaseModel):
     owner: MinimalUserSnapshot | None
     users: list[MinimalUserSnapshot]
     groups: list[int]
-    document_sets: list[DocumentSet]
+    document_sets: list[DocumentSetSummary]
     llm_model_provider_override: str | None
     llm_model_version_override: str | None
     num_chunks: float | None
@@ -202,7 +208,7 @@ class PersonaSnapshot(BaseModel):
             ],
             groups=[user_group.id for user_group in persona.groups],
             document_sets=[
-                DocumentSet.from_model(document_set_model)
+                DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
             llm_model_provider_override=persona.llm_model_provider_override,
@@ -258,7 +264,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 else None
             ),
             document_sets=[
-                DocumentSet.from_model(document_set_model)
+                DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
             num_chunks=persona.num_chunks,

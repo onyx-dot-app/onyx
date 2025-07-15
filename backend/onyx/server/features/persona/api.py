@@ -25,11 +25,11 @@ from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
 from onyx.db.persona import get_assistant_labels
+from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas_for_user
+from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
-from onyx.db.persona import PersonaLoadType
 from onyx.db.persona import update_all_personas_display_priority
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
@@ -55,6 +55,9 @@ from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -167,16 +170,12 @@ def list_personas_admin(
     include_deleted: bool = False,
     get_editable: bool = Query(False, description="If true, return editable personas"),
 ) -> list[PersonaSnapshot]:
-    return [
-        PersonaSnapshot.from_model(persona)
-        for persona in get_personas_for_user(
-            db_session=db_session,
-            user=user,
-            get_editable=get_editable,
-            include_deleted=include_deleted,
-            load_type=PersonaLoadType.FULL,
-        )
-    ]
+    return get_persona_snapshots_for_user(
+        user=user,
+        db_session=db_session,
+        get_editable=get_editable,
+        include_deleted=include_deleted,
+    )
 
 
 @admin_router.patch("/{persona_id}/undelete")
@@ -417,8 +416,7 @@ def list_personas(
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
 ) -> list[MinimalPersonaSnapshot]:
-    personas = get_personas_for_user(
-        load_type=PersonaLoadType.MINIMAL,
+    personas = get_minimal_persona_snapshots_for_user(
         user=user,
         include_deleted=include_deleted,
         db_session=db_session,
@@ -433,13 +431,14 @@ def list_personas(
         p
         for p in personas
         if not (
-            any(tool.in_code_tool_id == "ImageGenerationTool" for tool in p.tools)
+            any(
+                tool.in_code_tool_id == ImageGenerationTool.__name__ for tool in p.tools
+            )
             and not is_image_generation_available(db_session=db_session)
         )
     ]
 
-    result = [MinimalPersonaSnapshot.from_model(p) for p in personas]
-    return result
+    return personas
 
 
 @basic_router.get("/{persona_id}")

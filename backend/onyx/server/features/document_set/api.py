@@ -158,7 +158,7 @@ def list_document_sets_for_user(
     document_sets = fetch_all_document_sets_for_user(
         db_session=db_session, user=user, get_editable=get_editable
     )
-    return [DocumentSetSummary.from_document_set(ds) for ds in document_sets]
+    return [DocumentSetSummary.from_model(ds) for ds in document_sets]
 
 
 @router.get("/document-set-public")
