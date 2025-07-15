@@ -150,7 +150,7 @@ def orchestrator(
             write_custom_event(
                 "basic_response",
                 AgentAnswerPiece(
-                    answer_piece=f"\n\nHIGH_LEVEL PLAN: {plan_information.plan}\n\n\n",
+                    answer_piece=f"\n\nHIGH_LEVEL PLAN: {plan_information.plan}\n",
                     level=0,
                     level_question_num=0,
                     answer_type="agent_level_answer",
