@@ -1,3 +1,17 @@
+"""
+# README (notes on Confluence pagination):
+
+We've noticed that the `search/users` and `users/memberof` endpoints use offset-based pagination as opposed to cursor-based.
+We also know that page-retrieval uses cursor-based pagination.
+
+Our default pagination strategy right now for cloud is to assume cursor-based.
+However, if you notice that a cloud API is not being properly paginated (i.e., if the `_links.next` is not appearing in the
+returned payload), then you can force offset-based pagination.
+
+# TODO (@raunakab)
+We haven't explored all of the cloud APIs' pagination strategies. @raunakab take time to go through this and figure them out.
+"""
+
 import json
 import time
 from collections.abc import Callable
@@ -46,7 +60,7 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
-_DEFAULT_PAGINATION_LIMIT = 2
+_DEFAULT_PAGINATION_LIMIT = 1000
 
 
 class ConfluenceRateLimitError(Exception):
@@ -461,6 +475,7 @@ class OnyxConfluence:
         limit: int | None = None,
         # Called with the next url to use to get the next page
         next_page_callback: Callable[[str], None] | None = None,
+        force_offset_pagination: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """
         This will paginate through the top level query.
@@ -557,7 +572,10 @@ class OnyxConfluence:
             yield from results
 
             updated_start = get_start_param_from_url(url_suffix) + len(results)
-            url_suffix = update_param_in_path(url_suffix, "start", str(updated_start))
+            if not self._is_cloud or force_offset_pagination:
+                url_suffix = update_param_in_path(
+                    url_suffix, "start", str(updated_start)
+                )
 
             # Notify the caller of the new url.
             if next_page_callback:
@@ -606,7 +624,6 @@ class OnyxConfluence:
                 cql_url,
                 limit=limit,
                 next_page_callback=next_page_callback,
-                # force_offset_pagination=True,
             )
         except Exception as e:
             logger.exception(f"Error in paginated_page_retrieval: {e}")
@@ -661,7 +678,9 @@ class OnyxConfluence:
             url = "rest/api/search/user"
             expand_string = f"&expand={expand}" if expand else ""
             url += f"?cql={cql}{expand_string}"
-            for user_result in self._paginate_url(url, limit):
+            for user_result in self._paginate_url(
+                url, limit, force_offset_pagination=True
+            ):
                 # Example response:
                 # {
                 #     'user': {
@@ -751,7 +770,7 @@ class OnyxConfluence:
         user_query = f"{user_field}={quote(user_value)}"
 
         url = f"rest/api/user/memberof?{user_query}"
-        yield from self._paginate_url(url, limit)
+        yield from self._paginate_url(url, limit, force_offset_pagination=True)
 
     def paginated_groups_retrieval(
         self,
