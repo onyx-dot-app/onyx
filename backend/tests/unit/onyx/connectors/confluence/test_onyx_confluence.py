@@ -113,9 +113,6 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
                 "id": 1,
                 "child_items": {
                     "results": [],  # Populated by _traverse_and_update
-                    "_links": {
-                        "next": f"/rest/api/content/1/child?limit={_DEFAULT_PAGINATION_LIMIT}"
-                    },
                     "size": 0,
                 },
             },
@@ -123,9 +120,6 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
                 "id": 2,
                 "child_items": {
                     "results": [],
-                    "_links": {
-                        "next": f"/rest/api/content/2/child?limit={_DEFAULT_PAGINATION_LIMIT}"
-                    },
                     "size": 0,
                 },
             },
@@ -133,14 +127,10 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
                 "id": 3,
                 "child_items": {
                     "results": [],
-                    "_links": {
-                        "next": f"/rest/api/content/3/child?limit={_DEFAULT_PAGINATION_LIMIT}"
-                    },
                     "size": 0,
                 },
             },
         ],
-        "_links": {},
         "size": 3,
     }
     top_level_response = _create_mock_response(
@@ -159,14 +149,13 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         200,
         {
             "results": [{"child_id": 101}],
-            "_links": {"next": f"/{exp1_page2_path}"},
             "size": 1,
         },
         url=exp1_page1_path,
     )
     exp1_page2_response = _create_mock_response(
         200,
-        {"results": [{"child_id": 102}], "_links": {}, "size": 1},
+        {"results": [{"child_id": 102}], "size": 1},
         url=exp1_page2_path,
     )
 
@@ -195,7 +184,6 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         200,
         {
             "results": [{"child_id": 201}],
-            "_links": {"next": f"/{exp2_limit1_page2_path}"},
             "size": 1,
         },
         url=exp2_limit1_page1_path,
@@ -205,7 +193,6 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         200,
         {
             "results": [{"child_id": 203}],
-            "_links": {"next": f"/{exp2_limit1_page4_path}"},
             "size": 1,
         },
         url=exp2_limit1_page3_path,
@@ -214,14 +201,14 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         500, url=exp2_limit1_page4_path
     )  # This is the one we expect to bubble up
     exp2_limit1_page5_response = _create_mock_response(
-        200, {"results": [], "_links": {}, "size": 0}, url=exp2_limit1_page5_path
+        200, {"results": [], "size": 0}, url=exp2_limit1_page5_path
     )
 
     # Expansion 3
     exp3_page1_path = f"rest/api/content/3/child?limit={_DEFAULT_PAGINATION_LIMIT}"
     exp3_page1_response = _create_mock_response(
         200,
-        {"results": [{"child_id": 301}], "_links": {}, "size": 1},
+        {"results": [{"child_id": 301}], "size": 1},
         url=exp3_page1_path,
     )
 
@@ -401,7 +388,6 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         200,
         {
             "results": [{"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}],
-            "_links": {"next": f"/{page2_initial_path}"},
             "size": 4,
         },
         url=page1_path,
@@ -429,7 +415,6 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         200,
         {
             "results": [{"id": 5}],
-            "_links": {"next": f"/{page2_limit1_item2_path}"},
             "size": 1,
         },  # Note: next link might be present but we check results
         url=page2_limit1_item1_path,
@@ -441,7 +426,6 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         200,
         {
             "results": [{"id": 7}],
-            "_links": {"next": f"/{page2_limit1_item4_path}"},
             "size": 1,
         },
         url=page2_limit1_item3_path,
@@ -450,7 +434,6 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         200,
         {
             "results": [{"id": 8}],
-            "_links": {"next": f"/{page3_path}"},
             "size": 1,
         },
         url=page2_limit1_item4_path,
@@ -459,7 +442,7 @@ def test_paginated_cql_retrieval_handles_pagination_error(
     # Page 3: Success (2 items)
     page3_response = _create_mock_response(
         200,
-        {"results": [{"id": 9}, {"id": 10}], "_links": {}, "size": 2},  # No more pages
+        {"results": [{"id": 9}, {"id": 10}], "size": 2},  # No more pages
         url=page3_path,
     )
 
@@ -571,10 +554,12 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
 
     base_path = f"rest/api/content/search?cql={encoded_cql}"
     page1_path = f"{base_path}&limit={test_limit}"
-    # Page 2 starts where page 1 left off (start=test_limit)
+    # Page 2 starts where page 1 left off (start=test_limit).
     page2_initial_path = f"{base_path}&limit={test_limit}&start={test_limit}"
-    # Page 3 starts after the completely failed page 2 (start=test_limit * 2)
+    # Page 3 starts after the completely failed page 2 (start=test_limit * 2).
     page3_path = f"{base_path}&limit={test_limit}&start={test_limit * 2}"
+    # Empty tail call (since `paginated_cql_retrieval` performs offset-based pagination).
+    page4_path = f"{base_path}&limit={test_limit}&start={(test_limit * 2) + 2}"
 
     # --- Mock Responses ---
     # Page 1: Success (3 items)
@@ -582,7 +567,6 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
         200,
         {
             "results": [{"id": 1}, {"id": 2}, {"id": 3}],
-            "_links": {"next": f"/{page2_initial_path}"},
             "size": 3,
         },
         url=page1_path,
@@ -602,8 +586,15 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
     # Page 3: Success (2 items)
     page3_response = _create_mock_response(
         200,
-        {"results": [{"id": 7}, {"id": 8}], "_links": {}, "size": 2},
+        {"results": [{"id": 7}, {"id": 8}], "size": 2},
         url=page3_path,
+    )
+
+    # Page 4: Success (0 items; this is the end)
+    page4_response = _create_mock_response(
+        200,
+        {"results": [], "size": 0},
+        url=page4_path,
     )
 
     # --- Side Effect Logic ---
@@ -632,6 +623,9 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
         elif path == page3_path:
             print(f"-> Returning page 3 success for {path}")
             return page3_response
+        elif path == page4_path:
+            print(f"-> Returning page 4 success for {path}")
+            return page4_response
         else:
             print(f"!!! Unexpected GET path in mock: {path}")
             raise RuntimeError(f"Unexpected GET path in mock: {path}")
@@ -660,22 +654,16 @@ def test_paginated_cql_retrieval_skips_completely_failing_page(
 
     # Verify logs for the failed retry attempts on page 2
     for failed_path in page2_limit1_retry_errors:
-        assert f"Error in confluence call to /{failed_path}" in caplog.text
-    assert (
-        f"Error in confluence call to {page2_initial_path}" not in caplog.text
-    )  # Initial error triggers retry, not direct logging in _paginate_url
+        assert f"Error in confluence call to {failed_path}" in caplog.text
 
     # Verify sequence of calls
     expected_calls = [
         page1_path,  # Page 1 success
         page2_initial_path,  # Page 2 initial fail (500)
+        *page2_limit1_retry_errors,
+        page3_path,
+        page4_path,
     ]
-    # Add the failed limit=1 retry calls for page 2
-    expected_calls.extend(list(page2_limit1_retry_errors.keys()))
-    # The retry loop should make one final call to check if there are more items
-    # expected_calls.append(page2_limit1_final_empty_path)
-    # Add the call to page 3
-    expected_calls.append(page3_path)
 
     assert mock_get_call_paths == expected_calls
 
@@ -713,7 +701,6 @@ def test_paginated_cql_retrieval_cloud_no_retry_on_error(
         200,
         {
             "results": [{"id": i} for i in range(test_limit)],
-            "_links": {"next": f"/{page2_path}"},
             "size": test_limit,
         },
         url=page1_path,
