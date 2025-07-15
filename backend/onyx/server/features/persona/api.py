@@ -29,6 +29,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.persona import PersonaLoadType
 from onyx.db.persona import update_all_personas_display_priority
 from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
@@ -45,6 +46,7 @@ from onyx.secondary_llm_flows.starter_message_creation import (
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import ImageGenerationToolStatus
+from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -172,7 +174,7 @@ def list_personas_admin(
             user=user,
             get_editable=get_editable,
             include_deleted=include_deleted,
-            joinedload_all=True,
+            load_type=PersonaLoadType.FULL,
         )
     ]
 
@@ -414,14 +416,13 @@ def list_personas(
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
-) -> list[PersonaSnapshot]:
+) -> list[MinimalPersonaSnapshot]:
     personas = get_personas_for_user(
+        load_type=PersonaLoadType.MINIMAL,
         user=user,
         include_deleted=include_deleted,
         db_session=db_session,
         get_editable=False,
-        joinedload_all=True,
-        include_prompt=False,
     )
 
     if persona_ids:
@@ -437,7 +438,8 @@ def list_personas(
         )
     ]
 
-    return [PersonaSnapshot.from_model(p) for p in personas]
+    result = [MinimalPersonaSnapshot.from_model(p) for p in personas]
+    return result
 
 
 @basic_router.get("/{persona_id}")
