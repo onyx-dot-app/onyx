@@ -74,17 +74,18 @@ def filtered_search(
     logger.debug(f"kg_entity_filters: {kg_entity_filters}")
     logger.debug(f"kg_relationship_filters: {kg_relationship_filters}")
 
-    # Step 4 - stream out the research query
-    write_custom_event(
-        "subqueries",
-        SubQueryPiece(
-            sub_query="Conduct a filtered search",
-            level=0,
-            level_question_num=_KG_STEP_NR,
-            query_id=1,
-        ),
-        writer,
-    )
+    if state.individual_flow:
+        # Step 4 - stream out the research query
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query="Conduct a filtered search",
+                level=0,
+                level_question_num=_KG_STEP_NR,
+                query_id=1,
+            ),
+            writer,
+        )
 
     retrieved_docs = cast(
         list[InferenceSection],
@@ -167,11 +168,12 @@ def filtered_search(
 
     step_answer = "Filtered search is complete."
 
-    stream_write_kg_search_answer_explicit(
-        writer, answer=step_answer, level=0, step_nr=_KG_STEP_NR
-    )
+    if state.individual_flow:
+        stream_write_kg_search_answer_explicit(
+            writer, answer=step_answer, level=0, step_nr=_KG_STEP_NR
+        )
 
-    stream_kg_search_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
+        stream_kg_search_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
 
     return ConsolidatedResearchUpdate(
         consolidated_research_object_results_str=filtered_search_answer,

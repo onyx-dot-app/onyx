@@ -26,6 +26,12 @@ class OrchestrationPlan(BaseModel):
     plan: str
 
 
+class SearchAnswer(BaseModel):
+    reasoning: str
+    answer: str
+    citations: str
+
+
 class IterationAnswer(BaseModel):
     iteration_nr: int
     parallelization_nr: int

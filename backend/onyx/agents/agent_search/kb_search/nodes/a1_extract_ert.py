@@ -80,10 +80,11 @@ def extract_ert(
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
-    # Stream structure of substeps out to the UI
-    stream_write_kg_search_structure(writer)
+    if state.individual_flow:
+        # Stream structure of substeps out to the UI
+        stream_write_kg_search_structure(writer)
 
-    stream_write_kg_search_activities(writer, _KG_STEP_NR)
+        stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     # Create temporary views. TODO: move into parallel step, if ultimately materialized
     tenant_id = get_current_tenant_id()
@@ -245,10 +246,11 @@ def extract_ert(
     step_answer = f"""Entities and relationships have been extracted from query - \n \
 Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_string}"""
 
-    stream_write_kg_search_answer_explicit(writer, step_nr=1, answer=step_answer)
+    if state.individual_flow:
+        stream_write_kg_search_answer_explicit(writer, step_nr=1, answer=step_answer)
 
-    # Finish Step 1
-    stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
+        # Finish Step 1
+        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     return ERTExtractionUpdate(
         entities_types_str=all_entity_types,

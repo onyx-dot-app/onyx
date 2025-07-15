@@ -6,12 +6,13 @@ from langgraph.types import StreamWriter
 
 from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import SearchAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.utils import get_cited_document_numbers
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
+from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -55,6 +56,17 @@ def search(
         graph_config.tooling.search_tool.user
         if graph_config.tooling.search_tool
         else None
+    )
+
+    write_custom_event(
+        "basic_response",
+        AgentAnswerPiece(
+            answer_piece=f"\n\nSUB-QUESTION (SEARCH): {search_query}\n\n",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
     )
 
     if not user:
@@ -140,23 +152,31 @@ def search(
 
     # Run LLM
 
-    search_answer = get_answer_from_llm(
-        graph_config.tooling.primary_llm,
-        search_prompt,
-        timeout=40,
+    # search_answer = get_answer_from_llm(
+    #     graph_config.tooling.primary_llm,
+    #     search_prompt,
+    #     timeout=40,
+    #     timeout_override=40,
+    #     max_tokens=1500,
+    #     stream=False,
+    #     json_string_flag=True,
+    # )
+
+    search_answer_json = invoke_llm_json(
+        llm=graph_config.tooling.primary_llm,
+        prompt=search_prompt,
+        schema=SearchAnswer,
         timeout_override=40,
         max_tokens=1500,
-        stream=False,
-        json_string_flag=False,
     )
 
     logger.debug(f"Conducting a standard search for: {search_query}")
-    logger.debug(f"Search answer: {search_answer}")
+    logger.debug(f"Search answer: {search_answer_json.answer}")
 
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
-            answer_piece=f"\n\nSUB-QUESTION (SEARCH): {search_query}\n\n-> answered!\n\n",
+            answer_piece="\n\n-> answered!\n\n",
             level=0,
             level_question_num=0,
             answer_type="agent_level_answer",
@@ -165,7 +185,11 @@ def search(
     )
 
     # handle citations
-    citation_numbers = get_cited_document_numbers(search_answer)
+
+    citation_string = search_answer_json.citations
+    answer_string = search_answer_json.answer
+
+    citation_numbers = get_cited_document_numbers(citation_string + answer_string)
     citation_number_replacement_dict = {
         original_index: start_1_based_index
         for start_1_based_index, original_index in enumerate(citation_numbers, 1)
@@ -178,18 +202,19 @@ def search(
 
     # change citations from search answer
     for original_index, replacement_index in citation_number_replacement_dict.items():
-        search_answer = search_answer.replace(
+
+        answer_string = answer_string.replace(
             f"[{original_index}]", f"[{replacement_index}]"
         )
 
     return AnswerUpdate(
-        answers=[search_answer],
+        answers=[answer_string],
         iteration_responses=[
             IterationAnswer(
                 iteration_nr=iteration_nr,
                 parallelization_nr=0,
                 question=search_query,
-                answer=search_answer,
+                answer=answer_string,
                 cited_documents=cited_documents,
             )
         ],

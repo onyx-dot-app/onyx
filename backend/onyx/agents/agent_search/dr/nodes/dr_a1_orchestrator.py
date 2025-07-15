@@ -25,8 +25,8 @@ from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import FAST_PLAN_GENERATION_PROMPT
-from onyx.prompts.dr_prompts import ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT
 from onyx.prompts.dr_prompts import PLAN_GENERATION_PROMPT
+from onyx.prompts.dr_prompts import SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -154,13 +154,13 @@ def orchestrator(
             plan_information = state.plan_of_record[-1]
 
         decision_prompt = (
-            ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
+            SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
                 "---possible_entities---", all_entity_types
             )
             .replace("---possible_relationships---", all_relationship_types)
             .replace("---answer_history_string---", answer_history_string)
             .replace("---question---", question)
-            .replace("---iteration_nr---", str(iteration_nr))
+            .replace("---iteration_nr---", str(iteration_nr + 1))
             .replace("---current_plan_of_record_string---", plan_information.plan)
         )
 

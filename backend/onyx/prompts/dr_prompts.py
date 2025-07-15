@@ -27,6 +27,11 @@ It can also query a relational database containing the entities and relationship
 answer aggregation-type questions like 'how many jiras did each employee close last month?'. \
 However, the {KNOWLEDGE_GRAPH} tool is slower than the {SEARCH} tool, and it can only be used for \
 entity and relationship types that are available in the knowledge graph, listed later.
+Again, a question to the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, \
+not merely find them.
+
+NOTE: the {KNOWLEDGE_GRAPH} tool MUST ONLY BE USED if the question really fits the entity/relationship \
+types that are available in the knowledge graph!
 
 - The "{CLOSER}" tool does not directly have access to the documents, but it can use the results from \
 previous iterations to generate a comprehensive final answer. It should always be called exactly once \
@@ -76,16 +81,19 @@ You are a great Assistant that is an expert at analyzing a question and breaking
 series of high-level, answerable sub-questions.
 
 Given the user query and the list of available tools, your task is to devise a high-level plan \
-consisting of a list of the iterations, each iteration consisting of the tool to call and the \
-sub-question to investigate, so that by the end of the process you have gathered sufficient \
+consisting of a list of the iterations, each iteration consisting of the \
+apsects to investigate, so that by the end of the process you have gathered sufficient \
 information to generate a well-researched and highly relevant answer to the user query.
 
-Note that some tools can be called in parallel, thus you can include multiple sub-questions in one \
-iteration, saving on time. You should delimit the subquestions with commas or semicolons. Also note \
-that the plan is only used as a guideline, and a separate agent will use your plan along with the \
-results from previous iterations to generate the specific questions to send to the tool for each \
+Note that the plan will only be used as a guideline, and a separate agent will use your plan along \
+with the results from previous iterations to generate the specific questions to send to the tool for each \
 iteration. Thus you should not be too specific in your plan as some steps could be dependent on \
 previous steps.
+
+Assume that all steps will be executed sequentially, so the answers of earlier steps will be known \
+at later steps. To capture that, you can refer to earlier results in later steps. (Example of a 'later'\
+question: 'find information for each result of step 3.')
+
 
 {DR_TOOLS_DESCRIPTIONS}
 
@@ -110,19 +118,84 @@ Examples:
    - again, as future steps can depend on earlier ones, the questions should be fairly high-level. \
 For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
    --
-   1) KNOWLEDGE_GRAPH: identify the main problem that Nike has
-   2) SEARCH: find jiras that address the problem identified in step 1
-   3) CLOSER: generate the final answer
-   --
-   - likewise, some tools can be called in parallel, and you should use that to your advantage. \
-For example, if the question is like 'compare A vs B', then a good plan may be:
-   --
-   1) SEARCH: find features of A, find features of B
-   2) CLOSER: generate the final answer
+   1) identify the main problem that Nike has
+   2) find jiras that address the problem identified in step 1
+   3) generate the final answer
    --
 
 
 HINTS:
+   - please look at the user query and the entity types and relationship types in the knowledge graph \
+to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.\
+(This is important to ask well-structured questions, although the tool itself wil not be shown later.)
+   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
+'search for this'-type of question, then also use '{SEARCH}'.
+   - also consider whether the user query implies whether a standard search query should be used or a \
+knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
+whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
+   - use parallel calls to the {SEARCH} tool to your advantage to save time!
+   - again, referencing results from earlier steps is absolutely allowed and encouraged!
+   - the plan must be complete! I.e., all steps should be included that are believed \
+to be necessary to answer the question, including the final call to the {CLOSER} tool.
+
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
+guided by the question you need to answer, the answers you have so far, and the plan of record.>",
+   "plan": "<the full plan, formatted as a string. See examples above. \
+(Note that the plan of record must be a string, not a list of strings! Also, again, the steps \
+should NOT contain the specific tool although it may have been used to construct \
+the question. Just show the question.)>"
+}}
+"""
+
+SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT = f"""
+Overall, you need to answer a user query. To do so, you have various tools at your disposal that you \
+can call iteratively. And an initial plan that should guide your thinking.
+
+You may already have some answers to earlier questions calls you generated in previous iterations, and you also \
+have a high-level plan given to you.
+
+Your task is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
+considering the answers you already got, and guided by the initial plan.
+
+(You are planning for iteration ---iteration_nr--- now.).
+
+{DR_TOOLS_DESCRIPTIONS}
+
+Here are the entity types that are available in the knowledge graph:
+{SEPARATOR_LINE}
+---possible_entities---
+{SEPARATOR_LINE}
+
+Here are the relationship types that are available in the knowledge graph:
+{SEPARATOR_LINE}
+---possible_relationships---
+{SEPARATOR_LINE}
+
+Here is the overall question that you need to answer:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+The current iteration is ---iteration_nr---:
+
+Here is the high-level plan:
+{SEPARATOR_LINE}
+---current_plan_of_record_string---
+{SEPARATOR_LINE}
+
+Here is the answer history so far (if any):
+{SEPARATOR_LINE}
+---answer_history_string---
+{SEPARATOR_LINE}
+
+
+HINTS:
+   - please first consider whether you can answer the question with the information you already have. \
+Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
+   - if you think more information is needed because a sub-question was not sufficiently answered, \
+you can generate a modified version of the previous step, thus effectively modifying the plan.
    - please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
    - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
@@ -130,18 +203,27 @@ to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all
    - also consider whether the user query implies whether a standard search query should be used or a \
 knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
-   - use parallel calls to the {SEARCH} tool to your advantage to save time!
-   - the plan must be complete! I.e., all steps should be included that are believed \
-to be necessary to answer the question, including the final call to the {CLOSER} tool.
+   - the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, so DO NOT \
+   try to first find socuments and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
+   tool directly, like 'summarize the most recent jira created by John'.
+   - you can only send one request to each tool.
+
+YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
+the original question, the high-level plan, the tools you have available,and the answers you have so far. \
+Make sure that the answer is \
+specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
+new targetted information that gets us to be able to answer the original question. (Note again, that sending \
+the request to the CLOSER tool is an option if you think the information is sufficient.)
 
 
 Please format your answer as a json dictionary in the following format:
 {{
    "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
 guided by the question you need to answer, the answers you have so far, and the plan of record.>",
-   "plan": "<the full plan, formatted as a string. See examples above. \
-(Note that the plan of record must be a string, not a list of strings! Also, each step must refer to \
-a specific tool, and what you want the tool to do.)>"
+   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {CLOSER}>",
+                  "questions": "<the question you want to pose to the tool. Note that the \
+question should be appropriate for the tool. For example, if the tool is {SEARCH}, the question should be \
+written as a search query.>"}}
 }}
 """
 
@@ -206,6 +288,13 @@ in depth investigations on a single topic at once. For example, if the question 
 you can send two search queries in parallel, one focussed on A and a second on B. Likewise, if the question \
 is like "give me a detailed report on A", you can do multiple queries like "what is A", "what does A do", \
 etc. Note: try to keep the number of parallel queries reasonable.
+
+YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
+the original question, the high-level plan, the tools you have available,and the answers you have so far. \
+Make sure that the answer is \
+specic to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
+new targetted information that gets us to be able to answer the original question. (Note again, that sending \
+the request to the CLOSER tool is an option if you think the information is sufficient.)
 
 
 Please format your answer as a json dictionary in the following format:
@@ -330,13 +419,21 @@ out of context.
    - clearly indicate any assumptions you make in your answer.
    - while the base question is important, really focus on answering the specific search query. \
 That is your task.
-   - CRITICAL: cite the sources (by document number) at the end! Please use the format [1][4][6], etc.
    - only provide a SHORT answer that i) provides the requested information if the question was very \
 specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL summary of \
 the information in the cited documents, and cite the documents that are most relevent to the question \
 sent to you.
 
-ANSWER:
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your reasoning in 3-6 sentences of what guides you to the answer of \
+the specific search query given the documents. Any reasoning should be done here. Generate \
+here the information that will be necessary to provide a succinct answer to the specific search query.>",
+   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
+the documents. But this should be be precise and concise, and specifically answer the question.>",
+"citations": "<the list of document numbers that are relevevant for the answer. \
+Please list in format [1][4][6], etc.>"
+}}
 """
 
 FINAL_ANSWER_PROMPT = f"""

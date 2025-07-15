@@ -68,16 +68,17 @@ def process_kg_only_answers(
 
     # we use this stream write explicitly
 
-    write_custom_event(
-        "subqueries",
-        SubQueryPiece(
-            sub_query="Formatted References",
-            level=0,
-            level_question_num=_KG_STEP_NR,
-            query_id=1,
-        ),
-        writer,
-    )
+    if state.individual_flow:
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query="Formatted References",
+                level=0,
+                level_question_num=_KG_STEP_NR,
+                query_id=1,
+            ),
+            writer,
+        )
 
     query_results_list = []
 
@@ -101,11 +102,12 @@ def process_kg_only_answers(
         "No further research is needed, the answer is derived from the knowledge graph."
     )
 
-    stream_write_kg_search_answer_explicit(
-        writer, step_nr=_KG_STEP_NR, answer=step_answer
-    )
+    if state.individual_flow:
+        stream_write_kg_search_answer_explicit(
+            writer, step_nr=_KG_STEP_NR, answer=step_answer
+        )
 
-    stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
+        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     return ResultsDataUpdate(
         query_results_data_str=query_results_data_str,

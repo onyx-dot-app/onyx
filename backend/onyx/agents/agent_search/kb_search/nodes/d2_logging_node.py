@@ -49,6 +49,7 @@ def log_data(
 
     return MainOutput(
         final_answer=state.final_answer,
+        retrieved_documents=state.retrieved_documents,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
