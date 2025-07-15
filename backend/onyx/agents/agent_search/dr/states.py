@@ -24,7 +24,7 @@ class OrchestrationUpdate(LoggerUpdate):
     query_path: Annotated[list[DRPath], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
-    plan_of_record: Annotated[list[OrchestrationPlan], add] = []
+    plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
     used_time_budget: int = 0
 
 

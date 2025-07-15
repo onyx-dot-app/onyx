@@ -1,5 +1,8 @@
 import re
 
+from langchain.schema.messages import BaseMessage
+from langchain.schema.messages import HumanMessage
+
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 
@@ -64,5 +67,23 @@ def get_answers_history_from_iteration_responses(
         for iteration_response in sorted(
             iteration_responses,
             key=lambda x: (x.iteration_nr, x.parallelization_nr),
+        )
+    )
+
+
+def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) -> str:
+    """
+    Get the chat history (up to max_messages) as a string.
+    """
+    # get past max_messages USER, ASSISTANT message pairs
+    past_messages = chat_history[-max_messages * 2 :]
+    return (
+        "...\n"
+        if len(chat_history) > len(past_messages)
+        else ""
+        "\n".join(
+            ("user" if isinstance(msg, HumanMessage) else "you")
+            + f": {str(msg.content).strip()}"
+            for msg in past_messages
         )
     )
