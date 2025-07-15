@@ -583,12 +583,9 @@ class OnyxConfluence:
 
                 yield result
 
-            # We've observed that Confluence sometimes returns a next link despite giving
-            # 0 results. This is a bug with Confluence, so we need to check for it and
-            # stop paginating.
-            if url_suffix and not results:
+            if not results:
                 logger.info(
-                    f"No results found for call '{url_suffix}' despite next link "
+                    f"No results found for call '{url_suffix=}' despite next link "
                     "being present. Stopping pagination."
                 )
                 break
