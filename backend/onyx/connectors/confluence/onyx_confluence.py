@@ -563,23 +563,25 @@ class OnyxConfluence:
 
             # Yield the results individually.
             results = cast(list[dict[str, Any]], next_response.get("results", []))
+            total_results = len(results)
             # Make sure we don't update the start by more than the amount
             # of results we were able to retrieve. The Confluence API has a
             # weird behavior where if you pass in a limit that is too large for
             # the configured server, it will artificially limit the amount of
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
-            yield from results
+            for i, result in enumerate(results):
+                if i == total_results - 1:
+                    updated_start = get_start_param_from_url(url_suffix) + total_results
+                    if not self._is_cloud or force_offset_pagination:
+                        url_suffix = update_param_in_path(
+                            url_suffix, "start", str(updated_start)
+                        )
+                    # Notify the caller of the new url.
+                    if next_page_callback:
+                        next_page_callback(url_suffix)
 
-            updated_start = get_start_param_from_url(url_suffix) + len(results)
-            if not self._is_cloud or force_offset_pagination:
-                url_suffix = update_param_in_path(
-                    url_suffix, "start", str(updated_start)
-                )
-
-            # Notify the caller of the new url.
-            if next_page_callback:
-                next_page_callback(url_suffix)
+                yield result
 
             # We've observed that Confluence sometimes returns a next link despite giving
             # 0 results. This is a bug with Confluence, so we need to check for it and
