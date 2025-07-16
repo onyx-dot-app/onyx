@@ -29,11 +29,13 @@ class OrchestrationUpdate(LoggerUpdate):
     used_time_budget: int = 0
 
 
-class AnswerUpdate(LoggerUpdate):
+class QuestionUpdate(LoggerUpdate):
     iteration_nr: int = 0
     parallelization_nr: int = 0
-    instructions: str | None = None
-    answers: Annotated[list[str], add] = []
+    question: str | None = None
+
+
+class AnswerUpdate(LoggerUpdate):
     iteration_responses: Annotated[list[IterationAnswer], add] = []
 
 
@@ -55,6 +57,7 @@ class MainState(
     ToolCallUpdate,
     ToolChoiceUpdate,
     OrchestrationUpdate,
+    QuestionUpdate,
     AnswerUpdate,
     FinalUpdate,
 ):

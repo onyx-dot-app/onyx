@@ -38,11 +38,14 @@ def search(
     LangGraph node to start the agentic search process.
     """
 
-    iteration_nr = state.iteration_nr
-
     node_start_time = datetime.now()
+    iteration_nr = state.iteration_nr
+    parallelization_nr = state.parallelization_nr
 
-    search_query = state.query_list[0]  # TODO: fix this
+    search_query = state.question
+    if not search_query:
+        raise ValueError("search_query is not set")
+
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
 
@@ -53,7 +56,10 @@ def search(
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
-            answer_piece=f"\n\nSUB-QUESTION (SEARCH): {search_query}\n\n",
+            answer_piece=(
+                f"SUB-QUESTION {iteration_nr}.{parallelization_nr} "
+                f"(SEARCH): {search_query}\n\n"
+            ),
             level=0,
             level_question_num=0,
             answer_type="agent_level_answer",
@@ -146,7 +152,7 @@ def search(
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
-            answer_piece="\n\n-> answered!\n\n",
+            answer_piece=f"ANSWERED {iteration_nr}.{parallelization_nr}\n\n",
             level=0,
             level_question_num=0,
             answer_type="agent_level_answer",
@@ -168,11 +174,10 @@ def search(
     ]
 
     return AnswerUpdate(
-        answers=[answer_string],
         iteration_responses=[
             IterationAnswer(
                 iteration_nr=iteration_nr,
-                parallelization_nr=0,
+                parallelization_nr=parallelization_nr,
                 question=search_query,
                 answer=answer_string,
                 cited_documents=cited_documents,
