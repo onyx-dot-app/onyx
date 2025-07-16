@@ -21,7 +21,7 @@ def github_group_sync(
     github_connector.load_credentials(cc_pair.credential.credential_json)
     if not github_connector.github_client:
         raise ValueError("github_client is required")
-    github_connector.load_credentials(cc_pair.credential.credential_json)
+
     logger.info("Starting GitHub group sync...")
     repos: list[Repository.Repository] = []
     if github_connector.repositories:
@@ -36,8 +36,11 @@ def github_group_sync(
         repos = github_connector.get_all_repos(github_connector.github_client)
 
     for repo in repos:
-        for external_group in get_external_user_group(
-            repo, github_connector.github_client
-        ):
-            logger.info(f"External group: {external_group}")
-            yield external_group
+        try:
+            for external_group in get_external_user_group(
+                repo, github_connector.github_client
+            ):
+                logger.info(f"External group: {external_group}")
+                yield external_group
+        except Exception as e:
+            logger.error(f"Error processing repository {repo.id} ({repo.name}): {e}")

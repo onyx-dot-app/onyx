@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from dataclasses import dataclass
 from enum import Enum
 from typing import List
 from typing import Optional
@@ -14,6 +13,7 @@ from github.Organization import Organization
 from github.PaginatedList import PaginatedList
 from github.Repository import Repository
 from github.Team import Team
+from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
@@ -74,8 +74,7 @@ def _run_with_retry(
         return None
 
 
-@dataclass
-class UserInfo:
+class UserInfo(BaseModel):
     """Represents a GitHub user with their basic information."""
 
     login: str
@@ -83,8 +82,7 @@ class UserInfo:
     email: Optional[str] = None
 
 
-@dataclass
-class TeamInfo:
+class TeamInfo(BaseModel):
     """Represents a GitHub team with its members."""
 
     name: str
@@ -105,8 +103,8 @@ def _fetch_organization_members(
         github_client,
     )
     if not org:
-        logger.warning(f"Failed to fetch organization {org_name}")
-        return org_members
+        logger.error(f"Failed to fetch organization {org_name}")
+        raise RuntimeError(f"Failed to fetch organization {org_name}")
 
     member_objs: PaginatedList[NamedUser] | list[NamedUser] = (
         _run_with_retry(
@@ -221,7 +219,7 @@ def _get_collaborators_and_outside_collaborators(
             )
 
             if org is not None:
-                org_obj = org  # type: ignore
+                org_obj = org
                 membership = _run_with_retry(
                     lambda: org_obj.has_in_members(collaborator),
                     f"check membership for {collaborator.login} in org {org_obj.login}",
@@ -302,15 +300,18 @@ def get_external_access_permission(
     """
     Get the external access permission for a repository.
     Uses group-based permissions for efficiency and scalability.
+
+    add_prefix: When this method is called during the initial permission sync via the connector,
+                the group ID isn't prefixed with the source while inserting the document record.
+                So in that case, set add_prefix to True, allowing the method itself to handle
+                prefixing. However, when the same method is invoked from doc_sync, our system
+                already adds the prefix to the group ID while processing the ExternalAccess object.
     """
     # We maintain collaborators, and outside collaborators as two separate groups
     # instead of adding individual user emails to ExternalAccess.external_user_emails for two reasons:
     # 1. Changes in repo collaborators (additions/removals) would require updating all documents.
     # 2. Repo permissions can change without updating the repo's updated_at timestamp,
     #    forcing full permission syncs for all documents every time, which is inefficient.
-
-    user_emails: set[str] = set()
-    group_ids: set[str] = set()
 
     repo_visibility = get_repository_visibility(repo)
     logger.info(
@@ -322,8 +323,8 @@ def get_external_access_permission(
             f"Repository {repo.full_name} is public - allowing access to all users"
         )
         return ExternalAccess(
-            external_user_emails=user_emails,
-            external_user_group_ids=group_ids,
+            external_user_emails=set(),
+            external_user_group_ids=set(),
             is_public=True,
         )
     elif repo_visibility == GitHubVisibility.PRIVATE:
@@ -342,9 +343,7 @@ def get_external_access_permission(
                 source=DocumentSource.GITHUB,
                 ext_group_name=outside_collaborators_group_id,
             )
-
-        group_ids.add(collaborators_group_id)
-        group_ids.add(outside_collaborators_group_id)
+        group_ids = {collaborators_group_id, outside_collaborators_group_id}
 
         team_slugs = fetch_repository_team_slugs(repo, github_client)
         if add_prefix:
@@ -359,7 +358,7 @@ def get_external_access_permission(
 
         logger.info(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
         return ExternalAccess(
-            external_user_emails=user_emails,
+            external_user_emails=set(),
             external_user_group_ids=group_ids,
             is_public=False,
         )
@@ -374,11 +373,10 @@ def get_external_access_permission(
                 source=DocumentSource.GITHUB,
                 ext_group_name=org_group_id,
             )
-        group_ids.add(org_group_id)
-
+        group_ids = {org_group_id}
         logger.info(f"ExternalAccess groups for {repo.full_name}: {group_ids}")
         return ExternalAccess(
-            external_user_emails=user_emails,
+            external_user_emails=set(),
             external_user_group_ids=group_ids,
             is_public=False,
         )
@@ -409,6 +407,8 @@ def get_external_user_group(
         for collab in collaborators:
             if collab.email:
                 user_emails.add(collab.email)
+            else:
+                logger.error(f"Collaborator {collab.login} has no email")
 
         if user_emails:
             collaborators_group = ExternalUserGroup(
@@ -423,6 +423,8 @@ def get_external_user_group(
         for collab in outside_collaborators:
             if collab.email:
                 user_emails.add(collab.email)
+            else:
+                logger.error(f"Outside collaborator {collab.login} has no email")
 
         if user_emails:
             outside_collaborators_group = ExternalUserGroup(
@@ -440,6 +442,8 @@ def get_external_user_group(
             for member in team.members:
                 if member.email:
                     user_emails.add(member.email)
+                else:
+                    logger.error(f"Team member {member.login} has no email")
 
             if user_emails:
                 team_group = ExternalUserGroup(
@@ -468,6 +472,8 @@ def get_external_user_group(
         for member in org_members:
             if member.email:
                 user_emails.add(member.email)
+            else:
+                logger.error(f"Org member {member.login} has no email")
 
         org_group = ExternalUserGroup(
             id=org_group_id,

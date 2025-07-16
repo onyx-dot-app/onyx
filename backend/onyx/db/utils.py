@@ -36,6 +36,12 @@ def is_retryable_sqlalchemy_error(exc: BaseException) -> bool:
 
 class FilterOperation(str, Enum):
     LIKE = "like"
+    JSON_CONTAINS = "json_contains"  # Check if JSON field contains a key-value pair
+
+
+class SortOrder(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 @dataclass
@@ -43,6 +49,8 @@ class DocumentFilter:
     field: DocumentColumns
     operation: FilterOperation
     value: Any = None
+    # For JSON operations, specify the JSON key to check
+    json_key: str | None = None
 
 
 def build_where_clause_from_filter(
@@ -62,6 +70,11 @@ def build_where_clause_from_filter(
 
     if filter.operation == FilterOperation.LIKE:
         return column.like(filter.value)
+    elif filter.operation == FilterOperation.JSON_CONTAINS:
+        if filter.json_key is None:
+            raise ValueError("json_key is required for JSON_CONTAINS operation")
+        # For PostgreSQL JSONB, use the ->> operator to extract and compare
+        return column.op("->>")(filter.json_key) == filter.value
     else:
         raise ValueError(f"Unsupported operation: {filter.operation}")
 
