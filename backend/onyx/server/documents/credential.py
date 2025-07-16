@@ -169,6 +169,40 @@ def process_private_key_file(file: UploadFile) -> str:
 
 @router.post("/credential")
 def create_credential_from_model(
+    credential_info: CredentialBase,
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> ObjectCreationIdResponse:
+    if credential_info.credential_json.get("authentication_method") == "certificate":
+        raise HTTPException(
+            status_code=400,
+            detail="Certificate authentication is not supported for this endpoint. "
+            "Please use the /credential/private-key endpoint instead.",
+        )
+
+    if not _ignore_credential_permissions(credential_info.source):
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_group", "validate_object_creation_for_user", None
+        )(
+            db_session=db_session,
+            user=user,
+            target_group_ids=credential_info.groups,
+            object_is_public=credential_info.curator_public,
+        )
+
+    # Temporary fix for empty Google App credentials
+    if credential_info.source == DocumentSource.GMAIL:
+        cleanup_gmail_credentials(db_session=db_session)
+
+    credential = create_credential(credential_info, user, db_session)
+    return ObjectCreationIdResponse(
+        id=credential.id,
+        credential=CredentialSnapshot.from_credential_db_model(credential),
+    )
+
+
+@router.post("/credential/private-key")
+def create_credential_with_private_key(
     credential_json: str = Form(...),
     admin_public: bool = Form(False),
     curator_public: bool = Form(False),
@@ -181,6 +215,13 @@ def create_credential_from_model(
 ) -> ObjectCreationIdResponse:
     credential_data = json.loads(credential_json)
     auth_method = credential_data["authentication_method"]
+
+    if auth_method == "client_secret":
+        raise HTTPException(
+            status_code=400,
+            detail="Client secret authentication is not supported for this endpoint. "
+            "Please use the /credential endpoint instead.",
+        )
 
     if auth_method == "certificate" and not private_key:
         raise HTTPException(

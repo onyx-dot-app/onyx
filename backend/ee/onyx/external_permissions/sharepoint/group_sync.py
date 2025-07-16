@@ -4,8 +4,6 @@ from office365.sharepoint.client_context import ClientContext
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.utils import get_sharepoint_external_groups
-from onyx.background.error_logging import emit_background_error
-from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.sharepoint.connector import acquire_token_for_rest
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
@@ -19,41 +17,36 @@ def sharepoint_group_sync(
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
     """Sync SharePoint groups and their members"""
-    provider = OnyxDBCredentialsProvider(tenant_id, "sharepoint", cc_pair.credential_id)
-    credentials = provider.get_credentials()
 
     # Get site URLs from connector config
     connector_config = cc_pair.connector.connector_specific_config
-    sites_config = connector_config.get("sites", [])
 
     # Create SharePoint connector instance and load credentials
-    connector = SharepointConnector(sites=sites_config)
-    connector.load_credentials(credentials)
+    connector = SharepointConnector(**connector_config)
+    connector.load_credentials(cc_pair.credential.credential_json)
+
+    if not connector.msal_app:
+        raise RuntimeError("MSAL app not initialized in connector")
+
+    if not connector.sp_tenant_domain:
+        raise RuntimeError("Tenant domain not initialized in connector")
 
     # Get site descriptors from connector (either configured sites or all sites)
     site_descriptors = connector.site_descriptors or connector.fetch_sites()
 
     if not site_descriptors:
-        msg = "No SharePoint sites found for group sync"
-        emit_background_error(msg, cc_pair_id=cc_pair.id)
-        logger.error(msg)
-        return
+        raise RuntimeError("No SharePoint sites found for group sync")
 
     logger.info(f"Processing {len(site_descriptors)} sites for group sync")
 
+    msal_app = connector.msal_app
+    sp_tenant_domain = connector.sp_tenant_domain
     # Process each site
     for site_descriptor in site_descriptors:
         try:
             logger.debug(f"Processing site: {site_descriptor.url}")
 
             # Create client context for the site using connector's MSAL app
-            if not connector.msal_app or not connector.sp_tenant_domain:
-                logger.error("MSAL app or tenant domain not initialized in connector")
-                continue
-
-            msal_app = connector.msal_app
-            sp_tenant_domain = connector.sp_tenant_domain
-
             ctx = ClientContext(site_descriptor.url).with_access_token(
                 lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
             )
@@ -72,6 +65,5 @@ def sharepoint_group_sync(
 
         except Exception as e:
             msg = f"Failed to process site {site_descriptor.url}: {str(e)}"
-            emit_background_error(msg, cc_pair_id=cc_pair.id)
             logger.error(msg)
             continue

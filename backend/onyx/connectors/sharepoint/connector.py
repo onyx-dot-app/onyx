@@ -839,6 +839,7 @@ if __name__ == "__main__":
             "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
             "sp_client_secret": os.environ["SHAREPOINT_CLIENT_SECRET"],
             "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
+            "authentication_method": "client_secret",
         }
     )
     document_batches = connector.load_from_state()

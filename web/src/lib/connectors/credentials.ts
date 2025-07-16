@@ -28,7 +28,10 @@ export interface CredentialBase<T> {
   name?: string;
   curator_public?: boolean;
   groups?: number[];
-  private_key?: File;
+}
+
+export interface CredentialWithPrivateKey<T> extends CredentialBase<T> {
+  private_key: File;
 }
 
 export interface Credential<T> extends CredentialBase<T> {

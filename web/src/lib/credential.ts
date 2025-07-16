@@ -1,8 +1,22 @@
-import { CredentialBase } from "./connectors/credentials";
+import {
+  CredentialBase,
+  CredentialWithPrivateKey,
+} from "./connectors/credentials";
 import { AccessType } from "@/lib/types";
 
 export async function createCredential(credential: CredentialBase<any>) {
-  console.log(credential);
+  return await fetch(`/api/manage/credential`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(credential),
+  });
+}
+
+export async function createCredentialWithPrivateKey(
+  credential: CredentialWithPrivateKey<any>
+) {
   const formData = new FormData();
   formData.append(
     "credential_json",
@@ -23,8 +37,7 @@ export async function createCredential(credential: CredentialBase<any>) {
   if (credential.private_key) {
     formData.append("private_key", credential.private_key);
   }
-  console.log(formData);
-  return await fetch(`/api/manage/credential`, {
+  return await fetch(`/api/manage/credential/private-key`, {
     method: "POST",
     body: formData,
   });
