@@ -33,7 +33,6 @@ def aggregate_context(
     """
     context_components: list[str] = []
     cited_documents: list[InferenceSection] = []
-
     cited_doc_indices: dict[str, int] = {}
 
     for question_counter, iteration_response in enumerate(iteration_responses, 1):
@@ -42,26 +41,22 @@ def aggregate_context(
         cited_document_list = iteration_response.cited_documents
 
         if cited_document_list:
-            citation_text_components = ["CITED DOCUMENTS for this question:"]
+            question_cited_indices: list[int] = []
             for cited_document in cited_document_list:
-                if cited_document.center_chunk.score is not None:
-                    cited_document.center_chunk.score -= (
-                        iteration_response.iteration_nr - 1
-                    )
-                for chunk in cited_document.chunks:
-                    if chunk.score is not None:
-                        chunk.score -= iteration_response.iteration_nr - 1
+                document_id = cited_document.center_chunk.unique_id
+                if document_id not in cited_doc_indices:
+                    # decrement scores
+                    for chunk in cited_document.chunks:
+                        if chunk.score is not None:
+                            chunk.score -= iteration_response.iteration_nr - 1
 
-                section_id = cited_document.center_chunk.unique_id
-                if section_id not in cited_doc_indices:
-                    cited_doc_indices[section_id] = len(cited_doc_indices) + 1
+                    # add to citation
+                    cited_doc_indices[document_id] = len(cited_doc_indices) + 1
                     cited_documents.append(cited_document)
-                citation_text_components.append(
-                    build_document_context(
-                        cited_document, cited_doc_indices[section_id]
-                    )
-                )
-            citation_text = "\n\n---\n".join(citation_text_components)
+                    question_cited_indices.append(cited_doc_indices[document_id])
+            citation_text = "Cited documents: " + "".join(
+                f"[{index}]" for index in question_cited_indices
+            )
 
         else:
             citation_text = "No citations provided for this answer. Take provided answer at face value."
@@ -71,6 +66,13 @@ def aggregate_context(
         context_components.append(f"Answer: {answer_text}")
         context_components.append(citation_text)
         context_components.append("\n\n---\n\n")
+
+    context_components.append("Cited document contents:")
+    for doc in cited_documents:
+        context_components.append(
+            build_document_context(doc, cited_doc_indices[doc.center_chunk.unique_id])
+        )
+        context_components.append("\n---\n")
 
     return AggregatedDRContext(
         context="\n".join(context_components),
