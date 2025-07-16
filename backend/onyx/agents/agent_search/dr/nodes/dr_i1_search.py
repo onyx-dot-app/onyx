@@ -4,19 +4,17 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
 from onyx.agents.agent_search.dr.states import MainState
-from onyx.agents.agent_search.dr.utils import get_cited_document_numbers
+from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import LlmDoc
@@ -45,18 +43,12 @@ def search(
     node_start_time = datetime.now()
 
     search_query = state.query_list[0]  # TODO: fix this
-    base_question = config["metadata"]["config"].inputs.prompt_builder.raw_user_query
-
-    node_start_time = datetime.now()
-    query_to_retrieve = search_query
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    search_tool = graph_config.tooling.search_tool
+    base_question = graph_config.inputs.prompt_builder.raw_user_query
 
-    user = (
-        graph_config.tooling.search_tool.user
-        if graph_config.tooling.search_tool
-        else None
-    )
+    search_tool = graph_config.tooling.search_tool
+    if search_tool is None:
+        raise ValueError("search_tool must be provided for agentic search")
 
     write_custom_event(
         "basic_response",
@@ -69,23 +61,13 @@ def search(
         writer,
     )
 
-    if not user:
-        raise ValueError("User is not set")
-
     retrieved_docs: list[InferenceSection] = []
-
-    if search_tool is None:
-        raise ValueError("search_tool must be provided for agentic search")
-
     callback_container: list[list[InferenceSection]] = []
 
     # new db session to avoid concurrency issues
     with get_session_with_current_tenant() as search_db_session:
-
-        list(get_acl_for_user(user, search_db_session))
-
         for tool_response in search_tool.run(
-            query=query_to_retrieve,
+            query=search_query,
             override_kwargs=SearchToolOverrideKwargs(
                 force_no_rerank=True,
                 alternate_db_session=search_db_session,
@@ -101,8 +83,6 @@ def search(
                 break
 
     # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
-
-    relevance_from_docs(retrieved_docs)
 
     """
     # keep for later use
@@ -174,28 +154,18 @@ def search(
         writer,
     )
 
-    # handle citations
-
+    # get all citations and remove them from the answer to avoid
+    # incorrect citations when the documents get reordered by the closer
     citation_string = search_answer_json.citations
     answer_string = search_answer_json.answer
 
-    citation_numbers = get_cited_document_numbers(citation_string + answer_string)
-    citation_number_replacement_dict = {
-        original_index: start_1_based_index
-        for start_1_based_index, original_index in enumerate(citation_numbers, 1)
-    }
-
-    cited_documents: list[InferenceSection] = []
-
-    for citation_number in citation_numbers:
-        cited_documents.append(retrieved_docs[citation_number - 1])
-
-    # change citations from search answer
-    for original_index, replacement_index in citation_number_replacement_dict.items():
-
-        answer_string = answer_string.replace(
-            f"[{original_index}]", f"[{replacement_index}]"
-        )
+    (
+        citation_numbers,
+        answer_string,
+    ) = extract_document_citations(citation_string + answer_string)
+    cited_documents = [
+        retrieved_docs[citation_number - 1] for citation_number in citation_numbers
+    ]
 
     return AnswerUpdate(
         answers=[answer_string],
