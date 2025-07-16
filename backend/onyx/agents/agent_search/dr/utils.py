@@ -53,7 +53,7 @@ def aggregate_context(
                     # add to citation
                     cited_doc_indices[document_id] = len(cited_doc_indices) + 1
                     cited_documents.append(cited_document)
-                    question_cited_indices.append(cited_doc_indices[document_id])
+                question_cited_indices.append(cited_doc_indices[document_id])
             citation_text = "Cited documents: " + "".join(
                 f"[{index}]" for index in question_cited_indices
             )
