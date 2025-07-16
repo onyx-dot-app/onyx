@@ -16,7 +16,6 @@ export function createValidationSchema(json_values: Record<string, any>) {
     schemaFields["authentication_method"] = Yup.string().required(
       "Please select an authentication method"
     );
-
     // conditional rules per authMethod
     template.authMethods.forEach((method) => {
       Object.entries(method.fields).forEach(([key, def]) => {
@@ -32,6 +31,24 @@ export function createValidationSchema(json_values: Record<string, any>) {
             .transform((v) => (v === "" ? null : v))
             .nullable()
             .notRequired();
+        } else if (def instanceof File) {
+          // File upload fields with size and extension validation
+          schemaFields[key] = Yup.mixed()
+            .required(`Please select a ${displayName} file`)
+            .test("fileSize", "File size must be less than 10KB", (value) => {
+              if (!value) return false; // Require file
+              if (value instanceof File) {
+                return value.size <= 10 * 1024; // 10KB in bytes
+              }
+              return false;
+            })
+            .test("fileExtension", "File must have .pfx extension", (value) => {
+              if (!value) return false; // Require file
+              if (value instanceof File) {
+                return value.name.toLowerCase().endsWith(".pfx");
+              }
+              return false;
+            });
         } else {
           schemaFields[key] = Yup.string()
             .trim()
@@ -64,6 +81,24 @@ export function createValidationSchema(json_values: Record<string, any>) {
         .transform((v) => (v === "" ? null : v))
         .nullable()
         .notRequired();
+    } else if (def instanceof File) {
+      // File upload fields with size and extension validation
+      schemaFields[key] = Yup.mixed()
+        .required(`Please select a ${displayName} file`)
+        .test("fileSize", "File size must be less than 10KB", (value) => {
+          if (!value) return false; // Require file
+          if (value instanceof File) {
+            return value.size <= 10 * 1024; // 10KB in bytes
+          }
+          return false;
+        })
+        .test("fileExtension", "File must have .pfx extension", (value) => {
+          if (!value) return false; // Require file
+          if (value instanceof File) {
+            return value.name.toLowerCase().endsWith(".pfx");
+          }
+          return false;
+        });
     } else {
       schemaFields[key] = Yup.string()
         .trim()

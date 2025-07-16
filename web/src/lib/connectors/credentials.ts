@@ -28,6 +28,7 @@ export interface CredentialBase<T> {
   name?: string;
   curator_public?: boolean;
   groups?: number[];
+  private_key?: File;
 }
 
 export interface Credential<T> extends CredentialBase<T> {
@@ -188,8 +189,11 @@ export interface SalesforceCredentialJson {
 
 export interface SharepointCredentialJson {
   sp_client_id: string;
-  sp_client_secret: string;
+  sp_client_secret?: string;
   sp_directory_id: string;
+  sp_certificate_password?: string;
+  sp_private_key?: File;
+  sp_tenant_domain?: string;
 }
 
 export interface AsanaCredentialJson {
@@ -297,10 +301,34 @@ export const credentialTemplates: Record<ValidSources, any> = {
     is_sandbox: false,
   } as SalesforceCredentialJson,
   sharepoint: {
-    sp_client_id: "",
-    sp_client_secret: "",
-    sp_directory_id: "",
-  } as SharepointCredentialJson,
+    authentication_method: "client_credentials",
+    authMethods: [
+      {
+        value: "client_secret",
+        label: "Client Secret",
+        fields: {
+          sp_client_id: "",
+          sp_client_secret: "",
+          sp_directory_id: "",
+        },
+        description:
+          "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
+      },
+      {
+        value: "certificate",
+        label: "Certificate Authentication",
+        fields: {
+          sp_client_id: "",
+          sp_directory_id: "",
+          sp_certificate_password: "",
+          sp_private_key: new File([], ""),
+          sp_tenant_domain: "",
+        },
+        description:
+          "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
+      },
+    ],
+  } as CredentialTemplateWithAuth<SharepointCredentialJson>,
   asana: {
     asana_api_token_secret: "",
   } as AsanaCredentialJson,
@@ -522,6 +550,9 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_client_id: "SharePoint Client ID",
   sp_client_secret: "SharePoint Client Secret",
   sp_directory_id: "SharePoint Directory ID",
+  sp_certificate_password: "SharePoint Certificate Password",
+  sp_private_key: "SharePoint Private Key",
+  sp_tenant_domain: "SharePoint Tenant Domain",
 
   // Asana
   asana_api_token_secret: "Asana API Token",

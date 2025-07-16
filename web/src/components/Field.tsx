@@ -8,6 +8,7 @@ import {
   useField,
   useFormikContext,
 } from "formik";
+import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
 import { StringOrNumberOption } from "@/components/Dropdown";
@@ -377,6 +378,71 @@ export function FileUploadFormField({
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
       <FileInput name={fileName} multiple={false} hideError />
+    </div>
+  );
+}
+
+export function FileUploadRawFormField({
+  name,
+  label,
+  subtext,
+  maxSizeKB = 10,
+}: {
+  name: string;
+  label: string;
+  subtext?: string | JSX.Element;
+  maxSizeKB?: number;
+}) {
+  // This component keeps the file as a File object without extracting its content
+  // Useful for files like private keys that need to be processed on the backend
+  const [field, meta, helpers] = useField<File | null>(name);
+  const [customError, setCustomError] = useState<string>("");
+
+  // Validate file when it changes
+  useEffect(() => {
+    const validateFile = (file: File | null) => {
+      if (!file) {
+        setCustomError("File is required");
+        return false;
+      }
+      let extension = file.name.split(".").pop();
+      if (extension !== "pfx") {
+        setCustomError(`File must have a .pfx extension`);
+        return false;
+      }
+      // File size validation
+      if (maxSizeKB && file.size > maxSizeKB * 1024) {
+        setCustomError(`File size must not exceed ${maxSizeKB}KB`);
+        return false;
+      }
+
+      setCustomError("");
+      return true;
+    };
+
+    validateFile(field.value);
+  }, [field.value, maxSizeKB]);
+
+  return (
+    <div className="w-full">
+      <FieldLabel name={name} label={label} subtext={subtext} />
+      <FileUpload
+        selectedFiles={field.value ? [field.value] : []}
+        setSelectedFiles={(files: File[]) => {
+          helpers.setValue(files[0] || null);
+        }}
+        multiple={false}
+      />
+      {/* Show custom validation errors first, then schema validation errors */}
+      {customError ? (
+        <div className="text-red-500 text-sm mt-1">{customError}</div>
+      ) : (
+        <ErrorMessage
+          name={name}
+          component="div"
+          className="text-red-500 text-sm mt-1"
+        />
+      )}
     </div>
   );
 }

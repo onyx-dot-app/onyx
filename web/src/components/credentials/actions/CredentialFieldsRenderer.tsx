@@ -1,7 +1,12 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFormikContext } from "formik";
-import { BooleanFormField, TextFormField } from "@/components/Field";
+import {
+  BooleanFormField,
+  FileUploadFormField,
+  FileUploadRawFormField,
+  TextFormField,
+} from "@/components/Field";
 import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
@@ -90,6 +95,18 @@ export function CredentialFieldsRenderer({
                 )}
 
               {Object.entries(method.fields).map(([key, val]) => {
+                if (val instanceof File) {
+                  // Apply specific validation for private key files
+                  const isPrivateKey = key.includes("private_key");
+                  return (
+                    <FileUploadRawFormField
+                      key={key}
+                      name={key}
+                      label={getDisplayNameForCredentialKey(key)}
+                      maxSizeKB={isPrivateKey ? 10 : undefined}
+                    />
+                  );
+                }
                 if (typeof val === "boolean") {
                   return (
                     <BooleanFormField
@@ -137,6 +154,18 @@ export function CredentialFieldsRenderer({
               key={key}
               name={key}
               label={getDisplayNameForCredentialKey(key)}
+            />
+          );
+        }
+        if ((val as any) instanceof File) {
+          // Apply specific validation for private key files
+          const isPrivateKey = key.includes("private_key");
+          return (
+            <FileUploadRawFormField
+              key={key}
+              name={key}
+              label={getDisplayNameForCredentialKey(key)}
+              maxSizeKB={isPrivateKey ? 10 : undefined}
             />
           );
         }

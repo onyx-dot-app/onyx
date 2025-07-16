@@ -2,12 +2,31 @@ import { CredentialBase } from "./connectors/credentials";
 import { AccessType } from "@/lib/types";
 
 export async function createCredential(credential: CredentialBase<any>) {
+  console.log(credential);
+  const formData = new FormData();
+  formData.append(
+    "credential_json",
+    JSON.stringify(credential.credential_json)
+  );
+  formData.append("admin_public", credential.admin_public.toString());
+  formData.append(
+    "curator_public",
+    credential.curator_public?.toString() || "false"
+  );
+  if (credential.groups && credential.groups.length > 0) {
+    credential.groups.forEach((group) => {
+      formData.append("groups", String(group));
+    });
+  }
+  formData.append("name", credential.name || "");
+  formData.append("source", credential.source);
+  if (credential.private_key) {
+    formData.append("private_key", credential.private_key);
+  }
+  console.log(formData);
   return await fetch(`/api/manage/credential`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(credential),
+    body: formData,
   });
 }
 

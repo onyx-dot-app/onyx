@@ -114,10 +114,15 @@ export default function CreateCredential({
 
     const { name, is_public, groups, ...credentialValues } = values;
 
+    let privateKey: File | null = null;
     const filteredCredentialValues = Object.fromEntries(
-      Object.entries(credentialValues).filter(
-        ([_, value]) => value !== null && value !== ""
-      )
+      Object.entries(credentialValues).filter(([key, value]) => {
+        if (key.includes("private_key")) {
+          privateKey = value;
+          return false;
+        }
+        return value !== null && value !== "";
+      })
     );
 
     try {
@@ -128,6 +133,7 @@ export default function CreateCredential({
         groups: groups,
         name: name,
         source: sourceType,
+        private_key: privateKey || undefined,
       });
 
       const { message, isSuccess, credential } = response;

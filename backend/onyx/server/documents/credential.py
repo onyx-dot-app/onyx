@@ -1,7 +1,13 @@
+import base64
+import json
+
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import File
+from fastapi import Form
 from fastapi import HTTPException
 from fastapi import Query
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
@@ -76,6 +82,7 @@ def get_cc_source_full_info(
         document_source=source_type,
         get_editable=get_editable,
     )
+
     return [
         CredentialSnapshot.from_credential_db_model(credential)
         for credential in credentials
@@ -122,24 +129,94 @@ def swap_credentials_for_connector(
     )
 
 
+# @router.post("/credential")
+# def create_credential_from_model(
+#     credential_info: CredentialBase,
+#     user: User | None = Depends(current_curator_or_admin_user),
+#     db_session: Session = Depends(get_session),
+# ) -> ObjectCreationIdResponse:
+#     if not _ignore_credential_permissions(credential_info.source):
+#         fetch_ee_implementation_or_noop(
+#             "onyx.db.user_group", "validate_object_creation_for_user", None
+#         )(
+#             db_session=db_session,
+#             user=user,
+#             target_group_ids=credential_info.groups,
+#             object_is_public=credential_info.curator_public,
+#         )
+
+#     # Temporary fix for empty Google App credentials
+#     if credential_info.source == DocumentSource.GMAIL:
+#         cleanup_gmail_credentials(db_session=db_session)
+
+#     credential = create_credential(credential_info, user, db_session)
+#     return ObjectCreationIdResponse(
+#         id=credential.id,
+#         credential=CredentialSnapshot.from_credential_db_model(credential),
+#     )
+
+
+def process_private_key_file(file: UploadFile) -> str:
+    if file.filename and file.filename.endswith(".pfx"):
+        private_key_bytes = file.file.read()
+        pfx_64 = base64.b64encode(private_key_bytes).decode("ascii")
+        return pfx_64
+    else:
+        raise HTTPException(
+            status_code=400, detail="Invalid file type. Only .pfx files are supported."
+        )
+
+
 @router.post("/credential")
 def create_credential_from_model(
-    credential_info: CredentialBase,
+    credential_json: str = Form(...),
+    admin_public: bool = Form(False),
+    curator_public: bool = Form(False),
+    groups: list[int] = Form([]),
+    name: str | None = Form(None),
+    source: str = Form(...),
     user: User | None = Depends(current_curator_or_admin_user),
+    private_key: UploadFile | None = File(None),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    if not _ignore_credential_permissions(credential_info.source):
+    credential_data = json.loads(credential_json)
+    auth_method = credential_data["authentication_method"]
+
+    if auth_method == "certificate" and not private_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Private key is required for certificate authentication",
+        )
+
+    if private_key:
+        private_key_content = process_private_key_file(private_key)
+    else:
+        private_key_content = None
+
+    if private_key_content:
+        credential_data["private_key"] = private_key_content
+
+    credential_info = CredentialBase(
+        credential_json=credential_data,
+        admin_public=admin_public,
+        curator_public=curator_public,
+        groups=groups,
+        name=name,
+        source=DocumentSource(source),
+    )
+
+    if not _ignore_credential_permissions(DocumentSource(source)):
         fetch_ee_implementation_or_noop(
             "onyx.db.user_group", "validate_object_creation_for_user", None
         )(
             db_session=db_session,
             user=user,
-            target_group_ids=credential_info.groups,
-            object_is_public=credential_info.curator_public,
+            target_group_ids=groups,
+            object_is_public=curator_public,
         )
 
     # Temporary fix for empty Google App credentials
-    if credential_info.source == DocumentSource.GMAIL:
+    if DocumentSource(source) == DocumentSource.GMAIL:
         cleanup_gmail_credentials(db_session=db_session)
 
     credential = create_credential(credential_info, user, db_session)
