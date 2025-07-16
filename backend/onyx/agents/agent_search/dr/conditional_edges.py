@@ -1,8 +1,37 @@
+from collections.abc import Hashable
+
+from langgraph.types import Send
+
+from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.states import QuestionUpdate
 
 
-def decision_router(state: MainState) -> DRPath:
+def decision_router(state: MainState) -> list[Send | Hashable] | DRPath:
     if not state.query_path:
         raise IndexError("state.query_path cannot be empty")
-    return state.query_path[-1]
+
+    # go to closer if path is CLOSER or no queries
+    next_path = state.query_path[-1]
+    if next_path == DRPath.CLOSER or not state.query_list:
+        return DRPath.CLOSER
+
+    # send search/kg requests (parallel only for search)
+    queries = (
+        state.query_list[:MAX_DR_PARALLEL_SEARCH]
+        if next_path == DRPath.SEARCH
+        else state.query_list[:1]
+    )
+    queries = queries[:1]  # TODO: model server raises error with > 1 for some reason
+    return [
+        Send(
+            next_path,
+            QuestionUpdate(
+                iteration_nr=state.iteration_nr,
+                parallelization_nr=parallelization_nr,
+                question=query,
+            ),
+        )
+        for parallelization_nr, query in enumerate(queries)
+    ]

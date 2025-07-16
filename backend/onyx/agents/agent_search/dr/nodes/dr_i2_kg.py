@@ -27,24 +27,30 @@ def kg_query(
 
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
-    search_query = state.query_list[0]  # TODO: fix this
+    parallelization_nr = state.parallelization_nr
+    search_query = state.question
+    if not search_query:
+        raise ValueError("search_query is not set")
 
     logger.debug(f"Conducting a knowledge graph search for: {search_query}")
 
     kb_graph = kb_graph_builder().compile()
 
-    # TODO: change this
+    # TODO: change this, won't work if doing parallel kg
     original_question = config["metadata"][
         "config"
     ].inputs.prompt_builder.raw_user_query
-    kg_config = config.copy()
+    kg_config = config.copy()  # doesn't really do much
     kg_config["metadata"]["config"].behavior.use_agentic_search = True
     kg_config["metadata"]["config"].inputs.prompt_builder.raw_user_query = search_query
 
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
-            answer_piece=f"\n\nSUB-QUESTION (KNOWLEDGE GRAPH): {search_query}\n\n",
+            answer_piece=(
+                f"SUB-QUESTION {iteration_nr}.{parallelization_nr} "
+                f"(KNOWLEDGE GRAPH): {search_query}\n\n"
+            ),
             level=0,
             level_question_num=0,
             answer_type="agent_level_answer",
@@ -57,6 +63,7 @@ def kg_query(
     )
     full_answer = kb_results.get("final_answer") or "No answer provided"
 
+    # TODO: here to revert the query, but won't work for parallel kg
     config["metadata"][
         "config"
     ].inputs.prompt_builder.raw_user_query = original_question
@@ -71,7 +78,7 @@ def kg_query(
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
-            answer_piece="\n\n-> answered!\n\n",
+            answer_piece=f"ANSWERED {iteration_nr}.{parallelization_nr}\n\n",
             level=0,
             level_question_num=0,
             answer_type="agent_level_answer",
@@ -80,11 +87,10 @@ def kg_query(
     )
 
     return AnswerUpdate(
-        answers=[kb_results.get("final_answer") or ""],
         iteration_responses=[
             IterationAnswer(
                 iteration_nr=iteration_nr,
-                parallelization_nr=0,
+                parallelization_nr=parallelization_nr,
                 question=search_query,
                 answer=full_answer,
                 cited_documents=kb_results.get(
