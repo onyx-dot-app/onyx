@@ -19,15 +19,16 @@ from office365.onedrive.sites.site import Site  # type: ignore
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore
 from office365.runtime.client_request import ClientRequestException  # type: ignore
 import msal
+import msal  # type: ignore[import-untyped]
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
-from office365.graph_client import GraphClient
-from office365.onedrive.driveitems.driveItem import DriveItem
-from office365.onedrive.sites.site import Site
-from office365.onedrive.sites.sites_with_root import SitesWithRoot
-from office365.runtime.auth.token_response import TokenResponse
-from office365.sharepoint.client_context import ClientContext
+from office365.graph_client import GraphClient  # type: ignore[import-untyped]
+from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
+from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
+from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
+from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
+from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -106,7 +107,10 @@ def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> 
                         f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
                     )
                 raise e
-def load_certificate_from_pfx(pfx_data, password):
+
+def load_certificate_from_pfx(
+    pfx_data: bytes, password: str
+) -> dict[str, bytes | str] | None:
     """Load certificate from .pfx file for MSAL authentication"""
     try:
         # Load the certificate and private key

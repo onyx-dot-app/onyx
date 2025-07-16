@@ -3,11 +3,11 @@ import time
 from collections import deque
 from typing import Any
 
-from office365.graph_client import GraphClient
-from office365.onedrive.driveitems.driveItem import DriveItem
-from office365.runtime.client_request_exception import ClientRequestException
-from office365.sharepoint.client_context import ClientContext
-from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection
+from office365.graph_client import GraphClient  # type: ignore[import-untyped]
+from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
+from office365.runtime.client_request_exception import ClientRequestException  # type: ignore[import-untyped]
+from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
+from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
