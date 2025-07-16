@@ -7,6 +7,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SlimConnector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentColumns
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -63,7 +64,7 @@ def generic_doc_sync(
             )
 
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id=}")
-    existing_docs: list[dict[str, Any]] = fetch_all_existing_docs_fn(
+    existing_docs: list[dict[DocumentColumns, Any]] = fetch_all_existing_docs_fn(
         columns=["id"],
     )
     existing_doc_ids = set(doc["id"] for doc in existing_docs)

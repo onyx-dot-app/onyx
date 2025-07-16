@@ -243,6 +243,10 @@ def _convert_pr_to_document(
             if pull_request.updated_at
             else None
         ),
+        # this metadata is used in perm sync
+        doc_metadata={
+            "repo": pull_request.base.repo.full_name if pull_request.base else None,
+        },
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -307,6 +311,10 @@ def _convert_issue_to_document(
         semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
+        # this metadata is used in perm sync
+        doc_metadata={
+            "repo": issue.repository.full_name if issue.repository else None,
+        },
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -900,7 +908,7 @@ if __name__ == "__main__":
     connector.load_credentials(
         {"github_access_token": os.environ["ACCESS_TOKEN_GITHUB"]}
     )
-    logger.info(f"Token: {os.environ['ACCESS_TOKEN_GITHUB']}")
+
     if connector.github_client:
         get_external_access_permission(
             connector.get_github_repos(connector.github_client).pop(),

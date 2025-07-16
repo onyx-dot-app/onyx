@@ -53,6 +53,7 @@ from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import build_where_clause_from_filter
 from onyx.db.utils import DocumentFilter
 from onyx.db.utils import model_to_dict
+from onyx.db.utils import SortOrder
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -172,66 +173,70 @@ def get_documents_for_connector_credential_pair_filtered(
     document_filter: DocumentFilter | None = None,
     limit: int | None = None,
     columns: list[DocumentColumns] | None = None,
-) -> Sequence[dict[str, Any]]:
+    sort_order: SortOrder | None = None,
+) -> Sequence[dict[DocumentColumns, Any]]:
     """Get documents for a connector credential pair with optional filtering and column selection.
 
     Args:
         db_session: Database session
         connector_id: ID of the connector
         credential_id: ID of the credential
-        where_clause: Optional SQLAlchemy where clause for additional filtering
+        document_filter: Optional document filter for additional filtering
         limit: Optional limit on number of results
         columns: Optional list of specific columns to select (if None, selects all document columns)
+        sort_order: Optional sort order for results (ASC or DESC). If None, no ordering is applied for better performance.
 
     Returns:
         Sequence of Document objects matching the criteria
     """
-    # First, get the document IDs for the connector credential pair
-    initial_doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
+    where_clause = None
+    if document_filter:
+        where_clause = build_where_clause_from_filter(document_filter)
+
+    # Build the base subquery to get document IDs for the connector credential pair
+    doc_ids_subquery = select(DocumentByConnectorCredentialPair.id).where(
         and_(
             DocumentByConnectorCredentialPair.connector_id == connector_id,
             DocumentByConnectorCredentialPair.credential_id == credential_id,
         )
     )
 
-    where_clause = None
-
-    if document_filter:
-        where_clause = build_where_clause_from_filter(document_filter)
-
-    # If limit is 1, order by last_modified ASC to get the oldest record
-    if limit and limit == 1 and where_clause is not None:
-        # Join with Document table to get access to last_modified for ordering
-        initial_doc_ids_stmt = (
-            select(DocumentByConnectorCredentialPair.id)
-            .join(DbDocument, DocumentByConnectorCredentialPair.id == DbDocument.id)
-            .where(
-                and_(
-                    DocumentByConnectorCredentialPair.connector_id == connector_id,
-                    DocumentByConnectorCredentialPair.credential_id == credential_id,
-                )
-            )
-            .order_by(DbDocument.last_modified.asc())
-            .limit(limit)
+    # If we need ordering or filtering by Document fields, we need to join and apply those constraints
+    # in the subquery for proper limit behavior
+    if sort_order is not None or where_clause is not None:
+        doc_ids_subquery = doc_ids_subquery.join(
+            DbDocument, DocumentByConnectorCredentialPair.id == DbDocument.id
         )
-        if where_clause is not None:
-            initial_doc_ids_stmt = initial_doc_ids_stmt.where(where_clause)
 
-    elif limit:
-        initial_doc_ids_stmt = initial_doc_ids_stmt.limit(limit)
+        if where_clause is not None:
+            logger.info(f"Where clause: {where_clause}")
+            doc_ids_subquery = doc_ids_subquery.where(where_clause)
+
+        if sort_order is not None:
+            order_by_clause = (
+                DbDocument.last_modified.asc()
+                if sort_order == SortOrder.ASC
+                else DbDocument.last_modified.desc()
+            )
+            doc_ids_subquery = doc_ids_subquery.order_by(order_by_clause)
+
+    if limit:
+        doc_ids_subquery = doc_ids_subquery.limit(limit)
 
     if columns:
         stmt = select(*[getattr(DbDocument, col) for col in columns])
     else:
         stmt = select(DbDocument)
 
-    stmt = stmt.where(DbDocument.id.in_(initial_doc_ids_stmt))
+    stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
 
-    if where_clause is not None:
-        logger.info(f"Where clause: {where_clause}")
-        stmt = stmt.where(where_clause)
-
-    stmt = stmt.distinct()
+    if sort_order is not None:
+        order_by_clause = (
+            DbDocument.last_modified.asc()
+            if sort_order == SortOrder.ASC
+            else DbDocument.last_modified.desc()
+        )
+        stmt = stmt.order_by(order_by_clause)
 
     return [dict(row) for row in db_session.execute(stmt).mappings().all()]
 
@@ -445,6 +450,7 @@ def upsert_documents(
                         if doc.external_access
                         else {}
                     ),
+                    doc_metadata=doc.doc_metadata,
                 )
             )
             for doc in seen_documents.values()
@@ -464,6 +470,7 @@ def upsert_documents(
             "external_user_emails": insert_stmt.excluded.external_user_emails,
             "external_user_group_ids": insert_stmt.excluded.external_user_group_ids,
             "is_public": insert_stmt.excluded.is_public,
+            "doc_metadata": insert_stmt.excluded.doc_metadata,
         },
     )
     db_session.execute(on_conflict_stmt)

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from onyx.context.search.models import InferenceChunk
 from onyx.db.models import DocumentColumns
 from onyx.db.utils import DocumentFilter
+from onyx.db.utils import SortOrder
 
 # Avoid circular imports
 if TYPE_CHECKING:
@@ -29,17 +30,19 @@ class FetchAllDocumentsFunction(Protocol):
         columns: list[DocumentColumns] | None = None,
         document_filter: DocumentFilter | None = None,
         limit: int | None = None,
-    ) -> list[dict[str, Any]]:
+        sort_order: SortOrder | None = None,
+    ) -> list[dict[DocumentColumns, Any]]:
         """
         Fetches documents for a connector credential pair with optional filtering.
 
         Args:
             columns: List of column attributes to select.
                     If None, implementation should default to all columns.
-            where_clause: Optional SQLAlchemy where clause for filtering documents.
+            document_filter: Optional document filter for filtering documents.
                          If None, no additional filtering is applied.
             limit: Optional limit on the number of documents to return.
                   If None, all matching documents are returned.
+            sort_order: Optional sort order for results (ASC or DESC). If None, no ordering is applied for better performance.
 
         Returns:
             List of dicts matching the specified criteria.

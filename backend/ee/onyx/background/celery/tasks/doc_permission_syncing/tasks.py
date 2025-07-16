@@ -61,6 +61,7 @@ from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.db.utils import DocumentFilter
 from onyx.db.utils import is_retryable_sqlalchemy_error
+from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
@@ -504,7 +505,8 @@ def connector_permission_sync_generator_task(
                 columns: list[DocumentColumns] | None = None,
                 document_filter: DocumentFilter | None = None,
                 limit: int | None = None,
-            ) -> list[dict[str, Any]]:
+                sort_order: SortOrder | None = None,
+            ) -> list[dict[DocumentColumns, Any]]:
                 result = get_documents_for_connector_credential_pair_filtered(
                     db_session=db_session,
                     connector_id=cc_pair.connector.id,
@@ -512,6 +514,7 @@ def connector_permission_sync_generator_task(
                     document_filter=document_filter,
                     limit=limit,
                     columns=columns,
+                    sort_order=sort_order,
                 )
                 return list(result)
 

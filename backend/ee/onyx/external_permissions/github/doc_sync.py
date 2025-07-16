@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from typing import Any
 
 from github import Github
 from github.Repository import Repository
@@ -18,8 +19,10 @@ from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.connector import GithubConnector
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import DocumentColumns
 from onyx.db.utils import DocumentFilter
 from onyx.db.utils import FilterOperation
+from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -87,50 +90,57 @@ def github_doc_sync(
 
     # Process each repository individually
     for repo in repos:
+        try:
+            logger.info(f"Processing repository: {repo.id} (name: {repo.name})")
 
-        logger.info(f"Processing repository: {repo.id} (name: {repo.name})")
-
-        # Check if repository has any permission changes
-        has_changes = _check_repository_for_changes(
-            repo=repo,
-            github_client=github_connector.github_client,
-            fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
-        )
-
-        if has_changes:
-            logger.info(
-                f"Repository {repo.id} ({repo.name}) has changes, updating documents"
+            # Check if repository has any permission changes
+            has_changes = _check_repository_for_changes(
+                repo=repo,
+                github_client=github_connector.github_client,
+                fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
             )
 
-            # Get new external access permissions for this repository
-            new_external_access = get_external_access_permission(
-                repo, github_connector.github_client
-            )
-
-            repo_documents = fetch_all_existing_docs_fn(
-                columns=["id"],
-                document_filter=DocumentFilter(
-                    field="id",
-                    operation=FilterOperation.LIKE,
-                    value=f"%{repo.full_name}%",
-                ),
-            )
-
-            logger.info(
-                f"Found {len(repo_documents)} documents for repository {repo.full_name}"
-            )
-
-            # Yield updated external access for each document
-            for doc in repo_documents:
-                if callback:
-                    callback.progress(GITHUB_DOC_SYNC_LABEL, 1)
-
-                yield DocExternalAccess(
-                    doc_id=doc["id"],
-                    external_access=new_external_access,
+            if has_changes:
+                logger.info(
+                    f"Repository {repo.id} ({repo.name}) has changes, updating documents"
                 )
-        else:
-            logger.info(f"Repository {repo.id} ({repo.name}) has no changes, skipping")
+
+                # Get new external access permissions for this repository
+                new_external_access = get_external_access_permission(
+                    repo, github_connector.github_client
+                )
+
+                repo_documents: list[dict[DocumentColumns, Any]] = (
+                    fetch_all_existing_docs_fn(
+                        columns=["id"],
+                        document_filter=DocumentFilter(
+                            field="doc_metadata",
+                            operation=FilterOperation.JSON_CONTAINS,
+                            value=repo.full_name,
+                            json_key="repo",
+                        ),
+                    )
+                )
+
+                logger.info(
+                    f"Found {len(repo_documents)} documents for repository {repo.full_name}"
+                )
+
+                # Yield updated external access for each document
+                for doc in repo_documents:
+                    if callback:
+                        callback.progress(GITHUB_DOC_SYNC_LABEL, 1)
+
+                    yield DocExternalAccess(
+                        doc_id=doc["id"],
+                        external_access=new_external_access,
+                    )
+            else:
+                logger.info(
+                    f"Repository {repo.id} ({repo.name}) has no changes, skipping"
+                )
+        except Exception as e:
+            logger.error(f"Error processing repository {repo.id} ({repo.name}): {e}")
 
     logger.info(f"GitHub document sync completed for CC pair ID: {cc_pair.id}")
 
@@ -155,14 +165,16 @@ def _check_repository_for_changes(
     """
     logger.info(f"Checking repository {repo.id} ({repo.name}) for changes")
 
-    docs = fetch_all_existing_docs_fn(
+    docs: list[dict[DocumentColumns, Any]] = fetch_all_existing_docs_fn(
         columns=["id", "external_user_group_ids"],
         document_filter=DocumentFilter(
-            field="id",
-            operation=FilterOperation.LIKE,
-            value=f"%{repo.full_name}%",
+            field="doc_metadata",
+            operation=FilterOperation.JSON_CONTAINS,
+            value=repo.full_name,
+            json_key="repo",
         ),
         limit=1,
+        sort_order=SortOrder.ASC,
     )
 
     # If no documents exist for this connector/credential pair, no changes to process
@@ -271,7 +283,7 @@ def _teams_updated_from_groups(
         f"Current teams for repository {repo.id} (name: {repo.name}): {current_teams}"
     )
 
-    # Build group IDs to exclude from team count
+    # Build group IDs to exclude from team comparison (non-team groups)
     collaborators_group_id = build_ext_group_name_for_onyx(
         source=DocumentSource.GITHUB,
         ext_group_name=form_collaborators_group_id(repo.id),
@@ -280,24 +292,35 @@ def _teams_updated_from_groups(
         source=DocumentSource.GITHUB,
         ext_group_name=form_outside_collaborators_group_id(repo.id),
     )
+    non_team_group_ids = {collaborators_group_id, outside_collaborators_group_id}
 
     # Extract existing team IDs from current external group IDs
     existing_team_ids = set()
     for group_id in current_external_group_ids:
-        # Skip collaborators and outside collaborators groups, focus on team groups
-        if group_id not in [collaborators_group_id, outside_collaborators_group_id]:
+        # Skip all non-team groups, keep only team groups
+        if group_id not in non_team_group_ids:
             existing_team_ids.add(group_id)
 
+    # Note: existing_team_ids from DB are already prefixed (e.g., "github__team-slug")
+    # but current_teams from API are raw team slugs, so we need to add the prefix
+    current_team_ids = set()
+    for team_slug in current_teams:
+        team_group_id = build_ext_group_name_for_onyx(
+            source=DocumentSource.GITHUB,
+            ext_group_name=team_slug,
+        )
+        current_team_ids.add(team_group_id)
+
     logger.info(
-        f"Existing team IDs: {existing_team_ids}, Current teams: {current_teams}"
+        f"Existing team IDs: {existing_team_ids}, Current team IDs: {current_team_ids}"
     )
 
-    # Compare team counts to detect changes
-    teams_changed = len(current_teams) != len(existing_team_ids)
+    # Compare actual team IDs to detect changes
+    teams_changed = current_team_ids != existing_team_ids
     if teams_changed:
         logger.info(
-            f"Team count changed for repo {repo.id} (name: {repo.name}): "
-            f"{len(existing_team_ids)} -> {len(current_teams)}"
+            f"Team changes detected for repo {repo.id} (name: {repo.name}): "
+            f"existing={existing_team_ids}, current={current_team_ids}"
         )
 
     return teams_changed
