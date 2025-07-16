@@ -9,11 +9,20 @@ from onyx.agents.agent_search.kb_search.graph_utils import build_document_contex
 from onyx.context.search.models import InferenceSection
 
 
-def get_cited_document_numbers(answer: str) -> list[int]:
+def extract_document_citations(answer: str) -> tuple[list[int], str]:
     """
-    Get the document numbers cited in the answer.
+    Get the cited documents and remove the citations from the answer.
     """
-    return [int(num) for num in re.findall(r"\[(\d+)\]", answer)]
+    citations: set[int] = set()
+
+    def replace_and_capture(match: re.Match[str]) -> str:
+        num = int(match.group(1))
+        citations.add(num)
+        return ""
+
+    cleaned_answer = re.sub(r"\[(\d+)\]", replace_and_capture, answer)
+
+    return list(citations), cleaned_answer
 
 
 def aggregate_context(
@@ -22,13 +31,12 @@ def aggregate_context(
     """
     Aggregate the context from the sub-answers and cited documents.
     """
-    document_counter = 0
-    question_counter = 0
-
     context_components: list[str] = []
     cited_documents: list[InferenceSection] = []
 
-    for iteration_response in iteration_responses:
+    cited_doc_indices: dict[str, int] = {}
+
+    for question_counter, iteration_response in enumerate(iteration_responses, 1):
         question_text = iteration_response.question
         answer_text = iteration_response.answer
         cited_document_list = iteration_response.cited_documents
@@ -36,10 +44,6 @@ def aggregate_context(
         if cited_document_list:
             citation_text_components = ["CITED DOCUMENTS for this question:"]
             for cited_document in cited_document_list:
-                document_counter += 1
-                citation_text_components.append(
-                    build_document_context(cited_document, document_counter)
-                )
                 if cited_document.center_chunk.score is not None:
                     cited_document.center_chunk.score -= (
                         iteration_response.iteration_nr - 1
@@ -47,13 +51,21 @@ def aggregate_context(
                 for chunk in cited_document.chunks:
                     if chunk.score is not None:
                         chunk.score -= iteration_response.iteration_nr - 1
-                cited_documents.append(cited_document)
+
+                section_id = cited_document.center_chunk.unique_id
+                if section_id not in cited_doc_indices:
+                    cited_doc_indices[section_id] = len(cited_doc_indices) + 1
+                    cited_documents.append(cited_document)
+                citation_text_components.append(
+                    build_document_context(
+                        cited_document, cited_doc_indices[section_id]
+                    )
+                )
             citation_text = "\n\n---\n".join(citation_text_components)
 
         else:
             citation_text = "No citations provided for this answer. Take provided answer at face value."
 
-        question_counter += 1
         context_components.append(f"Question Number: {question_counter}")
         context_components.append(f"Question: {question_text}")
         context_components.append(f"Answer: {answer_text}")
