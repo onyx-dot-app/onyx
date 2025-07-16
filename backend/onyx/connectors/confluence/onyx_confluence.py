@@ -46,13 +46,11 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
+_DEFAULT_PAGINATION_LIMIT = 6
 
 
 class ConfluenceRateLimitError(Exception):
     pass
-
-
-_DEFAULT_PAGINATION_LIMIT = 1000
 
 
 class OnyxConfluence:
@@ -463,6 +461,7 @@ class OnyxConfluence:
         limit: int | None = None,
         # Called with the next url to use to get the next page
         next_page_callback: Callable[[str], None] | None = None,
+        force_offset_pagination: bool = False,
     ) -> Iterator[dict[str, Any]]:
         """
         This will paginate through the top level query.
@@ -571,6 +570,12 @@ class OnyxConfluence:
                         )
                     # notify the caller of the new url
                     next_page_callback(url_suffix)
+
+                elif force_offset_pagination and i == len(results) - 1:
+                    url_suffix = update_param_in_path(
+                        old_url_suffix, "start", str(updated_start)
+                    )
+
                 yield result
 
             # we've observed that Confluence sometimes returns a next link despite giving
@@ -668,7 +673,9 @@ class OnyxConfluence:
             url = "rest/api/search/user"
             expand_string = f"&expand={expand}" if expand else ""
             url += f"?cql={cql}{expand_string}"
-            for user_result in self._paginate_url(url, limit):
+            for user_result in self._paginate_url(
+                url, limit, force_offset_pagination=True
+            ):
                 # Example response:
                 # {
                 #     'user': {
@@ -758,7 +765,7 @@ class OnyxConfluence:
         user_query = f"{user_field}={quote(user_value)}"
 
         url = f"rest/api/user/memberof?{user_query}"
-        yield from self._paginate_url(url, limit)
+        yield from self._paginate_url(url, limit, force_offset_pagination=True)
 
     def paginated_groups_retrieval(
         self,
