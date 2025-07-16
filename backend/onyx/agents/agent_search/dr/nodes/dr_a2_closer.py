@@ -23,6 +23,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import ExtendedToolResponse
 from onyx.context.search.enums import SearchType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -120,6 +121,17 @@ def closer(
         )
 
     # Generate final answer
+
+    write_custom_event(
+        "basic_response",
+        AgentAnswerPiece(
+            answer_piece="\n\n\nFINAL ANSWER:\n\n\n",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
 
     final_answer_prompt = (
         FINAL_ANSWER_PROMPT.replace("---base_question---", base_question)

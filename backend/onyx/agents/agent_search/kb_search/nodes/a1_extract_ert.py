@@ -23,7 +23,7 @@ from onyx.agents.agent_search.kb_search.models import KGQuestionEntityExtraction
 from onyx.agents.agent_search.kb_search.models import (
     KGQuestionRelationshipExtractionResult,
 )
-from onyx.agents.agent_search.kb_search.states import ERTExtractionUpdate
+from onyx.agents.agent_search.kb_search.states import EntityRelationshipExtractionUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -48,7 +48,7 @@ logger = setup_logger()
 
 def extract_ert(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
-) -> ERTExtractionUpdate:
+) -> EntityRelationshipExtractionUpdate:
     """
     LangGraph node to start the agentic search process.
     """
@@ -252,7 +252,7 @@ Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_
         # Finish Step 1
         stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
-    return ERTExtractionUpdate(
+    return EntityRelationshipExtractionUpdate(
         entities_types_str=all_entity_types,
         relationship_types_str=all_relationship_types,
         extracted_entities_w_attributes=entity_extraction_result.entities,

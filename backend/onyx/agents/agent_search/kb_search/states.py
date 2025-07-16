@@ -120,7 +120,7 @@ class ResearchObjectOutput(LoggerUpdate):
     research_object_results: Annotated[list[dict[str, Any]], add] = []
 
 
-class ERTExtractionUpdate(LoggerUpdate):
+class EntityRelationshipExtractionUpdate(LoggerUpdate):
     entities_types_str: str = ""
     relationship_types_str: str = ""
     extracted_entities_w_attributes: list[str] = []
@@ -159,7 +159,7 @@ class MainState(
     ToolChoiceInput,
     ToolCallUpdate,
     ToolChoiceUpdate,
-    ERTExtractionUpdate,
+    EntityRelationshipExtractionUpdate,
     AnalysisUpdate,
     SQLSimpleGenerationUpdate,
     ResultsDataUpdate,

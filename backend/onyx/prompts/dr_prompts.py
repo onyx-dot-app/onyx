@@ -15,8 +15,10 @@ DR_TOOLS_DESCRIPTIONS = f"""\
 You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 - The "{SEARCH}" tool is used to answer questions that can be answered using the information \
-present in the connected documents. Note that the search tool is not well suited for time-ordering \
-and answering aggregation-type questions (unless that info is present in the connected documents). \
+present in the connected documents.
+Note that the search tool is not well suited for time-ordered \
+questions ('...latest email...', '... last 2 jiras resolved...' etc.) and answering aggregation-type \
+questions (unless that info is present in the connected documents). \
 For answering those type of questions, you should use the {KNOWLEDGE_GRAPH} tool instead. The \
 {SEARCH} tool supports parallel calls.
 
@@ -25,13 +27,16 @@ entity/relationship-centric way, making it suitable for answering complex questi
 entities and relationships, such as "summarize the open tickets assigned to John in the last month". \
 It can also query a relational database containing the entities and relationships, allowing it to \
 answer aggregation-type questions like 'how many jiras did each employee close last month?'. \
+The {KNOWLEDGE_GRAPH} tool MUST ONLY BE USED if the question really fits the entity/relationship \
+types that are available in the knowledge graph!
+
+
 However, the {KNOWLEDGE_GRAPH} tool is slower than the {SEARCH} tool, and it can only be used for \
 entity and relationship types that are available in the knowledge graph, listed later.
 Again, a question to the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, \
 not merely find them.
 
-NOTE: the {KNOWLEDGE_GRAPH} tool MUST ONLY BE USED if the question really fits the entity/relationship \
-types that are available in the knowledge graph!
+NOTE:
 
 - The "{CLOSER}" tool does not directly have access to the documents, but it can use the results from \
 previous iterations to generate a comprehensive final answer. It should always be called exactly once \
