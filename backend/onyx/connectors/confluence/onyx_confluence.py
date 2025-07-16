@@ -1,8 +1,8 @@
 """
 # README (notes on Confluence pagination):
 
-We've noticed that the `search/users` and `users/memberof` endpoints use offset-based pagination as opposed to cursor-based.
-We also know that page-retrieval uses cursor-based pagination.
+We've noticed that the `search/users` and `users/memberof` endpoints for Confluence Cloud use offset-based pagination as
+opposed to cursor-based. We also know that page-retrieval uses cursor-based pagination.
 
 Our default pagination strategy right now for cloud is to assume cursor-based.
 However, if you notice that a cloud API is not being properly paginated (i.e., if the `_links.next` is not appearing in the

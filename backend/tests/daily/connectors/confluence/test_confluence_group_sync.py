@@ -1,5 +1,6 @@
 from typing import Any
 
+from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -11,6 +12,45 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from shared_configs.contextvars import get_current_tenant_id
+
+
+_EXPECTED_CONFLUENCE_GROUPS = [
+    ExternalUserGroup(
+        id="confluence-admins-onyx-test",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroup(
+        id="org-admins",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroup(
+        id="confluence-users-onyx-test",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroup(
+        id="jira-servicemanagement-users-onyx-test",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroup(
+        id="jira-users-onyx-test",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroup(
+        id="jira-product-discovery-users-onyx-test",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroup(
+        id="All_Confluence_Users_Found_By_Onyx",
+        user_emails=["admin@onyx-test.com"],
+        gives_anyone_access=False,
+    ),
+]
 
 
 def test_confluence_group_sync(
@@ -57,5 +97,6 @@ def test_confluence_group_sync(
             cc_pair=cc_pair,
         )
 
-        for external_user_group in group_sync_iter:
-            print(external_user_group)
+        expected_groups = {group.id: group for group in _EXPECTED_CONFLUENCE_GROUPS}
+        actual_groups = {group.id: group for group in group_sync_iter}
+        assert expected_groups == actual_groups
