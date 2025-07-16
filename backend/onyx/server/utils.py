@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi import status
+from fastapi import UploadFile
 
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
@@ -83,3 +84,14 @@ def make_short_id() -> str:
     to trace it through a flow. This is definitely not guaranteed to be unique and is
     targeted at the stated use case."""
     return base64.b32encode(os.urandom(5)).decode("utf-8")[:8]  # 5 bytes → 8 chars
+
+
+def process_private_key_file(file: UploadFile) -> str:
+    if file.filename and file.filename.endswith(".pfx"):
+        private_key_bytes = file.file.read()
+        pfx_64 = base64.b64encode(private_key_bytes).decode("ascii")
+        return pfx_64
+    else:
+        raise HTTPException(
+            status_code=400, detail="Invalid file type. Only .pfx files are supported."
+        )

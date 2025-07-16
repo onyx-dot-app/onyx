@@ -1,4 +1,3 @@
-import base64
 import json
 
 from fastapi import APIRouter
@@ -34,6 +33,7 @@ from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.documents.models import CredentialSwapRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
+from onyx.server.utils import process_private_key_file
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -127,44 +127,6 @@ def swap_credentials_for_connector(
         message="Credential swapped successfully",
         data=connector_credential_pair.id,
     )
-
-
-# @router.post("/credential")
-# def create_credential_from_model(
-#     credential_info: CredentialBase,
-#     user: User | None = Depends(current_curator_or_admin_user),
-#     db_session: Session = Depends(get_session),
-# ) -> ObjectCreationIdResponse:
-#     if not _ignore_credential_permissions(credential_info.source):
-#         fetch_ee_implementation_or_noop(
-#             "onyx.db.user_group", "validate_object_creation_for_user", None
-#         )(
-#             db_session=db_session,
-#             user=user,
-#             target_group_ids=credential_info.groups,
-#             object_is_public=credential_info.curator_public,
-#         )
-
-#     # Temporary fix for empty Google App credentials
-#     if credential_info.source == DocumentSource.GMAIL:
-#         cleanup_gmail_credentials(db_session=db_session)
-
-#     credential = create_credential(credential_info, user, db_session)
-#     return ObjectCreationIdResponse(
-#         id=credential.id,
-#         credential=CredentialSnapshot.from_credential_db_model(credential),
-#     )
-
-
-def process_private_key_file(file: UploadFile) -> str:
-    if file.filename and file.filename.endswith(".pfx"):
-        private_key_bytes = file.file.read()
-        pfx_64 = base64.b64encode(private_key_bytes).decode("ascii")
-        return pfx_64
-    else:
-        raise HTTPException(
-            status_code=400, detail="Invalid file type. Only .pfx files are supported."
-        )
 
 
 @router.post("/credential")
