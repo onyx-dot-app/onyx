@@ -260,13 +260,11 @@ export function UserDropdown({
                   )
                 )}
 
-                {isTelegramIntegrationEnable && (
-                  <DropdownOption
-                    href="/telegram"
-                    icon={<FaTelegramPlane size={16} className="my-auto" />}
-                    label="Telegram"
-                  />
-                )}
+                <DropdownOption
+                  href="/telegram"
+                  icon={<FaTelegramPlane size={16} className="my-auto" />}
+                  label="Telegram"
+                />
 
                 {toggleUserSettings && (
                   <DropdownOption
