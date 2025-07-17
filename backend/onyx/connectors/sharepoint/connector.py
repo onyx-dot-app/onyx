@@ -758,7 +758,7 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
         sp_client_id = credentials.get("sp_client_id")
         sp_client_secret = credentials.get("sp_client_secret")
         sp_directory_id = credentials.get("sp_directory_id")
-        private_key = credentials.get("private_key")
+        sp_private_key = credentials.get("sp_private_key")
         sp_certificate_password = credentials.get("sp_certificate_password")
         sp_tenant_domain = credentials.get("sp_tenant_domain")
 
@@ -770,12 +770,12 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
         )
         self._graph_client = GraphClient(self._acquire_token)
         if auth_method == "certificate":
-            if not private_key or not sp_certificate_password:
+            if not sp_private_key or not sp_certificate_password:
                 raise ConnectorValidationError(
                     "Private key and certificate password are required for certificate authentication"
                 )
 
-            pfx_data = base64.b64decode(private_key)
+            pfx_data = base64.b64decode(sp_private_key)
             certificate_data = load_certificate_from_pfx(
                 pfx_data, sp_certificate_password
             )

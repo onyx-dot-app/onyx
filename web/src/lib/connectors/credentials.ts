@@ -1,4 +1,5 @@
 import { ValidSources } from "../types";
+import { TypedFile } from "./fileTypes";
 
 export interface OAuthAdditionalKwargDescription {
   name: string;
@@ -31,7 +32,7 @@ export interface CredentialBase<T> {
 }
 
 export interface CredentialWithPrivateKey<T> extends CredentialBase<T> {
-  private_key: File;
+  private_key: TypedFile;
 }
 
 export interface Credential<T> extends CredentialBase<T> {
@@ -195,7 +196,7 @@ export interface SharepointCredentialJson {
   sp_client_secret?: string;
   sp_directory_id: string;
   sp_certificate_password?: string;
-  sp_private_key?: File;
+  sp_private_key?: TypedFile;
   sp_tenant_domain?: string;
 }
 
@@ -324,7 +325,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
           sp_client_id: "",
           sp_directory_id: "",
           sp_certificate_password: "",
-          sp_private_key: new File([], ""),
+          sp_private_key: null,
           sp_tenant_domain: "",
         },
         description:

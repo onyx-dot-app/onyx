@@ -32,8 +32,10 @@ from onyx.server.documents.models import CredentialDataUpdateRequest
 from onyx.server.documents.models import CredentialSnapshot
 from onyx.server.documents.models import CredentialSwapRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
+from onyx.server.documents.private_key_types import FILE_TYPE_TO_FILE_PROCESSOR
+from onyx.server.documents.private_key_types import PrivateKeyFileTypes
+from onyx.server.documents.private_key_types import ProcessPrivateKeyFileProtocol
 from onyx.server.models import StatusResponse
-from onyx.server.utils import process_private_key_file
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -135,20 +137,6 @@ def create_credential_from_model(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    auth_method = credential_info.credential_json.get("authentication_method")
-
-    if auth_method is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Authentication method is required",
-        )
-    if auth_method == "certificate":
-        raise HTTPException(
-            status_code=400,
-            detail="Certificate authentication is not supported for this endpoint. "
-            "Please use the /credential/private-key endpoint instead.",
-        )
-
     if not _ignore_credential_permissions(credential_info.source):
         fetch_ee_implementation_or_noop(
             "onyx.db.user_group", "validate_object_creation_for_user", None
@@ -179,7 +167,9 @@ def create_credential_with_private_key(
     name: str | None = Form(None),
     source: str = Form(...),
     user: User | None = Depends(current_curator_or_admin_user),
-    private_key: UploadFile = File(...),
+    uploaded_file: UploadFile = File(...),
+    field_key: str = Form(...),
+    type_definition_key: str = Form(...),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     try:
@@ -189,23 +179,18 @@ def create_credential_with_private_key(
             status_code=400,
             detail=f"Invalid JSON in credential_json: {str(e)}",
         )
-    auth_method = credential_data.get("authentication_method")
 
-    if auth_method is None:
+    private_key_processor: ProcessPrivateKeyFileProtocol | None = (
+        FILE_TYPE_TO_FILE_PROCESSOR.get(PrivateKeyFileTypes(type_definition_key))
+    )
+    if private_key_processor is None:
         raise HTTPException(
             status_code=400,
-            detail="Authentication method is required",
+            detail="Invalid type definition key for private key file",
         )
+    private_key_content: str = private_key_processor(uploaded_file)
 
-    if auth_method == "client_secret":
-        raise HTTPException(
-            status_code=400,
-            detail="Client secret authentication is not supported for this endpoint. "
-            "Please use the /credential endpoint instead.",
-        )
-
-    private_key_content = process_private_key_file(private_key)
-    credential_data["private_key"] = private_key_content
+    credential_data[field_key] = private_key_content
 
     credential_info = CredentialBase(
         credential_json=credential_data,
@@ -284,6 +269,53 @@ def update_credential_data(
         credential_id,
         credential_update.name,
         credential_update.credential_json,
+        user,
+        db_session,
+    )
+
+    if credential is None:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        )
+
+    return CredentialSnapshot.from_credential_db_model(credential)
+
+
+@router.put("/admin/credential/private-key/{credential_id}")
+def update_credential_private_key(
+    credential_id: int,
+    name: str = Form(...),
+    credential_json: str = Form(...),
+    uploaded_file: UploadFile = File(...),
+    field_key: str = Form(...),
+    type_definition_key: str = Form(...),
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> CredentialBase:
+    try:
+        credential_data = json.loads(credential_json)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid JSON in credential_json: {str(e)}",
+        )
+
+    private_key_processor: ProcessPrivateKeyFileProtocol | None = (
+        FILE_TYPE_TO_FILE_PROCESSOR.get(PrivateKeyFileTypes(type_definition_key))
+    )
+    if private_key_processor is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid type definition key for private key file",
+        )
+    private_key_content: str = private_key_processor(uploaded_file)
+    credential_data[field_key] = private_key_content
+
+    credential = alter_credential(
+        credential_id,
+        name,
+        credential_data,
         user,
         db_session,
     )

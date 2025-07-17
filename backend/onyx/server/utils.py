@@ -4,10 +4,8 @@ import os
 from datetime import datetime
 from typing import Any
 
-from cryptography.hazmat.primitives.serialization import pkcs12
 from fastapi import HTTPException
 from fastapi import status
-from fastapi import UploadFile
 
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
@@ -85,56 +83,3 @@ def make_short_id() -> str:
     to trace it through a flow. This is definitely not guaranteed to be unique and is
     targeted at the stated use case."""
     return base64.b32encode(os.urandom(5)).decode("utf-8")[:8]  # 5 bytes → 8 chars
-
-
-def _validate_pkcs12_content(file_bytes: bytes) -> bool:
-    """
-    Validate that the file content is actually a PKCS#12 file.
-
-    Args:
-        file_bytes: The raw bytes of the uploaded file
-
-    Returns:
-        True if the content is a valid PKCS#12 file, False otherwise
-    """
-    try:
-        # Try to load as PKCS#12 with empty password to validate format
-        # This will raise an exception if the file is not valid PKCS#12
-        pkcs12.load_key_and_certificates(file_bytes, password=None)
-        return True
-    except Exception:
-        # If it fails with empty password, try with some common passwords
-        # to distinguish between invalid format vs wrong password
-        try:
-            pkcs12.load_key_and_certificates(file_bytes, password=b"")
-            return True
-        except Exception:
-            return False
-
-
-def process_private_key_file(file: UploadFile) -> str:
-    """
-    Process and validate a private key file upload.
-
-    Validates both the file extension and file content to ensure it's a valid PKCS#12 file.
-    Content validation prevents attacks that rely on file extension spoofing.
-    """
-    # First check file extension (basic filter)
-    if not (file.filename and file.filename.endswith(".pfx")):
-        raise HTTPException(
-            status_code=400, detail="Invalid file type. Only .pfx files are supported."
-        )
-
-    # Read file content for validation and processing
-    private_key_bytes = file.file.read()
-
-    # Validate file content to prevent extension spoofing attacks
-    if not _validate_pkcs12_content(private_key_bytes):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file content. The uploaded file does not appear to be a valid PKCS#12 (.pfx) file.",
-        )
-
-    # Convert to base64 if validation passes
-    pfx_64 = base64.b64encode(private_key_bytes).decode("ascii")
-    return pfx_64

@@ -3,15 +3,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFormikContext } from "formik";
 import {
   BooleanFormField,
-  FileUploadFormField,
-  FileUploadRawFormField,
   TextFormField,
+  TypedFileUploadFormField,
 } from "@/components/Field";
 import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
 } from "@/lib/connectors/credentials";
 import { dictionaryType } from "../types";
+import { isTypedFileField } from "@/lib/connectors/fileTypes";
 
 interface CredentialFieldsRendererProps {
   credentialTemplate: dictionaryType;
@@ -95,18 +95,16 @@ export function CredentialFieldsRenderer({
                 )}
 
               {Object.entries(method.fields).map(([key, val]) => {
-                if (val instanceof File) {
-                  // Apply specific validation for private key files
-                  const isPrivateKey = key.includes("private_key");
+                if (isTypedFileField(key)) {
                   return (
-                    <FileUploadRawFormField
+                    <TypedFileUploadFormField
                       key={key}
                       name={key}
                       label={getDisplayNameForCredentialKey(key)}
-                      maxSizeKB={isPrivateKey ? 10 : undefined}
                     />
                   );
                 }
+
                 if (typeof val === "boolean") {
                   return (
                     <BooleanFormField
@@ -147,6 +145,15 @@ export function CredentialFieldsRenderer({
         if (key === "authentication_method" || key === "authMethods") {
           return null;
         }
+        if (isTypedFileField(key)) {
+          return (
+            <TypedFileUploadFormField
+              key={key}
+              name={key}
+              label={getDisplayNameForCredentialKey(key)}
+            />
+          );
+        }
 
         if (typeof val === "boolean") {
           return (
@@ -157,23 +164,11 @@ export function CredentialFieldsRenderer({
             />
           );
         }
-        if ((val as any) instanceof File) {
-          // Apply specific validation for private key files
-          const isPrivateKey = key.includes("private_key");
-          return (
-            <FileUploadRawFormField
-              key={key}
-              name={key}
-              label={getDisplayNameForCredentialKey(key)}
-              maxSizeKB={isPrivateKey ? 10 : undefined}
-            />
-          );
-        }
         return (
           <TextFormField
             key={key}
             name={key}
-            placeholder={val}
+            placeholder={val as string}
             label={getDisplayNameForCredentialKey(key)}
             type={
               key.toLowerCase().includes("token") ||

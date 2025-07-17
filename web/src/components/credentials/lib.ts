@@ -6,25 +6,7 @@ import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
 } from "@/lib/connectors/credentials";
-
-function createFileValidationSchema(displayName: string) {
-  return Yup.mixed()
-    .required(`Please select a ${displayName} file`)
-    .test("fileSize", "File size must be less than 10KB", (value) => {
-      if (!value) return false; // Require file
-      if (value instanceof File) {
-        return value.size <= 10 * 1024; // 10KB in bytes
-      }
-      return false;
-    })
-    .test("fileExtension", "File must have .pfx extension", (value) => {
-      if (!value) return false; // Require file
-      if (value instanceof File) {
-        return value.name.toLowerCase().endsWith(".pfx");
-      }
-      return false;
-    });
-}
+import { isTypedFileField } from "@/lib/connectors/fileTypes";
 
 export function createValidationSchema(json_values: Record<string, any>) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
@@ -44,19 +26,20 @@ export function createValidationSchema(json_values: Record<string, any>) {
             .nullable()
             .default(false)
             .transform((v, o) => (o === undefined ? false : v));
+        } else if (isTypedFileField(key)) {
+          //TypedFile fields - use mixed schema instead of string (check before null check)
+          schemaFields[key] = Yup.mixed().when("authentication_method", {
+            is: method.value,
+            then: () =>
+              Yup.mixed().required(`Please select a ${displayName} file`),
+            otherwise: () => Yup.mixed().notRequired(),
+          });
         } else if (def === null) {
           schemaFields[key] = Yup.string()
             .trim()
             .transform((v) => (v === "" ? null : v))
             .nullable()
             .notRequired();
-        } else if (def instanceof File) {
-          // File upload fields with size and extension validation
-          schemaFields[key] = Yup.mixed().when("authentication_method", {
-            is: method.value,
-            then: () => createFileValidationSchema(displayName),
-            otherwise: () => Yup.mixed().notRequired(),
-          });
         } else {
           schemaFields[key] = Yup.string()
             .trim()
@@ -83,15 +66,17 @@ export function createValidationSchema(json_values: Record<string, any>) {
         .nullable()
         .default(false)
         .transform((v, o) => (o === undefined ? false : v));
+    } else if (isTypedFileField(key)) {
+      // TypedFile fields - use mixed schema instead of string (check before null check)
+      schemaFields[key] = Yup.mixed().required(
+        `Please select a ${displayName} file`
+      );
     } else if (def === null) {
       schemaFields[key] = Yup.string()
         .trim()
         .transform((v) => (v === "" ? null : v))
         .nullable()
         .notRequired();
-    } else if (def instanceof File) {
-      // File upload fields with size and extension validation
-      schemaFields[key] = createFileValidationSchema(displayName);
     } else {
       schemaFields[key] = Yup.string()
         .trim()
@@ -105,11 +90,16 @@ export function createValidationSchema(json_values: Record<string, any>) {
 }
 
 export function createEditingValidationSchema(json_values: dictionaryType) {
-  const schemaFields: { [key: string]: Yup.StringSchema } = {};
+  const schemaFields: { [key: string]: Yup.AnySchema } = {};
 
   for (const key in json_values) {
     if (Object.prototype.hasOwnProperty.call(json_values, key)) {
-      schemaFields[key] = Yup.string().optional();
+      if (isTypedFileField(key)) {
+        // TypedFile fields - use mixed schema for optional file uploads during editing
+        schemaFields[key] = Yup.mixed().optional();
+      } else {
+        schemaFields[key] = Yup.string().optional();
+      }
     }
   }
 
@@ -123,7 +113,12 @@ export function createInitialValues(credential: Credential<any>): formType {
   };
 
   for (const key in credential.credential_json) {
-    initialValues[key] = "";
+    // Initialize TypedFile fields as null, other fields as empty strings
+    if (isTypedFileField(key)) {
+      initialValues[key] = null as any; // TypedFile fields start as null
+    } else {
+      initialValues[key] = "";
+    }
   }
 
   return initialValues;
