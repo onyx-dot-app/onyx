@@ -93,50 +93,6 @@ def count_documents_by_needs_sync(session: Session) -> int:
     )
 
 
-def construct_document_select_for_connector_credential_pair_by_needs_sync(
-    connector_id: int, credential_id: int
-) -> Select:
-    return (
-        select(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-                or_(
-                    DbDocument.last_modified > DbDocument.last_synced,
-                    DbDocument.last_synced.is_(None),
-                ),
-            )
-        )
-    )
-
-
-def construct_document_id_select_for_connector_credential_pair_by_needs_sync(
-    connector_id: int, credential_id: int
-) -> Select:
-    return (
-        select(DbDocument.id)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-                or_(
-                    DbDocument.last_modified > DbDocument.last_synced,
-                    DbDocument.last_synced.is_(None),
-                ),
-            )
-        )
-    )
-
-
 def construct_document_id_select_by_needs_sync() -> Select:
     """Get all document IDs that need syncing across all connector credential pairs.
 
