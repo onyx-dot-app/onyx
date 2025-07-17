@@ -229,8 +229,13 @@ class CloudEmbedding:
 
         inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
 
-        # Split into batches of 25 texts
-        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        # gemini-embedding-001 max batch size is 1. otherwise use default
+        max_texts_per_batch = (
+            1
+            if model == "gemini-embedding-001"
+            else VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        )
+
         batches = [
             inputs[i : i + max_texts_per_batch]
             for i in range(0, len(inputs), max_texts_per_batch)
