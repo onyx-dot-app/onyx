@@ -120,7 +120,7 @@ def search(
     """
     document_texts_list = []
 
-    for doc_num, retrieved_doc in enumerate(retrieved_docs):
+    for doc_num, retrieved_doc in enumerate(retrieved_docs[:15]):
         if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
             raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")
         chunk_text = build_document_context(retrieved_doc, doc_num + 1)
@@ -186,7 +186,7 @@ def search(
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
-                node_name="kg search",
+                node_name="search",
                 node_start_time=node_start_time,
             )
         ],
