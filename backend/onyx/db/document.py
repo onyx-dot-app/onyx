@@ -79,10 +79,6 @@ def count_documents_by_needs_sync(session: Session) -> int:
 
     return (
         session.query(DbDocument.id)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
         .filter(
             or_(
                 DbDocument.last_modified > DbDocument.last_synced,
@@ -101,17 +97,10 @@ def construct_document_id_select_by_needs_sync() -> Select:
     2. last_synced is null (meaning we've never synced)
     AND the document has a relationship with a connector/credential pair
     """
-    return (
-        select(DbDocument.id)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .where(
-            or_(
-                DbDocument.last_modified > DbDocument.last_synced,
-                DbDocument.last_synced.is_(None),
-            )
+    return select(DbDocument.id).where(
+        or_(
+            DbDocument.last_modified > DbDocument.last_synced,
+            DbDocument.last_synced.is_(None),
         )
     )
 
