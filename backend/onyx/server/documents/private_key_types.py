@@ -9,7 +9,7 @@ from onyx.server.documents.utils import validate_pkcs12_content
 
 
 class ProcessPrivateKeyFileProtocol(Protocol):
-    def __call__(self, file) -> str:
+    def __call__(self, file: UploadFile) -> str:
         """
         Accepts a file-like object, validates the file (e.g., checks extension and content),
         and returns its contents as a base64-encoded string if valid.
