@@ -7,3 +7,4 @@
 .vscode/launch.json
 *.sw?
 docker-compose.dev.yml
+venv/

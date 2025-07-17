@@ -546,11 +546,16 @@ export interface ChannelConfig {
   prioritized_sources?: string[];
   opsgenie_schedule?: string;
   jira_title_filter?: string[];
+  curated_response_user_title_filter?: string[];
   jira_config?: {
     enable_jira_integration?: boolean;
     project_key?: string;
     issue_type?: string;
     component?: string;
+  };
+  curated_response_config?: {
+    enable_curated_response_integration?: boolean;
+    response_message?: string;
   };
 }
 

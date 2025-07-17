@@ -1,4 +1,5 @@
 import time
+import traceback
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -238,6 +239,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
                 )
                 break
             except Exception:
+                logger.error(f"Vespa initialization error: {traceback.format_exc()}")
                 logger.info(f"Waiting on Vespa, retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
 

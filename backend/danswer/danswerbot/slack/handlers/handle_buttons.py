@@ -14,9 +14,17 @@ from danswer.connectors.slack.utils import make_slack_api_rate_limited
 from danswer.danswerbot.slack.blocks import build_follow_up_resolved_blocks
 from danswer.danswerbot.slack.blocks import get_document_feedback_blocks
 from danswer.danswerbot.slack.config import get_slack_bot_config_for_channel
+from danswer.danswerbot.slack.constants import CURATED_RESPONSE_CONFIG_KEY
 from danswer.danswerbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
+from danswer.danswerbot.slack.constants import ENABLE_CURATED_RESPONSE_KEY
 from danswer.danswerbot.slack.constants import FeedbackVisibility
 from danswer.danswerbot.slack.constants import LIKE_BLOCK_ACTION_ID
+from danswer.danswerbot.slack.constants import RESPONSE_MESSAGE_KEY
+from danswer.danswerbot.slack.constants import USER_ID_KEY
+from danswer.danswerbot.slack.constants import USER_KEY
+from danswer.danswerbot.slack.constants import USER_PROFILE_KEY
+from danswer.danswerbot.slack.constants import USER_TITLE_FILTER_KEY
+from danswer.danswerbot.slack.constants import USER_TITLE_KEY
 from danswer.danswerbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from danswer.danswerbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
@@ -38,6 +46,64 @@ from danswer.document_index.factory import get_default_document_index
 from danswer.utils.logger import setup_logger
 
 logger_base = setup_logger()
+
+
+def handle_curated_response(
+    slack_bot_config: Any,
+    client: SocketModeClient,
+    req: SocketModeRequest,
+    channel_id: str,
+    thread_ts: str,
+) -> bool:
+    """Handle curated response based on user title filter.
+
+    Returns:
+        bool: True if a curated response was sent, else returns False.
+    """
+    if not slack_bot_config or not slack_bot_config.channel_config:
+        return False
+
+    channel_conf = slack_bot_config.channel_config
+    curated_response_config = channel_conf.get(CURATED_RESPONSE_CONFIG_KEY, {})
+
+    # Early return if curated response is not enabled
+    if not curated_response_config.get(ENABLE_CURATED_RESPONSE_KEY, False):
+        return False
+
+    if not curated_response_config.get(RESPONSE_MESSAGE_KEY):
+        return False
+
+    user_title_filter = channel_conf.get(USER_TITLE_FILTER_KEY, [])
+    sender_id = req.payload.get(USER_KEY, {}).get(USER_ID_KEY)
+
+    if not user_title_filter or not sender_id:
+        return False
+
+    try:
+        user_info = client.web_client.users_info(user=sender_id)
+        user_data = user_info.get(USER_KEY)
+        if not user_data:
+            return False
+
+        user_profile = user_data.get(USER_PROFILE_KEY, {})
+        user_title = user_profile.get(USER_TITLE_KEY, "").lower()
+
+        # Check if user title matches any in the filter list
+        if user_title in [title.lower() for title in user_title_filter]:
+            response_message = curated_response_config.get(RESPONSE_MESSAGE_KEY)
+
+            respond_in_thread(
+                client=client.web_client,
+                channel=channel_id,
+                text=response_message,
+                thread_ts=thread_ts,
+                unfurl=False,
+            )
+            return True
+    except Exception as e:
+        logger_base.error(f"Failed to check user title for curated response: {str(e)}")
+
+    return False
 
 
 def handle_doc_feedback_button(
@@ -209,14 +275,25 @@ def handle_followup_button(
 
     blocks = build_follow_up_resolved_blocks(tag_ids=tag_ids, group_ids=group_ids)
 
-    respond_in_thread(
-        client=client.web_client,
-        channel=channel_id,
-        text="Received your request for more help",
-        blocks=blocks,
+    # Check for curated response based on user title
+    curated_response_sent = handle_curated_response(
+        slack_bot_config=slack_bot_config,
+        client=client,
+        req=req,
+        channel_id=channel_id,
         thread_ts=thread_ts,
-        unfurl=False,
     )
+
+    # Only send the default response if no curated response was sent
+    if not curated_response_sent:
+        respond_in_thread(
+            client=client.web_client,
+            channel=channel_id,
+            text="Received your request for more help",
+            blocks=blocks,
+            thread_ts=thread_ts,
+            unfurl=False,
+        )
 
     if action_id is not None:
         message_id, _, _ = decompose_action_id(action_id)

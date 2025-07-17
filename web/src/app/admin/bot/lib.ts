@@ -24,7 +24,12 @@ interface SlackBotConfigCreationRequest {
     issue_type: string;
     component?: string;
   };
+  curated_response_config?: {
+    enable_curated_response_integration: boolean;
+    response_message: string;
+  };
   jira_title_filter?: string[];
+  curated_response_user_title_filter?: string[];
   usePersona: boolean;
   response_type: SlackBotResponseType;
 }
@@ -56,7 +61,10 @@ const buildRequestBodyFromCreationRequest = (
     prioritized_sources: creationRequest.prioritized_sources,
     opsgenie_schedule: creationRequest.opsgenie_schedule,
     jira_config: creationRequest.jira_config,
+    curated_response_config: creationRequest.curated_response_config,
     jira_title_filter: creationRequest.jira_title_filter,
+    curated_response_user_title_filter:
+      creationRequest.curated_response_user_title_filter,
     ...(creationRequest.usePersona
       ? { persona_id: creationRequest.persona_id }
       : { document_sets: creationRequest.document_sets }),

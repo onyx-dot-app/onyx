@@ -118,8 +118,16 @@ export const SlackBotCreationForm = ({
               issue_type: "",
               component: "",
             },
+            curated_response_config: existingSlackBotConfig?.channel_config
+              ?.curated_response_config || {
+              enable_curated_response_integration: false,
+              response_message: "",
+            },
             jira_title_filter:
               existingSlackBotConfig?.channel_config?.jira_title_filter || [],
+            curated_response_user_title_filter:
+              existingSlackBotConfig?.channel_config
+                ?.curated_response_user_title_filter || [],
           }}
           validationSchema={Yup.object().shape({
             channel_names: Yup.array().of(Yup.string()),
@@ -157,6 +165,12 @@ export const SlackBotCreationForm = ({
               }),
               component: Yup.string().notRequired(),
             }),
+            curated_response_config: Yup.object().shape({
+              enable_curated_response_integration: Yup.boolean().required(),
+              response_message: Yup.string().required(
+                "Response message is required when curated response integration is enabled"
+              ),
+            }),
             jira_title_filter: Yup.array()
               .of(Yup.string().required("Title filter cannot be empty"))
               .when(["jira_config.enable_jira_integration"], {
@@ -182,6 +196,34 @@ export const SlackBotCreationForm = ({
                     ),
                 otherwise: (schema) => schema.notRequired(),
               }),
+            curated_response_user_title_filter: Yup.array()
+              .of(Yup.string().required("Title filter cannot be empty"))
+              .when(
+                ["curated_response_config.enable_curated_response_integration"],
+                {
+                  is: (enableTam: boolean) => enableTam,
+                  then: (schema) =>
+                    schema
+                      .min(
+                        1,
+                        "At least one title filter is required when TAM integration is enabled"
+                      )
+                      .test(
+                        "non-empty-strings",
+                        "Title filters cannot be empty",
+                        (value) => {
+                          if (!value || !Array.isArray(value)) return false;
+                          return value.every(
+                            (title) =>
+                              title &&
+                              typeof title === "string" &&
+                              title.trim().length > 0
+                          );
+                        }
+                      ),
+                  otherwise: (schema) => schema.notRequired(),
+                }
+              ),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -210,6 +252,15 @@ export const SlackBotCreationForm = ({
                 component: values.jira_config.component?.trim() || undefined,
               },
               jira_title_filter: values.jira_title_filter ?? [],
+              curated_response_user_title_filter:
+                values.curated_response_user_title_filter ?? [],
+              curated_response_config: {
+                enable_curated_response_integration:
+                  values.curated_response_config
+                    .enable_curated_response_integration ?? false,
+                response_message:
+                  values.curated_response_config.response_message ?? "",
+              },
             };
             if (!cleanedValues.still_need_help_enabled) {
               cleanedValues.follow_up_tags = undefined;
@@ -522,6 +573,39 @@ export const SlackBotCreationForm = ({
                       name="jira_config.component"
                       label="JIRA Component"
                       subtext="The component to assign the issue to"
+                    />
+                  </>
+                )}
+
+                <SectionHeader>
+                  Curated response if user asks for more help
+                </SectionHeader>
+
+                <BooleanFormField
+                  name="curated_response_config.enable_curated_response_integration"
+                  label="Enable Curated Response"
+                  subtext="If enabled, sends a customized message for messages from users with specific titles"
+                />
+
+                {values.curated_response_config
+                  .enable_curated_response_integration && (
+                  <>
+                    <TextArrayField
+                      name="curated_response_user_title_filter"
+                      label="User Titles to Send Customized Message For"
+                      values={values}
+                      subtext={
+                        <div>
+                          List of user titles that should trigger sending a
+                          customized message. For example, &apos;Senior Software
+                          Engineer&apos;, &apos;Software Engineer II&apos;, etc.
+                        </div>
+                      }
+                    />
+                    <TextFormField
+                      name="curated_response_config.response_message"
+                      label="Response Message"
+                      subtext="The message to send to the user when they ask for more help"
                     />
                   </>
                 )}

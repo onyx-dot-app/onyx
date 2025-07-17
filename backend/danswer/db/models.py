@@ -1089,8 +1089,12 @@ class ChannelConfig(TypedDict):
     opsgenie_schedule: NotRequired[str]
     # JIRA title filter for creating tickets
     jira_title_filter: NotRequired[list[str]]
+    # Title filter for sending personalised response if user asks for more help
+    curated_response_user_title_filter: NotRequired[list[str]]
     # JIRA integration settings
     jira_config: NotRequired[dict[str, Any]]  # Contains all JIRA related settings
+    # Curated response config if user asks for more help
+    curated_response_config: NotRequired[dict[str, Any]]
 
 
 class SlackBotResponseType(str, PyEnum):

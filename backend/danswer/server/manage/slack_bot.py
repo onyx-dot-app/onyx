@@ -46,7 +46,11 @@ def _form_channel_config(
     prioritized_sources = slack_bot_config_creation_request.prioritized_sources
     opsgenie_schedule = slack_bot_config_creation_request.opsgenie_schedule
     jira_config = slack_bot_config_creation_request.jira_config
+    curated_response_config = slack_bot_config_creation_request.curated_response_config
     jira_title_filter = slack_bot_config_creation_request.jira_title_filter
+    curated_response_user_title_filter = (
+        slack_bot_config_creation_request.curated_response_user_title_filter
+    )
 
     if not raw_channel_names:
         raise HTTPException(
@@ -95,6 +99,12 @@ def _form_channel_config(
         channel_config["jira_config"] = jira_config
     if jira_title_filter:
         channel_config["jira_title_filter"] = jira_title_filter
+    if curated_response_user_title_filter:
+        channel_config[
+            "curated_response_user_title_filter"
+        ] = curated_response_user_title_filter
+    if curated_response_config:
+        channel_config["curated_response_config"] = curated_response_config
 
     channel_config[
         "respond_to_bots"
