@@ -61,6 +61,8 @@ _RETRY_TRIES = 10 if INDEXING_ONLY else 2
 _OPENAI_MAX_INPUT_LEN = 2048
 # Cohere allows up to 96 embeddings in a single embedding calling
 _COHERE_MAX_INPUT_LEN = 96
+# gemini-embedding-001 max batch size is 1
+_GEMINI_EMBEDDING_MAX_BATCH_SIZE = 1
 
 # Authentication error string constants
 _AUTH_ERROR_401 = "401"
@@ -231,8 +233,8 @@ class CloudEmbedding:
 
         # gemini-embedding-001 max batch size is 1. otherwise use default
         max_texts_per_batch = (
-            1
-            if model == "gemini-embedding-001"
+            _GEMINI_EMBEDDING_MAX_BATCH_SIZE
+            if "gemini-embedding-001" in model
             else VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
         )
 
