@@ -619,14 +619,16 @@ def remove_credential_from_connector(
     )
 
 
-def fetch_connector_credential_pairs(
+def fetch_indexable_connector_credential_pair_ids(
     db_session: Session,
-    include_user_files: bool = False,
-) -> list[ConnectorCredentialPair]:
-    stmt = select(ConnectorCredentialPair)
-    if not include_user_files:
-        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
-    return list(db_session.scalars(stmt).unique().all())
+) -> list[int]:
+    stmt = select(ConnectorCredentialPair.id)
+    stmt = stmt.where(
+        ConnectorCredentialPair.status.in_(
+            ConnectorCredentialPairStatus.active_statuses()
+        )
+    )
+    return list(db_session.scalars(stmt).all())
 
 
 def fetch_connector_credential_pair_for_connector(
