@@ -73,7 +73,7 @@ def generate_document_sync_tasks(
     db_session: Session,
     lock: RedisLock,
     tenant_id: str,
-) -> tuple[int, int] | None:
+) -> tuple[int, int]:
     """Generate sync tasks for all documents that need syncing.
 
     Args:
@@ -85,7 +85,7 @@ def generate_document_sync_tasks(
         tenant_id: Tenant identifier
 
     Returns:
-        tuple[int, int] | None: (tasks_generated, total_docs_found) or None if failed
+        tuple[int, int]: (tasks_generated, total_docs_found)
     """
     last_lock_time = time.monotonic()
     num_tasks_sent = 0
@@ -127,13 +127,6 @@ def generate_document_sync_tasks(
             break
 
     return num_tasks_sent, num_docs
-
-
-def reset_all_document_sync(r: Redis) -> None:
-    """Reset all document sync tracking data."""
-    r.srem(OnyxRedisConstants.ACTIVE_FENCES, DOCUMENT_SYNC_FENCE_KEY)
-    r.delete(DOCUMENT_SYNC_TASKSET_KEY)
-    r.delete(DOCUMENT_SYNC_FENCE_KEY)
 
 
 def try_generate_stale_document_sync_tasks(
