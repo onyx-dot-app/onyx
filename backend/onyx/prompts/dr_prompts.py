@@ -345,25 +345,49 @@ And here is the list of documents that you must use to answer the specific searc
 ---document_text---
 {SEPARATOR_LINE}
 
-Note:
-   - only use documents that are relevant to the specific search query AND you KNOW apply to the \
-context of the question. It is critical to avoid hallucinations as well as taking information \
-out of context.
+Notes:
+   - only use documents that are relevant to the specific search query AND you KNOW apply \
+to the context of the question! Example: context is about what Nike was doing to drive sales, \
+and the question is about what Puma is doing to drive sales, DO NOT USE ANY INFORMATION \
+from the informations from Nike! In fact, even if the cintext does not discuss driving \
+sales for Nike but about driving sales w/o mentioning any company (incl. Puma!), you \
+still cannot use the information! You MUST be sure that the contect is correct. If in \
+doubt, don't use that document!
+   - It is critical to avoid hallucinations as well as taking information out of context.
    - clearly indicate any assumptions you make in your answer.
    - while the base question is important, really focus on answering the specific search query. \
 That is your task.
-   - only provide a SHORT answer that i) provides the requested information if the question was very \
-specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL summary of \
-the information in the cited documents, and cite the documents that are most relevent to the question \
-sent to you.
+   - again, do not use/cite any documents that you are not 100% sure are relevant to the \
+SPECIFIC context \
+of the question! And do NOT GUESS HERE and say 'oh, it is reasonable that this context applies here'. \
+DO NOT DO THAT. If the question is about 'yellow curry' and you only see information about 'curry', \
+say something like 'there is no mention of yellow curry specifically', and IGNORE THAT DOCUMENT. But \
+if you still strongly suspect the document is relevant, you can use it, but you MUST clearly \
+indicate that you are not 100% sure and that the document does not mention 'yellow curry'. (As \
+an example.)
+If the specific term or concept is not present, the answer should explicitly state its absence before \
+providing any related information.
+  - Always begin your answer with a direct statement about whether the exact term or phrase, or \
+exact meaning was found in the documents.
+   - only provide a SHORT answer that i) provides the requested information if the question was \
+very specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL \
+summary of the information in the cited documents, and cite the documents that are most \
+relevent to the question sent to you.
 
 Please format your answer as a json dictionary in the following format:
 {{
    "reasoning": "<your reasoning in 3-6 sentences of what guides you to the answer of \
-the specific search query given the documents. Any reasoning should be done here. Generate \
-here the information that will be necessary to provide a succinct answer to the specific search query.>",
+the specific search query given the documents.
+Start out here with a brief statement whether the SPECIFIC CONTEXT is mentioned in the \
+documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry..'). Any reasoning should be done here. Generate \
+here the information that will be necessary to provide a succinct answer to the specific search query. >",
    "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
-the documents. But this should be be precise and concise, and specifically answer the question.>",
+the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
+mentioned in the \
+documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry..').
+But this should be be precise and concise, and specifically answer the question.>",
 "citations": "<the list of document numbers that are relevevant for the answer. \
 Please list in format [1][4][6], etc.>"
 }}
@@ -395,6 +419,14 @@ GUIDANCE:
  - note that the sub-answers to the sub-questions are designed to be high-level, mostly \
 focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
+ - Pay close attention to whether the sub-answers mention whether the topic of interest \
+was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
+or you MUST then qualify your answer with something like 'xyz was not explcitly \
+mentioned, however the similar concept abc was, and I learned...'
+- if the documents/sub-answers do not explicitly mention the topic of interest with \
+specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
+the provided context os based on the less specific conecpt. (Example: 'I was not able to \
+find information about yellow curry specificall, but here is what I found about curry..'
 - make sure that a the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
