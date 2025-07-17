@@ -29,7 +29,7 @@ import {
   connectorConfigs,
   createConnectorInitialValues,
   createConnectorValidationSchema,
-  defaultPruneFreqDays,
+  defaultPruneFreqHours,
   defaultRefreshFreqMinutes,
   isLoadState,
   Connector,
@@ -343,7 +343,7 @@ export default function AddConnector({
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
-          pruneFreq: (pruneFreq ?? defaultPruneFreqDays) * 60 * 60 * 24,
+          pruneFreq: (pruneFreq ?? defaultPruneFreqHours) * 3600,
           indexingStart: convertStringToDateTime(indexingStart),
           refreshFreq: (refreshFreq ?? defaultRefreshFreqMinutes) * 60,
         };
@@ -498,172 +498,166 @@ export default function AddConnector({
         }
       }}
     >
-      {(formikProps) => {
-        return (
-          <div className="mx-auto w-full">
-            {popup}
+      {(formikProps) => (
+        <div className="mx-auto w-full">
+          {popup}
 
-            {uploading && <Spinner />}
+          {uploading && <Spinner />}
 
-            {creatingConnector && <Spinner />}
+          {creatingConnector && <Spinner />}
 
-            <AdminPageTitle
-              includeDivider={false}
-              icon={<SourceIcon iconSize={32} sourceType={connector} />}
-              title={displayName}
-              farRightElement={undefined}
-            />
+          <AdminPageTitle
+            includeDivider={false}
+            icon={<SourceIcon iconSize={32} sourceType={connector} />}
+            title={displayName}
+            farRightElement={undefined}
+          />
 
-            {formStep == 0 && (
-              <CardSection>
-                <Title className="mb-2 text-lg">Select a credential</Title>
+          {formStep == 0 && (
+            <CardSection>
+              <Title className="mb-2 text-lg">Select a credential</Title>
 
-                {connector == ValidSources.Gmail ? (
-                  <GmailMain />
-                ) : (
-                  <>
-                    <ModifyCredential
-                      showIfEmpty
-                      accessType={formikProps.values.access_type}
-                      defaultedCredential={currentCredential!}
-                      credentials={credentials}
-                      editableCredentials={editableCredentials}
-                      onDeleteCredential={onDeleteCredential}
-                      onSwitch={onSwap}
-                    />
-                    {!createCredentialFormToggle && (
-                      <div className="mt-6 flex space-x-4">
-                        {/* Button to pop up a form to manually enter credentials */}
-                        <Button
-                          variant="secondary"
-                          className="mt-6 text-sm mr-4"
-                          onClick={async () => {
-                            if (oauthDetails && oauthDetails.oauth_enabled) {
-                              if (oauthDetails.additional_kwargs.length > 0) {
-                                setCreateCredentialFormToggle(true);
-                              } else {
-                                const redirectUrl =
-                                  await getConnectorOauthRedirectUrl(
-                                    connector,
-                                    {}
-                                  );
-                                // if redirect is supported, just use it
-                                if (redirectUrl) {
-                                  window.location.href = redirectUrl;
-                                } else {
-                                  setCreateCredentialFormToggle(
-                                    (createConnectorToggle) =>
-                                      !createConnectorToggle
-                                  );
-                                }
-                              }
+              {connector == ValidSources.Gmail ? (
+                <GmailMain />
+              ) : (
+                <>
+                  <ModifyCredential
+                    showIfEmpty
+                    accessType={formikProps.values.access_type}
+                    defaultedCredential={currentCredential!}
+                    credentials={credentials}
+                    editableCredentials={editableCredentials}
+                    onDeleteCredential={onDeleteCredential}
+                    onSwitch={onSwap}
+                  />
+                  {!createCredentialFormToggle && (
+                    <div className="mt-6 flex space-x-4">
+                      {/* Button to pop up a form to manually enter credentials */}
+                      <Button
+                        variant="secondary"
+                        className="mt-6 text-sm mr-4"
+                        onClick={async () => {
+                          if (oauthDetails && oauthDetails.oauth_enabled) {
+                            if (oauthDetails.additional_kwargs.length > 0) {
+                              setCreateCredentialFormToggle(true);
                             } else {
-                              setCreateCredentialFormToggle(
-                                (createConnectorToggle) =>
-                                  !createConnectorToggle
-                              );
+                              const redirectUrl =
+                                await getConnectorOauthRedirectUrl(
+                                  connector,
+                                  {}
+                                );
+                              // if redirect is supported, just use it
+                              if (redirectUrl) {
+                                window.location.href = redirectUrl;
+                              } else {
+                                setCreateCredentialFormToggle(
+                                  (createConnectorToggle) =>
+                                    !createConnectorToggle
+                                );
+                              }
                             }
-                          }}
-                        >
-                          Create New
-                        </Button>
-                        {/* Button to sign in via OAuth */}
-                        {oauthSupportedSources.includes(connector) &&
-                          (NEXT_PUBLIC_CLOUD_ENABLED ||
-                            NEXT_PUBLIC_TEST_ENV) && (
-                            <Button
-                              variant="navigate"
-                              onClick={handleAuthorize}
-                              className="mt-6 "
-                              disabled={isAuthorizing}
-                              hidden={!isAuthorizeVisible}
-                            >
-                              {isAuthorizing
-                                ? "Authorizing..."
-                                : `Authorize with ${getSourceDisplayName(
-                                    connector
-                                  )}`}
-                            </Button>
-                          )}
-                      </div>
-                    )}
-
-                    {createCredentialFormToggle && (
-                      <Modal
-                        className="max-w-3xl rounded-lg"
-                        onOutsideClick={() =>
-                          setCreateCredentialFormToggle(false)
-                        }
+                          } else {
+                            setCreateCredentialFormToggle(
+                              (createConnectorToggle) => !createConnectorToggle
+                            );
+                          }
+                        }}
                       >
-                        {oauthDetailsLoading ? (
-                          <Spinner />
-                        ) : (
-                          <>
-                            <Title className="mb-2 text-lg">
-                              Create a {getSourceDisplayName(connector)}{" "}
-                              credential
-                            </Title>
-                            {oauthDetails && oauthDetails.oauth_enabled ? (
-                              <CreateStdOAuthCredential
-                                sourceType={connector}
-                                additionalFields={
-                                  oauthDetails.additional_kwargs
-                                }
-                              />
-                            ) : (
-                              <CreateCredential
-                                close
-                                refresh={refresh}
-                                sourceType={connector}
-                                accessType={formikProps.values.access_type}
-                                setPopup={setPopup}
-                                onSwitch={onSwap}
-                                onClose={() =>
-                                  setCreateCredentialFormToggle(false)
-                                }
-                              />
-                            )}
-                          </>
+                        Create New
+                      </Button>
+                      {/* Button to sign in via OAuth */}
+                      {oauthSupportedSources.includes(connector) &&
+                        (NEXT_PUBLIC_CLOUD_ENABLED || NEXT_PUBLIC_TEST_ENV) && (
+                          <Button
+                            variant="navigate"
+                            onClick={handleAuthorize}
+                            className="mt-6 "
+                            disabled={isAuthorizing}
+                            hidden={!isAuthorizeVisible}
+                          >
+                            {isAuthorizing
+                              ? "Authorizing..."
+                              : `Authorize with ${getSourceDisplayName(
+                                  connector
+                                )}`}
+                          </Button>
                         )}
-                      </Modal>
-                    )}
-                  </>
-                )}
-              </CardSection>
-            )}
+                    </div>
+                  )}
 
-            {formStep == 1 && (
-              <CardSection className="w-full py-8 flex gap-y-6 flex-col max-w-3xl px-12 mx-auto">
-                <DynamicConnectionForm
-                  values={formikProps.values}
-                  config={configuration}
-                  connector={connector}
-                  currentCredential={
-                    currentCredential ||
-                    liveGDriveCredential ||
-                    liveGmailCredential ||
-                    null
-                  }
-                />
-              </CardSection>
-            )}
+                  {createCredentialFormToggle && (
+                    <Modal
+                      className="max-w-3xl rounded-lg"
+                      onOutsideClick={() =>
+                        setCreateCredentialFormToggle(false)
+                      }
+                    >
+                      {oauthDetailsLoading ? (
+                        <Spinner />
+                      ) : (
+                        <>
+                          <Title className="mb-2 text-lg">
+                            Create a {getSourceDisplayName(connector)}{" "}
+                            credential
+                          </Title>
+                          {oauthDetails && oauthDetails.oauth_enabled ? (
+                            <CreateStdOAuthCredential
+                              sourceType={connector}
+                              additionalFields={oauthDetails.additional_kwargs}
+                            />
+                          ) : (
+                            <CreateCredential
+                              close
+                              refresh={refresh}
+                              sourceType={connector}
+                              accessType={formikProps.values.access_type}
+                              setPopup={setPopup}
+                              onSwitch={onSwap}
+                              onClose={() =>
+                                setCreateCredentialFormToggle(false)
+                              }
+                            />
+                          )}
+                        </>
+                      )}
+                    </Modal>
+                  )}
+                </>
+              )}
+            </CardSection>
+          )}
 
-            {formStep === 2 && (
-              <CardSection>
-                <AdvancedFormPage />
-              </CardSection>
-            )}
+          {formStep == 1 && (
+            <CardSection className="w-full py-8 flex gap-y-6 flex-col max-w-3xl px-12 mx-auto">
+              <DynamicConnectionForm
+                values={formikProps.values}
+                config={configuration}
+                connector={connector}
+                currentCredential={
+                  currentCredential ||
+                  liveGDriveCredential ||
+                  liveGmailCredential ||
+                  null
+                }
+              />
+            </CardSection>
+          )}
 
-            <NavigationRow
-              activatedCredential={credentialActivated != null}
-              isValid={formikProps.isValid}
-              onSubmit={formikProps.handleSubmit}
-              noCredentials={noCredentials}
-              noAdvanced={connector == "file"}
-            />
-          </div>
-        );
-      }}
+          {formStep === 2 && (
+            <CardSection>
+              <AdvancedFormPage />
+            </CardSection>
+          )}
+
+          <NavigationRow
+            activatedCredential={credentialActivated != null}
+            isValid={formikProps.isValid}
+            onSubmit={formikProps.handleSubmit}
+            noCredentials={noCredentials}
+            noAdvanced={connector == "file"}
+          />
+        </div>
+      )}
     </Formik>
   );
 }

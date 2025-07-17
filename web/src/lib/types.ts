@@ -269,16 +269,31 @@ export interface FederatedConnectorDescriptor {
   entities: Record<string, any>;
 }
 
-export interface DocumentSet {
+// Simplified interfaces with minimal data
+export interface CCPairSummary {
+  id: number;
+  name: string | null;
+  source: ValidSources;
+  access_type: AccessType;
+}
+
+export interface FederatedConnectorSummary {
+  id: number;
+  name: string;
+  source: string;
+  entities: Record<string, any>;
+}
+
+export interface DocumentSetSummary {
   id: number;
   name: string;
   description: string;
-  cc_pair_descriptors: CCPairDescriptor<any, any>[];
+  cc_pair_summaries: CCPairSummary[];
   is_up_to_date: boolean;
   is_public: boolean;
   users: string[];
   groups: number[];
-  federated_connectors: FederatedConnectorDescriptor[];
+  federated_connector_summaries: FederatedConnectorSummary[];
 }
 
 export interface Tag {
@@ -366,7 +381,7 @@ export interface UserGroup {
   users: User[];
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
-  document_sets: DocumentSet[];
+  document_sets: DocumentSetSummary[];
   personas: Persona[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
@@ -419,6 +434,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  Imap = "imap",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",

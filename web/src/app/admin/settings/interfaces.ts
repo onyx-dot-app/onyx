@@ -27,6 +27,9 @@ export interface Settings {
   image_extraction_and_analysis_enabled?: boolean;
   search_time_image_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
+
+  // User Knowledge settings
+  user_knowledge_enabled?: boolean;
 }
 
 export enum NotificationType {

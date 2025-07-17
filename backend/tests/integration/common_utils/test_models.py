@@ -117,6 +117,7 @@ class DATestDocumentSet(BaseModel):
     is_up_to_date: bool
     users: list[str] = Field(default_factory=list)
     groups: list[int] = Field(default_factory=list)
+    federated_connectors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class DATestPersona(BaseModel):

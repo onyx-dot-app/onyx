@@ -313,8 +313,17 @@ def docx_to_text_and_images(
     try:
         doc = docx.Document(file)
     except BadZipFile as e:
-        logger.warning(f"Failed to extract text from {file_name or 'docx file'}: {e}")
-        return "", []
+        logger.warning(
+            f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
+        )
+
+        # May be an invalid docx, but still a valid text file
+        file.seek(0)
+        encoding = detect_encoding(file)
+        text_content_raw, _ = read_text_file(
+            file, encoding=encoding, ignore_onyx_metadata=False
+        )
+        return text_content_raw or "", []
 
     # Grab text from paragraphs
     for paragraph in doc.paragraphs:

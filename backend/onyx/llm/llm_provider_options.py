@@ -3,6 +3,8 @@ from enum import Enum
 import litellm  # type: ignore
 from pydantic import BaseModel
 
+from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -24,6 +26,7 @@ class CustomConfigKey(BaseModel):
     is_required: bool = True
     is_secret: bool = False
     key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
+    default_value: str | None = None
 
 
 class WellKnownLLMProviderDescriptor(BaseModel):
@@ -154,9 +157,6 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
 }
 
 
-CREDENTIALS_FILE_CUSTOM_CONFIG_KEY = "CREDENTIALS_FILE"
-
-
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
         WellKnownLLMProviderDescriptor(
@@ -240,12 +240,22 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             custom_config_keys=[
                 CustomConfigKey(
-                    name=CREDENTIALS_FILE_CUSTOM_CONFIG_KEY,
+                    name=VERTEX_CREDENTIALS_FILE_KWARG,
                     display_name="Credentials File",
                     description="This should be a JSON file containing some private credentials.",
                     is_required=True,
                     is_secret=False,
                     key_type=CustomConfigKeyType.FILE_INPUT,
+                ),
+                CustomConfigKey(
+                    name=VERTEX_LOCATION_KWARG,
+                    display_name="Location",
+                    description="The location of the Vertex AI model. Please refer to the "
+                    "[Vertex AI configuration docs](https://docs.onyx.app/gen_ai_configs/vertex_ai) for all possible values.",
+                    is_required=False,
+                    is_secret=False,
+                    key_type=CustomConfigKeyType.TEXT_INPUT,
+                    default_value="us-east1",
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,

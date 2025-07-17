@@ -59,6 +59,7 @@ Onyx being a fully functional app, relies on some external software, specificall
 - [Postgres](https://www.postgresql.org/) (Relational DB)
 - [Vespa](https://vespa.ai/) (Vector DB/Search Engine)
 - [Redis](https://redis.io/) (Cache)
+- [MinIO](https://min.io/) (File Store)
 - [Nginx](https://nginx.org/) (Not needed for development flows generally)
 
 > **Note:**
@@ -171,10 +172,10 @@ Otherwise, you can follow the instructions below to run the application for deve
 
 You will need Docker installed to run these containers.
 
-First navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis with:
+First navigate to `onyx/deployment/docker_compose`, then start up Postgres/Vespa/Redis/MinIO with:
 
 ```bash
-docker compose -f docker-compose.dev.yml -p onyx-stack up -d index relational_db cache
+docker compose -f docker-compose.dev.yml -p onyx-stack up -d index relational_db cache minio
 ```
 
 (index refers to Vespa, relational_db refers to Postgres, and cache refers to Redis)

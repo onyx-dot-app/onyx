@@ -1359,14 +1359,14 @@ class Connector(Base):
         if self.refresh_freq is not None:
             if self.refresh_freq < 60:
                 raise ValueError(
-                    "refresh_freq must be greater than or equal to 60 seconds."
+                    "refresh_freq must be greater than or equal to 1 minute."
                 )
 
     def validate_prune_freq(self) -> None:
         if self.prune_freq is not None:
-            if self.prune_freq < 86400:
+            if self.prune_freq < 300:
                 raise ValueError(
-                    "prune_freq must be greater than or equal to 86400 seconds."
+                    "prune_freq must be greater than or equal to 5 minutes."
                 )
 
 

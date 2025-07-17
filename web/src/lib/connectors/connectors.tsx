@@ -1333,6 +1333,39 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     advanced_values: [],
   },
+  imap: {
+    description: "Configure Email connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the IMAP server host:",
+        label: "IMAP Server Host",
+        name: "host",
+        optional: false,
+        description:
+          "The IMAP server hostname (e.g., imap.gmail.com, outlook.office365.com)",
+      },
+      {
+        type: "number",
+        query: "Enter the IMAP server port:",
+        label: "IMAP Server Port",
+        name: "port",
+        optional: true,
+        default: 993,
+        description: "The IMAP server port (default: 993 for SSL)",
+      },
+      {
+        type: "list",
+        query: "Enter mailboxes to include:",
+        label: "Mailboxes",
+        name: "mailboxes",
+        optional: true,
+        description:
+          "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes.",
+      },
+    ],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1397,14 +1430,20 @@ export function createConnectorValidationSchema(
     ),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(0, "Prune frequency must be non-negative"),
-    refreshFreq: Yup.number().min(0, "Refresh frequency must be non-negative"),
+    pruneFreq: Yup.number().min(
+      0.083,
+      "Prune frequency must be at least 0.083 hours (5 minutes)"
+    ),
+    refreshFreq: Yup.number().min(
+      1,
+      "Refresh frequency must be at least 1 minute"
+    ),
   });
 
   return object;
 }
 
-export const defaultPruneFreqDays = 30; // 30 days
+export const defaultPruneFreqHours = 720; // 30 days in hours
 export const defaultRefreshFreqMinutes = 30; // 30 minutes
 
 // CONNECTORS
@@ -1625,3 +1664,9 @@ export interface MediaWikiConfig extends MediaWikiBaseConfig {
 }
 
 export interface WikipediaConfig extends MediaWikiBaseConfig {}
+
+export interface ImapConfig {
+  host: string;
+  port?: number;
+  mailboxes?: string[];
+}
