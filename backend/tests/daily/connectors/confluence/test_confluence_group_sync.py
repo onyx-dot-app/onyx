@@ -5,7 +5,6 @@ from ee.onyx.external_permissions.confluence.group_sync import confluence_group_
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import Connector
@@ -54,11 +53,10 @@ _EXPECTED_CONFLUENCE_GROUPS = [
 
 
 def test_confluence_group_sync(
+    initialize_db: None,
     confluence_connector_config: dict[str, Any],
     confluence_credential_json: dict[str, Any],
 ) -> None:
-    SqlEngine.init_engine(pool_size=10, max_overflow=10)
-
     with get_session_with_current_tenant() as db_session:
         connector = Connector(
             name="Test Connector",

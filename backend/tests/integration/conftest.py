@@ -4,7 +4,6 @@ import pytest
 
 from onyx.auth.schemas import UserRole
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -45,19 +44,6 @@ errors.
 Commenting out till we can get to the bottom of it. For now, just using
 instantiate the session directly within the test.
 """
-# @pytest.fixture
-# def db_session() -> Generator[Session, None, None]:
-#     with get_session_with_current_tenant() as session:
-#         yield session
-
-
-@pytest.fixture(scope="session", autouse=True)
-def initialize_db() -> None:
-    # Make sure that the db engine is initialized before any tests are run
-    SqlEngine.init_engine(
-        pool_size=10,
-        max_overflow=5,
-    )
 
 
 @pytest.fixture
