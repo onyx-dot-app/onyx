@@ -382,11 +382,12 @@ export function FileUploadFormField({
   );
 }
 
+const PRIVATE_KEY_MAX_SIZE_KB = 10;
 export function FileUploadRawFormField({
   name,
   label,
   subtext,
-  maxSizeKB = 10,
+  maxSizeKB = PRIVATE_KEY_MAX_SIZE_KB,
 }: {
   name: string;
   label: string;
@@ -395,7 +396,7 @@ export function FileUploadRawFormField({
 }) {
   // This component keeps the file as a File object without extracting its content
   // Useful for files like private keys that need to be processed on the backend
-  const [field, meta, helpers] = useField<File | null>(name);
+  const [field, , helpers] = useField<File | null>(name);
   const [customError, setCustomError] = useState<string>("");
 
   // Validate file when it changes
@@ -406,7 +407,7 @@ export function FileUploadRawFormField({
         return false;
       }
       let extension = file.name.split(".").pop();
-      if (extension !== "pfx") {
+      if (!extension || extension.toLowerCase() !== "pfx") {
         setCustomError(`File must have a .pfx extension`);
         return false;
       }

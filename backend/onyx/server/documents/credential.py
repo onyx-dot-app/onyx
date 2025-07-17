@@ -135,7 +135,14 @@ def create_credential_from_model(
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    if credential_info.credential_json.get("authentication_method") == "certificate":
+    auth_method = credential_info.credential_json.get("authentication_method")
+
+    if auth_method is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Authentication method is required",
+        )
+    if auth_method == "certificate":
         raise HTTPException(
             status_code=400,
             detail="Certificate authentication is not supported for this endpoint. "
@@ -172,11 +179,23 @@ def create_credential_with_private_key(
     name: str | None = Form(None),
     source: str = Form(...),
     user: User | None = Depends(current_curator_or_admin_user),
-    private_key: UploadFile | None = File(None),
+    private_key: UploadFile = File(...),
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
-    credential_data = json.loads(credential_json)
-    auth_method = credential_data["authentication_method"]
+    try:
+        credential_data = json.loads(credential_json)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid JSON in credential_json: {str(e)}",
+        )
+    auth_method = credential_data.get("authentication_method")
+
+    if auth_method is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Authentication method is required",
+        )
 
     if auth_method == "client_secret":
         raise HTTPException(
@@ -185,19 +204,8 @@ def create_credential_with_private_key(
             "Please use the /credential endpoint instead.",
         )
 
-    if auth_method == "certificate" and not private_key:
-        raise HTTPException(
-            status_code=400,
-            detail="Private key is required for certificate authentication",
-        )
-
-    if private_key:
-        private_key_content = process_private_key_file(private_key)
-    else:
-        private_key_content = None
-
-    if private_key_content:
-        credential_data["private_key"] = private_key_content
+    private_key_content = process_private_key_file(private_key)
+    credential_data["private_key"] = private_key_content
 
     credential_info = CredentialBase(
         credential_json=credential_data,

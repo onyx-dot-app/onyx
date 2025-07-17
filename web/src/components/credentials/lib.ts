@@ -7,6 +7,25 @@ import {
   CredentialTemplateWithAuth,
 } from "@/lib/connectors/credentials";
 
+function createFileValidationSchema(displayName: string) {
+  return Yup.mixed()
+    .required(`Please select a ${displayName} file`)
+    .test("fileSize", "File size must be less than 10KB", (value) => {
+      if (!value) return false; // Require file
+      if (value instanceof File) {
+        return value.size <= 10 * 1024; // 10KB in bytes
+      }
+      return false;
+    })
+    .test("fileExtension", "File must have .pfx extension", (value) => {
+      if (!value) return false; // Require file
+      if (value instanceof File) {
+        return value.name.toLowerCase().endsWith(".pfx");
+      }
+      return false;
+    });
+}
+
 export function createValidationSchema(json_values: Record<string, any>) {
   const schemaFields: Record<string, Yup.AnySchema> = {};
   const template = json_values as CredentialTemplateWithAuth<any>;
@@ -33,22 +52,11 @@ export function createValidationSchema(json_values: Record<string, any>) {
             .notRequired();
         } else if (def instanceof File) {
           // File upload fields with size and extension validation
-          schemaFields[key] = Yup.mixed()
-            .required(`Please select a ${displayName} file`)
-            .test("fileSize", "File size must be less than 10KB", (value) => {
-              if (!value) return false; // Require file
-              if (value instanceof File) {
-                return value.size <= 10 * 1024; // 10KB in bytes
-              }
-              return false;
-            })
-            .test("fileExtension", "File must have .pfx extension", (value) => {
-              if (!value) return false; // Require file
-              if (value instanceof File) {
-                return value.name.toLowerCase().endsWith(".pfx");
-              }
-              return false;
-            });
+          schemaFields[key] = Yup.mixed().when("authentication_method", {
+            is: method.value,
+            then: () => createFileValidationSchema(displayName),
+            otherwise: () => Yup.mixed().notRequired(),
+          });
         } else {
           schemaFields[key] = Yup.string()
             .trim()
@@ -83,22 +91,7 @@ export function createValidationSchema(json_values: Record<string, any>) {
         .notRequired();
     } else if (def instanceof File) {
       // File upload fields with size and extension validation
-      schemaFields[key] = Yup.mixed()
-        .required(`Please select a ${displayName} file`)
-        .test("fileSize", "File size must be less than 10KB", (value) => {
-          if (!value) return false; // Require file
-          if (value instanceof File) {
-            return value.size <= 10 * 1024; // 10KB in bytes
-          }
-          return false;
-        })
-        .test("fileExtension", "File must have .pfx extension", (value) => {
-          if (!value) return false; // Require file
-          if (value instanceof File) {
-            return value.name.toLowerCase().endsWith(".pfx");
-          }
-          return false;
-        });
+      schemaFields[key] = createFileValidationSchema(displayName);
     } else {
       schemaFields[key] = Yup.string()
         .trim()

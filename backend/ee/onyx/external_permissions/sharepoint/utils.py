@@ -29,21 +29,33 @@ def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> 
     """
     Execute a SharePoint query with retry logic for rate limiting.
     """
-    retries = 0
-    try:
-        return query_obj.execute_query()
-    except ClientRequestException as e:
-        if e.response and e.response.status_code == 429 and retries < max_retries:
-            logger.warning("Rate limit exceeded, sleeping and retrying query execution")
-            retry_after = e.response.headers.get("Retry-After")
-            if retry_after:
-                time.sleep(int(retry_after))
+    for attempt in range(max_retries + 1):
+        try:
+            return query_obj.execute_query()
+        except ClientRequestException as e:
+            if e.response and e.response.status_code == 429 and attempt < max_retries:
+                logger.warning(
+                    f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
+                )
+                retry_after = e.response.headers.get("Retry-After")
+                if retry_after:
+                    sleep_time = int(retry_after)
+                else:
+                    # Exponential backoff: 2^attempt * 5 seconds
+                    sleep_time = min(30, (2**attempt) * 5)
+
+                logger.info(f"Sleeping for {sleep_time} seconds before retry")
+                time.sleep(sleep_time)
             else:
-                # Default sleep if no retry-after header
-                time.sleep(30)
-            retries += 1
-            return _sleep_and_retry(query_obj, method_name, max_retries)
-        raise e
+                # Either not a rate limit error, or we've exhausted retries
+                if e.response and e.response.status_code == 429:
+                    logger.error(
+                        f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
+                    )
+                raise e
+
+    # This should never be reached, but included for completeness
+    raise RuntimeError(f"Unexpected end of retry loop for {method_name}")
 
 
 def _get_azuread_group_guid_by_name(
@@ -283,7 +295,7 @@ def _get_sharepoint_groups(
         groups: set[SharepointGroup] = set()
         user_emails: set[str] = set()
 
-        def process_users(users) -> None:
+        def process_users(users: list[Any]) -> None:
             nonlocal groups, user_emails
 
             for user in users:
@@ -330,7 +342,7 @@ def _get_azuread_groups(
         groups: set[SharepointGroup] = set()
         user_emails: set[str] = set()
 
-        def process_members(members) -> None:
+        def process_members(members: list[Any]) -> None:
             nonlocal groups, user_emails
 
             for member in members:
