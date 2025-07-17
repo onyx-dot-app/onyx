@@ -103,7 +103,7 @@ def test_confluence_connector_restriction_handling(
     # Call the confluence_doc_sync function directly with the mock cc_pair
     doc_access_generator = confluence_doc_sync(mock_cc_pair, lambda: [], None)
     doc_access_list = list(doc_access_generator)
-    assert len(doc_access_list) == 2
+    assert len(doc_access_list) == 7
     assert all(
         not doc_access.external_access.is_public for doc_access in doc_access_list
     )
@@ -119,14 +119,16 @@ def test_confluence_connector_restriction_handling(
     }
 
     # if restriction is applied, only should be visible to shared users / groups
-    restricted_emails = {"chris@onyx.app"}
-    restricted_user_groups = {
-        "confluence-admins-danswerai",
-        "atlassian-addons-admin",
-        "confluence-users-danswerai",
-        "confluence-admins-danswerai",
-        "org-admins",
-    }
+    restricted_emails = {"chris@onyx.app", "hagen@danswer.ai"}
+    restricted_user_groups = {"confluence-admins-danswerai"}
+
+    extra_restricted_emails = {"chris@onyx.app"}
+    extra_restricted_user_groups: set[str] = set()
+
+    # note that this is only allowed since yuhong@onyx.app is a member of the
+    # confluence-admins-danswerai group
+    special_restricted_emails = {"chris@onyx.app", "yuhong@onyx.app"}
+    special_restricted_user_groups: set[str] = set()
 
     # Check Root+Page+2 is public
     root_page_2 = next(d for d in doc_access_list if d.doc_id.endswith("Root+Page+2"))
@@ -149,10 +151,48 @@ def test_confluence_connector_restriction_handling(
     ), "Overview page groups do not match expected values"
 
     # check root page is restricted
-    root_page = next(d for d in doc_access_list if d.doc_id.endswith("Root+Page+2"))
+    root_page = next(d for d in doc_access_list if d.doc_id.endswith("Root+Page"))
     assert (
         root_page.external_access.external_user_emails == restricted_emails
     ), "Root page emails do not match expected values"
     assert (
         root_page.external_access.external_user_group_ids == restricted_user_groups
     ), "Root page groups do not match expected values"
+
+    # check child page has restriction propagated
+    child_page = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page"))
+    assert (
+        child_page.external_access.external_user_emails == restricted_emails
+    ), "Child page emails do not match expected values"
+    assert (
+        child_page.external_access.external_user_group_ids == restricted_user_groups
+    ), "Child page groups do not match expected values"
+
+    # check doubly nested child page has restriction propagated
+    child_page_2 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+2"))
+    assert (
+        child_page_2.external_access.external_user_emails == restricted_emails
+    ), "Child page 2 emails do not match expected values"
+    assert (
+        child_page_2.external_access.external_user_group_ids == restricted_user_groups
+    ), "Child page 2 groups do not match expected values"
+
+    # check child page w/ specific restrictions have those applied
+    child_page_3 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+3"))
+    assert (
+        child_page_3.external_access.external_user_emails == extra_restricted_emails
+    ), "Child page 3 emails do not match expected values"
+    assert (
+        child_page_3.external_access.external_user_group_ids
+        == extra_restricted_user_groups
+    ), "Child page 3 groups do not match expected values"
+
+    # check child page w/ specific restrictions have those applied
+    child_page_4 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+4"))
+    assert (
+        child_page_4.external_access.external_user_emails == special_restricted_emails
+    ), "Child page 4 emails do not match expected values"
+    assert (
+        child_page_4.external_access.external_user_group_ids
+        == special_restricted_user_groups
+    ), "Child page 4 groups do not match expected values"
