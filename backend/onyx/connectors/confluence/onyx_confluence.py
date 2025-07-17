@@ -60,7 +60,7 @@ _REPLACEMENT_EXPANSIONS = "body.view.value"
 _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 _USER_EMAIL_CACHE: dict[str, str | None] = {}
-_DEFAULT_PAGINATION_LIMIT = 6
+_DEFAULT_PAGINATION_LIMIT = 1000
 
 
 class ConfluenceRateLimitError(Exception):
