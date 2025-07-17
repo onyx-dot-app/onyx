@@ -561,14 +561,32 @@ class OnyxConfluence:
                 )
                 raise e
 
-            # yield the results individually
+            # Yield the results individually.
             results = cast(list[dict[str, Any]], next_response.get("results", []))
-            # make sure we don't update the start by more than the amount
+
+            # Note 1:
+            # Make sure we don't update the start by more than the amount
             # of results we were able to retrieve. The Confluence API has a
             # weird behavior where if you pass in a limit that is too large for
             # the configured server, it will artificially limit the amount of
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
+            #
+            # Note 2:
+            # We specifically perform manual yielding (i.e., `for x in xs: yield x`) as opposed to using a `yield from xs`
+            # because we *have to call the `next_page_callback`* prior to yielding the last element!
+            #
+            # If we did:
+            #
+            # ```py
+            # yield from results
+            # if next_page_callback:
+            #   next_page_callback(url_suffix)
+            # ```
+            #
+            # then the logic would fail since the iterator would finish (and the calling scope would exit out of its driving
+            # loop) prior to the callback being called.
+
             old_url_suffix = url_suffix
             updated_start = get_start_param_from_url(old_url_suffix)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
