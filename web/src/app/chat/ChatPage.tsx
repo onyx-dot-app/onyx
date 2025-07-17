@@ -150,6 +150,20 @@ export enum UploadIntent {
   ADD_TO_DOCUMENTS, // For files uploaded via FilePickerModal or similar (just add to repo)
 }
 
+// ---
+// File Attachment Behavior in ChatPage
+//
+// When a user attaches a file to a message:
+// - If the file is small enough, it will be directly embedded into the query and sent with the message.
+//   These files are transient and only persist for the current message.
+// - If the file is too large to embed, it will be uploaded to the backend, processed (chunked),
+//   and then used for retrieval-augmented generation (RAG) instead. These files may persist across messages
+//   and can be referenced in future queries.
+//
+// As a result, depending on the size of the attached file, it could either persist only for the current message
+// or be available for retrieval in subsequent messages.
+// ---
+
 export function ChatPage({
   toggle,
   documentSidebarInitialWidth,
@@ -202,6 +216,11 @@ export function ChatPage({
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
 
+  // This state is needed to avoid a UI flicker for the source-chip above the message input.
+  // When a message is submitted, the state transitions to "loading" and the source-chip (which shows attached files)
+  // would disappear if we only relied on the files in the streamed-back answer. By keeping a local copy of the files
+  // in messageFiles, we ensure the chip remains visible during loading, preventing a flicker before the server response
+  // (which re-includes the files in the streamed answer and re-renders the chip). This provides a smoother user experience.
   const [messageFiles, setMessageFiles] = useState<FileDescriptor[]>([]);
 
   // Also fetch federated connectors for the sources list
@@ -1239,6 +1258,10 @@ export function ChatPage({
     // If under the context limit, the files will be included in the chat history
     // so we don't need to keep them around.
     if (selectedDocumentTokens < maxTokens) {
+      // Persist the selected files in `messageFiles` before clearing them below.
+      // This ensures that the files remain visible in the UI during the loading state,
+      // even though `setSelectedFiles([])` below will clear the `selectedFiles` state.
+      // Without this, the source-chip would disappear before the server response arrives.
       setMessageFiles(
         selectedFiles.map((selectedFile) => ({
           id: selectedFile.id.toString(),
