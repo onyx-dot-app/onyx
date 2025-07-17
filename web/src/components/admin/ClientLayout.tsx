@@ -67,6 +67,11 @@ export function ClientLayout({
   const isLangfuseEditorEnable =
     process.env.NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR === "true";
 
+  console.log(
+    "ENV",
+    process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR,
+    process.env.NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR
+  );
   if (
     (pathname && pathname.startsWith("/admin/connectors")) ||
     (pathname && pathname.startsWith("/admin/embeddings"))
