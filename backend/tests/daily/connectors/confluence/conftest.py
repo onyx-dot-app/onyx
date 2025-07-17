@@ -6,7 +6,7 @@ import pytest
 
 @pytest.fixture
 def confluence_connector_config() -> dict[str, Any]:
-    url_base = os.environ.get("CONFLUENCE_URL")
+    url_base = os.environ.get("CONFLUENCE_TEST_SPACE_URL")
     space_key = os.environ.get("CONFLUENCE_SPACE_KEY")
     page_id = os.environ.get("CONFLUENCE_PAGE_ID")
     is_cloud = os.environ.get("CONFLUENCE_IS_CLOUD", "").lower() == "true"
@@ -23,7 +23,7 @@ def confluence_connector_config() -> dict[str, Any]:
 
 @pytest.fixture
 def confluence_credential_json() -> dict[str, Any]:
-    username = os.environ.get("CONFLUENCE_USERNAME")
+    username = os.environ.get("CONFLUENCE_USER_NAME")
     access_token = os.environ.get("CONFLUENCE_ACCESS_TOKEN")
 
     assert username, "CONFLUENCE_USERNAME environment variable is required"

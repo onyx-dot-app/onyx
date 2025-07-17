@@ -1,6 +1,5 @@
 from typing import Any
 
-from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -11,42 +10,73 @@ from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from shared_configs.contextvars import get_current_tenant_id
+from tests.daily.connectors.confluence.models import ExternalUserGroupSet
 
+
+# In order to get these tests to run, use the credentials from Bitwarden.
+# Search up "ENV vars for local and Github tests", and find the Confluence relevant key-value pairs.
 
 _EXPECTED_CONFLUENCE_GROUPS = [
-    ExternalUserGroup(
-        id="confluence-admins-onyx-test",
-        user_emails=["admin@onyx-test.com"],
+    ExternalUserGroupSet(
+        id="confluence-admins-danswerai",
+        user_emails={"chris@onyx.app", "yuhong@onyx.app"},
         gives_anyone_access=False,
     ),
-    ExternalUserGroup(
+    ExternalUserGroupSet(
         id="org-admins",
-        user_emails=["admin@onyx-test.com"],
+        user_emails={"founders@onyx.app", "chris@onyx.app", "yuhong@onyx.app"},
         gives_anyone_access=False,
     ),
-    ExternalUserGroup(
-        id="confluence-users-onyx-test",
-        user_emails=["admin@onyx-test.com"],
+    ExternalUserGroupSet(
+        id="confluence-users-danswerai",
+        user_emails={
+            "chris@onyx.app",
+            "hagen@danswer.ai",
+            "founders@onyx.app",
+            "pablo@onyx.app",
+            "yuhong@onyx.app",
+        },
         gives_anyone_access=False,
     ),
-    ExternalUserGroup(
-        id="jira-servicemanagement-users-onyx-test",
-        user_emails=["admin@onyx-test.com"],
+    ExternalUserGroupSet(
+        id="jira-users-danswerai",
+        user_emails={
+            "hagen@danswer.ai",
+            "founders@onyx.app",
+            "pablo@onyx.app",
+            "chris@onyx.app",
+        },
         gives_anyone_access=False,
     ),
-    ExternalUserGroup(
-        id="jira-users-onyx-test",
-        user_emails=["admin@onyx-test.com"],
+    ExternalUserGroupSet(
+        id="jira-admins-danswerai",
+        user_emails={"hagen@danswer.ai", "founders@onyx.app", "pablo@onyx.app"},
         gives_anyone_access=False,
     ),
-    ExternalUserGroup(
-        id="jira-product-discovery-users-onyx-test",
-        user_emails=["admin@onyx-test.com"],
+    ExternalUserGroupSet(
+        id="confluence-user-access-admins-danswerai",
+        user_emails={"hagen@danswer.ai"},
         gives_anyone_access=False,
     ),
-    ExternalUserGroup(
+    ExternalUserGroupSet(
+        id="jira-user-access-admins-danswerai",
+        user_emails={"hagen@danswer.ai"},
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
+        id="Yuhong Only No Chris Allowed",
+        user_emails={"yuhong@onyx.app"},
+        gives_anyone_access=False,
+    ),
+    ExternalUserGroupSet(
         id="All_Confluence_Users_Found_By_Onyx",
-        user_emails=["admin@onyx-test.com"],
+        user_emails={
+            "chris@onyx.app",
+            "hagen@danswer.ai",
+            "founders@onyx.app",
+            "pablo@onyx.app",
+            "yuhong@onyx.app",
+        },
         gives_anyone_access=False,
     ),
 ]
@@ -96,5 +126,8 @@ def test_confluence_group_sync(
         )
 
         expected_groups = {group.id: group for group in _EXPECTED_CONFLUENCE_GROUPS}
-        actual_groups = {group.id: group for group in group_sync_iter}
+        actual_groups = {
+            group.id: ExternalUserGroupSet.from_model(external_user_group=group)
+            for group in group_sync_iter
+        }
         assert expected_groups == actual_groups
