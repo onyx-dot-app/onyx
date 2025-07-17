@@ -151,6 +151,7 @@ def try_generate_stale_document_sync_tasks(
     # add tasks to celery and build up the task set to monitor in redis
     stale_doc_count = count_documents_by_needs_sync(db_session)
     if stale_doc_count == 0:
+        logger.info("No stale documents found. Skipping sync tasks generation.")
         return None
 
     logger.info(
