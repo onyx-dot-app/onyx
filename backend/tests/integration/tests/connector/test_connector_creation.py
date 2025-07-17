@@ -37,9 +37,8 @@ def test_overlapping_connector_creation(reset: None) -> None:
 
     config = {
         "wiki_base": os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        "space": "DailyConne",
+        "space": "DailyConnectorTestSpace",
         "is_cloud": True,
-        "page_id": "",
     }
 
     credential = {
@@ -98,9 +97,7 @@ def test_connector_pause_while_indexing(reset: None) -> None:
 
     config = {
         "wiki_base": os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        "space": "",
         "is_cloud": True,
-        "page_id": "",
     }
 
     credential = {
