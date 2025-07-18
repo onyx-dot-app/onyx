@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import { EntityType } from "./interfaces";
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import CollapsibleCard from "@/components/CollapsibleCard";
 import { FiSettings } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
@@ -32,7 +31,7 @@ export function snakeToHumanReadable(str: string): string {
 // Custom Header Component
 function TableHeader() {
   return (
-    <div className="grid grid-cols-12 gap-4 px-8 pb-4 border-b border-neutral-600 font-semibold text-sm">
+    <div className="grid grid-cols-12 gap-4 px-8 pb-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
       <div className="col-span-1">Name</div>
       <div className="col-span-9">Description</div>
       <div className="col-span-1 flex justify-end">Active</div>
@@ -112,7 +111,7 @@ function TableRow({ entityType }: { entityType: EntityType }) {
   return (
     <>
       <div
-        className={`grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors transition-opacity ${entityTypeState.active ? "" : "opacity-60"}`}
+        className={`grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors transition-hover duration-100 ease-in-out`}
       >
         <div className="col-span-1 flex items-center">
           <span className="font-medium text-sm">
@@ -130,6 +129,20 @@ function TableRow({ entityType }: { entityType: EntityType }) {
                 description: e.target.value,
               })
             }
+            onKeyDown={async (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (timer) {
+                  clearTimeout(timer);
+                  setTimer(null);
+                }
+                setDescriptionSavingState("saving");
+                setCheckmarkVisible(false);
+                await handleDescriptionChange(
+                  (e.target as HTMLInputElement).value
+                );
+              }
+            }}
           />
           <span
             className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5"
@@ -194,31 +207,9 @@ function TableRow({ entityType }: { entityType: EntityType }) {
 
 interface KGEntityTypesProps {
   kgEntityTypes: Record<string, EntityType[]>;
-  setPopup?: (spec: PopupSpec | null) => void;
-  refreshKGEntityTypes?: () => void;
 }
 
-export default function KGEntityTypes({
-  kgEntityTypes,
-  setPopup,
-  refreshKGEntityTypes,
-}: KGEntityTypesProps) {
-  // Remove Formik and validation logic
-  // const [groupedKGEntityTypes, setGroupedKGEntityTypes] = useState(kgEntityTypes);
-
-  // // Handler to update local state when an entity type's active state changes
-  // const handleActiveChange = (key: string, idx: number, active: boolean) => {
-  //   setGroupedKGEntityTypes((prev) => {
-  //     const updated = { ...prev };
-  //     if (updated[key]) {
-  //       updated[key] = updated[key].map((et, i) =>
-  //         i === idx ? { ...et, active } : et
-  //       );
-  //     }
-  //     return updated;
-  //   });
-  // };
-
+export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
   return (
     <div className="flex flex-col gap-y-8 w-full">
       <div className="flex flex-col gap-y-4 w-full">
@@ -259,7 +250,6 @@ export default function KGEntityTypes({
                     <TableRow
                       key={`${entityType.name}-${index}`}
                       entityType={entityType}
-                      // onActiveChange={(active) => handleActiveChange(key, index, active)}
                     />
                   ))}
                 </div>
