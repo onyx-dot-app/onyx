@@ -23,7 +23,6 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath:
         if next_path == DRPath.SEARCH
         else state.query_list[:1]
     )
-    # queries = queries[:1]  # TODO: model server raises error with > 1 for some reason
     return [
         Send(
             next_path,

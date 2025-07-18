@@ -193,7 +193,7 @@ def generate_simple_sql(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     entities_types_str = state.entities_types_str
     relationship_types_str = state.relationship_types_str
 

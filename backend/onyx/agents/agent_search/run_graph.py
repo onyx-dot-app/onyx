@@ -158,7 +158,9 @@ def run_kb_graph(
 ) -> AnswerStream:
     graph = kb_graph_builder()
     compiled_graph = graph.compile()
-    input = KBMainInput(log_messages=[])
+    input = KBMainInput(
+        log_messages=[], question=config.inputs.prompt_builder.raw_user_query
+    )
 
     yield ToolCallKickoff(
         tool_name="agent_search_0",

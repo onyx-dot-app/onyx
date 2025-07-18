@@ -144,6 +144,7 @@ class ResearchObjectUpdate(LoggerUpdate):
 
 ## Graph Input State
 class MainInput(CoreState):
+    question: str
     individual_flow: bool = True  # used for UI display purposes
 
 
