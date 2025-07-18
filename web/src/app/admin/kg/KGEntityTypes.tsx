@@ -12,6 +12,7 @@ import CollapsibleCard from "@/components/CollapsibleCard";
 import { CogIcon } from "lucide-react";
 import { FiSettings } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
+import { FaCircleQuestion } from "react-icons/fa6";
 
 interface KGEntityTypesProps {
   kgEntityTypes: Record<string, EntityType[]>;
@@ -231,7 +232,7 @@ export default function KGEntityTypes({
                             iconSize={25}
                           />
                         ) : (
-                          <></>
+                          <FaCircleQuestion size={25} />
                         )}
                         {snakeToHumanReadable(key)}
                       </span>

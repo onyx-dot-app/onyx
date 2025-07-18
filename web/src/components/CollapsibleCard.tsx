@@ -52,13 +52,13 @@ export default function CollapsibleCard({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
       >
+        <div className="flex-1">{header}</div>
         <span
-          className="mr-4 transition-transform flex-shrink-0"
+          className="ml-3 transition-transform flex-shrink-0"
           style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
         >
           <ChevronDown size={20} />
         </span>
-        <div className="flex-1">{header}</div>
       </button>
       <div
         ref={contentRef}
