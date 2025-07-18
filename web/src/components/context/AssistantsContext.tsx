@@ -103,10 +103,7 @@ export const AssistantsProvider: React.FC<{
       });
       if (!response.ok) throw new Error("Failed to fetch assistants");
       let assistants: MinimalPersonaSnapshot[] = await response.json();
-
-      let filteredAssistants = filterAssistants(assistants);
-
-      setAssistants(filteredAssistants);
+      setAssistants(filterAssistants(assistants));
     } catch (error) {
       console.error("Error refreshing assistants:", error);
     }

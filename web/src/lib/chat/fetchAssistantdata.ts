@@ -12,9 +12,7 @@ export async function fetchAssistantData(): Promise<MinimalPersonaSnapshot[]> {
       return [];
     }
 
-    let filteredAssistants = filterAssistants(assistants);
-
-    return filteredAssistants;
+    return filterAssistants(assistants);
   } catch (error) {
     console.error("Unexpected error in fetchAssistantData:", error);
     return [];
