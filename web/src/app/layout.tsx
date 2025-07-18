@@ -30,7 +30,7 @@ import { DocumentsProvider } from "./chat/my-documents/DocumentsContext";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
-import { fetchAssistantData } from "@/lib/chat/fetchAssistantData";
+import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
 
 const inter = Inter({
   subsets: ["latin"],
