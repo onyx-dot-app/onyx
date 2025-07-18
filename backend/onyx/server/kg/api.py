@@ -54,7 +54,7 @@ def get_kg_exposed(_: User | None = Depends(current_admin_user)) -> bool:
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, list[EntityType]]:
+) -> list[EntityType]:
     reset_full_kg_index__commit(db_session)
     populate_missing_default_entity_types__commit(db_session=db_session)
     return get_kg_entity_types(db_session=db_session)
@@ -173,13 +173,11 @@ def enable_or_disable_kg(
 def get_kg_entity_types(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> dict[str, list[EntityType]]:
+) -> list[EntityType]:
     # when using for the first time, populate with default entity types
     kg_entity_types = get_configured_entity_types(db_session=db_session)
-    return {
-        connector_name: [EntityType.from_model(model=et) for et in ets]
-        for connector_name, ets in kg_entity_types.items()
-    }
+
+    return [EntityType.from_model(kg_entity_type) for kg_entity_type in kg_entity_types]
 
 
 @admin_router.put("/entity-types")
