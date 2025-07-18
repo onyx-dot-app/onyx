@@ -53,7 +53,7 @@ def generate_answer(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
 
     final_answer: str | None = None
 

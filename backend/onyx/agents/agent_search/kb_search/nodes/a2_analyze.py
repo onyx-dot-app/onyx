@@ -145,7 +145,7 @@ def analyze(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     entities = (
         state.extracted_entities_no_attributes
     )  # attribute knowledge is not required for this step

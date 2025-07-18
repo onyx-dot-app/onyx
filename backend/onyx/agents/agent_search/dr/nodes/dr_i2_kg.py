@@ -36,14 +36,6 @@ def kg_query(
 
     kb_graph = kb_graph_builder().compile()
 
-    # TODO: change this, won't work if doing parallel kg
-    original_question = config["metadata"][
-        "config"
-    ].inputs.prompt_builder.raw_user_query
-    kg_config = config.copy()  # doesn't really do much
-    kg_config["metadata"]["config"].behavior.use_agentic_search = True
-    kg_config["metadata"]["config"].inputs.prompt_builder.raw_user_query = search_query
-
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
@@ -59,21 +51,10 @@ def kg_query(
     )
 
     kb_results = kb_graph.invoke(
-        input=KbMainInput(individual_flow=False), config=kg_config
+        input=KbMainInput(question=search_query, individual_flow=False),
+        config=config,
     )
     full_answer = kb_results.get("final_answer") or "No answer provided"
-
-    # TODO: here to revert the query, but won't work for parallel kg
-    config["metadata"][
-        "config"
-    ].inputs.prompt_builder.raw_user_query = original_question
-
-    # create source document result list
-    source_document_result_list = []
-    for source_document in kb_results.get("source_documents", []):
-        source_document_result_list.append(
-            source_document,
-        )
 
     write_custom_event(
         "basic_response",

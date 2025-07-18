@@ -74,7 +74,7 @@ def extract_ert(
         user_name = user_email.split("@")[0] or "unknown"
 
     # first four lines duplicates from generate_initial_answer
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     today_date = datetime.now().strftime("%A, %Y-%m-%d")
 
     all_entity_types = get_entity_types_str(active=True)
