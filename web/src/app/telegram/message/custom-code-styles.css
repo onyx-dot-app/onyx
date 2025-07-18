@@ -1,0 +1,36 @@
+pre[class*="language-"] {
+  padding: 0px; /* Override padding */
+  margin: 0px;
+  border: none;
+}
+
+.prose :where(pre):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  padding: 0px; /* Override padding */
+  margin: 0px;
+
+  /* Override scrollbar style to match prism-tomorrow */
+  ::-webkit-scrollbar {
+    width: 8px; /* Vertical scrollbar width */
+    height: 8px; /* Horizontal scrollbar height */
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #1f2937; /* Dark track background color */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4b5563; /* Dark handle color */
+    border-radius: 10px;
+    transition:
+      background 0.3s ease,
+      box-shadow 0.3s ease; /* Smooth transition for hover effect */
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280; /* Dark handle color on hover */
+    box-shadow: 0 0 10px #6b7280; /* Light up effect on hover */
+  }
+
+  scrollbar-width: thin;
+  scrollbar-color: #4b5563 #1f2937; /* thumb and track colors */
+}
