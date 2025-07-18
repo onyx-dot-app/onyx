@@ -1,24 +1,17 @@
 import { SourceIcon } from "@/components/SourceIcon";
-import React, { useState } from "react";
-import { Form, Formik, FormikProps, FormikState } from "formik";
-import * as Yup from "yup";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { TextAreaField, TextFormField } from "@/components/Field";
-import { SwitchField } from "@/components/ui/switch";
+import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import { EntityType } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import CollapsibleCard from "@/components/CollapsibleCard";
-import { CogIcon } from "lucide-react";
 import { FiSettings } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
-
-interface KGEntityTypesProps {
-  kgEntityTypes: Record<string, EntityType[]>;
-  setPopup?: (spec: PopupSpec | null) => void;
-  refreshKGEntityTypes?: () => void;
-}
+import { Modal } from "@/components/Modal";
+import { Input } from "@/components/ui/input";
+import { CheckmarkIcon } from "@/components/icons/icons";
 
 // Utility: Convert capitalized snake case to human readable case
 export function snakeToHumanReadable(str: string): string {
@@ -49,43 +42,160 @@ function TableHeader() {
 }
 
 // Custom Row Component
-function TableRow({
-  entityType,
-  index,
-}: {
-  entityType: EntityType;
-  index: number;
-}) {
-  const [dimState, setDimState] = useState(entityType.active);
+function TableRow({ entityType }: { entityType: EntityType }) {
+  const [entityTypeState, setEntityTypeState] = useState(entityType);
+  const [showModal, setShowModal] = useState(false);
+  const [descriptionSavingState, setDescriptionSavingState] = useState<
+    "saving" | "saved" | "failed" | undefined
+  >(undefined);
+
+  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+  const [checkmarkVisible, setCheckmarkVisible] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
+
+  const handleToggle = async (checked: boolean) => {
+    const response = await fetch("/api/admin/kg/entity-types", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([{ ...entityType, active: checked }]),
+    });
+
+    if (!response.ok) return;
+
+    setEntityTypeState({ ...entityTypeState, active: checked });
+  };
+
+  const handleDescriptionChange = async (description: string) => {
+    try {
+      const response = await fetch("/api/admin/kg/entity-types", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([{ ...entityType, description }]),
+      });
+      if (response.ok) {
+        setDescriptionSavingState("saved");
+        setCheckmarkVisible(true);
+        setTimeout(() => setCheckmarkVisible(false), 1000);
+      } else {
+        setDescriptionSavingState("failed");
+        setCheckmarkVisible(false);
+      }
+    } catch {
+      setDescriptionSavingState("failed");
+      setCheckmarkVisible(false);
+    } finally {
+      setTimeout(() => setDescriptionSavingState(undefined), 1000);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasMounted) {
+      setHasMounted(true);
+      return;
+    }
+    if (timer) clearTimeout(timer);
+    setTimer(
+      setTimeout(() => {
+        setDescriptionSavingState("saving");
+        setCheckmarkVisible(false);
+        setTimer(
+          setTimeout(
+            () => handleDescriptionChange(entityTypeState.description),
+            500
+          )
+        );
+      }, 1000)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityTypeState.description]);
 
   return (
-    <div
-      className={`grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors transition-opacity ${dimState ? "" : "opacity-50"}`}
-    >
-      <div className="col-span-1 flex items-center">
-        <span className="font-medium text-sm">
-          {snakeToHumanReadable(entityType.name)}
-        </span>
+    <>
+      <div
+        className={`grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors transition-opacity ${entityTypeState.active ? "" : "opacity-60"}`}
+      >
+        <div className="col-span-1 flex items-center">
+          <span className="font-medium text-sm">
+            {snakeToHumanReadable(entityType.name)}
+          </span>
+        </div>
+        <div className="col-span-9 relative">
+          <Input
+            disabled={!entityTypeState.active}
+            className="w-full px-3 py-2 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200 pr-10"
+            defaultValue={entityType.description}
+            onChange={(e) =>
+              setEntityTypeState({
+                ...entityTypeState,
+                description: e.target.value,
+              })
+            }
+          />
+          <span
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5"
+            style={{ pointerEvents: "none" }}
+          >
+            <span
+              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
+                descriptionSavingState === "saving" && hasMounted
+                  ? "opacity-100"
+                  : "opacity-0"
+              }`}
+              style={{ zIndex: 1 }}
+            >
+              <span className="inline-block w-4 h-4 align-middle border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            </span>
+            <span
+              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
+                checkmarkVisible ? "opacity-100" : "opacity-0"
+              }`}
+              style={{ zIndex: 2 }}
+            >
+              <CheckmarkIcon size={16} className="text-green-400" />
+            </span>
+          </span>
+        </div>
+        <div className="col-span-1 flex items-center justify-end">
+          <Switch
+            checked={entityTypeState.active}
+            onCheckedChange={handleToggle}
+          />
+        </div>
+        <div className="col-span-1 flex items-center justify-end">
+          <button
+            type="button"
+            disabled={!entityTypeState.active}
+            onClick={() => setShowModal(true)}
+            className="p-1 rounded"
+            aria-label="Settings"
+          >
+            <FiSettings size={20} color="rgb(150, 150, 150)" />
+          </button>
+        </div>
       </div>
-      <div className="col-span-9">
-        <TextFormField
-          name={`${entityType.grounded_source_name}[${index}].description`}
-          className="w-full px-3 py-2 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"
-          label="description"
-          removeLabel
-        />
-      </div>
-      <div className="col-span-1 flex items-center justify-end">
-        <SwitchField
-          name={`${entityType.grounded_source_name}[${index}].active`}
-          onCheckedChange={setDimState}
-        />
-      </div>
-      <div className="col-span-1 flex items-center justify-end">
-        <FiSettings size={20} color="rgb(150, 150, 150)" />
-      </div>
-    </div>
+      {showModal && (
+        <Modal onOutsideClick={() => setShowModal(false)}>
+          <div className="p-6">
+            <h2 className="text-lg font-semibold mb-4">
+              Settings for {snakeToHumanReadable(entityType.name)}
+            </h2>
+            <p>Settings content goes here.</p>
+            <div className="mt-6 flex justify-end">
+              <Button onClick={() => setShowModal(false)} type="button">
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
+}
+
+interface KGEntityTypesProps {
+  kgEntityTypes: Record<string, EntityType[]>;
+  setPopup?: (spec: PopupSpec | null) => void;
+  refreshKGEntityTypes?: () => void;
 }
 
 export default function KGEntityTypes({
@@ -93,212 +203,84 @@ export default function KGEntityTypes({
   setPopup,
   refreshKGEntityTypes,
 }: KGEntityTypesProps) {
-  console.log(kgEntityTypes);
+  // Remove Formik and validation logic
+  // const [groupedKGEntityTypes, setGroupedKGEntityTypes] = useState(kgEntityTypes);
 
-  // Store grouped entity types for reset
-  const [groupedKGEntityTypes, setGroupedKGEntityTypes] =
-    useState(kgEntityTypes);
-
-  const validationSchema = Yup.array(
-    Yup.object({
-      name: Yup.string().required(),
-      description: Yup.string().required(),
-      active: Yup.boolean().required(),
-      // max_coverage_days: Yup.date().required(),
-    })
-  );
-
-  const onSubmit = async (
-    values: Record<string, EntityType[]>,
-    {
-      resetForm,
-    }: {
-      resetForm: (
-        nextState?: Partial<FormikState<Record<string, EntityType[]>>>
-      ) => void;
-    }
-  ) => {
-    const diffs: EntityType[] = [];
-
-    for (const key in kgEntityTypes) {
-      const initialArray = kgEntityTypes[key]!;
-      const currentArray = values[key]!;
-      for (let i = 0; i < initialArray.length; i++) {
-        const initialValue = initialArray[i];
-        const currentValue = currentArray?.[i];
-        if (!initialValue || !currentValue) continue;
-        const equals =
-          initialValue.description === currentValue.description &&
-          initialValue.active === currentValue.active;
-        if (!equals) {
-          diffs.push(currentValue);
-        }
-      }
-    }
-
-    if (diffs.length === 0) return;
-
-    const response = await fetch("/api/admin/kg/entity-types", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(diffs),
-    });
-
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      console.warn({ errorMsg });
-      setPopup?.({
-        message: "Failed to configure Entity Types.",
-        type: "error",
-      });
-      return;
-    }
-
-    setPopup?.({
-      message: "Successfully updated Entity Types.",
-      type: "success",
-    });
-
-    refreshKGEntityTypes?.();
-
-    resetForm({ values });
-  };
-
-  const reset = async (props: FormikProps<Record<string, EntityType[]>>) => {
-    const result = await fetch("/api/admin/kg/reset", { method: "PUT" });
-
-    if (!result.ok) {
-      setPopup?.({
-        message: "Failed to reset Knowledge Graph.",
-        type: "error",
-      });
-      return;
-    }
-
-    const rawData = (await result.json()) as EntityType[];
-    // Group by name into Record<string, EntityType[]>
-    if (!Array.isArray(rawData)) {
-      setPopup?.({
-        message: "Unexpected response format when resetting Knowledge Graph.",
-        type: "error",
-      });
-      return;
-    }
-    const newEntityTypes: Record<string, EntityType[]> = {};
-    rawData.forEach((et) => {
-      if (!et || !et.name) return;
-      if (!newEntityTypes[et.name]) newEntityTypes[et.name] = [];
-      newEntityTypes[et.name]?.push(et);
-    });
-    setGroupedKGEntityTypes(newEntityTypes);
-    props.resetForm({ values: newEntityTypes });
-
-    setPopup?.({
-      message: "Successfully reset Knowledge Graph.",
-      type: "success",
-    });
-
-    refreshKGEntityTypes?.();
-  };
-
-  function renderFormik(props: FormikProps<Record<string, EntityType[]>>) {
-    return (
-      <Form className="flex flex-col gap-y-8 w-full">
-        <div className="flex flex-col gap-y-4 w-full">
-          {Object.entries(groupedKGEntityTypes).length === 0 ? (
-            <div className="flex flex-col gap-y-4">
-              <p>No results available.</p>
-              <p>
-                To configure Knowledge Graph, first connect some{" "}
-                <Link href={`/admin/add-connector`} className="underline">
-                  Connectors.
-                </Link>
-              </p>
-            </div>
-          ) : (
-            Object.entries(groupedKGEntityTypes).map(
-              ([key, entityTypesArr]) => (
-                <div key={key}>
-                  <CollapsibleCard
-                    header={
-                      <span className="font-semibold text-lg flex flex-row gap-x-4">
-                        {Object.values(ValidSources).includes(
-                          key as ValidSources
-                        ) ? (
-                          <SourceIcon
-                            sourceType={key as ValidSources}
-                            iconSize={25}
-                          />
-                        ) : (
-                          <FaCircleQuestion size={25} />
-                        )}
-                        {snakeToHumanReadable(key)}
-                      </span>
-                    }
-                    defaultOpen={true}
-                  >
-                    <div className="w-full pt-4">
-                      <TableHeader />
-                      {entityTypesArr.map((entityType, index) => (
-                        <TableRow
-                          key={`${entityType.name}-${index}`}
-                          entityType={entityType}
-                          index={index}
-                        />
-                      ))}
-                    </div>
-                  </CollapsibleCard>
-                </div>
-              )
-            )
-          )}
-          <div className="flex flex-row items-center gap-x-4 mt-4">
-            <Button type="submit" variant="submit" disabled={!props.dirty}>
-              Save
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!props.dirty}
-              onClick={() => props.resetForm()}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-        <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
-          <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-            Danger
-          </p>
-          <div className="flex flex-col gap-y-4">
-            <p>
-              Resetting will delete all extracted entities and relationships and
-              deactivate all entity types. After reset, you can reactivate
-              entity types to begin populating the Knowledge Graph again.
-            </p>
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-min"
-              onClick={() => reset(props)}
-            >
-              Reset Knowledge Graph
-            </Button>
-          </div>
-        </div>
-      </Form>
-    );
-  }
+  // // Handler to update local state when an entity type's active state changes
+  // const handleActiveChange = (key: string, idx: number, active: boolean) => {
+  //   setGroupedKGEntityTypes((prev) => {
+  //     const updated = { ...prev };
+  //     if (updated[key]) {
+  //       updated[key] = updated[key].map((et, i) =>
+  //         i === idx ? { ...et, active } : et
+  //       );
+  //     }
+  //     return updated;
+  //   });
+  // };
 
   return (
-    <Formik
-      initialValues={kgEntityTypes}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-      enableReinitialize
-    >
-      {renderFormik}
-    </Formik>
+    <div className="flex flex-col gap-y-8 w-full">
+      <div className="flex flex-col gap-y-4 w-full">
+        {Object.entries(kgEntityTypes).length === 0 ? (
+          <div className="flex flex-col gap-y-4">
+            <p>No results available.</p>
+            <p>
+              To configure Knowledge Graph, first connect some{" "}
+              <Link href={`/admin/add-connector`} className="underline">
+                Connectors.
+              </Link>
+            </p>
+          </div>
+        ) : (
+          Object.entries(kgEntityTypes).map(([key, entityTypesArr]) => (
+            <div key={key}>
+              <CollapsibleCard
+                header={
+                  <span className="font-semibold text-lg flex flex-row gap-x-4">
+                    {Object.values(ValidSources).includes(
+                      key as ValidSources
+                    ) ? (
+                      <SourceIcon
+                        sourceType={key as ValidSources}
+                        iconSize={25}
+                      />
+                    ) : (
+                      <FaCircleQuestion size={25} />
+                    )}
+                    {snakeToHumanReadable(key)}
+                  </span>
+                }
+                defaultOpen={true}
+              >
+                <div className="w-full pt-4">
+                  <TableHeader />
+                  {entityTypesArr.map((entityType, index) => (
+                    <TableRow
+                      key={`${entityType.name}-${index}`}
+                      entityType={entityType}
+                      // onActiveChange={(active) => handleActiveChange(key, index, active)}
+                    />
+                  ))}
+                </div>
+              </CollapsibleCard>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
+        <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
+          Danger
+        </p>
+        <div className="flex flex-col gap-y-4">
+          <p>
+            Resetting will delete all extracted entities and relationships and
+            deactivate all entity types. After reset, you can reactivate entity
+            types to begin populating the Knowledge Graph again.
+          </p>
+          {/* Optionally keep or remove the reset button as needed */}
+        </div>
+      </div>
+    </div>
   );
 }
