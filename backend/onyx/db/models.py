@@ -17,7 +17,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyBaseOAuthAccountTableUUID
 from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from sqlalchemy import Boolean
+from sqlalchemy import Boolean, BigInteger, JSON
 from sqlalchemy import DateTime
 from sqlalchemy import desc
 from sqlalchemy import Enum
@@ -251,6 +251,23 @@ class ApiKey(Base):
 
     # Add this relationship to access the User object via user_id
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+
+
+class TelegramUserApiKey(Base):
+    __tablename__ = "telegram_user_api_key"
+
+    api_key: Mapped[str] = mapped_column(String, unique=True, primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+
+class TelegramUserSettings(Base):
+    __tablename__ = "telegram_user_settings"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    model: Mapped[dict] = mapped_column(JSON, nullable=True)
+    persona_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    prompt_id: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
 class Notification(Base):

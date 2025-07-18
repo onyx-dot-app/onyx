@@ -112,15 +112,12 @@ def reorder_sections(
     if section_relevance_list is None:
         return sections
 
-    logger.info(sections)
-    logger.info(section_relevance_list)
     reordered_sections: list[InferenceSection] = []
     if section_relevance_list is not None:
         for selection_target in [True,]:
             for section, is_relevant in zip(sections, section_relevance_list):
                 if is_relevant == selection_target:
                     reordered_sections.append(section)
-    logger.info(reordered_sections)
     return reordered_sections
 
 
@@ -153,7 +150,6 @@ def _apply_pruning(
     sections = reorder_sections(
         sections=sections, section_relevance_list=section_relevance_list
     )
-    logger.info(sections)
     # remove docs that are explicitly marked as not for QA
     sections = _remove_sections_to_ignore(sections=sections)
 
@@ -161,8 +157,6 @@ def _apply_pruning(
 
     final_section_ind = None
     total_tokens = 0
-    for section in sections:
-        logger.info(section.combined_content)
     for ind, section in enumerate(sections):
         section_str = (
             # If using tool message, it will be a bit of an overestimate as the extra json text around the section
@@ -274,7 +268,6 @@ def _apply_pruning(
                     tokenizer=llm_tokenizer,
                 )
                 sections = [sections[0]]
-    logger.info(sections)
     return sections
 
 
