@@ -1,5 +1,6 @@
 import re
 from typing import cast
+from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -73,6 +74,7 @@ def _get_final_context_doc_indices(
 
 def _convert_packet_stream_to_response(
     packets: ChatPacketStream,
+    chat_session_id: UUID,
 ) -> ChatBasicResponse:
     response = ChatBasicResponse()
     final_context_docs: list[LlmDoc] = []
@@ -216,6 +218,8 @@ def _convert_packet_stream_to_response(
     if answer:
         response.answer_citationless = remove_answer_citations(answer)
 
+    response.chat_session_id = chat_session_id
+
     return response
 
 
@@ -237,13 +241,36 @@ def handle_simplified_chat_message(
     if not chat_message_req.message:
         raise HTTPException(status_code=400, detail="Empty chat message is invalid")
 
+    # Handle chat session creation if chat_session_id is not provided
+    if chat_message_req.chat_session_id is None:
+        if chat_message_req.persona_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Either chat_session_id or persona_id must be provided",
+            )
+
+        # Create a new chat session with the provided persona_id
+        try:
+            new_chat_session = create_chat_session(
+                db_session=db_session,
+                description="",  # Leave empty for simple API
+                user_id=user.id if user else None,
+                persona_id=chat_message_req.persona_id,
+            )
+            chat_session_id = new_chat_session.id
+        except Exception as e:
+            logger.exception(e)
+            raise HTTPException(status_code=400, detail="Invalid Persona provided.")
+    else:
+        chat_session_id = chat_message_req.chat_session_id
+
     try:
         parent_message, _ = create_chat_chain(
-            chat_session_id=chat_message_req.chat_session_id, db_session=db_session
+            chat_session_id=chat_session_id, db_session=db_session
         )
     except Exception:
         parent_message = get_or_create_root_message(
-            chat_session_id=chat_message_req.chat_session_id, db_session=db_session
+            chat_session_id=chat_session_id, db_session=db_session
         )
 
     if (
@@ -258,7 +285,7 @@ def handle_simplified_chat_message(
         retrieval_options = chat_message_req.retrieval_options
 
     full_chat_msg_info = CreateChatMessageRequest(
-        chat_session_id=chat_message_req.chat_session_id,
+        chat_session_id=chat_session_id,
         parent_message_id=parent_message.id,
         message=chat_message_req.message,
         file_descriptors=[],
@@ -283,7 +310,7 @@ def handle_simplified_chat_message(
         enforce_chat_session_id_for_search_docs=False,
     )
 
-    return _convert_packet_stream_to_response(packets)
+    return _convert_packet_stream_to_response(packets, chat_session_id)
 
 
 @router.post("/send-message-simple-with-history")
@@ -403,4 +430,4 @@ def handle_send_message_simple_with_history(
         enforce_chat_session_id_for_search_docs=False,
     )
 
-    return _convert_packet_stream_to_response(packets)
+    return _convert_packet_stream_to_response(packets, chat_session.id)

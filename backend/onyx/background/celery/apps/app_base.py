@@ -24,13 +24,14 @@ from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatt
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.celery_utils import make_probe_path
+from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
+from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
@@ -145,8 +146,11 @@ def on_task_postrun(
 
     r = get_redis_client(tenant_id=tenant_id)
 
-    if task_id.startswith(RedisConnectorCredentialPair.PREFIX):
-        r.srem(RedisConnectorCredentialPair.get_taskset_key(), task_id)
+    # NOTE: we want to remove the `Redis*` classes, prefer to just have functions to
+    # do these things going forward. In short, things should generally be like the doc
+    # sync task rather than the others below
+    if task_id.startswith(DOCUMENT_SYNC_PREFIX):
+        r.srem(DOCUMENT_SYNC_TASKSET_KEY, task_id)
         return
 
     if task_id.startswith(RedisDocumentSet.PREFIX):

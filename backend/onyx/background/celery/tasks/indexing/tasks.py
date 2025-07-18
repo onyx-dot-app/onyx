@@ -54,7 +54,10 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
+from onyx.db.connector_credential_pair import ConnectorType
+from onyx.db.connector_credential_pair import (
+    fetch_indexable_connector_credential_pair_ids,
+)
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -85,6 +88,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
+
+USER_FILE_INDEXING_LIMIT = 100
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -480,20 +485,37 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         embedding_model=embedding_model,
                     )
 
-        # gather cc_pair_ids
+        # gather cc_pair_ids + current search settings
         lock_beat.reacquire()
-        cc_pair_ids: list[int] = []
         with get_session_with_current_tenant() as db_session:
-            cc_pairs = fetch_connector_credential_pairs(
-                db_session, include_user_files=True
+            standard_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
+                db_session, connector_type=ConnectorType.STANDARD
             )
-            for cc_pair_entry in cc_pairs:
-                cc_pair_ids.append(cc_pair_entry.id)
+            # only index 50 user files at a time. This makes sense since user files are
+            # indexed only once, and then they are done. In practice, we would rarely
+            # have more than `USER_FILE_INDEXING_LIMIT` user files to index.
+            user_file_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
+                db_session,
+                connector_type=ConnectorType.USER_FILE,
+                limit=USER_FILE_INDEXING_LIMIT,
+            )
+            cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+
+            # NOTE: some potential race conditions here, but the worse case is
+            # kicking off some "invalid" indexing tasks which will just fail
+            search_settings_list = get_active_search_settings_list(db_session)
+
+        current_search_settings = next(
+            search_settings_instance
+            for search_settings_instance in search_settings_list
+            if search_settings_instance.status.is_current()
+        )
 
         # mark CC Pairs that are repeatedly failing as in repeated error state
         with get_session_with_current_tenant() as db_session:
-            current_search_settings = get_current_search_settings(db_session)
             for cc_pair_id in cc_pair_ids:
+                lock_beat.reacquire()
+
                 if is_in_repeated_error_state(
                     cc_pair_id=cc_pair_id,
                     search_settings_id=current_search_settings.id,
@@ -511,7 +533,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
             redis_connector = RedisConnector(tenant_id, cc_pair_id)
             with get_session_with_current_tenant() as db_session:
-                search_settings_list = get_active_search_settings_list(db_session)
                 for search_settings_instance in search_settings_list:
                     # skip non-live search settings that don't have background reindex enabled
                     # those should just auto-change to live shortly after creation without
