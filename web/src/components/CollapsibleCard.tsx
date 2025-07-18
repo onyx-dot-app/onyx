@@ -1,8 +1,9 @@
+import { ChevronDown } from "lucide-react";
 import React, { useState, ReactNode, useRef, useLayoutEffect } from "react";
 
 interface CollapsibleCardProps {
-  header: ReactNode;
-  children: ReactNode;
+  header: JSX.Element;
+  children: JSX.Element;
   defaultOpen?: boolean;
   className?: string;
 }
@@ -47,25 +48,17 @@ export default function CollapsibleCard({
     >
       <button
         type="button"
-        className="w-full flex items-center justify-between px-6 py-4 text-left focus:outline-none focus:ring-2 focus:ring-accent rounded-t-lg bg-accent-background hover:bg-accent-background-hovered transition-colors"
+        className="w-full flex items-center px-8 py-6 text-left focus:outline-none focus:ring-2 focus:ring-accent rounded-t-lg bg-accent-background hover:bg-accent-background-hovered transition-colors"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
       >
-        {header}
         <span
-          className="ml-2 transition-transform"
-          style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+          className="mr-4 transition-transform flex-shrink-0"
+          style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
         >
-          <svg width="20" height="20" fill="none" viewBox="0 0 20 20">
-            <path
-              d="M7 7l3 3 3-3"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <ChevronDown size={20} />
         </span>
+        <div className="flex-1">{header}</div>
       </button>
       <div
         ref={contentRef}

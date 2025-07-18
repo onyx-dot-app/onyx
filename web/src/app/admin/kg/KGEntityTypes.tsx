@@ -1,3 +1,4 @@
+import { SourceIcon } from "@/components/SourceIcon";
 import React, { useState } from "react";
 import { Form, Formik, FormikProps, FormikState } from "formik";
 import * as Yup from "yup";
@@ -8,6 +9,9 @@ import Link from "next/link";
 import { EntityType } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import CollapsibleCard from "@/components/CollapsibleCard";
+import { CogIcon } from "lucide-react";
+import { FiSettings } from "react-icons/fi";
+import { ValidSources } from "@/lib/types";
 
 interface KGEntityTypesProps {
   kgEntityTypes: Record<string, EntityType[]>;
@@ -17,11 +21,18 @@ interface KGEntityTypesProps {
 
 // Utility: Convert capitalized snake case to human readable case
 export function snakeToHumanReadable(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (match) => match.toUpperCase())
-    .replace("Pr", "PR");
+  return (
+    str
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (match) => match.toUpperCase())
+      // # TODO (@raunakab)
+      // Special case to replace all instances of "Pr" with "PR".
+      // This is a *dumb* implementation. If there exists a string that starts with "Pr" (e.g., "Prompt"),
+      // then this line will stupidly convert it to "PRompt".
+      // Fix this later (or if this becomes a problem lol).
+      .replace("Pr", "PR")
+  );
 }
 
 // Custom Header Component
@@ -29,8 +40,9 @@ function TableHeader() {
   return (
     <div className="grid grid-cols-12 gap-4 px-8 pb-4 border-b border-neutral-600 font-semibold text-sm">
       <div className="col-span-1">Name</div>
-      <div className="col-span-10">Description</div>
+      <div className="col-span-9">Description</div>
       <div className="col-span-1 flex justify-end">Active</div>
+      <div className="col-span-1" />
     </div>
   );
 }
@@ -39,20 +51,22 @@ function TableHeader() {
 function TableRow({
   entityType,
   index,
-  isLast,
 }: {
   entityType: EntityType;
   index: number;
-  isLast: boolean;
 }) {
+  const [dimState, setDimState] = useState(entityType.active);
+
   return (
-    <div className="grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors">
+    <div
+      className={`grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors transition-opacity ${dimState ? "" : "opacity-50"}`}
+    >
       <div className="col-span-1 flex items-center">
         <span className="font-medium text-sm">
           {snakeToHumanReadable(entityType.name)}
         </span>
       </div>
-      <div className="col-span-10">
+      <div className="col-span-9">
         <TextFormField
           name={`${entityType.grounded_source_name}[${index}].description`}
           className="w-full px-3 py-2 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"
@@ -63,7 +77,11 @@ function TableRow({
       <div className="col-span-1 flex items-center justify-end">
         <SwitchField
           name={`${entityType.grounded_source_name}[${index}].active`}
+          onCheckedChange={setDimState}
         />
+      </div>
+      <div className="col-span-1 flex items-center justify-end">
+        <FiSettings size={20} color="rgb(150, 150, 150)" />
       </div>
     </div>
   );
@@ -204,7 +222,17 @@ export default function KGEntityTypes({
                 <div key={key}>
                   <CollapsibleCard
                     header={
-                      <span className="font-semibold text-lg">
+                      <span className="font-semibold text-lg flex flex-row gap-x-4">
+                        {Object.values(ValidSources).includes(
+                          key as ValidSources
+                        ) ? (
+                          <SourceIcon
+                            sourceType={key as ValidSources}
+                            iconSize={25}
+                          />
+                        ) : (
+                          <></>
+                        )}
                         {snakeToHumanReadable(key)}
                       </span>
                     }
@@ -217,7 +245,6 @@ export default function KGEntityTypes({
                           key={`${entityType.name}-${index}`}
                           entityType={entityType}
                           index={index}
-                          isLast={index === entityTypesArr.length - 1}
                         />
                       ))}
                     </div>
