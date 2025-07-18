@@ -6,6 +6,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -34,11 +35,14 @@ from onyx.db.document import get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import count_index_attempts_for_connector
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id
+from onyx.db.indexing_coordination import IndexingCoordination
+from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings_list
@@ -194,6 +198,32 @@ def update_cc_pair_status(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     if status_update_request.status == ConnectorCredentialPairStatus.PAUSED:
         redis_connector.stop.set_fence(True)
+
+        # Request cancellation for any active indexing attempts for this cc_pair
+        active_attempts = (
+            db_session.execute(
+                select(IndexAttempt).where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    IndexAttempt.status.in_(
+                        [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                    ),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        for attempt in active_attempts:
+            try:
+                IndexingCoordination.request_cancellation(db_session, attempt.id)
+                logger.info(
+                    f"Requested cancellation for active indexing attempt {attempt.id} "
+                    f"due to connector pause: cc_pair={cc_pair_id}"
+                )
+            except Exception:
+                logger.exception(
+                    f"Failed to request cancellation for indexing attempt {attempt.id}"
+                )
 
         search_settings_list: list[SearchSettings] = get_active_search_settings_list(
             db_session

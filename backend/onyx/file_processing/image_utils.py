@@ -1,8 +1,6 @@
 from io import BytesIO
 from typing import Tuple
 
-from sqlalchemy.orm import Session
-
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import ImageSection
 from onyx.file_store.file_store import get_default_file_store
@@ -12,7 +10,6 @@ logger = setup_logger()
 
 
 def store_image_and_create_section(
-    db_session: Session,
     image_data: bytes,
     file_id: str,
     display_name: str,
@@ -24,7 +21,6 @@ def store_image_and_create_section(
     Stores an image in FileStore and creates an ImageSection object without summarization.
 
     Args:
-        db_session: Database session
         image_data: Raw image bytes
         file_id: Base identifier for the file
         display_name: Human-readable name for the image
@@ -38,7 +34,7 @@ def store_image_and_create_section(
     """
     # Storage logic
     try:
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         file_id = file_store.save_file(
             content=BytesIO(image_data),
             display_name=display_name,

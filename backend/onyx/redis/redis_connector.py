@@ -16,24 +16,26 @@ class RedisConnector:
     """Composes several classes to simplify interacting with a connector and its
     associated background tasks / associated redis interactions."""
 
-    def __init__(self, tenant_id: str, id: int) -> None:
+    def __init__(self, tenant_id: str, cc_pair_id: int) -> None:
         """id: a connector credential pair id"""
 
         self.tenant_id: str = tenant_id
-        self.id: int = id
+        self.cc_pair_id: int = cc_pair_id
         self.redis: redis.Redis = get_redis_client(tenant_id=tenant_id)
 
-        self.stop = RedisConnectorStop(tenant_id, id, self.redis)
-        self.prune = RedisConnectorPrune(tenant_id, id, self.redis)
-        self.delete = RedisConnectorDelete(tenant_id, id, self.redis)
-        self.permissions = RedisConnectorPermissionSync(tenant_id, id, self.redis)
+        self.stop = RedisConnectorStop(tenant_id, cc_pair_id, self.redis)
+        self.prune = RedisConnectorPrune(tenant_id, cc_pair_id, self.redis)
+        self.delete = RedisConnectorDelete(tenant_id, cc_pair_id, self.redis)
+        self.permissions = RedisConnectorPermissionSync(
+            tenant_id, cc_pair_id, self.redis
+        )
         self.external_group_sync = RedisConnectorExternalGroupSync(
-            tenant_id, id, self.redis
+            tenant_id, cc_pair_id, self.redis
         )
 
     def new_index(self, search_settings_id: int) -> RedisConnectorIndex:
         return RedisConnectorIndex(
-            self.tenant_id, self.id, search_settings_id, self.redis
+            self.tenant_id, self.cc_pair_id, search_settings_id, self.redis
         )
 
     def wait_for_indexing_termination(

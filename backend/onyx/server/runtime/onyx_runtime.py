@@ -11,7 +11,6 @@ from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAU
 from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import ONYX_EMAILABLE_LOGO_MAX_DIM
-from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.file_store.file_store import get_default_file_store
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.file import FileWithMimeType
@@ -40,9 +39,8 @@ class OnyxRuntime:
         onyx_file: FileWithMimeType | None = None
 
         if db_filename:
-            with get_session_with_shared_schema() as db_session:
-                file_store = get_default_file_store(db_session)
-                onyx_file = file_store.get_file_with_mime_type(db_filename)
+            file_store = get_default_file_store()
+            onyx_file = file_store.get_file_with_mime_type(db_filename)
 
         if not onyx_file:
             onyx_file = OnyxStaticFileManager.get_static(static_filename)

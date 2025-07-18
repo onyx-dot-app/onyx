@@ -70,20 +70,19 @@ def _get_all_backend_configs() -> List[BackendConfig]:
     if S3_ENDPOINT_URL:
         minio_access_key = "minioadmin"
         minio_secret_key = "minioadmin"
-        if minio_access_key and minio_secret_key:
-            configs.append(
-                {
-                    "endpoint_url": S3_ENDPOINT_URL,
-                    "access_key": minio_access_key,
-                    "secret_key": minio_secret_key,
-                    "region": "us-east-1",
-                    "verify_ssl": False,
-                    "backend_name": "MinIO",
-                }
-            )
+        configs.append(
+            {
+                "endpoint_url": S3_ENDPOINT_URL,
+                "access_key": minio_access_key,
+                "secret_key": minio_secret_key,
+                "region": "us-east-1",
+                "verify_ssl": False,
+                "backend_name": "MinIO",
+            }
+        )
 
     # AWS S3 configuration (if credentials are available)
-    if S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
+    elif S3_AWS_ACCESS_KEY_ID and S3_AWS_SECRET_ACCESS_KEY:
         configs.append(
             {
                 "endpoint_url": None,
@@ -116,7 +115,6 @@ def file_store(
 
     # Create S3BackedFileStore with backend-specific configuration
     store = S3BackedFileStore(
-        db_session=db_session,
         bucket_name=TEST_BUCKET_NAME,
         aws_access_key_id=backend_config["access_key"],
         aws_secret_access_key=backend_config["secret_key"],
@@ -827,7 +825,6 @@ class TestS3BackedFileStore:
                     # Create a new database session for each worker to avoid conflicts
                     with get_session_with_current_tenant() as worker_session:
                         worker_file_store = S3BackedFileStore(
-                            db_session=worker_session,
                             bucket_name=current_bucket_name,
                             aws_access_key_id=current_access_key,
                             aws_secret_access_key=current_secret_key,
@@ -849,6 +846,7 @@ class TestS3BackedFileStore:
                             display_name=f"Worker {worker_id} File",
                             file_origin=file_origin,
                             file_type=file_type,
+                            db_session=worker_session,
                         )
                         results.append((file_name, content))
                         return True
@@ -885,3 +883,94 @@ class TestS3BackedFileStore:
             read_content_io = file_store.read_file(file_id)
             actual_content: str = read_content_io.read().decode("utf-8")
             assert actual_content == expected_content
+
+    def test_list_files_by_prefix(self, file_store: S3BackedFileStore) -> None:
+        """Test listing files by prefix returns only correctly prefixed files"""
+        test_prefix = "documents-batch-"
+
+        # Files that should be returned (start with the prefix)
+        prefixed_files: List[str] = [
+            f"{test_prefix}001.txt",
+            f"{test_prefix}002.json",
+            f"{test_prefix}abc.pdf",
+            f"{test_prefix}xyz-final.docx",
+        ]
+
+        # Files that should NOT be returned (don't start with prefix, even if they contain it)
+        non_prefixed_files: List[str] = [
+            f"other-{test_prefix}001.txt",  # Contains prefix but doesn't start with it
+            f"backup-{test_prefix}data.txt",  # Contains prefix but doesn't start with it
+            f"{uuid.uuid4()}.txt",  # Random file without prefix
+            "reports-001.pdf",  # Different prefix
+            f"my-{test_prefix[:-1]}.txt",  # Similar but not exact prefix
+        ]
+
+        all_files = prefixed_files + non_prefixed_files
+        saved_file_ids: List[str] = []
+
+        # Save all test files
+        for file_name in all_files:
+            content = f"Content for {file_name}"
+            content_io = BytesIO(content.encode("utf-8"))
+
+            returned_file_id = file_store.save_file(
+                content=content_io,
+                display_name=f"Display: {file_name}",
+                file_origin=FileOrigin.OTHER,
+                file_type="text/plain",
+                file_id=file_name,
+            )
+            saved_file_ids.append(returned_file_id)
+
+            # Verify file was saved
+            assert returned_file_id == file_name
+
+        # Test the list_files_by_prefix functionality
+        prefix_results = file_store.list_files_by_prefix(test_prefix)
+
+        # Extract file IDs from results
+        returned_file_ids = [record.file_id for record in prefix_results]
+
+        # Verify correct number of files returned
+        assert len(returned_file_ids) == len(prefixed_files), (
+            f"Expected {len(prefixed_files)} files with prefix '{test_prefix}', "
+            f"but got {len(returned_file_ids)}: {returned_file_ids}"
+        )
+
+        # Verify all prefixed files are returned
+        for expected_file_id in prefixed_files:
+            assert expected_file_id in returned_file_ids, (
+                f"File '{expected_file_id}' should be in results but was not found. "
+                f"Returned files: {returned_file_ids}"
+            )
+
+        # Verify no non-prefixed files are returned
+        for unexpected_file_id in non_prefixed_files:
+            assert unexpected_file_id not in returned_file_ids, (
+                f"File '{unexpected_file_id}' should NOT be in results but was found. "
+                f"Returned files: {returned_file_ids}"
+            )
+
+        # Verify the returned records have correct properties
+        for record in prefix_results:
+            assert record.file_id.startswith(test_prefix)
+            assert record.display_name == f"Display: {record.file_id}"
+            assert record.file_origin == FileOrigin.OTHER
+            assert record.file_type == "text/plain"
+            assert record.bucket_name == file_store._get_bucket_name()
+
+        # Test with empty prefix (should return all files we created)
+        all_results = file_store.list_files_by_prefix("")
+        all_returned_ids = [record.file_id for record in all_results]
+
+        # Should include all our test files
+        for file_id in saved_file_ids:
+            assert (
+                file_id in all_returned_ids
+            ), f"File '{file_id}' should be in results for empty prefix"
+
+        # Test with non-existent prefix
+        nonexistent_results = file_store.list_files_by_prefix("nonexistent-prefix-")
+        assert (
+            len(nonexistent_results) == 0
+        ), "Should return empty list for non-existent prefix"

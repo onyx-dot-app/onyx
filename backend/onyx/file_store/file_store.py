@@ -22,10 +22,14 @@ from onyx.configs.app_configs import S3_FILE_STORE_BUCKET_NAME
 from onyx.configs.app_configs import S3_FILE_STORE_PREFIX
 from onyx.configs.app_configs import S3_VERIFY_SSL
 from onyx.configs.constants import FileOrigin
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.file_record import delete_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.file_record import get_filerecord_by_prefix
 from onyx.db.file_record import upsert_filerecord
+from onyx.db.models import FileRecord
 from onyx.db.models import FileRecord as FileStoreModel
 from onyx.file_store.s3_key_utils import generate_s3_key
 from onyx.utils.file import FileWithMimeType
@@ -129,13 +133,29 @@ class FileStore(ABC):
         Get the file + parse out the mime type.
         """
 
+    @abstractmethod
+    def change_file_id(self, old_file_id: str, new_file_id: str) -> None:
+        """
+        Change the file ID of an existing file.
+
+        Parameters:
+        - old_file_id: Current file ID
+        - new_file_id: New file ID to assign
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
+        """
+        List all file IDs that start with the given prefix.
+        """
+
 
 class S3BackedFileStore(FileStore):
     """Isn't necessarily S3, but is any S3-compatible storage (e.g. MinIO)"""
 
     def __init__(
         self,
-        db_session: Session,
         bucket_name: str,
         aws_access_key_id: str | None = None,
         aws_secret_access_key: str | None = None,
@@ -144,7 +164,6 @@ class S3BackedFileStore(FileStore):
         s3_prefix: str | None = None,
         s3_verify_ssl: bool = True,
     ) -> None:
-        self.db_session = db_session
         self._s3_client: S3Client | None = None
         self._bucket_name = bucket_name
         self._aws_access_key_id = aws_access_key_id
@@ -272,10 +291,12 @@ class S3BackedFileStore(FileStore):
         file_id: str,
         file_origin: FileOrigin,
         file_type: str,
+        db_session: Session | None = None,
     ) -> bool:
-        file_record = get_filerecord_by_file_id_optional(
-            file_id=file_id, db_session=self.db_session
-        )
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            file_record = get_filerecord_by_file_id_optional(
+                file_id=file_id, db_session=db_session
+            )
         return (
             file_record is not None
             and file_record.file_origin == file_origin
@@ -290,6 +311,7 @@ class S3BackedFileStore(FileStore):
         file_type: str,
         file_metadata: dict[str, Any] | None = None,
         file_id: str | None = None,
+        db_session: Session | None = None,
     ) -> str:
         if file_id is None:
             file_id = str(uuid.uuid4())
@@ -314,27 +336,33 @@ class S3BackedFileStore(FileStore):
             ContentType=file_type,
         )
 
-        # Save metadata to database
-        upsert_filerecord(
-            file_id=file_id,
-            display_name=display_name or file_id,
-            file_origin=file_origin,
-            file_type=file_type,
-            bucket_name=bucket_name,
-            object_key=s3_key,
-            db_session=self.db_session,
-            file_metadata=file_metadata,
-        )
-        self.db_session.commit()
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            # Save metadata to database
+            upsert_filerecord(
+                file_id=file_id,
+                display_name=display_name or file_id,
+                file_origin=file_origin,
+                file_type=file_type,
+                bucket_name=bucket_name,
+                object_key=s3_key,
+                db_session=db_session,
+                file_metadata=file_metadata,
+            )
+            db_session.commit()
 
         return file_id
 
     def read_file(
-        self, file_id: str, mode: str | None = None, use_tempfile: bool = False
+        self,
+        file_id: str,
+        mode: str | None = None,
+        use_tempfile: bool = False,
+        db_session: Session | None = None,
     ) -> IO[bytes]:
-        file_record = get_filerecord_by_file_id(
-            file_id=file_id, db_session=self.db_session
-        )
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=db_session
+            )
 
         s3_client = self._get_s3_client()
         try:
@@ -356,32 +384,107 @@ class S3BackedFileStore(FileStore):
         else:
             return BytesIO(file_content)
 
-    def read_file_record(self, file_id: str) -> FileStoreModel:
-        file_record = get_filerecord_by_file_id(
-            file_id=file_id, db_session=self.db_session
-        )
+    def read_file_record(
+        self, file_id: str, db_session: Session | None = None
+    ) -> FileStoreModel:
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            file_record = get_filerecord_by_file_id(
+                file_id=file_id, db_session=db_session
+            )
         return file_record
 
-    def delete_file(self, file_id: str) -> None:
-        try:
-            file_record = get_filerecord_by_file_id(
-                file_id=file_id, db_session=self.db_session
-            )
+    def delete_file(self, file_id: str, db_session: Session | None = None) -> None:
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            try:
 
-            # Delete from external storage
-            s3_client = self._get_s3_client()
-            s3_client.delete_object(
-                Bucket=file_record.bucket_name, Key=file_record.object_key
-            )
+                file_record = get_filerecord_by_file_id(
+                    file_id=file_id, db_session=db_session
+                )
+                if not file_record.bucket_name:
+                    logger.error(
+                        f"File record {file_id} with key {file_record.object_key} "
+                        "has no bucket name, cannot delete from filestore"
+                    )
+                    delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
+                    db_session.commit()
+                    return
 
-            # Delete metadata from database
-            delete_filerecord_by_file_id(file_id=file_id, db_session=self.db_session)
+                # Delete from external storage
+                s3_client = self._get_s3_client()
+                s3_client.delete_object(
+                    Bucket=file_record.bucket_name, Key=file_record.object_key
+                )
 
-            self.db_session.commit()
+                # Delete metadata from database
+                delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
 
-        except Exception:
-            self.db_session.rollback()
-            raise
+                db_session.commit()
+
+            except Exception:
+                db_session.rollback()
+                raise
+
+    def change_file_id(
+        self, old_file_id: str, new_file_id: str, db_session: Session | None = None
+    ) -> None:
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            try:
+                # Get the existing file record
+                old_file_record = get_filerecord_by_file_id(
+                    file_id=old_file_id, db_session=db_session
+                )
+
+                # Generate new S3 key for the new file ID
+                new_s3_key = self._get_s3_key(new_file_id)
+
+                # Copy S3 object to new key
+                s3_client = self._get_s3_client()
+                bucket_name = self._get_bucket_name()
+
+                copy_source = (
+                    f"{old_file_record.bucket_name}/{old_file_record.object_key}"
+                )
+
+                s3_client.copy_object(
+                    CopySource=copy_source,
+                    Bucket=bucket_name,
+                    Key=new_s3_key,
+                    MetadataDirective="COPY",
+                )
+
+                # Create new file record with new file_id
+                # Cast file_metadata to the expected type
+                file_metadata = cast(
+                    dict[Any, Any] | None, old_file_record.file_metadata
+                )
+
+                upsert_filerecord(
+                    file_id=new_file_id,
+                    display_name=old_file_record.display_name,
+                    file_origin=old_file_record.file_origin,
+                    file_type=old_file_record.file_type,
+                    bucket_name=bucket_name,
+                    object_key=new_s3_key,
+                    db_session=db_session,
+                    file_metadata=file_metadata,
+                )
+
+                # Delete old S3 object
+                s3_client.delete_object(
+                    Bucket=old_file_record.bucket_name, Key=old_file_record.object_key
+                )
+
+                # Delete old file record
+                delete_filerecord_by_file_id(file_id=old_file_id, db_session=db_session)
+
+                db_session.commit()
+
+            except Exception as e:
+                db_session.rollback()
+                logger.exception(
+                    f"Failed to change file ID from {old_file_id} to {new_file_id}: {e}"
+                )
+                raise
 
     def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
         mime_type: str = "application/octet-stream"
@@ -395,8 +498,18 @@ class S3BackedFileStore(FileStore):
         except Exception:
             return None
 
+    def list_files_by_prefix(self, prefix: str) -> list[FileRecord]:
+        """
+        List all file IDs that start with the given prefix.
+        """
+        with get_session_with_current_tenant() as db_session:
+            file_records = get_filerecord_by_prefix(
+                prefix=prefix, db_session=db_session
+            )
+        return file_records
 
-def get_s3_file_store(db_session: Session) -> S3BackedFileStore:
+
+def get_s3_file_store() -> S3BackedFileStore:
     """
     Returns the S3 file store implementation.
     """
@@ -409,7 +522,6 @@ def get_s3_file_store(db_session: Session) -> S3BackedFileStore:
         )
 
     return S3BackedFileStore(
-        db_session=db_session,
         bucket_name=bucket_name,
         aws_access_key_id=S3_AWS_ACCESS_KEY_ID,
         aws_secret_access_key=S3_AWS_SECRET_ACCESS_KEY,
@@ -420,7 +532,7 @@ def get_s3_file_store(db_session: Session) -> S3BackedFileStore:
     )
 
 
-def get_default_file_store(db_session: Session) -> FileStore:
+def get_default_file_store() -> FileStore:
     """
     Returns the configured file store implementation.
 
@@ -445,4 +557,4 @@ def get_default_file_store(db_session: Session) -> FileStore:
     Other S3-compatible storage (Digital Ocean, Linode, etc.):
     - Same as MinIO, but set appropriate S3_ENDPOINT_URL
     """
-    return get_s3_file_store(db_session)
+    return get_s3_file_store()

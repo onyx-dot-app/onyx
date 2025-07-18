@@ -244,6 +244,12 @@ def setup_logger(
 
     logger.notice = lambda msg, *args, **kwargs: logger.log(logging.getLevelName("NOTICE"), msg, *args, **kwargs)  # type: ignore
 
+    # After handler configuration, disable propagation to avoid duplicate logs
+    # Prevent messages from propagating to the root logger which can cause
+    # duplicate log entries when the root logger is also configured with its
+    # own handler (e.g. by Uvicorn / Celery).
+    logger.propagate = False
+
     return OnyxLoggingAdapter(logger, extra=extra)
 
 

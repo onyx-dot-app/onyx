@@ -77,18 +77,15 @@ def sample_file_io(sample_content: bytes) -> BytesIO:
 class TestExternalStorageFileStore:
     """Test external storage file store functionality (S3-compatible)"""
 
-    def test_get_default_file_store_s3(self, db_session: Session) -> None:
+    def test_get_default_file_store_s3(self) -> None:
         """Test that external storage file store is returned"""
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         assert isinstance(file_store, S3BackedFileStore)
 
-    def test_s3_client_initialization_with_credentials(
-        self, db_session: Session
-    ) -> None:
+    def test_s3_client_initialization_with_credentials(self) -> None:
         """Test S3 client initialization with explicit credentials"""
         with patch("boto3.client") as mock_boto3:
             file_store = S3BackedFileStore(
-                db_session,
                 bucket_name="test-bucket",
                 aws_access_key_id="test-key",
                 aws_secret_access_key="test-secret",
@@ -110,7 +107,6 @@ class TestExternalStorageFileStore:
         """Test S3 client initialization with IAM role (no explicit credentials)"""
         with patch("boto3.client") as mock_boto3:
             file_store = S3BackedFileStore(
-                db_session,
                 bucket_name="test-bucket",
                 aws_access_key_id=None,
                 aws_secret_access_key=None,
@@ -129,16 +125,16 @@ class TestExternalStorageFileStore:
             assert "aws_access_key_id" not in call_kwargs
             assert "aws_secret_access_key" not in call_kwargs
 
-    def test_s3_bucket_name_configuration(self, db_session: Session) -> None:
+    def test_s3_bucket_name_configuration(self) -> None:
         """Test S3 bucket name configuration"""
         with patch(
             "onyx.file_store.file_store.S3_FILE_STORE_BUCKET_NAME", "my-test-bucket"
         ):
-            file_store = S3BackedFileStore(db_session, bucket_name="my-test-bucket")
+            file_store = S3BackedFileStore(bucket_name="my-test-bucket")
             bucket_name: str = file_store._get_bucket_name()
             assert bucket_name == "my-test-bucket"
 
-    def test_s3_key_generation_default_prefix(self, db_session: Session) -> None:
+    def test_s3_key_generation_default_prefix(self) -> None:
         """Test S3 key generation with default prefix"""
         with (
             patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "onyx-files"),
@@ -147,11 +143,11 @@ class TestExternalStorageFileStore:
                 return_value="test-tenant",
             ),
         ):
-            file_store = S3BackedFileStore(db_session, bucket_name="test-bucket")
+            file_store = S3BackedFileStore(bucket_name="test-bucket")
             s3_key: str = file_store._get_s3_key("test-file.txt")
             assert s3_key == "onyx-files/test-tenant/test-file.txt"
 
-    def test_s3_key_generation_custom_prefix(self, db_session: Session) -> None:
+    def test_s3_key_generation_custom_prefix(self) -> None:
         """Test S3 key generation with custom prefix"""
         with (
             patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "custom-prefix"),
@@ -161,17 +157,15 @@ class TestExternalStorageFileStore:
             ),
         ):
             file_store = S3BackedFileStore(
-                db_session, bucket_name="test-bucket", s3_prefix="custom-prefix"
+                bucket_name="test-bucket", s3_prefix="custom-prefix"
             )
             s3_key: str = file_store._get_s3_key("test-file.txt")
             assert s3_key == "custom-prefix/test-tenant/test-file.txt"
 
-    def test_s3_key_generation_with_different_tenant_ids(
-        self, db_session: Session
-    ) -> None:
+    def test_s3_key_generation_with_different_tenant_ids(self) -> None:
         """Test S3 key generation with different tenant IDs"""
         with patch("onyx.file_store.file_store.S3_FILE_STORE_PREFIX", "onyx-files"):
-            file_store = S3BackedFileStore(db_session, bucket_name="test-bucket")
+            file_store = S3BackedFileStore(bucket_name="test-bucket")
 
             # Test with tenant ID "tenant-1"
             with patch(
@@ -224,9 +218,7 @@ class TestExternalStorageFileStore:
             with patch("onyx.db.file_record.upsert_filerecord") as mock_upsert:
                 mock_upsert.return_value = Mock()
 
-                file_store = S3BackedFileStore(
-                    mock_db_session, bucket_name="test-bucket"
-                )
+                file_store = S3BackedFileStore(bucket_name="test-bucket")
 
                 # This should not raise an exception
                 file_store.save_file(
@@ -235,6 +227,7 @@ class TestExternalStorageFileStore:
                     display_name="Test File",
                     file_origin=FileOrigin.OTHER,
                     file_type="text/plain",
+                    db_session=mock_db_session,
                 )
 
                 # Verify S3 client was called correctly
@@ -244,14 +237,13 @@ class TestExternalStorageFileStore:
                 assert call_args[1]["Key"] == "onyx-files/public/test-file.txt"
                 assert call_args[1]["ContentType"] == "text/plain"
 
-    def test_minio_client_initialization(self, db_session: Session) -> None:
+    def test_minio_client_initialization(self) -> None:
         """Test S3 client initialization with MinIO endpoint"""
         with (
             patch("boto3.client") as mock_boto3,
             patch("urllib3.disable_warnings"),
         ):
             file_store = S3BackedFileStore(
-                db_session,
                 bucket_name="test-bucket",
                 aws_access_key_id="minioadmin",
                 aws_secret_access_key="minioadmin",
@@ -277,11 +269,10 @@ class TestExternalStorageFileStore:
             assert config.signature_version == "s3v4"
             assert config.s3["addressing_style"] == "path"
 
-    def test_minio_ssl_verification_enabled(self, db_session: Session) -> None:
+    def test_minio_ssl_verification_enabled(self) -> None:
         """Test MinIO with SSL verification enabled"""
         with patch("boto3.client") as mock_boto3:
             file_store = S3BackedFileStore(
-                db_session,
                 bucket_name="test-bucket",
                 aws_access_key_id="test-key",
                 aws_secret_access_key="test-secret",
@@ -295,11 +286,10 @@ class TestExternalStorageFileStore:
             assert "verify" not in call_kwargs or call_kwargs.get("verify") is not False
             assert call_kwargs["endpoint_url"] == "https://minio.example.com"
 
-    def test_aws_s3_without_endpoint_url(self, db_session: Session) -> None:
+    def test_aws_s3_without_endpoint_url(self) -> None:
         """Test that regular AWS S3 doesn't include endpoint URL or custom config"""
         with patch("boto3.client") as mock_boto3:
             file_store = S3BackedFileStore(
-                db_session,
                 bucket_name="test-bucket",
                 aws_access_key_id="test-key",
                 aws_secret_access_key="test-secret",
@@ -321,8 +311,8 @@ class TestExternalStorageFileStore:
 class TestFileStoreInterface:
     """Test the general file store interface"""
 
-    def test_file_store_always_external_storage(self, db_session: Session) -> None:
+    def test_file_store_always_external_storage(self) -> None:
         """Test that external storage file store is always returned"""
         # File store should always be S3BackedFileStore regardless of environment
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         assert isinstance(file_store, S3BackedFileStore)
