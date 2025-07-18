@@ -203,6 +203,8 @@ def generate_simple_sql(
     if state.kg_entity_temp_view_name is None:
         raise ValueError("kg_entity_temp_view_name is not set")
 
+    sql_statement_display: str | None = None
+
     ## STEP 3 - articulate goals
 
     stream_write_step_activities(writer, _KG_STEP_NR)
@@ -529,7 +531,7 @@ def generate_simple_sql(
     if reasoning:
         stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
 
-    if main_sql_statement:
+    if sql_statement_display:
         stream_write_step_answer_explicit(
             writer,
             step_nr=_KG_STEP_NR,
