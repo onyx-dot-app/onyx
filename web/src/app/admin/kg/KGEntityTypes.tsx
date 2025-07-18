@@ -4,17 +4,15 @@ import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import { EntityType } from "./interfaces";
 import CollapsibleCard from "@/components/CollapsibleCard";
-import { FiSettings } from "react-icons/fi";
 import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
-import { Modal } from "@/components/Modal";
 import { Input } from "@/components/ui/input";
 import { CheckmarkIcon } from "@/components/icons/icons";
 import { entityTypesToEntityMap } from "./utils";
 import { DatePicker } from "@/components/ui/datePicker";
 
 // Utility: Convert capitalized snake case to human readable case
-export function snakeToHumanReadable(str: string): string {
+function snakeToHumanReadable(str: string): string {
   return (
     str
       .toLowerCase()
@@ -34,8 +32,8 @@ function TableHeader() {
   return (
     <div className="grid grid-cols-12 gap-4 px-8 pb-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
       <div className="col-span-1">Name</div>
-      <div className="col-span-7">Description</div>
-      <div className="col-span-3 flex justify-center">Max Coverage Date</div>
+      <div className="col-span-8">Description</div>
+      <div className="col-span-2 flex justify-center">Max Coverage Date</div>
       <div className="col-span-1 flex justify-center">Active</div>
     </div>
   );
@@ -110,73 +108,76 @@ function TableRow({ entityType }: { entityType: EntityType }) {
 
   return (
     <div className="hover:bg-accent-background-hovered transition-colors duration-200 ease-in-out">
-      <div
-        className={`grid grid-cols-12 px-8 py-4 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
-      >
-        <div className="col-span-1 flex items-center">
-          <span className="font-medium text-sm">
-            {snakeToHumanReadable(entityType.name)}
-          </span>
-        </div>
-        <div className="col-span-7 relative">
-          <Input
-            disabled={!entityTypeState.active}
-            className="w-full px-3 py-2 border focus:ring-2 transition-shadow"
-            defaultValue={entityType.description}
-            onChange={(e) =>
-              setEntityTypeState({
-                ...entityTypeState,
-                description: e.target.value,
-              })
-            }
-            onKeyDown={async (e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                if (timer) {
-                  clearTimeout(timer);
-                  setTimer(null);
-                }
-                setDescriptionSavingState("saving");
-                setCheckmarkVisible(false);
-                await handleDescriptionChange(
-                  (e.target as HTMLInputElement).value
-                );
+      <div className="grid grid-cols-12 px-8 py-4">
+        <div
+          className={`grid grid-cols-12 col-span-11 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
+        >
+          <div className="col-span-1 flex items-center">
+            <span className="font-medium text-sm">
+              {snakeToHumanReadable(entityType.name)}
+            </span>
+          </div>
+          <div className="col-span-9 relative">
+            <Input
+              disabled={!entityTypeState.active}
+              className="w-full px-3 py-2 border focus:ring-2 transition-shadow"
+              defaultValue={entityType.description}
+              onChange={(e) =>
+                setEntityTypeState({
+                  ...entityTypeState,
+                  description: e.target.value,
+                })
               }
-            }}
-          />
-          <span
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5"
-            style={{ pointerEvents: "none" }}
-          >
+              onKeyDown={async (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (timer) {
+                    clearTimeout(timer);
+                    setTimer(null);
+                  }
+                  setDescriptionSavingState("saving");
+                  setCheckmarkVisible(false);
+                  await handleDescriptionChange(
+                    (e.target as HTMLInputElement).value
+                  );
+                }
+              }}
+            />
             <span
-              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
-                descriptionSavingState === "saving" && hasMounted
-                  ? "opacity-100"
-                  : "opacity-0"
-              }`}
-              style={{ zIndex: 1 }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5"
+              style={{ pointerEvents: "none" }}
             >
-              <span className="inline-block w-4 h-4 align-middle border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <span
+                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
+                  descriptionSavingState === "saving" && hasMounted
+                    ? "opacity-100"
+                    : "opacity-0"
+                }`}
+                style={{ zIndex: 1 }}
+              >
+                <span className="inline-block w-4 h-4 align-middle border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              </span>
+              <span
+                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
+                  checkmarkVisible ? "opacity-100" : "opacity-0"
+                }`}
+                style={{ zIndex: 2 }}
+              >
+                <CheckmarkIcon size={16} className="text-green-400" />
+              </span>
             </span>
-            <span
-              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-400 ease-in-out ${
-                checkmarkVisible ? "opacity-100" : "opacity-0"
-              }`}
-              style={{ zIndex: 2 }}
-            >
-              <CheckmarkIcon size={16} className="text-green-400" />
-            </span>
-          </span>
+          </div>
+          <div className="col-span-2 flex items-center justify-center">
+            <DatePicker
+              selectedDate={entityTypeState.coverage_start ?? new Date()}
+              setSelectedDate={(coverage_start) =>
+                setEntityTypeState({ ...entityTypeState, coverage_start })
+              }
+              disabled={!entityTypeState.active}
+            />
+          </div>
         </div>
-        <div className="col-span-3 flex items-center justify-center">
-          <DatePicker
-            selectedDate={entityTypeState.coverage_start ?? new Date()}
-            setSelectedDate={(coverage_start) =>
-              setEntityTypeState({ ...entityTypeState, coverage_start })
-            }
-            disabled={!entityTypeState.active}
-          />
-        </div>
+
         <div className="col-span-1 flex items-center justify-center pl-3">
           <Switch
             checked={entityTypeState.active}
