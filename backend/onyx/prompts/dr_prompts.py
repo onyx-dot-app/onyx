@@ -11,6 +11,7 @@ KNOWLEDGE_GRAPH = DRPath.KNOWLEDGE_GRAPH.value
 SEARCH = DRPath.SEARCH.value
 CLOSER = DRPath.CLOSER.value
 
+
 DR_TOOLS_DESCRIPTIONS = f"""\
 You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
@@ -18,28 +19,25 @@ You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 present in the connected documents.
 Note that the search tool is not well suited for time-ordered \
 questions ('...latest email...', '... last 2 jiras resolved...' etc.) and answering aggregation-type \
-questions (unless that info is present in the connected documents). \
-For answering those type of questions, you should use the {KNOWLEDGE_GRAPH} tool instead. The \
-{SEARCH} tool supports parallel calls.
+questions (unless that info is present in the connected documents). If there are better suited tools \
+for answering those questions, use them instead. \
+The {SEARCH} tool supports parallel calls.
 
-- The "{KNOWLEDGE_GRAPH}" tool also generates answers based on the connected documents, but in a \
-entity/relationship-centric way, making it suitable for answering complex questions about specific \
+
+- The "{KNOWLEDGE_GRAPH}" tool is similar to a search tool but it answers questions based on \
+entities and relationships extracted from the source documents. \
+It is suitable for answering complex questions about specific \
 entities and relationships, such as "summarize the open tickets assigned to John in the last month". \
 It can also query a relational database containing the entities and relationships, allowing it to \
 answer aggregation-type questions like 'how many jiras did each employee close last month?'. \
-The {KNOWLEDGE_GRAPH} tool MUST ONLY BE USED if the question really fits the entity/relationship \
-types that are available in the knowledge graph!
-
-
-However, the {KNOWLEDGE_GRAPH} tool is slower than the {SEARCH} tool, and it can only be used for \
-entity and relationship types that are available in the knowledge graph, listed later.
-Again, a question to the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, \
+But(!) the {KNOWLEDGE_GRAPH} tool MUST ONLY BE USED if the question really fits the entity/relationship \
+types that are available in the knowledge graph, so please consider the to make the choice to use it!
+Note that the {KNOWLEDGE_GRAPH} tool can both FIND AND ANALYZE/QURY the relevant documents/entities, \
 not merely find them.
+Note also that the {KNOWLEDGE_GRAPH} tool is slower than the standard search tools.
 
-NOTE:
-
-- The "{CLOSER}" tool does not directly have access to the documents, but it can use the results from \
-previous iterations to generate a comprehensive final answer. It should always be called exactly once \
+- The "{CLOSER}" tool does not directly have access to the documents, but will use the results from \
+previous tool calls to generate a comprehensive final answer. It should always be called exactly once \
 at the very end to consolidate the gathered information, run any comparisons if needed, and pick out \
 the most relevant information to answer the question. You can also skip straight to the {CLOSER} \
 if there is sufficient information in the provided history to answer the question.
@@ -163,6 +161,85 @@ the question. Just show the question.)>"
 }}
 """
 
+PLAN_REVISION_PROMPT = f"""
+You are a great Assistant that is an expert at analyzing a question and breaking it up into a \
+series of high-level, answerable sub-questions.
+
+Given the user query, the list of available tools, the initial plan, and user clarifications, \
+your task is to devise an updated high-level plan \
+consisting of a list of the steps where each step consists of the \
+aspects to investigate, so that by the end of the process you have gathered sufficient \
+information to generate a well-researched and highly relevant answer to the user query.
+
+Note that the updated plan will only be used as a guideline, and a separate agent will use your plan along \
+with the results from previous iterations to generate the specific questions to send to the tool for each \
+iteration. Thus you should not be too specific in your plan as some steps could be dependent on \
+previous steps.
+
+Assume that all steps will be executed sequentially, so the answers of earlier steps will be known \
+at later steps. To capture that, you can refer to earlier results in later steps. (Example of a 'later'\
+question: 'find information for each result of step 3.')
+
+{DR_TOOLS_DESCRIPTIONS}
+
+{KG_TYPES_DESCRIPTIONS}
+
+Here is the question that you must device a plan for answering:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+Here is the initial plan:
+{SEPARATOR_LINE}
+---initial_plan---
+{SEPARATOR_LINE}
+
+Here is the user feedback that you should use as clarification to the question and the initial plan:
+{SEPARATOR_LINE}
+---user_feedback---
+{SEPARATOR_LINE}
+
+Finally, here are the past few chat messages for reference (if any). \
+Note that the chat history may already contain the answer to the user question, in which case you can \
+skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
+In any case, do not confuse the below with the user query. It is only there to provide context.
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
+
+HINTS:
+   - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
+For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
+   --
+   1) identify the main problem that Nike has
+   2) find jiras that address the problem identified in step 1
+   3) generate the final answer
+   --
+   - please look at the user query and the entity types and relationship types in the knowledge graph \
+to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.\
+(This is important to ask well-structured questions, although the tool itself wil not be shown later.)
+   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
+'search for this'-type of question, then also use '{SEARCH}'.
+   - also consider whether the user query implies whether a standard search query should be used or a \
+knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
+whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
+   - use parallel calls to the {SEARCH} tool to your advantage to save time!
+   - again, use the chat history (if provided) to see if you can skip straight to the {CLOSER} tool to generate \
+the final answer. If so, simply state 'generate the final answer' in your plan.
+
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
+guided by the question you need to answer, the answers you have so far, and the plan of record.>",
+   "plan": "<the full plan, formatted as a string. See examples above. \
+(Note that the plan of record must be a string, not a list of strings! Also, again, the steps \
+should NOT contain the specific tool although it may have been used to construct \
+the question. Just show the question.)>"
+}}
+"""
+
+
 SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT = f"""
 Overall, you need to answer a user query. To do so, you have various tools at your disposal that you \
 can call iteratively. And an initial plan that should guide your thinking.
@@ -204,12 +281,25 @@ In any case, do not confuse the below with the user query. It is only there to p
 ---chat_history_string---
 {SEPARATOR_LINE}
 
+Here are the average costs of the tools that you should consider in your decision:
+{SEPARATOR_LINE}
+---average_tool_costs---
+{SEPARATOR_LINE}
+
+Here is the remaining time budget you have to answer the question:
+{SEPARATOR_LINE}
+---remaining_time_budget---
+{SEPARATOR_LINE}
+
+
 
 HINTS:
-   - please first consider whether you can answer the question with the information you already have. \
+   - please first consider whether you already can answer the question with the information you already have. \
 Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
    - if you think more information is needed because a sub-question was not sufficiently answered, \
 you can generate a modified version of the previous step, thus effectively modifying the plan.
+- you can only consider a tool that fits the remaining time budget! The tool cost must be below \
+the remaining time budget.
    - please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
    - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
@@ -433,6 +523,40 @@ if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
 - Please cite your sources inline in format [2][4], etc! The numbers of the documents \
 are provided above.
+
+ANSWER:
+"""
+
+GET_FEEDBACK_PROMPT = f"""
+You are a helpful assistant that is great in asking follow-up questions in case \
+a base question is not as clear as it should, specificaly in regards to an initial \
+high-level plan.
+
+Here is the question that needs to be answered:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+Here is the high-level plan:
+{SEPARATOR_LINE}
+---high_level_plan---
+{SEPARATOR_LINE}
+
+NOTES:
+  - if the plan is clear and no further qualification/specification is \
+needed, just fill in 'false' for "feedback_needed" field.
+  - otherwise, fill in 'true' for "feedback_needed" field and articulate \
+up to 3 NUMBERED follow-up questions that you think are needed to clarify the plan.
+Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
+Note that it is fine to ask zero, one, two, or three follow-up questions.
+
+Please respond with a json dictionary in the following format:
+{{
+   "feedback_needed": "<true or false. If true, please provide a feedback request. \
+If false, just say 'no feedback request'.>",
+   "feedback_request": "<the feedback request. If you think the plan is good, \
+just say 'no feedback request'.>"
+}}
 
 ANSWER:
 """

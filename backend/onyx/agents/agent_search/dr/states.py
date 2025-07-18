@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from onyx.agents.agent_search.core_state import CoreState
 from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
@@ -26,7 +27,10 @@ class OrchestrationUpdate(LoggerUpdate):
     query_list: list[str] = []
     iteration_nr: int = 0
     plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
-    used_time_budget: int = 0
+    remaining_time_budget: float = 2.0  # set by default to about 2 searches
+    feedback_needed: bool = False
+    feedback_request: OrchestrationFeedbackRequest | None = None
+    feedback_answer: str | None = None
 
 
 class QuestionUpdate(LoggerUpdate):
