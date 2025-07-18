@@ -41,9 +41,14 @@ function TableHeader() {
 }
 
 // Custom Row Component
-function TableRow({ entityType }: { entityType: EntityType }) {
+function TableRow({
+  entityType,
+  onShowSettings,
+}: {
+  entityType: EntityType;
+  onShowSettings: () => void;
+}) {
   const [entityTypeState, setEntityTypeState] = useState(entityType);
-  const [showModal, setShowModal] = useState(false);
   const [descriptionSavingState, setDescriptionSavingState] = useState<
     "saving" | "saved" | "failed" | undefined
   >(undefined);
@@ -178,7 +183,7 @@ function TableRow({ entityType }: { entityType: EntityType }) {
           <button
             type="button"
             disabled={!entityTypeState.active}
-            onClick={() => setShowModal(true)}
+            onClick={onShowSettings}
             className="p-1 rounded"
             aria-label="Settings"
           >
@@ -186,22 +191,35 @@ function TableRow({ entityType }: { entityType: EntityType }) {
           </button>
         </div>
       </div>
-      {showModal && (
-        <Modal onOutsideClick={() => setShowModal(false)}>
-          <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">
-              Settings for {snakeToHumanReadable(entityType.name)}
-            </h2>
-            <p>Settings content goes here.</p>
-            <div className="mt-6 flex justify-end">
-              <Button onClick={() => setShowModal(false)} type="button">
-                Close
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </>
+  );
+}
+
+// New Modal component for entity type settings
+function KGEntityTypeSettingsModal({
+  open,
+  onClose,
+  entityType,
+}: {
+  open: boolean;
+  onClose: () => void;
+  entityType: EntityType;
+}) {
+  if (!open) return null;
+  return (
+    <Modal onOutsideClick={onClose}>
+      <div className="p-6">
+        <h2 className="text-lg font-semibold mb-4">
+          Settings for {snakeToHumanReadable(entityType.name)}
+        </h2>
+        <p>Settings content goes here.</p>
+        <div className="mt-6 flex justify-end">
+          <Button onClick={onClose} type="button">
+            Close
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -210,6 +228,21 @@ interface KGEntityTypesProps {
 }
 
 export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalEntityType, setModalEntityType] = useState<EntityType | null>(
+    null
+  );
+
+  const handleShowSettings = (entityType: EntityType) => {
+    setModalEntityType(entityType);
+    setModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setModalEntityType(null);
+  };
+
   return (
     <div className="flex flex-col gap-y-8 w-full">
       <div className="flex flex-col gap-y-4 w-full">
@@ -250,6 +283,7 @@ export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
                     <TableRow
                       key={`${entityType.name}-${index}`}
                       entityType={entityType}
+                      onShowSettings={() => handleShowSettings(entityType)}
                     />
                   ))}
                 </div>
@@ -258,6 +292,11 @@ export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
           ))
         )}
       </div>
+      <KGEntityTypeSettingsModal
+        open={modalOpen && !!modalEntityType}
+        onClose={handleCloseModal}
+        entityType={modalEntityType as EntityType}
+      />
       <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
         <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
           Danger
