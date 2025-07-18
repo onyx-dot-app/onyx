@@ -157,7 +157,7 @@ BEDROCK_MODEL_NAMES = [
     # litellm has split them into two lists :(
     for model in litellm.bedrock_models + litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
-][::-1]
+]
 
 BEDROCK_MODEL_NAMES.sort()
 
