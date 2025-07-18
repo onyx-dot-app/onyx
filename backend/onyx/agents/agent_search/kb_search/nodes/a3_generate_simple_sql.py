@@ -459,7 +459,13 @@ def generate_simple_sql(
                     rows = result.fetchall()
                     query_results = [dict(row._mapping) for row in rows]
             except Exception as e:
+                # TODO: raise error on frontend
                 logger.error(f"Error executing SQL query: {e}")
+                drop_views(
+                    allowed_docs_view_name=doc_temp_view,
+                    kg_relationships_view_name=rel_temp_view,
+                    kg_entity_view_name=ent_temp_view,
+                )
 
                 raise e
 
@@ -483,8 +489,14 @@ def generate_simple_sql(
                         for source_document_result in query_source_document_results
                     ]
                 except Exception as e:
-                    # No stopping here, the individualized SQL query is not mandatory
                     # TODO: raise error on frontend
+
+                    drop_views(
+                        allowed_docs_view_name=doc_temp_view,
+                        kg_relationships_view_name=rel_temp_view,
+                        kg_entity_view_name=ent_temp_view,
+                    )
+
                     logger.error(f"Error executing Individualized SQL query: {e}")
 
         else:
