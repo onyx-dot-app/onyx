@@ -140,6 +140,8 @@ else:
 # Multi-tenancy configuration
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
+# Outside this file, should almost always use `POSTGRES_DEFAULT_SCHEMA` unless you
+# have a very good reason
 POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE = "public"
 POSTGRES_DEFAULT_SCHEMA = (
     os.environ.get("POSTGRES_DEFAULT_SCHEMA") or POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
