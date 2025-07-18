@@ -1,6 +1,5 @@
 import { SourceIcon } from "@/components/SourceIcon";
 import React, { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import { EntityType } from "./interfaces";
@@ -11,6 +10,8 @@ import { FaCircleQuestion } from "react-icons/fa6";
 import { Modal } from "@/components/Modal";
 import { Input } from "@/components/ui/input";
 import { CheckmarkIcon } from "@/components/icons/icons";
+import { entityTypesToEntityMap } from "./utils";
+import { DatePicker } from "@/components/ui/datePicker";
 
 // Utility: Convert capitalized snake case to human readable case
 export function snakeToHumanReadable(str: string): string {
@@ -33,21 +34,15 @@ function TableHeader() {
   return (
     <div className="grid grid-cols-12 gap-4 px-8 pb-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
       <div className="col-span-1">Name</div>
-      <div className="col-span-9">Description</div>
-      <div className="col-span-1 flex justify-end">Active</div>
-      <div className="col-span-1" />
+      <div className="col-span-7">Description</div>
+      <div className="col-span-3 flex justify-center">Max Coverage Date</div>
+      <div className="col-span-1 flex justify-center">Active</div>
     </div>
   );
 }
 
 // Custom Row Component
-function TableRow({
-  entityType,
-  onShowSettings,
-}: {
-  entityType: EntityType;
-  onShowSettings: () => void;
-}) {
+function TableRow({ entityType }: { entityType: EntityType }) {
   const [entityTypeState, setEntityTypeState] = useState(entityType);
   const [descriptionSavingState, setDescriptionSavingState] = useState<
     "saving" | "saved" | "failed" | undefined
@@ -114,19 +109,19 @@ function TableRow({
   }, [entityTypeState.description]);
 
   return (
-    <>
+    <div className="hover:bg-accent-background-hovered transition-colors duration-200 ease-in-out">
       <div
-        className={`grid grid-cols-12 px-8 py-4 hover:bg-accent-background-hovered transition-colors transition-opacity transition-hover duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
+        className={`grid grid-cols-12 px-8 py-4 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
       >
         <div className="col-span-1 flex items-center">
           <span className="font-medium text-sm">
             {snakeToHumanReadable(entityType.name)}
           </span>
         </div>
-        <div className="col-span-9 relative">
+        <div className="col-span-7 relative">
           <Input
             disabled={!entityTypeState.active}
-            className="w-full px-3 py-2 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200 pr-10"
+            className="w-full px-3 py-2 border focus:ring-2 transition-shadow"
             defaultValue={entityType.description}
             onChange={(e) =>
               setEntityTypeState({
@@ -173,75 +168,32 @@ function TableRow({
             </span>
           </span>
         </div>
-        <div className="col-span-1 flex items-center justify-end">
+        <div className="col-span-3 flex items-center justify-center">
+          <DatePicker
+            selectedDate={entityTypeState.coverage_start ?? new Date()}
+            setSelectedDate={(coverage_start) =>
+              setEntityTypeState({ ...entityTypeState, coverage_start })
+            }
+            disabled={!entityTypeState.active}
+          />
+        </div>
+        <div className="col-span-1 flex items-center justify-center pl-3">
           <Switch
             checked={entityTypeState.active}
             onCheckedChange={handleToggle}
           />
         </div>
-        <div className="col-span-1 flex items-center justify-end">
-          <button
-            type="button"
-            disabled={!entityTypeState.active}
-            onClick={onShowSettings}
-            className="p-1 rounded"
-            aria-label="Settings"
-          >
-            <FiSettings size={20} color="rgb(150, 150, 150)" />
-          </button>
-        </div>
       </div>
-    </>
-  );
-}
-
-// New Modal component for entity type settings
-function KGEntityTypeSettingsModal({
-  open,
-  onClose,
-  entityType,
-}: {
-  open: boolean;
-  onClose: () => void;
-  entityType: EntityType;
-}) {
-  if (!open) return null;
-  return (
-    <Modal onOutsideClick={onClose}>
-      <div className="p-6">
-        <h2 className="text-lg font-semibold mb-4">
-          Settings for {snakeToHumanReadable(entityType.name)}
-        </h2>
-        <p>Settings content goes here.</p>
-        <div className="mt-6 flex justify-end">
-          <Button onClick={onClose} type="button">
-            Close
-          </Button>
-        </div>
-      </div>
-    </Modal>
+    </div>
   );
 }
 
 interface KGEntityTypesProps {
-  kgEntityTypes: Record<string, EntityType[]>;
+  kgEntityTypes: EntityType[];
 }
 
 export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalEntityType, setModalEntityType] = useState<EntityType | null>(
-    null
-  );
-
-  const handleShowSettings = (entityType: EntityType) => {
-    setModalEntityType(entityType);
-    setModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setModalOpen(false);
-    setModalEntityType(null);
-  };
+  const entityTypesMap = entityTypesToEntityMap(kgEntityTypes);
 
   return (
     <div className="flex flex-col gap-y-8 w-full">
@@ -251,52 +203,45 @@ export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
             <p>No results available.</p>
             <p>
               To configure Knowledge Graph, first connect some{" "}
-              <Link href={`/admin/add-connector`} className="underline">
+              <Link href="/admin/add-connector" className="underline">
                 Connectors.
               </Link>
             </p>
           </div>
         ) : (
-          Object.entries(kgEntityTypes).map(([key, entityTypesArr]) => (
-            <div key={key}>
-              <CollapsibleCard
-                header={
-                  <span className="font-semibold text-lg flex flex-row gap-x-4">
-                    {Object.values(ValidSources).includes(
-                      key as ValidSources
-                    ) ? (
-                      <SourceIcon
-                        sourceType={key as ValidSources}
-                        iconSize={25}
-                      />
-                    ) : (
-                      <FaCircleQuestion size={25} />
-                    )}
-                    {snakeToHumanReadable(key)}
-                  </span>
-                }
-                defaultOpen={true}
-              >
-                <div className="w-full pt-4">
-                  <TableHeader />
-                  {entityTypesArr.map((entityType, index) => (
-                    <TableRow
-                      key={`${entityType.name}-${index}`}
-                      entityType={entityType}
-                      onShowSettings={() => handleShowSettings(entityType)}
-                    />
-                  ))}
-                </div>
-              </CollapsibleCard>
-            </div>
-          ))
+          Object.entries(entityTypesMap)
+            .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+            .map(([key, entityTypesArr]) => (
+              <div key={key}>
+                <CollapsibleCard
+                  header={
+                    <span className="font-semibold text-lg flex flex-row gap-x-4">
+                      {Object.values(ValidSources).includes(
+                        key as ValidSources
+                      ) ? (
+                        <SourceIcon
+                          sourceType={key as ValidSources}
+                          iconSize={25}
+                        />
+                      ) : (
+                        <FaCircleQuestion size={25} />
+                      )}
+                      {snakeToHumanReadable(key)}
+                    </span>
+                  }
+                  defaultOpen={true}
+                >
+                  <div className="w-full pt-4">
+                    <TableHeader />
+                    {entityTypesArr.map((entityType, index) => (
+                      <TableRow key={index} entityType={entityType} />
+                    ))}
+                  </div>
+                </CollapsibleCard>
+              </div>
+            ))
         )}
       </div>
-      <KGEntityTypeSettingsModal
-        open={modalOpen && !!modalEntityType}
-        onClose={handleCloseModal}
-        entityType={modalEntityType as EntityType}
-      />
       <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
         <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
           Danger

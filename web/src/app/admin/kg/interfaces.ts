@@ -19,8 +19,9 @@ export type EntityTypeValues = { [key: string]: EntityType };
 export type EntityType = {
   name: string;
   description: string;
-  grounded_source_name: string;
   active: boolean;
+  grounded_source_name?: string | null;
+  coverage_start?: Date | null;
 };
 
 export function sanitizeKGConfig(raw: KGConfigRaw): KGConfig {

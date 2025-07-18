@@ -225,10 +225,7 @@ function Main() {
     data: entityTypesData,
     isLoading: entityTypesIsLoading,
     mutate: entityTypesMutate,
-  } = useSWR<Record<string, EntityType[]>>(
-    "/api/admin/kg/entity-types",
-    errorHandlingFetcher
-  );
+  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
 
   // Local State:
   const { popup, setPopup } = usePopup();
@@ -292,11 +289,7 @@ function Main() {
           <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
             Entity Types
           </p>
-          <KGEntityTypes
-            kgEntityTypes={entityTypesData}
-            setPopup={setPopup}
-            refreshKGEntityTypes={entityTypesMutate}
-          />
+          <KGEntityTypes kgEntityTypes={entityTypesData} />
         </>
       )}
       {configureModalShown && (
