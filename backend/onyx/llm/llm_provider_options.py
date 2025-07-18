@@ -1,12 +1,85 @@
+import re
 from enum import Enum
 
 import litellm  # type: ignore
 from pydantic import BaseModel
 
+from onyx.configs.app_configs import BEDROCK_DEFAULT_FAST_MODEL
+from onyx.configs.app_configs import BEDROCK_DEFAULT_MODEL
+from onyx.configs.app_configs import BEDROCK_EXCLUDE_PATTERN
+from onyx.configs.app_configs import BEDROCK_INCLUDE_PATTERN
 from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
 from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def filter_models_by_patterns(
+    models: list[str],
+    include_pattern: str | None = None,
+    exclude_pattern: str | None = None,
+    remove_duplicates: bool = True,
+) -> list[str]:
+    """
+    Filter a list of model names based on include and exclude regex patterns.
+
+    Args:
+        models: List of model names to filter
+        include_pattern: Regex pattern for models to include (if None, all models are included)
+        exclude_pattern: Regex pattern for models to exclude (if None, no models are excluded)
+        remove_duplicates: Whether to remove duplicate model names (default: True)
+
+    Returns:
+        Filtered list of model names
+    """
+    filtered_models = models
+
+    # Apply include pattern if specified
+    if include_pattern:
+        try:
+            include_regex = re.compile(include_pattern)
+            filtered_models = [
+                model for model in filtered_models if include_regex.search(model)
+            ]
+            logger.debug(
+                f"Applied include pattern '{include_pattern}' to filter models. {len(filtered_models)} models remaining."
+            )
+        except re.error as e:
+            logger.warning(
+                f"Invalid include pattern '{include_pattern}': {e}. Skipping include filter."
+            )
+
+    # Apply exclude pattern if specified
+    if exclude_pattern:
+        try:
+            exclude_regex = re.compile(exclude_pattern)
+            filtered_models = [
+                model for model in filtered_models if not exclude_regex.search(model)
+            ]
+            logger.debug(
+                f"Applied exclude pattern '{exclude_pattern}' to filter models. {len(filtered_models)} models remaining."
+            )
+        except re.error as e:
+            logger.warning(
+                f"Invalid exclude pattern '{exclude_pattern}': {e}. Skipping exclude filter."
+            )
+
+    # Remove duplicates if requested
+    if remove_duplicates:
+        original_count = len(filtered_models)
+        filtered_models = list(
+            dict.fromkeys(filtered_models)
+        )  # Preserves order while removing duplicates
+        if len(filtered_models) < original_count:
+            logger.info(
+                f"Removed {original_count - len(filtered_models)} duplicate models. "
+                f"{len(filtered_models)} unique models remaining."
+            )
+
+    return filtered_models
 
 
 class CustomConfigKeyType(Enum):
@@ -85,7 +158,17 @@ BEDROCK_MODEL_NAMES = [
     for model in litellm.bedrock_models + litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
 ][::-1]
-BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+BEDROCK_MODEL_NAMES.sort()
+
+if BEDROCK_INCLUDE_PATTERN or BEDROCK_EXCLUDE_PATTERN:
+    BEDROCK_MODEL_NAMES = filter_models_by_patterns(
+        BEDROCK_MODEL_NAMES,
+        include_pattern=BEDROCK_INCLUDE_PATTERN,
+        exclude_pattern=BEDROCK_EXCLUDE_PATTERN,
+        remove_duplicates=True,
+    )
+    logger.debug(f"Filtered Bedrock models: {BEDROCK_MODEL_NAMES}")
 
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
@@ -227,7 +310,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 BEDROCK_PROVIDER_NAME
             ),
             default_model=BEDROCK_DEFAULT_MODEL,
-            default_fast_model=BEDROCK_DEFAULT_MODEL,
+            default_fast_model=BEDROCK_DEFAULT_FAST_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,

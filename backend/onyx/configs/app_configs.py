@@ -799,3 +799,15 @@ S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
 # Forcing Vespa Language
 # English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
 VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")
+
+# AWS Bedrock Configurations
+# You must set the default model to one to which you have been granted access
+BEDROCK_DEFAULT_MODEL = os.environ.get(
+    "BEDROCK_DEFAULT_MODEL", default="anthropic.claude-3-5-sonnet-20241022-v2:0"
+)
+BEDROCK_DEFAULT_FAST_MODEL = os.environ.get(
+    "BEDROCK_DEFAULT_FAST_MODEL", default=BEDROCK_DEFAULT_MODEL
+)
+# Apply environment-based filtering to BEDROCK_MODEL_NAMES
+BEDROCK_INCLUDE_PATTERN = os.environ.get("BEDROCK_MODEL_INCLUDE_PATTERN")
+BEDROCK_EXCLUDE_PATTERN = os.environ.get("BEDROCK_MODEL_EXCLUDE_PATTERN")
