@@ -54,6 +54,7 @@ from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
+from onyx.db.connector_credential_pair import ConnectorType
 from onyx.db.connector_credential_pair import (
     fetch_indexable_connector_credential_pair_ids,
 )
@@ -87,6 +88,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import SENTRY_DSN
 
 logger = setup_logger()
+
+USER_FILE_INDEXING_LIMIT = 100
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -485,7 +488,18 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # gather cc_pair_ids + current search settings
         lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
-            cc_pair_ids = fetch_indexable_connector_credential_pair_ids(db_session)
+            standard_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
+                db_session, connector_type=ConnectorType.STANDARD
+            )
+            # only index 50 user files at a time. This makes sense since user files are
+            # indexed only once, and then they are done. In practice, we would rarely
+            # have more than `USER_FILE_INDEXING_LIMIT` user files to index.
+            user_file_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
+                db_session,
+                connector_type=ConnectorType.USER_FILE,
+                limit=USER_FILE_INDEXING_LIMIT,
+            )
+            cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
 
             # NOTE: some potential race conditions here, but the worse case is
             # kicking off some "invalid" indexing tasks which will just fail

@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import TypeVarTuple
 
 from fastapi import HTTPException
@@ -39,6 +40,11 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 R = TypeVarTuple("R")
+
+
+class ConnectorType(str, Enum):
+    STANDARD = "standard"
+    USER_FILE = "user_file"
 
 
 def _add_user_filters(
@@ -621,6 +627,8 @@ def remove_credential_from_connector(
 
 def fetch_indexable_connector_credential_pair_ids(
     db_session: Session,
+    connector_type: ConnectorType | None = None,
+    limit: int | None = None,
 ) -> list[int]:
     stmt = select(ConnectorCredentialPair.id)
     stmt = stmt.where(
@@ -628,6 +636,12 @@ def fetch_indexable_connector_credential_pair_ids(
             ConnectorCredentialPairStatus.active_statuses()
         )
     )
+    if connector_type == ConnectorType.USER_FILE:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_(True))
+    elif connector_type == ConnectorType.STANDARD:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_(False))
+    if limit:
+        stmt = stmt.limit(limit)
     return list(db_session.scalars(stmt).all())
 
 
