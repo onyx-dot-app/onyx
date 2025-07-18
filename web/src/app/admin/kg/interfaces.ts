@@ -19,6 +19,7 @@ export type EntityTypeValues = { [key: string]: EntityType };
 export type EntityType = {
   name: string;
   description: string;
+  grounded_source_name: string;
   active: boolean;
 };
 
