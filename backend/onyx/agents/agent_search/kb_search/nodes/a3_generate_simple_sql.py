@@ -8,10 +8,14 @@ from langgraph.types import StreamWriter
 from sqlalchemy import text
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
 from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
+    stream_kg_search_close_step_answer,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_activities,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_answer_explicit,
 )
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import KGRelationshipDetection
@@ -189,7 +193,7 @@ def generate_simple_sql(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     entities_types_str = state.entities_types_str
     relationship_types_str = state.relationship_types_str
 
@@ -205,7 +209,8 @@ def generate_simple_sql(
 
     ## STEP 3 - articulate goals
 
-    stream_write_step_activities(writer, _KG_STEP_NR)
+    if state.individual_flow:
+        stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     if graph_config.tooling.search_tool is None:
         raise ValueError("Search tool is not set")
@@ -490,17 +495,20 @@ def generate_simple_sql(
 
         main_sql_statement = sql_statement
 
-    if reasoning:
-        stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
+    if reasoning and state.individual_flow:
+        stream_write_kg_search_answer_explicit(
+            writer, step_nr=_KG_STEP_NR, answer=reasoning
+        )
 
-    if main_sql_statement:
-        stream_write_step_answer_explicit(
+    if main_sql_statement and state.individual_flow:
+        stream_write_kg_search_answer_explicit(
             writer,
             step_nr=_KG_STEP_NR,
             answer=f" \n Generated SQL: {main_sql_statement}",
         )
 
-    stream_close_step_answer(writer, _KG_STEP_NR)
+    if state.individual_flow:
+        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     # Update path if too many results are retrieved
 

@@ -1,0 +1,193 @@
+from datetime import datetime
+from typing import cast
+
+from langchain_core.runnables import RunnableConfig
+from langgraph.types import StreamWriter
+
+from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import SearchAnswer
+from onyx.agents.agent_search.dr.states import AnswerUpdate
+from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.utils import extract_document_citations
+from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
+from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
+from onyx.agents.agent_search.shared_graph_utils.utils import (
+    get_langgraph_node_log_string,
+)
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import LlmDoc
+from onyx.context.search.models import InferenceSection
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPT
+from onyx.tools.models import SearchToolOverrideKwargs
+from onyx.tools.tool_implementations.search.search_tool import (
+    SEARCH_RESPONSE_SUMMARY_ID,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+def search(
+    state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
+) -> AnswerUpdate:
+    """
+    LangGraph node to start the agentic search process.
+    """
+
+    node_start_time = datetime.now()
+    iteration_nr = state.iteration_nr
+    parallelization_nr = state.parallelization_nr
+
+    search_query = state.question
+    if not search_query:
+        raise ValueError("search_query is not set")
+
+    graph_config = cast(GraphConfig, config["metadata"]["config"])
+    base_question = graph_config.inputs.prompt_builder.raw_user_query
+
+    search_tool = graph_config.tooling.search_tool
+    if search_tool is None:
+        raise ValueError("search_tool must be provided for agentic search")
+
+    write_custom_event(
+        "basic_response",
+        AgentAnswerPiece(
+            answer_piece=(
+                f"SUB-QUESTION {iteration_nr}.{parallelization_nr} "
+                f"(SEARCH): {search_query}\n\n"
+            ),
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
+    retrieved_docs: list[InferenceSection] = []
+    callback_container: list[list[InferenceSection]] = []
+
+    # new db session to avoid concurrency issues
+    with get_session_with_current_tenant() as search_db_session:
+        for tool_response in search_tool.run(
+            query=search_query,
+            override_kwargs=SearchToolOverrideKwargs(
+                force_no_rerank=True,
+                alternate_db_session=search_db_session,
+                retrieved_sections_callback=callback_container.append,
+                skip_query_analysis=True,
+            ),
+        ):
+            # get retrieved docs to send to the rest of the graph
+            if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
+                response = cast(SearchResponseSummary, tool_response.response)
+                retrieved_docs = response.top_sections
+
+                break
+
+    # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
+
+    """
+    # keep for later use
+    for tool_response in yield_search_responses(
+        query=query_to_retrieve,
+        get_retrieved_sections=lambda: retrieved_docs,
+        get_final_context_sections=lambda: retrieved_docs,
+        search_query_info=SearchQueryInfo(
+            predicted_search=SearchType.KEYWORD,
+            # acl here is empty, because the searach alrady happened and
+            # we are streaming out the results.
+            final_filters=IndexFilters(access_control_list=user_acl),
+            recency_bias_multiplier=1.0,
+        ),
+        get_section_relevance=lambda: relevance_list,
+        search_tool=search_tool,
+    ):
+        write_custom_event(
+            "tool_response",
+            ExtendedToolResponse(
+                id=tool_response.id,
+                response=tool_response.response,
+                level=0,
+                level_question_num=0,  # 0, 0 is the base question
+            ),
+            writer,
+        )
+
+    """
+    document_texts_list = []
+
+    for doc_num, retrieved_doc in enumerate(retrieved_docs[:15]):
+        if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
+            raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")
+        chunk_text = build_document_context(retrieved_doc, doc_num + 1)
+        document_texts_list.append(chunk_text)
+
+    document_texts = "\n\n".join(document_texts_list)
+
+    # Built prompt
+
+    search_prompt = (
+        BASIC_SEARCH_PROMPT.replace("---search_query---", search_query)
+        .replace("---base_question---", base_question)
+        .replace("---document_text---", document_texts)
+    )
+
+    # Run LLM
+
+    search_answer_json = invoke_llm_json(
+        llm=graph_config.tooling.primary_llm,
+        prompt=search_prompt,
+        schema=SearchAnswer,
+        timeout_override=40,
+        max_tokens=1500,
+    )
+
+    logger.debug(f"Conducting a standard search for: {search_query}")
+    logger.debug(f"Search answer: {search_answer_json.answer}")
+
+    write_custom_event(
+        "basic_response",
+        AgentAnswerPiece(
+            answer_piece=f"ANSWERED {iteration_nr}.{parallelization_nr}\n\n",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
+    # get all citations and remove them from the answer to avoid
+    # incorrect citations when the documents get reordered by the closer
+    citation_string = search_answer_json.citations
+    answer_string = search_answer_json.answer
+
+    (
+        citation_numbers,
+        answer_string,
+    ) = extract_document_citations(citation_string + answer_string)
+    cited_documents = [
+        retrieved_docs[citation_number - 1] for citation_number in citation_numbers
+    ]
+
+    return AnswerUpdate(
+        iteration_responses=[
+            IterationAnswer(
+                iteration_nr=iteration_nr,
+                parallelization_nr=parallelization_nr,
+                question=search_query,
+                answer=answer_string,
+                cited_documents=cited_documents,
+            )
+        ],
+        log_messages=[
+            get_langgraph_node_log_string(
+                graph_component="main",
+                node_name="search",
+                node_start_time=node_start_time,
+            )
+        ],
+    )

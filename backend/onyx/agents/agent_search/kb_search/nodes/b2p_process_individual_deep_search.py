@@ -98,16 +98,17 @@ def process_individual_deep_search(
         kg_relationship_filters = None
 
     # Step 4 - stream out the research query
-    write_custom_event(
-        "subqueries",
-        SubQueryPiece(
-            sub_query=f"{get_doc_information_for_entity(object).semantic_entity_name}",
-            level=0,
-            level_question_num=_KG_STEP_NR,
-            query_id=research_nr + 1,
-        ),
-        writer,
-    )
+    if state.individual_flow:
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query=f"{get_doc_information_for_entity(object).semantic_entity_name}",
+                level=0,
+                level_question_num=_KG_STEP_NR,
+                query_id=research_nr + 1,
+            ),
+            writer,
+        )
 
     if source_filters and (len(source_filters) > KG_MAX_SEARCH_DOCUMENTS):
         logger.debug(
