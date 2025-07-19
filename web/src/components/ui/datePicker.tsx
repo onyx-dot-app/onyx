@@ -37,9 +37,10 @@ export function DatePicker({
     .fill(currYear)
     .map((currYear, index) => currYear - index);
   const [shownDate, setShownDate] = useState(selectedDate ?? new Date());
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           icon={FiCalendar}
@@ -50,7 +51,7 @@ export function DatePicker({
           {selectedDate ? selectedDate.toLocaleDateString() : "Select Date"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="flex w-full flex-col p-2 gap-y-2">
+      <PopoverContent className="flex w-full flex-col p-2 gap-y-2 data-[state=open]:animate-fade-in-scale data-[state=closed]:animate-fade-out-scale">
         <div className="flex flex-row items-center gap-x-2">
           <Select
             onValueChange={(value) => {
@@ -85,6 +86,7 @@ export function DatePicker({
           onDayClick={(date) => {
             setShownDate(date);
             setSelectedDate(date);
+            setOpen(false);
           }}
           month={shownDate}
           onMonthChange={(date) => {

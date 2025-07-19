@@ -20,6 +20,8 @@ export type EntityType = {
   name: string;
   description: string;
   active: boolean;
+  grounded_source_name?: string | null;
+  coverage_start?: Date | null;
 };
 
 export function sanitizeKGConfig(raw: KGConfigRaw): KGConfig {
