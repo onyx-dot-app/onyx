@@ -76,7 +76,15 @@ def upsert_llm_provider(
     )
 
     if not existing_llm_provider:
-        existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
+        use_recommended_models = (
+            llm_provider_upsert_request.use_recommended_models
+            if llm_provider_upsert_request.use_recommended_models is not None
+            else False
+        )
+        existing_llm_provider = LLMProviderModel(
+            name=llm_provider_upsert_request.name,
+            use_recommended_models=use_recommended_models,
+        )
         db_session.add(existing_llm_provider)
 
     existing_llm_provider.provider = llm_provider_upsert_request.provider

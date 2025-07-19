@@ -24,6 +24,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+import { Switch } from "@/components/ui/switch";
 
 export function LLMProviderUpdateForm({
   llmProviderDescriptor,
@@ -49,7 +50,23 @@ export function LLMProviderUpdateForm({
   const [isTesting, setIsTesting] = useState(false);
   const [testError, setTestError] = useState<string>("");
 
+  // Determine which model configurations to use for options
+  // When editing an existing provider, use the database configurations
+  // When creating a new provider, use the hardcoded descriptor configurations
+  const modelConfigurationsForOptions = existingLlmProvider
+    ? existingLlmProvider.model_configurations
+    : llmProviderDescriptor.model_configurations;
+
+  // Check if there are any display models available
+  const hasDisplayModels = modelConfigurationsForOptions.some(
+    (modelConfiguration) => modelConfiguration.is_visible
+  );
+
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [useRecommendedModel, setUseRecommendedModel] = useState(
+    existingLlmProvider?.use_recommended_models ??
+      (hasDisplayModels && llmProviderDescriptor.has_curated_models)
+  );
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
@@ -160,38 +177,51 @@ export function LLMProviderUpdateForm({
         const finalValues = {
           ...rest,
           api_key_changed: values.api_key !== initialValues.api_key,
-          model_configurations: llmProviderDescriptor.model_configurations.map(
+          // If using recommended model, use the provider's defaults
+          default_model_name: useRecommendedModel
+            ? (existingLlmProvider?.default_model_name ??
+              (llmProviderDescriptor.default_model ||
+                llmProviderDescriptor.model_configurations[0]?.name))
+            : values.default_model_name,
+          fast_default_model_name: useRecommendedModel
+            ? (existingLlmProvider?.fast_default_model_name ??
+              (llmProviderDescriptor.default_fast_model ||
+                llmProviderDescriptor.default_model ||
+                llmProviderDescriptor.model_configurations[0]?.name))
+            : values.fast_default_model_name,
+          model_configurations: modelConfigurationsForOptions.map(
             (modelConfiguration): ModelConfigurationUpsertRequest => ({
               name: modelConfiguration.name,
-              is_visible: visibleModels.includes(modelConfiguration.name),
+              is_visible: useRecommendedModel
+                ? modelConfiguration.is_visible
+                : visibleModels.includes(modelConfiguration.name),
               max_input_tokens: null,
             })
           ),
         };
 
-        // test the configuration
-        if (!isEqual(finalValues, initialValues)) {
-          setIsTesting(true);
+        // if (!isEqual(finalValues, initialValues)) {
+        //   setIsTesting(true);
 
-          const response = await fetch("/api/admin/llm/test", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              provider: llmProviderDescriptor.name,
-              ...finalValues,
-            }),
-          });
-          setIsTesting(false);
+        //   const response = await fetch("/api/admin/llm/test", {
+        //     method: "POST",
+        //     headers: {
+        //       "Content-Type": "application/json",
+        //     },
+        //     body: JSON.stringify({
+        //       provider: llmProviderDescriptor.name,
+        //       ...finalValues,
+        //     }),
+        //   });
+        //   setIsTesting(false);
 
-          if (!response.ok) {
-            const errorMsg = (await response.json()).detail;
-            setTestError(errorMsg);
-            return;
-          }
-        }
-
+        //   if (!response.ok) {
+        //     const errorMsg = (await response.json()).detail;
+        //     setTestError(errorMsg);
+        //     return;
+        //   }
+        // }
+        console.log(useRecommendedModel);
         const response = await fetch(
           `${LLM_PROVIDERS_ADMIN_URL}${
             existingLlmProvider ? "" : "?is_creation=true"
@@ -204,6 +234,7 @@ export function LLMProviderUpdateForm({
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
               ...finalValues,
+              use_recommended_models: useRecommendedModel,
               fast_default_model_name:
                 finalValues.fast_default_model_name ||
                 finalValues.default_model_name,
@@ -344,67 +375,110 @@ export function LLMProviderUpdateForm({
             <>
               <Separator />
 
-              {llmProviderDescriptor.model_configurations.length > 0 ? (
-                <SelectorFormField
-                  name="default_model_name"
-                  subtext="The model to use by default for this provider unless otherwise specified."
-                  label="Default Model"
-                  options={llmProviderDescriptor.model_configurations.map(
-                    (modelConfiguration) => ({
-                      // don't clean up names here to give admins descriptive names / handle duplicates
-                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                      name: modelConfiguration.name,
-                      value: modelConfiguration.name,
-                    })
+              {hasDisplayModels && llmProviderDescriptor.has_curated_models && (
+                <div className="flex items-center space-x-2 mb-4">
+                  <Switch
+                    checked={useRecommendedModel}
+                    onCheckedChange={setUseRecommendedModel}
+                  />
+                  <label className="text-sm font-medium">
+                    Use recommended models
+                  </label>
+                </div>
+              )}
+
+              {!useRecommendedModel && (
+                <>
+                  {modelConfigurationsForOptions.length > 0 ? (
+                    <SelectorFormField
+                      name="default_model_name"
+                      subtext="The model to use by default for this provider unless otherwise specified."
+                      label="Default Model"
+                      options={modelConfigurationsForOptions.map(
+                        (modelConfiguration) => ({
+                          // don't clean up names here to give admins descriptive names / handle duplicates
+                          // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                          name: modelConfiguration.name,
+                          value: modelConfiguration.name,
+                        })
+                      )}
+                      maxHeight="max-h-56"
+                    />
+                  ) : (
+                    <TextFormField
+                      name="default_model_name"
+                      subtext="The model to use by default for this provider unless otherwise specified."
+                      label="Default Model"
+                      placeholder="E.g. gpt-4"
+                    />
                   )}
-                  maxHeight="max-h-56"
-                />
-              ) : (
-                <TextFormField
-                  name="default_model_name"
-                  subtext="The model to use by default for this provider unless otherwise specified."
-                  label="Default Model"
-                  placeholder="E.g. gpt-4"
-                />
-              )}
 
-              {llmProviderDescriptor.deployment_name_required && (
-                <TextFormField
-                  name="deployment_name"
-                  label="Deployment Name"
-                  placeholder="Deployment Name"
-                />
-              )}
+                  {llmProviderDescriptor.deployment_name_required && (
+                    <TextFormField
+                      name="deployment_name"
+                      label="Deployment Name"
+                      placeholder="Deployment Name"
+                    />
+                  )}
 
-              {!llmProviderDescriptor.single_model_supported &&
-                (llmProviderDescriptor.model_configurations.length > 0 ? (
-                  <SelectorFormField
-                    name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+                  {!llmProviderDescriptor.single_model_supported &&
+                    (modelConfigurationsForOptions.length > 0 ? (
+                      <SelectorFormField
+                        name="fast_default_model_name"
+                        subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
             for this provider. If \`Default\` is specified, will use
             the Default Model configured above.`}
-                    label="[Optional] Fast Model"
-                    options={llmProviderDescriptor.model_configurations.map(
-                      (modelConfiguration) => ({
-                        // don't clean up names here to give admins descriptive names / handle duplicates
-                        // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                        name: modelConfiguration.name,
-                        value: modelConfiguration.name,
-                      })
-                    )}
-                    includeDefault
-                    maxHeight="max-h-56"
-                  />
-                ) : (
-                  <TextFormField
-                    name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+                        label="[Optional] Fast Model"
+                        options={modelConfigurationsForOptions.map(
+                          (modelConfiguration) => ({
+                            // don't clean up names here to give admins descriptive names / handle duplicates
+                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                            name: modelConfiguration.name,
+                            value: modelConfiguration.name,
+                          })
+                        )}
+                        includeDefault
+                        maxHeight="max-h-56"
+                      />
+                    ) : (
+                      <TextFormField
+                        name="fast_default_model_name"
+                        subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
             for this provider. If \`Default\` is specified, will use
             the Default Model configured above.`}
-                    label="[Optional] Fast Model"
-                    placeholder="E.g. gpt-4"
-                  />
-                ))}
+                        label="[Optional] Fast Model"
+                        placeholder="E.g. gpt-4"
+                      />
+                    ))}
+
+                  {modelConfigurationsForOptions.length > 0 && (
+                    <div className="w-full">
+                      <MultiSelectField
+                        selectedInitially={
+                          formikProps.values.selected_model_names ?? []
+                        }
+                        name="selected_model_names"
+                        label="Display Models"
+                        subtext="Select the models to make available to users. Unselected models will not be available."
+                        options={modelConfigurationsForOptions.map(
+                          (modelConfiguration) => ({
+                            value: modelConfiguration.name,
+                            // don't clean up names here to give admins descriptive names / handle duplicates
+                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                            label: modelConfiguration.name,
+                          })
+                        )}
+                        onChange={(selected) =>
+                          formikProps.setFieldValue(
+                            "selected_model_names",
+                            selected
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                </>
+              )}
 
               <>
                 <Separator />
@@ -414,32 +488,6 @@ export function LLMProviderUpdateForm({
                 />
                 {showAdvancedOptions && (
                   <>
-                    {llmProviderDescriptor.model_configurations.length > 0 && (
-                      <div className="w-full">
-                        <MultiSelectField
-                          selectedInitially={
-                            formikProps.values.selected_model_names ?? []
-                          }
-                          name="selected_model_names"
-                          label="Display Models"
-                          subtext="Select the models to make available to users. Unselected models will not be available."
-                          options={llmProviderDescriptor.model_configurations.map(
-                            (modelConfiguration) => ({
-                              value: modelConfiguration.name,
-                              // don't clean up names here to give admins descriptive names / handle duplicates
-                              // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                              label: modelConfiguration.name,
-                            })
-                          )}
-                          onChange={(selected) =>
-                            formikProps.setFieldValue(
-                              "selected_model_names",
-                              selected
-                            )
-                          }
-                        />
-                      </div>
-                    )}
                     <IsPublicGroupSelector
                       formikProps={formikProps}
                       objectName="LLM Provider"

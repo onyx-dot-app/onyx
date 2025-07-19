@@ -443,6 +443,9 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+    CHECK_FOR_LLM_MODEL_UPDATE_ONYX_CURATED = "check_for_llm_model_update_onyx_curated"
+    UPDATE_RECOMMENDED_SELECTED_MODELS = "update_recommended_selected_models"
+
     CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
 
     # Connector checkpoint cleanup

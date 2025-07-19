@@ -31,6 +31,7 @@ from sqlalchemy import Integer
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
+from sqlalchemy import text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.interfaces import Dialect
@@ -2265,6 +2266,9 @@ class LLMProvider(Base):
     )
     default_model_name: Mapped[str] = mapped_column(String)
     fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    use_recommended_models: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -2295,6 +2299,12 @@ class ModelConfiguration(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
+
+    recommended_default: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    recommended_fast_default: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    recommended_is_visible: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Represents whether or not a given model will be usable by the end user or not.
     # This field is primarily used for "Well Known LLM Providers", since for them,
