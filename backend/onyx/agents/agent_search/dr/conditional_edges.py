@@ -15,11 +15,19 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
 
     # go to closer if path is CLOSER or no queries
     next_path = state.query_path[-1]
-    if next_path == DRPath.CLOSER or not state.query_list:
-        return DRPath.CLOSER
 
     if next_path == DRPath.USER_FEEDBACK:
         return END
+
+    elif next_path == DRPath.ORCHESTRATOR:
+        return DRPath.ORCHESTRATOR
+
+    elif (
+        next_path == DRPath.CLOSER
+        or (len(state.query_list) == 0)
+        and (state.iteration_nr > 0)
+    ):
+        return DRPath.CLOSER
 
     # send search/kg requests (parallel only for search)
     queries = (

@@ -6,6 +6,8 @@ from onyx.context.search.models import InferenceSection
 
 
 class DRPath(str, Enum):
+    CLARIFIER = "CLARIFIER"
+    ORCHESTRATOR = "ORCHESTRATOR"
     USER_FEEDBACK = "USER_FEEDBACK"
     SEARCH = "SEARCH"
     KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
@@ -30,7 +32,9 @@ class OrchestrationPlan(BaseModel):
 
 class OrchestrationFeedbackRequest(BaseModel):
     feedback_needed: bool = False
+    feedback_addressed: bool | None = None
     feedback_request: str | None = None
+    feedback_answer: str | None = None
 
 
 class SearchAnswer(BaseModel):
