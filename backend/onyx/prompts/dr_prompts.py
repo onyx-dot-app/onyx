@@ -528,27 +528,29 @@ ANSWER:
 """
 
 GET_FEEDBACK_PROMPT = f"""
-You are a helpful assistant that is great in asking follow-up questions in case \
-a base question is not as clear as it should, specificaly in regards to an initial \
-high-level plan.
+You are a helpful assistant that is great in asking clarifying questions in case \
+a base question is not as clear as it should.
 
 Here is the question that needs to be answered:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
 
-Here is the high-level plan:
+Here is the previous chat history (if any), which may contain relevant information \
+to answer the question:
 {SEPARATOR_LINE}
----high_level_plan---
+---chat_history_string---
 {SEPARATOR_LINE}
 
 NOTES:
-  - if the plan is clear and no further qualification/specification is \
-needed, just fill in 'false' for "feedback_needed" field.
-  - otherwise, fill in 'true' for "feedback_needed" field and articulate \
-up to 3 NUMBERED follow-up questions that you think are needed to clarify the plan.
+
+  - you have to reason over this purely based on your intrinsic knowledge.
+  - if clarifications are required, fill in 'true' for "feedback_needed" field and \
+articulate up to 3 NUMBERED clarification questions that you think are needed to clarify the question.
 Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
 Note that it is fine to ask zero, one, two, or three follow-up questions.
+  - if no clarifications are required, fill in 'false' for "feedback_needed" field and \
+"no feedback required" for "feedback_request" field.
 
 Please respond with a json dictionary in the following format:
 {{

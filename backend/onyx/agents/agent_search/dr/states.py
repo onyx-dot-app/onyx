@@ -23,14 +23,16 @@ class LoggerUpdate(BaseModel):
 
 
 class OrchestrationUpdate(LoggerUpdate):
+    original_question: Annotated[list[str | None], add] = (
+        []
+    )  # will always be using first
+    chat_history_string: Annotated[list[str], add] = []  # will always be using first
     query_path: Annotated[list[DRPath], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
     plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
     remaining_time_budget: float = 2.0  # set by default to about 2 searches
-    feedback_needed: bool = False
-    feedback_request: OrchestrationFeedbackRequest | None = None
-    feedback_answer: str | None = None
+    feedback_structure: OrchestrationFeedbackRequest | None = None
 
 
 class QuestionUpdate(LoggerUpdate):
