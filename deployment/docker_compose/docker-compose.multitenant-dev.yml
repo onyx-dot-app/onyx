@@ -116,6 +116,10 @@ services:
       # Vespa Language Forcing
       # See: https://docs.vespa.ai/en/linguistics.html 
       - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
+
+      # Enables extra/community-supported connectors
+      - SHOW_EXTRA_CONNECTORS=${SHOW_EXTRA_CONNECTORS:-}
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:

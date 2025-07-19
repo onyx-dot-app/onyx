@@ -84,7 +84,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   web: {
     icon: GlobeIcon2,
     displayName: "Web",
-    category: SourceCategory.Other,
+    category: SourceCategory.Storage,
     docs: "https://docs.onyx.app/connectors/web",
   },
   file: {
@@ -154,7 +154,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   gong: {
     icon: GongIcon,
     displayName: "Gong",
-    category: SourceCategory.Other,
+    category: SourceCategory.SalesAndMarketing,
     docs: "https://docs.onyx.app/connectors/gong",
   },
   linear: {
@@ -190,7 +190,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   hubspot: {
     icon: HubSpotIcon,
     displayName: "HubSpot",
-    category: SourceCategory.CustomerRelationshipManagement,
+    category: SourceCategory.SalesAndMarketing,
     docs: "https://docs.onyx.app/connectors/hubspot",
   },
   document360: {
@@ -214,7 +214,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   loopio: {
     icon: LoopioIcon,
     displayName: "Loopio",
-    category: SourceCategory.Other,
+    category: SourceCategory.SalesAndMarketing,
   },
   dropbox: {
     icon: DropboxIcon,
@@ -225,7 +225,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   salesforce: {
     icon: SalesforceIcon,
     displayName: "Salesforce",
-    category: SourceCategory.CustomerRelationshipManagement,
+    category: SourceCategory.SalesAndMarketing,
     docs: "https://docs.onyx.app/connectors/salesforce",
   },
   sharepoint: {
@@ -319,7 +319,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   fireflies: {
     icon: FirefliesIcon,
     displayName: "Fireflies",
-    category: SourceCategory.Other,
+    category: SourceCategory.SalesAndMarketing,
     docs: "https://docs.onyx.app/connectors/fireflies",
   },
   egnyte: {
@@ -331,7 +331,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   airtable: {
     icon: AirtableIcon,
     displayName: "Airtable",
-    category: SourceCategory.Other,
+    category: SourceCategory.ProjectManagement,
     docs: "https://docs.onyx.app/connectors/airtable",
   },
   gitbook: {
@@ -351,8 +351,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Email",
     category: SourceCategory.Messaging,
   },
-  // currently used for the Internet Search tool docs, which is why
-  // a globe is used
+  // Placeholder used as non-null default
   not_applicable: {
     icon: GlobeIcon,
     displayName: "Not Applicable",

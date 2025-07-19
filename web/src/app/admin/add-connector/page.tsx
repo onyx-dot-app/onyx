@@ -7,7 +7,14 @@ import { listSourceMetadata } from "@/lib/sources";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +31,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 function SourceTile({
   sourceMetadata,
@@ -148,6 +156,7 @@ export default function Page() {
   const sources = useMemo(() => listSourceMetadata(), []);
   const [searchTerm, setSearchTerm] = useState("");
   const { data: federatedConnectors } = useFederatedConnectors();
+  const settings = useContext(SettingsContext);
 
   // Fetch Slack credentials to determine navigation behavior
   const { data: slackCredentials } = useSWR<Credential<any>[]>(
@@ -177,7 +186,7 @@ export default function Page() {
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);
-    return Object.values(SourceCategory).reduce(
+    const categories = Object.values(SourceCategory).reduce(
       (acc, category) => {
         acc[category] = sources.filter(
           (source) =>
@@ -189,7 +198,25 @@ export default function Page() {
       },
       {} as Record<SourceCategory, SourceMetadata[]>
     );
-  }, [sources, filterSources, searchTerm]);
+
+    // Filter out the "Other" category if show_extra_connectors is false
+    if (settings?.settings?.show_extra_connectors !== true) {
+      const filteredCategories = Object.entries(categories).filter(
+        ([category]) => category !== SourceCategory.Other
+      );
+      return Object.fromEntries(filteredCategories) as Record<
+        SourceCategory,
+        SourceMetadata[]
+      >;
+    }
+
+    return categories;
+  }, [
+    sources,
+    filterSources,
+    searchTerm,
+    settings?.settings?.show_extra_connectors,
+  ]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -251,7 +278,6 @@ export default function Page() {
             <div className="flex mt-8">
               <Title>{category}</Title>
             </div>
-            <p>{getCategoryDescription(category as SourceCategory)}</p>
             <div className="flex flex-wrap gap-4 p-4">
               {sources.map((source, sourceInd) => (
                 <SourceTile
@@ -269,27 +295,4 @@ export default function Page() {
         ))}
     </div>
   );
-}
-
-function getCategoryDescription(category: SourceCategory): string {
-  switch (category) {
-    case SourceCategory.Messaging:
-      return "Integrate with messaging and communication platforms.";
-    case SourceCategory.ProjectManagement:
-      return "Link to project management and task tracking tools.";
-    case SourceCategory.CustomerSupport:
-      return "Connect to customer support and helpdesk systems.";
-    case SourceCategory.CustomerRelationshipManagement:
-      return "Integrate with customer relationship management platforms.";
-    case SourceCategory.CodeRepository:
-      return "Integrate with code repositories and version control systems.";
-    case SourceCategory.Storage:
-      return "Connect to cloud storage and file hosting services.";
-    case SourceCategory.Wiki:
-      return "Link to wiki and knowledge base platforms.";
-    case SourceCategory.Other:
-      return "Connect to other miscellaneous knowledge sources.";
-    default:
-      return "Connect to various knowledge sources.";
-  }
 }

@@ -162,10 +162,10 @@ export interface SearchResponse {
 }
 
 export enum SourceCategory {
-  Storage = "Storage",
-  Wiki = "Wiki",
+  Storage = "Web Crawl & File Storage",
+  Wiki = "Knowledge Base & Wiki",
   CustomerSupport = "Customer Support",
-  CustomerRelationshipManagement = "Customer Relationship Management",
+  SalesAndMarketing = "Sales & Marketing",
   Messaging = "Messaging",
   ProjectManagement = "Project Management",
   CodeRepository = "Code Repository",
