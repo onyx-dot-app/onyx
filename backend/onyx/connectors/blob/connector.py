@@ -5,6 +5,7 @@ from datetime import timezone
 from io import BytesIO
 from typing import Any
 from typing import Optional
+from urllib.parse import quote
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
@@ -218,21 +219,24 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
 
+        # Encode the key while preserving forward slashes
+        encoded_key = quote(key, safe="/")
+
         if self.bucket_type == BlobType.R2:
             account_id = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
-            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{key}"
+            return f"https://{account_id}.r2.cloudflarestorage.com/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.S3:
             region = self.s3_client.meta.region_name
-            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{key}"
+            return f"https://{self.bucket_name}.s3.{region}.amazonaws.com/{encoded_key}"
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
-            return f"https://storage.cloud.google.com/{self.bucket_name}/{key}"
+            return f"https://storage.cloud.google.com/{self.bucket_name}/{encoded_key}"
 
         elif self.bucket_type == BlobType.OCI_STORAGE:
             namespace = self.s3_client.meta.endpoint_url.split("//")[1].split(".")[0]
             region = self.s3_client.meta.region_name
-            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{key}"
+            return f"https://objectstorage.{region}.oraclecloud.com/n/{namespace}/b/{self.bucket_name}/o/{encoded_key}"
 
         else:
             raise ValueError(f"Unsupported bucket type: {self.bucket_type}")
