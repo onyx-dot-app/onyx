@@ -576,16 +576,17 @@ class SearchAnswerAnalyzer:
                 for k in TOP_K_LIST:
                     self.metrics[cat].top_k_accuracy[k] += int(rank <= k)
 
-            if not self.config.search_only:
-                if result.response_relevancy is not None:
-                    self.metrics[cat].response_relevancy += result.response_relevancy
-                    self.metrics[cat].n_response_relevancy += 1
-                if result.faithfulness is not None:
-                    self.metrics[cat].faithfulness += result.faithfulness
-                    self.metrics[cat].n_faithfulness += 1
-                if result.factual_correctness is not None:
-                    self.metrics[cat].factual_correctness += result.factual_correctness
-                    self.metrics[cat].n_factual_correctness += 1
+            if self.config.search_only:
+                continue
+            if result.response_relevancy is not None:
+                self.metrics[cat].response_relevancy += result.response_relevancy
+                self.metrics[cat].n_response_relevancy += 1
+            if result.faithfulness is not None:
+                self.metrics[cat].faithfulness += result.faithfulness
+                self.metrics[cat].n_faithfulness += 1
+            if result.factual_correctness is not None:
+                self.metrics[cat].factual_correctness += result.factual_correctness
+                self.metrics[cat].n_factual_correctness += 1
 
     def _aggregate_metrics(self) -> None:
         for cat in self.metrics:
@@ -598,13 +599,14 @@ class SearchAnswerAnalyzer:
                 self.metrics[cat].top_k_accuracy[k] /= total
                 self.metrics[cat].top_k_accuracy[k] *= 100
 
-            if not self.config.search_only:
-                if (n := self.metrics[cat].n_response_relevancy) > 0:
-                    self.metrics[cat].response_relevancy /= n
-                if (n := self.metrics[cat].n_faithfulness) > 0:
-                    self.metrics[cat].faithfulness /= n
-                if (n := self.metrics[cat].n_factual_correctness) > 0:
-                    self.metrics[cat].factual_correctness /= n
+            if self.config.search_only:
+                continue
+            if (n := self.metrics[cat].n_response_relevancy) > 0:
+                self.metrics[cat].response_relevancy /= n
+            if (n := self.metrics[cat].n_faithfulness) > 0:
+                self.metrics[cat].faithfulness /= n
+            if (n := self.metrics[cat].n_factual_correctness) > 0:
+                self.metrics[cat].factual_correctness /= n
 
 
 def run_search_eval(

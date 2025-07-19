@@ -47,7 +47,7 @@ def find_document_id(
     db_session: Session,
 ) -> str | None:
     """Find a document by its link and return its id if found."""
-    # handle federated sources
+    # handle federated sources TODO: maybe make handler dictionary by source if this gets complex
     if ground_truth.doc_source in federated_sources:
         if ground_truth.doc_source == DocumentSource.SLACK:
             groups = re.search(
