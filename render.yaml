@@ -1,0 +1,46 @@
+# Render Blueprint for Onyx Preview Environments
+previews:
+  generation: automatic
+
+services:
+  # Main service using docker-compose
+  - type: compose
+    name: onyx-preview
+    env: docker
+    previewEnv: true
+    dockerfilePath: deployment/docker_compose/docker-compose.prod-cloud.yml
+    plan: standard-16
+    httpPort: 80
+    envVars:
+      # Default environment variables for preview environments
+      - key: IMAGE_TAG
+        value: latest
+      - key: AUTH_TYPE
+        value: disabled
+      - key: DISABLE_MODEL_SERVER
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
+      - key: POSTGRES_USER
+        value: postgres
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+      - key: POSTGRES_DB
+        value: onyx
+      # Model server configuration
+      - key: MODEL_SERVER_HOST
+        value: inference_model_server
+      - key: INDEXING_MODEL_SERVER_HOST
+        value: indexing_model_server
+      # Service discovery
+      - key: POSTGRES_HOST
+        value: relational_db
+      - key: VESPA_HOST
+        value: index
+      - key: REDIS_HOST
+        value: cache
+      # Disable SSL for preview environments
+      - key: DOMAIN
+        value: localhost
+      - key: WEB_DOMAIN
+        value: localhost
