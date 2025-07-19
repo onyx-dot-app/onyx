@@ -7,7 +7,7 @@ import {
   FiTool,
   FiGlobe,
 } from "react-icons/fi";
-import { FeedbackType } from "../types";
+import { FeedbackType } from "@/app/chat/interfaces";
 import React, {
   useCallback,
   useContext,
@@ -26,16 +26,20 @@ import { SearchSummary, UserKnowledgeFiles } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
-import { ChatFileType, FileDescriptor, ToolCallMetadata } from "../interfaces";
+import {
+  ChatFileType,
+  FileDescriptor,
+  ToolCallMetadata,
+} from "@/app/chat/interfaces";
 import {
   IMAGE_GENERATION_TOOL_NAME,
   SEARCH_TOOL_NAME,
   INTERNET_SEARCH_TOOL_NAME,
-} from "../tools/constants";
-import { ToolRunDisplay } from "../tools/ToolRunningAnimation";
+} from "@/app/chat/components/tools/constants";
+import { ToolRunDisplay } from "../components/tools/ToolRunningAnimation";
 import { Hoverable, HoverableIcon } from "@/components/Hoverable";
-import { DocumentPreview } from "../files/documents/DocumentPreview";
-import { InMessageImage } from "../files/images/InMessageImage";
+import { DocumentPreview } from "../components/files/documents/DocumentPreview";
+import { InMessageImage } from "../components/files/images/InMessageImage";
 import { CodeBlock } from "./CodeBlock";
 import rehypePrism from "rehype-prism-plus";
 import "prismjs/themes/prism-tomorrow.css";
@@ -55,8 +59,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import GeneratingImageDisplay from "../tools/GeneratingImageDisplay";
-import RegenerateOption from "../RegenerateOption";
+import GeneratingImageDisplay from "../components/tools/GeneratingImageDisplay";
+import RegenerateOption from "../components/RegenerateOption";
 import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
@@ -80,7 +84,7 @@ import {
   extractThinkingContent,
   isThinkingComplete,
   removeThinkingTokens,
-} from "../utils/thinkingTokens";
+} from "../services/thinkingTokens";
 import { FileResponse } from "../my-documents/DocumentsContext";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
