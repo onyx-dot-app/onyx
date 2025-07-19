@@ -1,10 +1,14 @@
 from collections.abc import Callable
 from collections.abc import Generator
+from typing import Any
 from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
 
 from onyx.context.search.models import InferenceChunk
+from onyx.db.models import DocumentColumns
+from onyx.db.utils import DocumentFilter
+from onyx.db.utils import SortOrder
 
 # Avoid circular imports
 if TYPE_CHECKING:
@@ -15,14 +19,33 @@ if TYPE_CHECKING:
 
 
 class FetchAllDocumentsFunction(Protocol):
-    """Protocol for a function that fetches all document IDs for a connector credential pair."""
+    """Protocol for a function that fetches documents for a connector credential pair.
 
-    def __call__(self) -> list[str]:
+    This protocol defines the interface for functions that retrieve documents
+    from the database, typically used in permission synchronization workflows.
+    """
+
+    def __call__(
+        self,
+        columns: list[DocumentColumns] | None = None,
+        document_filter: DocumentFilter | None = None,
+        limit: int | None = None,
+        sort_order: SortOrder | None = None,
+    ) -> list[dict[DocumentColumns, Any]]:
         """
-        Returns a list of document IDs for a connector credential pair.
+        Fetches documents for a connector credential pair with optional filtering.
 
-        This is typically used to determine which documents should no longer be
-        accessible during the document sync process.
+        Args:
+            columns: List of column attributes to select.
+                    If None, implementation should default to all columns.
+            document_filter: Optional document filter for filtering documents.
+                         If None, no additional filtering is applied.
+            limit: Optional limit on the number of documents to return.
+                  If None, all matching documents are returned.
+            sort_order: Optional sort order for results (ASC or DESC). If None, no ordering is applied for better performance.
+
+        Returns:
+            List of dicts matching the specified criteria.
         """
         ...
 

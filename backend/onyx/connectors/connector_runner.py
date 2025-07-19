@@ -27,7 +27,8 @@ CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 class CheckpointOutputWrapper(Generic[CT]):
     """
-    Wraps a CheckpointOutput generator to give things back in a more digestible format.
+    Wraps a CheckpointOutput generator to give things back in a more digestible format,
+    specifically for Document outputs.
     The connector format is easier for the connector implementor (e.g. it enforces exactly
     one new checkpoint is returned AND that the checkpoint is at the end), thus the different
     formats.
@@ -131,7 +132,7 @@ class ConnectorRunner(Generic[CT]):
                 for document, failure, next_checkpoint in CheckpointOutputWrapper[CT]()(
                     checkpoint_connector_generator
                 ):
-                    if document is not None:
+                    if document is not None and isinstance(document, Document):
                         self.doc_batch.append(document)
 
                     if failure is not None:
