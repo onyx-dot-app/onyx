@@ -1,0 +1,159 @@
+# Render Blueprint for Onyx Preview Environments
+previews:
+  generation: automatic
+
+services:
+  # Nginx - Public entry point
+  - type: web
+    name: nginx
+    plan: starter
+    env: docker
+    dockerfilePath: ./Dockerfile.nginx
+    dockerContext: .
+    buildCommand: |
+      # Copy nginx config
+      mkdir -p deployment/data/nginx
+      cp deployment/docker_compose/*.conf deployment/data/nginx/
+      cp deployment/docker_compose/run-nginx.sh deployment/data/nginx/
+      
+      # Create nginx Dockerfile
+      cat > Dockerfile.nginx << 'EOF'
+      FROM nginx:1.23.4-alpine
+      RUN apk add --no-cache dos2unix
+      COPY deployment/data/nginx /etc/nginx/conf.d
+      EOF
+    envVars:
+      - key: DOMAIN
+        value: localhost
+      - key: WEB_DOMAIN
+        value: localhost
+    dockerCommand: /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh && /etc/nginx/conf.d/run-nginx.sh app.conf.template"
+
+  # API Server
+  - type: pserv
+    name: api-server
+    plan: starter
+    env: docker
+    dockerfilePath: ./backend/Dockerfile.cloud
+    dockerContext: ./backend
+    dockerCommand: /bin/sh -c "alembic -n schema_private upgrade head && echo 'Starting Onyx Api Server' && uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+    envVars:
+      - key: AUTH_TYPE
+        value: disabled
+      - key: POSTGRES_HOST
+        value: relational-db
+      - key: POSTGRES_USER
+        value: onyxuser
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+      - key: POSTGRES_DB
+        value: onyx
+      - key: VESPA_HOST
+        value: index
+      - key: REDIS_HOST
+        value: cache
+      - key: MODEL_SERVER_HOST
+        value: inference-model-server
+
+  # Background Workers
+  - type: pserv
+    name: background
+    plan: starter
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    envVars:
+      - key: AUTH_TYPE
+        value: disabled
+      - key: POSTGRES_HOST
+        value: relational-db
+      - key: POSTGRES_USER
+        value: onyxuser
+      - key: POSTGRES_PASSWORD
+        generateValue: true
+      - key: POSTGRES_DB
+        value: onyx
+      - key: VESPA_HOST
+        value: index
+      - key: REDIS_HOST
+        value: cache
+      - key: MODEL_SERVER_HOST
+        value: inference-model-server
+      - key: INDEXING_MODEL_SERVER_HOST
+        value: indexing-model-server
+
+  # Web Server (Frontend)
+  - type: pserv
+    name: web-server
+    plan: starter
+    env: docker
+    dockerfilePath: ./web/Dockerfile
+    dockerContext: ./web
+    envVars:
+      - key: INTERNAL_URL
+        value: http://api-server:8080
+      - key: AUTH_TYPE
+        value: disabled
+
+  # Inference Model Server
+  - type: pserv
+    name: inference-model-server
+    plan: standard
+    env: docker
+    dockerfilePath: ./backend/Dockerfile.model_server
+    dockerContext: ./backend
+    dockerCommand: /bin/sh -c "if [ '${DISABLE_MODEL_SERVER:-false}' = 'True' ]; then echo 'Skipping service...'; exit 0; else exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000; fi"
+    envVars:
+      - key: LOG_LEVEL
+        value: info
+      - key: MIN_THREADS_ML_MODELS
+        value: "1"
+
+  # Indexing Model Server
+  - type: pserv
+    name: indexing-model-server
+    plan: standard
+    env: docker
+    dockerfilePath: ./backend/Dockerfile.model_server
+    dockerContext: ./backend
+    dockerCommand: /bin/sh -c "if [ '${DISABLE_MODEL_SERVER:-false}' = 'True' ]; then echo 'Skipping service...'; exit 0; else exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000; fi"
+    envVars:
+      - key: LOG_LEVEL
+        value: info
+      - key: INDEXING_ONLY
+        value: "True"
+      - key: MIN_THREADS_ML_MODELS
+        value: "1"
+
+  # Vespa Search Index
+  - type: pserv
+    name: index
+    plan: standard
+    env: docker
+    dockerfilePath: ./Dockerfile.vespa
+    dockerContext: .
+    buildCommand: |
+      cat > Dockerfile.vespa << 'EOF'
+      FROM vespaengine/vespa:8.526.15
+      EOF
+    envVars:
+      - key: VESPA_SKIP_UPGRADE_CHECK
+        value: "true"
+      - key: VESPA_UNPRIVILEGED
+        value: "yes"
+    disk:
+      name: vespa-data
+      mountPath: /opt/vespa/var
+      sizeGB: 10
+
+databases:
+  # PostgreSQL Database
+  - name: relational-db
+    plan: free
+    databaseName: onyx
+    user: onyxuser
+
+  # Redis Cache
+  - name: cache
+    plan: free
