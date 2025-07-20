@@ -35,7 +35,7 @@ def search(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> AnswerUpdate:
     """
-    LangGraph node to start the agentic search process.
+    LangGraph node to perform a standard search as part of the DR process.
     """
 
     node_start_time = datetime.now()

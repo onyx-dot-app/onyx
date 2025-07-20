@@ -22,7 +22,7 @@ def kg_query(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> AnswerUpdate:
     """
-    LangGraph node to perform a knowledge graph search as part of the deep research process.
+    LangGraph node to perform a knowledge graph search as part of the DR process.
     """
 
     node_start_time = datetime.now()

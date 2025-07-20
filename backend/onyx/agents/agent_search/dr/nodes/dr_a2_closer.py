@@ -41,7 +41,7 @@ def closer(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> FinalUpdate:
     """
-    LangGraph node to close the agentic search process and finalize the answer.
+    LangGraph node to close the DR process and finalize the answer.
     """
 
     node_start_time = datetime.now()

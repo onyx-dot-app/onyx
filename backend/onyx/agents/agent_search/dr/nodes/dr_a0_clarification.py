@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.constants import CLARIFICATION_REQUEST_PREFIX
 from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.states import DRPath
@@ -24,20 +25,6 @@ from onyx.prompts.dr_prompts import GET_FEEDBACK_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-CLARIFICATION_REQUEST_PREFIX = "PLEASE CLARIFY:"
-HIGH_LEVEL_PLAN_PREFIX = "HIGH_LEVEL PLAN:"
-
-AVERAGE_TOOL_COSTS = {
-    "SEARCH": 1.0,
-    "KNOWLEDGE_GRAPH": 2.0,
-    "CLOSER": 0.0,
-    "USER_FEEDBACK": 0.0,
-}
-
-AVERAGE_TOOL_COST_STRING = "\n".join(
-    [f"{tool}: {cost}" for tool, cost in AVERAGE_TOOL_COSTS.items()]
-)
 
 
 def clarifier(
@@ -141,7 +128,10 @@ def clarifier(
                 write_custom_event(
                     "basic_response",
                     AgentAnswerPiece(
-                        answer_piece=f"PLEASE CLARIFY: {feedback_request_response.feedback_request}\n\n",
+                        answer_piece=(
+                            f"{CLARIFICATION_REQUEST_PREFIX} "
+                            f"{feedback_request_response.feedback_request}\n\n"
+                        ),
                         level=0,
                         level_question_num=0,
                         answer_type="agent_level_answer",

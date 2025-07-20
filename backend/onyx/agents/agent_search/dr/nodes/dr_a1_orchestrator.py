@@ -4,6 +4,9 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COST_STRING
+from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
+from onyx.agents.agent_search.dr.constants import HIGH_LEVEL_PLAN_PREFIX
 from onyx.agents.agent_search.dr.constants import MAX_DR_ITERATION_DEPTH
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
@@ -32,20 +35,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-CLARIFICATION_REQUEST_PREFIX = "PLEASE CLARIFY:"
-HIGH_LEVEL_PLAN_PREFIX = "HIGH_LEVEL PLAN:"
-
-AVERAGE_TOOL_COSTS = {
-    "SEARCH": 1.0,
-    "KNOWLEDGE_GRAPH": 2.0,
-    "CLOSER": 0.0,
-    "USER_FEEDBACK": 0.0,
-}
-
-AVERAGE_TOOL_COST_STRING = "\n".join(
-    [f"{tool}: {cost}" for tool, cost in AVERAGE_TOOL_COSTS.items()]
-)
-
 
 def _get_prompt_question(
     question: str, feedback_structure: OrchestrationFeedbackRequest | None
@@ -55,7 +44,10 @@ def _get_prompt_question(
         feedback_request = feedback_structure.feedback_request
         user_feedback = feedback_structure.feedback_answer
 
-        return f"User Question:{question}\n(Feedback Request:\n{feedback_request}\n\nUser Clarification:\n{user_feedback})"
+        return (
+            f"User Question:{question}\n(Feedback Request:\n"
+            f"{feedback_request}\n\nUser Clarification:\n{user_feedback})"
+        )
 
     return question
 
@@ -64,7 +56,7 @@ def orchestrator(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> OrchestrationUpdate:
     """
-    LangGraph node to start the agentic search process.
+    LangGraph node to decide the next step in the DR process.
     """
 
     node_start_time = datetime.now()
@@ -170,7 +162,7 @@ def orchestrator(
             write_custom_event(
                 "basic_response",
                 AgentAnswerPiece(
-                    answer_piece=f"HIGH_LEVEL PLAN: {plan_of_record.plan}\n\n",
+                    answer_piece=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
                     level=0,
                     level_question_num=0,
                     answer_type="agent_level_answer",
