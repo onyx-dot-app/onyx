@@ -80,17 +80,14 @@ def process_kg_only_answers(
             writer,
         )
 
-    query_results_list = []
-
     if query_results:
-        for query_result in query_results:
-            query_results_list.append(
-                str(query_result).replace("::", ":: ").capitalize()
-            )
+        query_results_data_str = "\n".join(
+            str(query_result).replace("::", ":: ").capitalize()
+            for query_result in query_results
+        )
     else:
-        raise ValueError("No query results were found")
-
-    query_results_data_str = "\n".join(query_results_list)
+        logger.warning("No query results were found")
+        query_results_data_str = "(No query results were found)"
 
     source_reference_result_str = _get_formated_source_reference_results(
         source_document_results

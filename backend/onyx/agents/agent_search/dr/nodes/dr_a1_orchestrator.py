@@ -61,7 +61,7 @@ def orchestrator(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = state.original_question[0]
+    question = state.original_question
     if not question:
         raise ValueError("Question is required for orchestrator")
 

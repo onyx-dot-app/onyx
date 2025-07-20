@@ -50,7 +50,7 @@ def closer(
     # Also, add missing fields once usage in UI is clear.
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    base_question = state.original_question[0]
+    base_question = state.original_question
     if not base_question:
         raise ValueError("Question is required for closer")
 

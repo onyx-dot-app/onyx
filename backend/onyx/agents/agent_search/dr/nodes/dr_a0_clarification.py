@@ -21,6 +21,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import MessageType
+from onyx.kg.utils.extraction_utils import get_entity_types_str
+from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import GET_FEEDBACK_PROMPT
 from onyx.utils.logger import setup_logger
 
@@ -38,16 +40,22 @@ def clarifier(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    original_question: str | None = None
+    original_question = graph_config.inputs.prompt_builder.raw_user_query
     user_feedback: str | None = None
 
     time_budget = graph_config.behavior.time_budget
 
+    # TODO: I don't think this is used in dr, if so remove
     graph_config.behavior.use_agentic_search = False
 
+    all_entity_types = get_entity_types_str(active=True)
+    all_relationship_types = get_relationship_types_str(active=True)
+
+    # by default, go straight to orchestrator
     feedback_request = OrchestrationFeedbackRequest(
         feedback_needed=False
     )  # remainder is None
+    query_path = DRPath.ORCHESTRATOR
 
     chat_history_string = (
         get_chat_history_string(
@@ -56,8 +64,9 @@ def clarifier(
         )
         or "(No chat history yet available)"
     )
-    if time_budget != TimeBudget.FAST:
 
+    # feedback can only be requested if time budget is not FAST
+    if time_budget != TimeBudget.FAST:
         previous_messages = graph_config.inputs.prompt_builder.message_history
         previous_raw_messages = graph_config.inputs.prompt_builder.raw_message_history
 
@@ -89,7 +98,6 @@ def clarifier(
                     and isinstance(previous_message.content, str)
                 ):
                     original_question = previous_message.content
-
                     break
 
             feedback_request = OrchestrationFeedbackRequest(
@@ -109,12 +117,12 @@ def clarifier(
 
         else:
             # ... if not, use the raw_user_query as the original question and ask for feedback
-
-            original_question = graph_config.inputs.prompt_builder.raw_user_query
-
-            get_feedback_prompt = GET_FEEDBACK_PROMPT.replace(
-                "---question---", original_question
-            ).replace("---chat_history_string---", chat_history_string)
+            get_feedback_prompt = (
+                GET_FEEDBACK_PROMPT.replace("---question---", original_question)
+                .replace("---possible_entities---", all_entity_types)
+                .replace("---possible_relationships---", all_relationship_types)
+                .replace("---chat_history_string---", chat_history_string)
+            )
 
             try:
                 feedback_request_response = invoke_llm_json(
@@ -144,7 +152,6 @@ def clarifier(
                 raise e
 
             if feedback_request_response.feedback_needed:
-
                 feedback_request = OrchestrationFeedbackRequest(
                     feedback_needed=True,
                     feedback_request=feedback_request_response.feedback_request,
@@ -152,22 +159,15 @@ def clarifier(
                     feedback_answer=None,
                 )
 
-        if feedback_request.feedback_needed and not feedback_request.feedback_addressed:
-            query_path = DRPath.USER_FEEDBACK
-
-        else:
-            query_path = DRPath.ORCHESTRATOR
-
-        original_question_update: str | None = original_question
-
-    else:
-        # if time budget is FAST, we do not need to ask for feedback
-        # original question is the raw_user_query
-        query_path = DRPath.ORCHESTRATOR
-        original_question_update = graph_config.inputs.prompt_builder.raw_user_query
+        query_path = (
+            DRPath.USER_FEEDBACK
+            if feedback_request.feedback_needed
+            and not feedback_request.feedback_addressed
+            else DRPath.ORCHESTRATOR
+        )
 
     return OrchestrationUpdate(
-        original_question=[original_question_update],
+        original_question=original_question,
         chat_history_string=chat_history_string,
         query_path=[query_path],
         query_list=[],
