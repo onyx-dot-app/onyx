@@ -51,7 +51,7 @@ def clarifier(
 
     chat_history_string = (
         get_chat_history_string(
-            graph_config.inputs.prompt_builder.message_history[:-2],
+            graph_config.inputs.prompt_builder.message_history,
             MAX_CHAT_HISTORY_MESSAGES,
         )
         or "(No chat history yet available)"
@@ -168,7 +168,7 @@ def clarifier(
 
     return OrchestrationUpdate(
         original_question=[original_question_update],
-        chat_history_string=[chat_history_string],
+        chat_history_string=chat_history_string,
         query_path=[query_path],
         query_list=[],
         iteration_nr=0,

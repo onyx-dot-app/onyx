@@ -50,7 +50,9 @@ def closer(
     # Also, add missing fields once usage in UI is clear.
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    base_question = graph_config.inputs.prompt_builder.raw_user_query
+    base_question = state.original_question[0]
+    if not base_question:
+        raise ValueError("Question is required for closer")
 
     chat_history_string = (
         get_chat_history_string(

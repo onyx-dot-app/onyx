@@ -26,7 +26,7 @@ class OrchestrationUpdate(LoggerUpdate):
     original_question: Annotated[list[str | None], add] = (
         []
     )  # will always be using first
-    chat_history_string: Annotated[list[str], add] = []  # will always be using first
+    chat_history_string: str | None = None
     query_path: Annotated[list[DRPath], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0

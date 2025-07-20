@@ -4,7 +4,6 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COST_STRING
 from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import HIGH_LEVEL_PLAN_PREFIX
 from onyx.agents.agent_search.dr.constants import MAX_DR_ITERATION_DEPTH
@@ -66,73 +65,57 @@ def orchestrator(
     if not question:
         raise ValueError("Question is required for orchestrator")
 
-    answer_history_string = state.chat_history_string[0]
     plan_of_record = state.plan_of_record
-
     feedback_request = state.feedback_structure
-    remaining_time_budget = state.remaining_time_budget
-
     iteration_nr = state.iteration_nr + 1
-
     time_budget = graph_config.behavior.time_budget
-
+    remaining_time_budget = state.remaining_time_budget
+    chat_history_string = state.chat_history_string or "(No chat history yet available)"
     answer_history_string = (
         get_answers_history_from_iteration_responses(state.iteration_responses)
         or "(No answer history yet available)"
     )
 
-    chat_history_string = state.chat_history_string[0]
-
+    # TODO: I don't think this is used in dr, if so remove
     graph_config.behavior.use_agentic_search = False
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
-    if iteration_nr >= MAX_DR_ITERATION_DEPTH - 1:
-        query_path = DRPath.CLOSER
-        query_list = []
+    # default to closer
+    query_path = DRPath.CLOSER
+    query_list = ["Answer the question with the information you have."]
 
-    elif time_budget == TimeBudget.FAST:
-        if iteration_nr == 1:
-            remaining_time_budget = 2.0  # TODO: reorg
+    if iteration_nr == 1 and time_budget == TimeBudget.FAST:
+        remaining_time_budget = 2.0  # TODO: reorg
 
-            decision_prompt = (
-                FAST_PLAN_GENERATION_PROMPT.replace(
-                    "---possible_entities---", all_entity_types
-                )
-                .replace("---possible_relationships---", all_relationship_types)
-                .replace("---question---", question)
-                .replace("---answer_history_string---", answer_history_string)
-                .replace("---average_tool_costs---", AVERAGE_TOOL_COST_STRING)
-                .replace("---remaining_time_budget---", str(remaining_time_budget))
+        # TODO: maybe generate query in fast plan too so it can use chat history properly
+        # e.g., "find me X" -> "can you use the knowledge graph instead to answer" -> should use KG to search for X
+        # but right now, it directly searches for "can you use the knowledge graph instead to answer"
+        decision_prompt = (
+            FAST_PLAN_GENERATION_PROMPT.replace(
+                "---possible_entities---", all_entity_types
             )
+            .replace("---possible_relationships---", all_relationship_types)
+            .replace("---question---", question)
+            .replace("---chat_history_string---", chat_history_string)
+        )
 
-            response_text = get_answer_from_llm(
-                llm=graph_config.tooling.primary_llm,
-                prompt=decision_prompt,
-                timeout=25,
-                timeout_override=5,
-                max_tokens=500,
-                stream=False,
-            )
+        response_text = get_answer_from_llm(
+            llm=graph_config.tooling.primary_llm,
+            prompt=decision_prompt,
+            timeout=25,
+            timeout_override=5,
+            max_tokens=500,
+            stream=False,
+        )
+        query_path = DRPath(response_text.split("ANSWER:", 1)[-1].strip())
+        query_list = [question]
 
-            if "ANSWER:" in response_text:
-                response_text = response_text.split("ANSWER:")[1].strip()
-            else:
-                response_text = response_text.strip()
-
-                query_path = DRPath(response_text)
-        else:
-            query_path = DRPath.CLOSER
-
-        query_list = [question] if query_path != DRPath.CLOSER else []
-
-    else:
-
+    elif iteration_nr < MAX_DR_ITERATION_DEPTH and time_budget != TimeBudget.FAST:
         prompt_question = _get_prompt_question(question, feedback_request)
 
         if iteration_nr == 1 and not plan_of_record:
-
             # by default, we start a new iteration, but if there is a feedback request,
             # we start a new iteration 0 again (set a bit later)
 
@@ -170,8 +153,8 @@ def orchestrator(
                 writer,
             )
 
+        # TODO: maybe check earlier to avoid unnecessary work
         if remaining_time_budget > 0:
-
             if not plan_of_record:
                 raise ValueError(
                     "Plan information is required for iterative decision making"
@@ -203,9 +186,6 @@ def orchestrator(
             except Exception as e:
                 logger.error(f"Error in approach extraction: {e}")
                 raise
-        elif remaining_time_budget <= 0:
-            query_path = DRPath.CLOSER
-            query_list = ["Answer the question with the information you have."]
 
     remaining_time_budget = remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
 
