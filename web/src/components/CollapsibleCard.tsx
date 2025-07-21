@@ -3,7 +3,7 @@ import React, { useState, ReactNode, useRef, useLayoutEffect } from "react";
 
 interface CollapsibleCardProps {
   header: JSX.Element;
-  children: JSX.Element;
+  children: ReactNode;
   defaultOpen?: boolean;
   className?: string;
 }
