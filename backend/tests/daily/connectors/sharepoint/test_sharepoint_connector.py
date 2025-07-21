@@ -1,4 +1,5 @@
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone
@@ -9,6 +10,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
 @dataclass
@@ -97,7 +99,11 @@ def test_sharepoint_connector_all_sites__docs_only(
 
     # Not asserting expected sites because that can change in test tenant at any time
     # Finding any docs is good enough to verify that the connector is working
-    document_batches = list(connector.load_from_state())
+    document_batches = load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=0,
+        end=time.time(),
+    )
     assert document_batches, "Should find documents from all sites"
 
 
@@ -114,10 +120,11 @@ def test_sharepoint_connector_specific_folder(
     connector.load_credentials(sharepoint_credentials)
 
     # Get all documents
-    document_batches = list(connector.load_from_state())
-    found_documents: list[Document] = [
-        doc for batch in document_batches for doc in batch
-    ]
+    found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=0,
+        end=time.time(),
+    )
 
     # Should only find documents in the test folder
     test_folder_docs = [
@@ -148,10 +155,11 @@ def test_sharepoint_connector_root_folder__docs_only(
     connector.load_credentials(sharepoint_credentials)
 
     # Get all documents
-    document_batches = list(connector.load_from_state())
-    found_documents: list[Document] = [
-        doc for batch in document_batches for doc in batch
-    ]
+    found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=0,
+        end=time.time(),
+    )
 
     assert len(found_documents) == len(
         EXPECTED_DOCUMENTS
@@ -178,10 +186,11 @@ def test_sharepoint_connector_other_library(
     connector.load_credentials(sharepoint_credentials)
 
     # Get all documents
-    document_batches = list(connector.load_from_state())
-    found_documents: list[Document] = [
-        doc for batch in document_batches for doc in batch
-    ]
+    found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=0,
+        end=time.time(),
+    )
     expected_documents: list[ExpectedDocument] = [
         doc for doc in EXPECTED_DOCUMENTS if doc.library == "Other Library"
     ]
@@ -214,10 +223,11 @@ def test_sharepoint_connector_poll(
     end = datetime(2025, 1, 28, 20, 51, 50, tzinfo=timezone.utc)  # 8 seconds after
 
     # Get documents within the time window
-    document_batches = list(connector._fetch_from_sharepoint(start=start, end=end))
-    found_documents: list[Document] = [
-        doc for batch in document_batches for doc in batch
-    ]
+    found_documents: list[Document] = load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=start.timestamp(),
+        end=end.timestamp(),
+    )
 
     # Should only find test1.docx
     assert len(found_documents) == 1, "Should only find one document in the time window"

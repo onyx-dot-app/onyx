@@ -1,24 +1,22 @@
 import html
 import base64
+import copy
 import io
 import os
 import re
 import time
+from collections import deque
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
+from enum import Enum
 from typing import Any
 from typing import cast
 from urllib.parse import unquote
 
-import msal  # type: ignore
+
 import requests
-from office365.graph_client import GraphClient  # type: ignore
-from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
-from office365.onedrive.sites.site import Site  # type: ignore
-from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore
 from office365.runtime.client_request import ClientRequestException  # type: ignore
-import msal
 import msal  # type: ignore[import-untyped]
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
@@ -35,16 +33,19 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.interfaces import GenerateDocumentsOutput
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import IndexingHeartbeatInterface
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.utils import get_sharepoint_external_access
@@ -107,6 +108,18 @@ def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> 
                         f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
                     )
                 raise e
+class SharepointConnectorCheckpoint(ConnectorCheckpoint):
+    cached_site_descriptors: deque[SiteDescriptor] | None = None
+    current_site_descriptor: SiteDescriptor | None = None
+
+    cached_drive_names: deque[str] | None = None
+    current_drive_name: str | None = None
+
+
+class SharepointAuthMethod(Enum):
+    CLIENT_SECRET = "client_secret"
+    CERTIFICATE = "certificate"
+
 
 def load_certificate_from_pfx(
     pfx_data: bytes, password: str
@@ -147,11 +160,13 @@ def acquire_token_for_rest(
     return TokenResponse.from_json(token)
 
 
-def _convert_driveitem_to_document(
+def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItem,
     drive_name: str,
-) -> Document | None:
-    # Check file size before downloading
+    ctx: ClientContext | None,
+    graph_client: GraphClient,
+    include_permissions: bool = False,
+) -> Document:
 
     if driveitem.name is None:
         raise ValueError("DriveItem name is required")
@@ -176,6 +191,8 @@ def _convert_driveitem_to_document(
         logger.info(
             f"Could not access file size for '{driveitem.name}': {e}. Proceeding with download."
         )
+    if include_permissions and ctx is None:
+        raise ValueError("ClientContext is required for permissions")
 
     # Proceed with download if size is acceptable or not available
     content = _sleep_and_retry(driveitem.get_content(), "get_content")
@@ -197,11 +214,27 @@ def _convert_driveitem_to_document(
         break_on_unprocessable=False,
     )
 
+    if include_permissions and ctx is not None:
+        try:
+            external_access = get_sharepoint_external_access(
+                driveitem, drive_name, ctx, graph_client
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to retrieve permissions for document {driveitem.name}: {e}"
+            )
+            # For permission failures, we can still return the document without permissions
+            # but we should log this as a warning since permissions are critical for security
+            external_access = None
+    else:
+        external_access = None
+
     doc = Document(
         id=driveitem.id,
         sections=[TextSection(link=driveitem.web_url, text=file_text)],
         source=DocumentSource.SHAREPOINT,
         semantic_identifier=driveitem.name,
+        external_access=external_access,
         doc_updated_at=(
             driveitem.last_modified_datetime.replace(tzinfo=timezone.utc)
             if driveitem.last_modified_datetime
@@ -381,7 +414,10 @@ def _convert_driveitem_to_slim_document(
     )
 
 
-class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
+class SharepointConnector(
+    SlimConnector,
+    CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
+):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -435,6 +471,102 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
                 )
         return site_data_list
 
+    def _get_drive_items_for_drive_name(
+        self,
+        site_descriptor: SiteDescriptor,
+        drive_name: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[DriveItem]:
+        try:
+            site = self.graph_client.sites.get_by_url(site_descriptor.url)
+            drives = site.drives.get().execute_query()
+            logger.debug(f"Found drives: {[drive.name for drive in drives]}")
+
+            drives = [
+                drive
+                for drive in drives
+                if (drive.name and drive.name.lower() == drive_name.lower())
+                or (drive.name == "Documents" and drive_name == "Shared Documents")
+            ]
+            drive = drives[0] if len(drives) > 0 else None
+            if drive is None:
+                logger.warning(f"Drive '{drive_name}' not found")
+                return []
+            try:
+                root_folder = drive.root
+                if site_descriptor.folder_path:
+                    for folder_part in site_descriptor.folder_path.split("/"):
+                        root_folder = root_folder.get_by_path(folder_part)
+
+                query = root_folder.get_files(
+                    recursive=True,
+                    page_size=1000,
+                )
+                driveitems = query.execute_query()
+                logger.debug(f"Found {len(driveitems)} items in drive '{drive_name}'")
+
+                # Filter items based on folder path if specified
+                if site_descriptor.folder_path:
+                    # Filter items to ensure they're in the specified folder or its subfolders
+                    # The path will be in format: /drives/{drive_id}/root:/folder/path
+                    driveitems = [
+                        item
+                        for item in driveitems
+                        if item.parent_reference.path
+                        and any(
+                            path_part == site_descriptor.folder_path
+                            or path_part.startswith(site_descriptor.folder_path + "/")
+                            for path_part in item.parent_reference.path.split("root:/")[
+                                1
+                            ].split("/")
+                        )
+                    ]
+                    if len(driveitems) == 0:
+                        all_paths = [item.parent_reference.path for item in driveitems]
+                        logger.warning(
+                            f"Nothing found for folder '{site_descriptor.folder_path}' "
+                            f"in; any of valid paths: {all_paths}"
+                        )
+                    logger.info(
+                        f"Found {len(driveitems)} items in drive '{drive_name}' for the folder '{site_descriptor.folder_path}'"
+                    )
+
+                # Filter items based on time window if specified
+                if start is not None and end is not None:
+                    driveitems = [
+                        item
+                        for item in driveitems
+                        if item.last_modified_datetime
+                        and start
+                        <= item.last_modified_datetime.replace(tzinfo=timezone.utc)
+                        <= end
+                    ]
+                    logger.debug(
+                        f"Found {len(driveitems)} items within time window in drive '{drive.name}'"
+                    )
+
+                return list(driveitems)
+
+            except Exception as e:
+                # Some drives might not be accessible
+                logger.warning(f"Failed to process drive: {str(e)}")
+                return []
+
+        except Exception as e:
+            err_str = str(e)
+            if (
+                "403 Client Error" in err_str
+                or "404 Client Error" in err_str
+                or "invalid_client" in err_str
+            ):
+                raise e
+
+            # Sites include things that do not contain drives so this fails
+            # but this is fine, as there are no actual documents in those
+            logger.warning(f"Failed to process site: {site_descriptor.url} - {err_str}")
+            return []
+
     def _fetch_driveitems(
         self,
         site_descriptor: SiteDescriptor,
@@ -485,7 +617,9 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
 
                     # Use "Shared Documents" as the library name for the default "Documents" drive
                     drive_name = (
-                        "Shared Documents" if drive.name == "Documents" else drive.name
+                        "Shared Documents"
+                        if drive.name == "Documents"
+                        else cast(str, drive.name)
                     )
 
                     # Filter items based on folder path if specified
@@ -754,7 +888,9 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        auth_method = credentials.get("authentication_method", "client_secret")
+        auth_method = credentials.get(
+            "authentication_method", SharepointAuthMethod.CLIENT_SECRET.value
+        )
         sp_client_id = credentials.get("sp_client_id")
         sp_client_secret = credentials.get("sp_client_secret")
         sp_directory_id = credentials.get("sp_directory_id")
@@ -769,7 +905,7 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
             client_credential=sp_client_secret,
         )
         self._graph_client = GraphClient(self._acquire_token)
-        if auth_method == "certificate":
+        if auth_method == SharepointAuthMethod.CERTIFICATE.value:
             if not sp_private_key or not sp_certificate_password:
                 raise ConnectorValidationError(
                     "Private key and certificate password are required for certificate authentication"
@@ -787,7 +923,7 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
                 client_id=sp_client_id,
                 client_credential=certificate_data,
             )
-        elif sp_client_secret:
+        elif auth_method == SharepointAuthMethod.CLIENT_SECRET.value:
             self.msal_app = msal.ConfidentialClientApplication(
                 authority=authority_url,
                 client_id=sp_client_id,
@@ -816,15 +952,313 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
         self.sp_tenant_domain = sp_tenant_domain
         return None
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._fetch_from_sharepoint()
+    def _create_document_failure(
+        self,
+        driveitem: DriveItem,
+        error_message: str,
+        exception: Exception | None = None,
+    ) -> ConnectorFailure:
+        """Helper method to create a ConnectorFailure for document processing errors."""
+        return ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id=driveitem.id or "unknown",
+                document_link=driveitem.web_url,
+            ),
+            failure_message=f"SharePoint document '{driveitem.name or 'unknown'}': {error_message}",
+            exception=exception,
+        )
 
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> GenerateDocumentsOutput:
-        start_datetime = datetime.fromtimestamp(start, timezone.utc)
-        end_datetime = datetime.fromtimestamp(end, timezone.utc)
-        return self._fetch_from_sharepoint(start=start_datetime, end=end_datetime)
+    def _create_entity_failure(
+        self,
+        entity_id: str,
+        error_message: str,
+        time_range: tuple[datetime, datetime] | None = None,
+        exception: Exception | None = None,
+    ) -> ConnectorFailure:
+        """Helper method to create a ConnectorFailure for entity-level errors."""
+        return ConnectorFailure(
+            failed_entity=EntityFailure(
+                entity_id=entity_id,
+                missed_time_range=time_range,
+            ),
+            failure_message=f"SharePoint entity '{entity_id}': {error_message}",
+            exception=exception,
+        )
+
+    def _get_drive_names_for_site(self, site_url: str) -> list[str]:
+        """Return all library/drive names for a given SharePoint site."""
+        try:
+            site = self.graph_client.sites.get_by_url(site_url)
+            drives = site.drives.get_all(page_loaded=lambda _: None).execute_query()
+            drive_names: list[str] = []
+            for drive in drives:
+                if drive.name is None:
+                    continue
+                drive_names.append(drive.name)
+            return drive_names
+        except Exception as e:
+            logger.warning(f"Failed to fetch drives for site '{site_url}': {e}")
+            return []
+
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
+
+        if self._graph_client is None:
+            raise ConnectorMissingCredentialError("Sharepoint")
+
+        checkpoint = copy.deepcopy(checkpoint)
+
+        # Phase 1: Initialize cached_site_descriptors if needed
+        if checkpoint.has_more and checkpoint.cached_site_descriptors is None:
+            logger.info("Initializing SharePoint sites for processing")
+            site_descs = self.site_descriptors or self.fetch_sites()
+            checkpoint.cached_site_descriptors = deque(site_descs)
+
+            if not checkpoint.cached_site_descriptors:
+                logger.warning(
+                    "No SharePoint sites found or accessible - nothing to process"
+                )
+                checkpoint.has_more = False
+                return checkpoint
+
+            logger.info(
+                f"Found {len(checkpoint.cached_site_descriptors)} sites to process"
+            )
+            # Set first site and return to allow checkpoint persistence
+            if checkpoint.cached_site_descriptors:
+                checkpoint.current_site_descriptor = (
+                    checkpoint.cached_site_descriptors.popleft()
+                )
+                logger.info(
+                    f"Starting with site: {checkpoint.current_site_descriptor.url}"
+                )
+                return checkpoint
+
+        # Phase 2: Initialize cached_drive_names for current site if needed
+        if checkpoint.current_site_descriptor and checkpoint.cached_drive_names is None:
+            logger.info(
+                f"Initializing drives for site: {checkpoint.current_site_descriptor.url}"
+            )
+
+            try:
+                # If the user explicitly specified drive(s) for this site, honour that
+                if checkpoint.current_site_descriptor.drive_name:
+                    logger.info(
+                        f"Using explicitly specified drive: {checkpoint.current_site_descriptor.drive_name}"
+                    )
+                    checkpoint.cached_drive_names = deque(
+                        [checkpoint.current_site_descriptor.drive_name]
+                    )
+                else:
+                    drive_names = self._get_drive_names_for_site(
+                        checkpoint.current_site_descriptor.url
+                    )
+                    checkpoint.cached_drive_names = deque(drive_names)
+
+                if not checkpoint.cached_drive_names:
+                    logger.warning(
+                        f"No accessible drives found for site: {checkpoint.current_site_descriptor.url}"
+                    )
+                else:
+                    logger.info(
+                        f"Found {len(checkpoint.cached_drive_names)} drives: {list(checkpoint.cached_drive_names)}"
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to initialize drives for site: {checkpoint.current_site_descriptor.url}: {e}"
+                )
+                # Yield a ConnectorFailure for site-level access failures
+                start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+                end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+                yield self._create_entity_failure(
+                    checkpoint.current_site_descriptor.url,
+                    f"Failed to access site: {str(e)}",
+                    (start_dt, end_dt),
+                    e,
+                )
+                # Move to next site if available
+                if (
+                    checkpoint.cached_site_descriptors
+                    and len(checkpoint.cached_site_descriptors) > 0
+                ):
+                    checkpoint.current_site_descriptor = (
+                        checkpoint.cached_site_descriptors.popleft()
+                    )
+                    checkpoint.cached_drive_names = None  # Reset for new site
+                    return checkpoint
+                else:
+                    # No more sites - we're done
+                    checkpoint.has_more = False
+                    return checkpoint
+
+            # Return checkpoint to allow persistence after drive initialization
+            return checkpoint
+
+        # Phase 3: Process documents from current drive
+        if (
+            checkpoint.current_site_descriptor
+            and checkpoint.cached_drive_names
+            and len(checkpoint.cached_drive_names) > 0
+            and checkpoint.current_drive_name is None
+        ):
+
+            checkpoint.current_drive_name = checkpoint.cached_drive_names.popleft()
+
+            start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+            site_descriptor = checkpoint.current_site_descriptor
+
+            logger.info(
+                f"Processing drive '{checkpoint.current_drive_name}' in site: {site_descriptor.url}"
+            )
+            logger.debug(f"Time range: {start_dt} to {end_dt}")
+
+            ctx: ClientContext | None = None
+            if include_permissions:
+                if self.msal_app and self.sp_tenant_domain:
+                    msal_app = self.msal_app
+                    sp_tenant_domain = self.sp_tenant_domain
+                    ctx = ClientContext(site_descriptor.url).with_access_token(
+                        lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+                    )
+                else:
+                    raise RuntimeError("MSAL app or tenant domain is not set")
+
+            # At this point current_drive_name should be set from popleft()
+            current_drive_name = checkpoint.current_drive_name
+            if current_drive_name is None:
+                logger.warning("Current drive name is None, skipping")
+                return checkpoint
+
+            try:
+                driveitems = self._get_drive_items_for_drive_name(
+                    site_descriptor, current_drive_name, start_dt, end_dt
+                )
+
+                if not driveitems:
+                    logger.warning(
+                        f"No drive items found in drive '{current_drive_name}' for site: {site_descriptor.url}"
+                    )
+                else:
+                    logger.info(
+                        f"Found {len(driveitems)} items to process in drive '{current_drive_name}'"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to retrieve items from drive '{current_drive_name}' in site: {site_descriptor.url}: {e}"
+                )
+                # Yield a ConnectorFailure for drive-level access failures
+                yield self._create_entity_failure(
+                    f"{site_descriptor.url}|{current_drive_name}",
+                    f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
+                    (start_dt, end_dt),
+                    e,
+                )
+                # Clear current drive and continue to next
+                checkpoint.current_drive_name = None
+                return checkpoint
+            current_drive_name = (
+                "Shared Documents"
+                if current_drive_name == "Documents"
+                else current_drive_name
+            )
+            for driveitem in driveitems:
+                try:
+                    doc = _convert_driveitem_to_document_with_permissions(
+                        driveitem,
+                        current_drive_name,
+                        ctx,
+                        self.graph_client,
+                        include_permissions=include_permissions,
+                    )
+                    yield doc
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to process driveitem {driveitem.web_url}: {e}"
+                    )
+                    # Yield a ConnectorFailure for individual document processing failures
+                    yield self._create_document_failure(
+                        driveitem, f"Failed to process: {str(e)}", e
+                    )
+
+            # Clear current drive after processing
+            checkpoint.current_drive_name = None
+
+        # Phase 4: Progression logic - determine next step
+        # If we have more drives in current site, continue with current site
+        if checkpoint.cached_drive_names and len(checkpoint.cached_drive_names) > 0:
+            logger.debug(
+                f"Continuing with {len(checkpoint.cached_drive_names)} remaining drives in current site"
+            )
+            return checkpoint
+
+        # If no more drives, move to next site if available
+        if (
+            checkpoint.cached_site_descriptors
+            and len(checkpoint.cached_site_descriptors) > 0
+        ):
+            current_site = (
+                checkpoint.current_site_descriptor.url
+                if checkpoint.current_site_descriptor
+                else "unknown"
+            )
+            checkpoint.current_site_descriptor = (
+                checkpoint.cached_site_descriptors.popleft()
+            )
+            checkpoint.cached_drive_names = None  # Reset for new site
+            logger.info(
+                f"Finished site '{current_site}', moving to next site: {checkpoint.current_site_descriptor.url}"
+            )
+            logger.info(
+                f"Remaining sites to process: {len(checkpoint.cached_site_descriptors) + 1}"
+            )
+            return checkpoint
+
+        # No more sites or drives - we're done
+        current_site = (
+            checkpoint.current_site_descriptor.url
+            if checkpoint.current_site_descriptor
+            else "unknown"
+        )
+        logger.info(
+            f"SharePoint processing complete. Finished last site: {current_site}"
+        )
+        checkpoint.has_more = False
+        return checkpoint
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+    ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+    ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
+        )
+
+    def build_dummy_checkpoint(self) -> SharepointConnectorCheckpoint:
+        return SharepointConnectorCheckpoint(has_more=True)
+
+    def validate_checkpoint_json(
+        self, checkpoint_json: str
+    ) -> SharepointConnectorCheckpoint:
+        return SharepointConnectorCheckpoint.model_validate_json(checkpoint_json)
 
     def retrieve_all_slim_documents(
         self,
@@ -837,6 +1271,8 @@ class SharepointConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
+    from onyx.connectors.connector_runner import ConnectorRunner
+
     connector = SharepointConnector(sites=os.environ["SHAREPOINT_SITES"].split(","))
 
     connector.load_credentials(
@@ -844,8 +1280,30 @@ if __name__ == "__main__":
             "sp_client_id": os.environ["SHAREPOINT_CLIENT_ID"],
             "sp_client_secret": os.environ["SHAREPOINT_CLIENT_SECRET"],
             "sp_directory_id": os.environ["SHAREPOINT_CLIENT_DIRECTORY_ID"],
-            "authentication_method": "client_secret",
         }
     )
-    document_batches = connector.load_from_state()
-    logger.info(next(document_batches))
+
+    # Create a time range from epoch to now
+    end_time = datetime.now(timezone.utc)
+    start_time = datetime.fromtimestamp(0, tz=timezone.utc)
+    time_range = (start_time, end_time)
+
+    # Initialize the runner with a batch size of 10
+    runner: ConnectorRunner[SharepointConnectorCheckpoint] = ConnectorRunner(
+        connector, batch_size=10, include_permissions=False, time_range=time_range
+    )
+
+    # Get initial checkpoint
+    checkpoint = connector.build_dummy_checkpoint()
+
+    # Run the connector
+    while checkpoint.has_more:
+        for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
+            if doc_batch:
+                print(f"Retrieved batch of {len(doc_batch)} documents")
+                for doc in doc_batch:
+                    print(f"Document: {doc.semantic_identifier}")
+            if failure:
+                print(f"Failure: {failure.failure_message}")
+            if next_checkpoint:
+                checkpoint = next_checkpoint

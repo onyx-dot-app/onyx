@@ -164,7 +164,7 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=sharepoint_doc_sync,
-            initial_index_should_sync=False,
+            initial_index_should_sync=True,
         ),
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY,
