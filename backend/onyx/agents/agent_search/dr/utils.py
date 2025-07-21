@@ -6,6 +6,9 @@ from langchain.schema.messages import HumanMessage
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
+from onyx.agents.agent_search.shared_graph_utils.operators import (
+    dedup_inference_section_list,
+)
 from onyx.context.search.models import InferenceSection
 
 
@@ -31,46 +34,48 @@ def aggregate_context(
     """
     Aggregate the context from the sub-answers and cited documents.
     """
-    context_components: list[str] = []
+    # get inference sections from all iterations
     cited_documents: list[InferenceSection] = []
-    cited_doc_indices: dict[str, int] = {}
+    for iteration_response in iteration_responses:
+        for cited_document in iteration_response.cited_documents:
+            cited_doc_copy = cited_document.model_copy(deep=True)
+            # make sure docs maintains ordering by iteration and question number
+            cited_doc_copy.center_chunk.score = 1 - 0.01 * len(cited_documents)
+            cited_documents.append(cited_doc_copy)
 
-    for question_counter, iteration_response in enumerate(iteration_responses, 1):
+    # get final inference sections and mapping of document id to index
+    cited_documents = dedup_inference_section_list(cited_documents)
+    cited_doc_indices = {
+        section.center_chunk.document_id: index
+        for index, section in enumerate(cited_documents, 1)
+    }
+
+    # generate context string
+    context_components: list[str] = []
+    for question_nr, iteration_response in enumerate(iteration_responses, 1):
         question_text = iteration_response.question
         answer_text = iteration_response.answer
-        cited_document_list = iteration_response.cited_documents
+        citation_numbers = [
+            cited_doc_indices[cited_document.center_chunk.document_id]
+            for cited_document in iteration_response.cited_documents
+        ]
+        citation_text = (
+            "Cited documents: " + "".join(f"[{index}]" for index in citation_numbers)
+            if citation_numbers
+            else "No citations provided for this answer. Take provided answer at face value."
+        )
 
-        if cited_document_list:
-            question_cited_indices: list[int] = []
-            for cited_document in cited_document_list:
-                document_id = cited_document.center_chunk.unique_id
-                if document_id not in cited_doc_indices:
-                    # decrement scores
-                    for chunk in cited_document.chunks:
-                        if chunk.score is not None:
-                            chunk.score -= iteration_response.iteration_nr - 1
-
-                    # add to citation
-                    cited_doc_indices[document_id] = len(cited_doc_indices) + 1
-                    cited_documents.append(cited_document)
-                question_cited_indices.append(cited_doc_indices[document_id])
-            citation_text = "Cited documents: " + "".join(
-                f"[{index}]" for index in question_cited_indices
-            )
-
-        else:
-            citation_text = "No citations provided for this answer. Take provided answer at face value."
-
-        context_components.append(f"Question Number: {question_counter}")
+        context_components.append(f"Question Number: {question_nr}")
         context_components.append(f"Question: {question_text}")
         context_components.append(f"Answer: {answer_text}")
         context_components.append(citation_text)
         context_components.append("\n\n---\n\n")
 
+    # add cited document contents
     context_components.append("Cited document contents:")
     for doc in cited_documents:
         context_components.append(
-            build_document_context(doc, cited_doc_indices[doc.center_chunk.unique_id])
+            build_document_context(doc, cited_doc_indices[doc.center_chunk.document_id])
         )
         context_components.append("\n---\n")
 
