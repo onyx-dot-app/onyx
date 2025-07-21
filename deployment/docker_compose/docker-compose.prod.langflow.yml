@@ -92,6 +92,35 @@ services:
     #   # Maps to the CA_CERT_PATH environment variable in the Dockerfile
     #   - ${CA_CERT_PATH:-./custom-ca.crt}:/etc/ssl/certs/custom-ca.crt:ro
 
+  telegram_bot:
+    image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    command: >
+      /bin/sh -c "
+      echo \"Starting Telegram Bot\" &&
+      python -m onyx.telegram.__main__"
+    depends_on:
+      - relational_db
+      - index
+      - cache
+      - inference_model_server
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-7649112332:AAG7MG2CdBAqlGXHa89JgY3vC4gMrOcpkQ0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    volumes:
+      - telegram_bot_logs:/var/log
+
   web_server:
     image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}
     build:
@@ -366,3 +395,4 @@ volumes:
   langflow:
   minio-storage:
   keydb_volume:
+  telegram_bot_logs:
