@@ -5,7 +5,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
+from onyx.agents.agent_search.dr.constants import DR_TIME_BUDGET_BY_TYPE
 from onyx.agents.agent_search.dr.constants import HIGH_LEVEL_PLAN_PREFIX
+from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.dr.models import OrchestratorDecisonsNoPlan
@@ -16,7 +18,6 @@ from onyx.agents.agent_search.dr.utils import (
     get_answers_history_from_iteration_responses,
 )
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.models import TimeBudget
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -88,11 +89,11 @@ def orchestrator(
     query_list = ["Answer the question with the information you have."]
     decision_prompt = None
 
-    if time_budget == TimeBudget.FAST:
+    if time_budget == DRTimeBudget.FAST:
         prompt_question = _get_prompt_question(question, None)
 
         if iteration_nr == 1:
-            remaining_time_budget = 2.0  # TODO: reorg
+            remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[DRTimeBudget.FAST]
             decision_prompt = (
                 ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT.replace(
                     "---possible_entities---", all_entity_types
@@ -119,7 +120,7 @@ def orchestrator(
             # by default, we start a new iteration, but if there is a feedback request,
             # we start a new iteration 0 again (set a bit later)
 
-            remaining_time_budget = 4.0  # TODO: reorg
+            remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[DRTimeBudget.DEEP]
 
             plan_generation_prompt = (
                 ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT.replace(

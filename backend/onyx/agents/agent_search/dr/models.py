@@ -11,6 +11,7 @@ class DRPath(str, Enum):
     USER_FEEDBACK = "USER_FEEDBACK"
     SEARCH = "SEARCH"
     KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
+    INTERNET_SEARCH = "INTERNET_SEARCH"
     CLOSER = "CLOSER"
     END = "END"
 
@@ -54,3 +55,11 @@ class IterationAnswer(BaseModel):
 class AggregatedDRContext(BaseModel):
     context: str
     cited_documents: list[InferenceSection]
+
+
+class DRTimeBudget(str, Enum):
+    """Time budget options for agent search operations"""
+
+    FAST = "fast"
+    SHALLOW = "shallow"
+    DEEP = "deep"

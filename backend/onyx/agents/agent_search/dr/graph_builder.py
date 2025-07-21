@@ -8,6 +8,7 @@ from onyx.agents.agent_search.dr.nodes.dr_a1_orchestrator import orchestrator
 from onyx.agents.agent_search.dr.nodes.dr_a2_closer import closer
 from onyx.agents.agent_search.dr.nodes.dr_i1_search import search
 from onyx.agents.agent_search.dr.nodes.dr_i2_kg import kg_query
+from onyx.agents.agent_search.dr.nodes.dr_i3_internet_search import internet_search
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainInput
 from onyx.agents.agent_search.dr.states import MainState
@@ -31,6 +32,7 @@ def dr_graph_builder() -> StateGraph:
 
     graph.add_node(DRPath.SEARCH, search)
     graph.add_node(DRPath.KNOWLEDGE_GRAPH, kg_query)
+    graph.add_node(DRPath.INTERNET_SEARCH, internet_search)
 
     graph.add_node(DRPath.CLOSER, closer)
 
@@ -44,6 +46,7 @@ def dr_graph_builder() -> StateGraph:
 
     graph.add_edge(start_key=DRPath.SEARCH, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.KNOWLEDGE_GRAPH, end_key=DRPath.ORCHESTRATOR)
+    graph.add_edge(start_key=DRPath.INTERNET_SEARCH, end_key=DRPath.ORCHESTRATOR)
 
     graph.add_edge(start_key=DRPath.CLOSER, end_key=END)
 

@@ -1,10 +1,10 @@
-from enum import Enum
 from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.context.search.models import RerankingDetails
 from onyx.db.models import Persona
@@ -14,14 +14,6 @@ from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
-
-
-class TimeBudget(str, Enum):
-    """Time budget options for agent search operations"""
-
-    FAST = "fast"
-    SHALLOW = "shallow"
-    DEEP = "deep"
 
 
 class GraphInputs(BaseModel):
@@ -81,7 +73,7 @@ class GraphSearchConfig(BaseModel):
     skip_gen_ai_answer_generation: bool = False
     allow_agent_reranking: bool = False
     kg_config_settings: KGConfigSettings = KGConfigSettings()
-    time_budget: TimeBudget = TimeBudget.FAST
+    time_budget: DRTimeBudget = DRTimeBudget.FAST
 
 
 class GraphConfig(BaseModel):

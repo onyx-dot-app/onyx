@@ -4,12 +4,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
-from onyx.agents.agent_search.models import TimeBudget
 from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
@@ -126,7 +126,7 @@ class Answer:
             allow_agent_reranking=allow_agent_reranking,
             perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
             kg_config_settings=get_kg_config_settings(),
-            time_budget=TimeBudget.DEEP if use_agentic_search else TimeBudget.FAST,
+            time_budget=DRTimeBudget.DEEP if use_agentic_search else DRTimeBudget.FAST,
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,

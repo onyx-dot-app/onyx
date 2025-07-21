@@ -7,13 +7,13 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.constants import CLARIFICATION_REQUEST_PREFIX
 from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
+from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.models import TimeBudget
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -66,7 +66,7 @@ def clarifier(
     )
 
     # feedback can only be requested if time budget is not FAST
-    if time_budget != TimeBudget.FAST:
+    if time_budget != DRTimeBudget.FAST:
         previous_messages = graph_config.inputs.prompt_builder.message_history
         previous_raw_messages = graph_config.inputs.prompt_builder.raw_message_history
 

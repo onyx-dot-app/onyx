@@ -10,6 +10,7 @@ NO = "no"
 KNOWLEDGE_GRAPH = DRPath.KNOWLEDGE_GRAPH.value
 SEARCH = DRPath.SEARCH.value
 CLOSER = DRPath.CLOSER.value
+INTERNET_SEARCH = DRPath.INTERNET_SEARCH.value
 
 # TODO: restructure this so each tool is a class with a description, and agents can select which tools to use
 TOOL_DESCRIPTION: dict[str, str] = {}
@@ -24,6 +25,20 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 for answering those questions, use them instead. \
 The {SEARCH} tool supports parallel calls.
 """
+
+TOOL_DESCRIPTION[
+    INTERNET_SEARCH
+] = f"""\
+- The "{INTERNET_SEARCH}" tool is used to answer questions that can be answered using the information \
+that is public on the internet. In case the {SEARCH} and/or {KNOWLEDGE_GRAPH} tools are also available \
+you should think about whether the data is likely private data (in which case the {SEARCH} and/or \
+{KNOWLEDGE_GRAPH} tools should be used), or likely public data (in which case the {INTERNET_SEARCH} tool \
+should be used). If in doubt you should consider the data to be private and you should not user the \
+{INTERNET_SEARCH} tool.
+
+The {INTERNET_SEARCH} tool does NOT support parallel calls.
+"""
+
 TOOL_DESCRIPTION[
     KNOWLEDGE_GRAPH
 ] = f"""\
@@ -71,6 +86,7 @@ You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 {TOOL_DESCRIPTION[SEARCH]}
 {TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
+{TOOL_DESCRIPTION[INTERNET_SEARCH]}
 {TOOL_DESCRIPTION[CLOSER]}
 
 {KG_TYPES_DESCRIPTIONS}
@@ -106,7 +122,7 @@ questions should be appropriate for the tool.
 If the tool is {SEARCH}, the question \
 to the tool should be written as a list of up to 3 search queries that would help to answer the question.
 If the tool is {CLOSER}, just return ['Answer the original question with the information you have.'].
-If the tool is {KNOWLEDGE_GRAPH}, return only one question in the list.>"}}
+If the tool is {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH}, return only one question in the list.>"}}
 }}
 """
 
@@ -132,6 +148,7 @@ You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 {TOOL_DESCRIPTION[SEARCH]}
 {TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
+{TOOL_DESCRIPTION[INTERNET_SEARCH]}
 {TOOL_DESCRIPTION[CLOSER]}
 
 {KG_TYPES_DESCRIPTIONS}
@@ -158,17 +175,7 @@ For example, if the question is 'which jiras address the main problems Nike has?
    2) find jiras that address the problem identified in step 1
    3) generate the final answer
    --
-   - please look at the user query and the entity types and relationship types in the knowledge graph \
-to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.\
-(This is important to ask well-structured questions, although the tool itself wil not be shown later.)
-   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
-'search for this'-type of question, then also use '{SEARCH}'.
-   - also consider whether the user query implies whether a standard search query should be used or a \
-knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
-whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
-   - use parallel calls to the {SEARCH} tool to your advantage to save time!
-   - again, use the chat history (if provided) to see if you can skip straight to the {CLOSER} tool to generate \
-the final answer. If so, simply state 'generate the final answer' in your plan.
+   - the last step should be something like 'generate the final answer' or maybe something more specific.
 
 Please format your answer as a json dictionary in the following format:
 {{
@@ -262,6 +269,7 @@ You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 {TOOL_DESCRIPTION[SEARCH]}
 {TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
+{TOOL_DESCRIPTION[INTERNET_SEARCH]}
 {TOOL_DESCRIPTION[CLOSER]}
 
 {KG_TYPES_DESCRIPTIONS}
@@ -334,10 +342,11 @@ Please format your answer as a json dictionary in the following format:
 {{
    "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
 guided by the question you need to answer, the answers you have so far, and the plan of record.>",
-   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {CLOSER}>",
+   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH} or {CLOSER}>",
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH}, the question should be \
-written as a search query.>"}}
+written as a list of suitable search queries. If the tool is {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH}, \
+return only one question in the list.>"}}
 }}
 """
 
@@ -465,6 +474,7 @@ You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 {TOOL_DESCRIPTION[SEARCH]}
 {TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
+{TOOL_DESCRIPTION[INTERNET_SEARCH]}
 {TOOL_DESCRIPTION[CLOSER]}
 
 {KG_TYPES_DESCRIPTIONS}
