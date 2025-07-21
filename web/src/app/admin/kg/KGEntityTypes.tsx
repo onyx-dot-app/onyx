@@ -2,14 +2,15 @@ import { SourceIcon } from "@/components/SourceIcon";
 import React, { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
-import { EntityType } from "./interfaces";
+import { EntityType, SourceAndEntityTypeView } from "./interfaces";
 import CollapsibleCard from "@/components/CollapsibleCard";
 import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
 import { Input } from "@/components/ui/input";
 import { CheckmarkIcon } from "@/components/icons/icons";
-import { entityTypesToEntityMap } from "./utils";
 import { DatePicker } from "@/components/ui/datePicker";
+import { Button } from "@/components/ui/button";
+import { FiList } from "react-icons/fi";
 
 // Utility: Convert capitalized snake case to human readable case
 function snakeToHumanReadable(str: string): string {
@@ -30,11 +31,10 @@ function snakeToHumanReadable(str: string): string {
 // Custom Header Component
 function TableHeader() {
   return (
-    <div className="grid grid-cols-12 gap-4 px-8 pb-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
-      <div className="col-span-1">Name</div>
-      <div className="col-span-8">Description</div>
-      <div className="col-span-2 flex justify-center">Max Coverage Date</div>
-      <div className="col-span-1 flex justify-center">Active</div>
+    <div className="grid grid-cols-12 gap-y-4 px-8 p-4 border-b border-neutral-700 font-semibold text-sm bg-neutral-900 text-neutral-500">
+      <div className="col-span-1">Entity Name</div>
+      <div className="col-span-10">Description</div>
+      <div className="col-span-1 flex flex-1 justify-center">Active</div>
     </div>
   );
 }
@@ -110,14 +110,14 @@ function TableRow({ entityType }: { entityType: EntityType }) {
     <div className="hover:bg-accent-background-hovered transition-colors duration-200 ease-in-out">
       <div className="grid grid-cols-12 px-8 py-4">
         <div
-          className={`grid grid-cols-12 col-span-11 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
+          className={`grid grid-cols-11 col-span-11 transition-opacity duration-150 ease-in-out ${entityTypeState.active ? "" : "opacity-60"}`}
         >
           <div className="col-span-1 flex items-center">
             <span className="font-medium text-sm">
               {snakeToHumanReadable(entityType.name)}
             </span>
           </div>
-          <div className="col-span-9 relative">
+          <div className="col-span-10 relative">
             <Input
               disabled={!entityTypeState.active}
               className="w-full px-3 py-2 border focus:ring-2 transition-shadow"
@@ -167,18 +167,8 @@ function TableRow({ entityType }: { entityType: EntityType }) {
               </span>
             </span>
           </div>
-          <div className="col-span-2 flex items-center justify-center">
-            <DatePicker
-              selectedDate={entityTypeState.coverage_start ?? new Date()}
-              setSelectedDate={(coverage_start) =>
-                setEntityTypeState({ ...entityTypeState, coverage_start })
-              }
-              disabled={!entityTypeState.active}
-            />
-          </div>
         </div>
-
-        <div className="col-span-1 flex items-center justify-center pl-3">
+        <div className="grid col-span-1 items-center justify-center">
           <Switch
             checked={entityTypeState.active}
             onCheckedChange={handleToggle}
@@ -190,16 +180,67 @@ function TableRow({ entityType }: { entityType: EntityType }) {
 }
 
 interface KGEntityTypesProps {
-  kgEntityTypes: EntityType[];
+  sourceAndEntityTypes: SourceAndEntityTypeView;
 }
 
-export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
-  const entityTypesMap = entityTypesToEntityMap(kgEntityTypes);
+export default function KGEntityTypes({
+  sourceAndEntityTypes,
+}: KGEntityTypesProps) {
+  console.log(sourceAndEntityTypes);
+
+  // State to control open/close of all CollapsibleCards
+  const [openCards, setOpenCards] = useState<{ [key: string]: boolean }>({});
+  // State for search query
+  const [search, setSearch] = useState("");
+
+  // Initialize openCards state when data changes
+  useEffect(() => {
+    const initialState: { [key: string]: boolean } = {};
+    Object.keys(sourceAndEntityTypes.entity_types).forEach((key) => {
+      initialState[key] = true;
+    });
+    setOpenCards(initialState);
+  }, [sourceAndEntityTypes]);
+
+  // Handlers for expand/collapse all
+  const handleExpandAll = () => {
+    const newState: { [key: string]: boolean } = {};
+    Object.keys(sourceAndEntityTypes.entity_types).forEach((key) => {
+      newState[key] = true;
+    });
+    setOpenCards(newState);
+  };
+  const handleCollapseAll = () => {
+    const newState: { [key: string]: boolean } = {};
+    Object.keys(sourceAndEntityTypes.entity_types).forEach((key) => {
+      newState[key] = false;
+    });
+    setOpenCards(newState);
+  };
+
+  // Determine if all cards are closed
+  const allClosed = Object.values(openCards).every((v) => v === false);
 
   return (
-    <div className="flex flex-col gap-y-8 w-full">
+    <div className="flex flex-col gap-y-4 w-full">
+      <div className="flex flex-row items-center gap-x-1.5 mb-2">
+        <input
+          type="text"
+          className="ml-1 w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          placeholder="Search source type..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Button
+          className="h-9"
+          variant="default"
+          onClick={allClosed ? handleExpandAll : handleCollapseAll}
+        >
+          {allClosed ? "Expand All" : "Collapse All"}
+        </Button>
+      </div>
       <div className="flex flex-col gap-y-4 w-full">
-        {Object.entries(kgEntityTypes).length === 0 ? (
+        {Object.entries(sourceAndEntityTypes.entity_types).length === 0 ? (
           <div className="flex flex-col gap-y-4">
             <p>No results available.</p>
             <p>
@@ -210,51 +251,76 @@ export default function KGEntityTypes({ kgEntityTypes }: KGEntityTypesProps) {
             </p>
           </div>
         ) : (
-          Object.entries(entityTypesMap)
+          Object.entries(sourceAndEntityTypes.entity_types)
+            .filter(([key]) =>
+              snakeToHumanReadable(key)
+                .toLowerCase()
+                .includes(search.toLowerCase())
+            )
             .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-            .map(([key, entityTypesArr]) => (
-              <div key={key}>
-                <CollapsibleCard
-                  header={
-                    <span className="font-semibold text-lg flex flex-row gap-x-4">
-                      {Object.values(ValidSources).includes(
-                        key as ValidSources
-                      ) ? (
-                        <SourceIcon
-                          sourceType={key as ValidSources}
-                          iconSize={25}
-                        />
-                      ) : (
-                        <FaCircleQuestion size={25} />
+            .map(([key, entityTypesArr]) => {
+              const stats = sourceAndEntityTypes.source_statistics[key] ?? {
+                source_name: key,
+                last_updated: undefined,
+                entities_count: 0,
+              };
+              return (
+                <div key={key}>
+                  <CollapsibleCard
+                    header={
+                      <span className="font-semibold text-lg flex flex-row gap-x-4 items-center">
+                        {Object.values(ValidSources).includes(
+                          key as ValidSources
+                        ) ? (
+                          <SourceIcon
+                            sourceType={key as ValidSources}
+                            iconSize={25}
+                          />
+                        ) : (
+                          <FaCircleQuestion size={25} />
+                        )}
+                        {snakeToHumanReadable(key)}
+                        <span className="ml-auto flex flex-row gap-x-16 items-center pr-16">
+                          <span className="flex flex-col items-end">
+                            <span className="text-sm text-neutral-400 mb-0.5">
+                              Entities Count
+                            </span>
+                            <span className="text-xl text-neutral-100 font-semibold flex w-full">
+                              {stats.entities_count}
+                            </span>
+                          </span>
+                          <span className="flex flex-col items-end">
+                            <span className="text-sm text-neutral-400 mb-0.5">
+                              Last Updated
+                            </span>
+                            <span className="text-xl text-neutral-100 font-semibold flex w-full">
+                              {stats.last_updated
+                                ? new Date(stats.last_updated).toLocaleString()
+                                : "N/A"}
+                            </span>
+                          </span>
+                        </span>
+                      </span>
+                    }
+                    // Use a key that changes with openCards[key] to force remount and update defaultOpen
+                    key={`${key}-${openCards[key]}`}
+                    defaultOpen={
+                      openCards[key] !== undefined ? openCards[key] : true
+                    }
+                  >
+                    <div className="w-full">
+                      <TableHeader />
+                      {entityTypesArr.map(
+                        (entityType: EntityType, index: number) => (
+                          <TableRow key={index} entityType={entityType} />
+                        )
                       )}
-                      {snakeToHumanReadable(key)}
-                    </span>
-                  }
-                  defaultOpen={true}
-                >
-                  <div className="w-full pt-4">
-                    <TableHeader />
-                    {entityTypesArr.map((entityType, index) => (
-                      <TableRow key={index} entityType={entityType} />
-                    ))}
-                  </div>
-                </CollapsibleCard>
-              </div>
-            ))
+                    </div>
+                  </CollapsibleCard>
+                </div>
+              );
+            })
         )}
-      </div>
-      <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
-        <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-          Danger
-        </p>
-        <div className="flex flex-col gap-y-4">
-          <p>
-            Resetting will delete all extracted entities and relationships and
-            deactivate all entity types. After reset, you can reactivate entity
-            types to begin populating the Knowledge Graph again.
-          </p>
-          {/* Optionally keep or remove the reset button as needed */}
-        </div>
       </div>
     </div>
   );

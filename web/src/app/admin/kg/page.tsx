@@ -16,12 +16,8 @@ import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
-import {
-  EntityType,
-  KGConfig,
-  sanitizeKGConfig,
-  KGConfigRaw,
-} from "./interfaces";
+import { KGConfig, KGConfigRaw, SourceAndEntityTypeView } from "./interfaces";
+import { sanitizeKGConfig } from "./utils";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
@@ -222,10 +218,13 @@ function Main() {
     mutate: configMutate,
   } = useSWR<KGConfigRaw>("/api/admin/kg/config", errorHandlingFetcher);
   const {
-    data: entityTypesData,
+    data: sourceAndEntityTypesData,
     isLoading: entityTypesIsLoading,
     mutate: entityTypesMutate,
-  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
+  } = useSWR<SourceAndEntityTypeView>(
+    "/api/admin/kg/entity-types",
+    errorHandlingFetcher
+  );
 
   // Local State:
   const { popup, setPopup } = usePopup();
@@ -235,7 +234,7 @@ function Main() {
     configIsLoading ||
     entityTypesIsLoading ||
     !configData ||
-    !entityTypesData
+    !sourceAndEntityTypesData
   ) {
     return <></>;
   }
@@ -286,10 +285,10 @@ function Main() {
       </CardSection>
       {kgConfig.enabled && (
         <>
-          <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
+          <p className="text-2xl font-bold text-text border-b border-b-border">
             Entity Types
           </p>
-          <KGEntityTypes kgEntityTypes={entityTypesData} />
+          <KGEntityTypes sourceAndEntityTypes={sourceAndEntityTypesData} />
         </>
       )}
       {configureModalShown && (
