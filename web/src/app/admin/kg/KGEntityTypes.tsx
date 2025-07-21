@@ -8,9 +8,7 @@ import { ValidSources } from "@/lib/types";
 import { FaCircleQuestion } from "react-icons/fa6";
 import { Input } from "@/components/ui/input";
 import { CheckmarkIcon } from "@/components/icons/icons";
-import { DatePicker } from "@/components/ui/datePicker";
 import { Button } from "@/components/ui/button";
-import { FiList } from "react-icons/fi";
 
 // Utility: Convert capitalized snake case to human readable case
 function snakeToHumanReadable(str: string): string {
