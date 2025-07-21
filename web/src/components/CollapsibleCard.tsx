@@ -34,7 +34,7 @@ export default function CollapsibleCard({
   useLayoutEffect(() => {
     if (open && contentRef.current) {
       const handleResize = () => {
-        setMaxHeight(contentRef.current!.scrollHeight + "px");
+        setMaxHeight(contentRef.current.scrollHeight + "px");
       };
       handleResize();
       window.addEventListener("resize", handleResize);
