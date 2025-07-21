@@ -679,14 +679,4 @@ ul > li > p {
   margin-bottom: 1rem;
 }
 
-/* ADDED THIS PARTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT */
-/* Disabled input styling */
-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background-color: #f5f5f5;
-}
 
-.dark input:disabled {
-  background-color: #2d2d2d;
-}
