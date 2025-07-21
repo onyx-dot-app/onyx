@@ -308,3 +308,27 @@ def get_entity_name(db_session: Session, entity_id_name: str) -> str | None:
         db_session.query(KGEntity).filter(KGEntity.id_name == entity_id_name).first()
     )
     return entity.name if entity else None
+
+
+def get_entity_stats_by_grounded_source_name(
+    db_session: Session,
+) -> dict[str, tuple[datetime, int]]:
+    """
+    Returns a dict mapping each grounded_source_name to a tuple in which:
+        - the first element is the latest update time across all entities with the same entity-type
+        - the second element is the count of `KGEntity`s
+    """
+    results = (
+        db_session.query(
+            KGEntityType.grounded_source_name,
+            func.count(KGEntity.id_name).label("entities_count"),
+            func.max(KGEntity.time_updated).label("last_updated"),
+        )
+        .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
+        .group_by(KGEntityType.grounded_source_name)
+        .all()
+    )
+    return {
+        row.grounded_source_name: (row.last_updated, row.entities_count)
+        for row in results
+    }
