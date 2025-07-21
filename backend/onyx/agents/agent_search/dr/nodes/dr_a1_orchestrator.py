@@ -25,12 +25,12 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import FAST_INITIAL_DECISION_PROMPT
-from onyx.prompts.dr_prompts import PLAN_GENERATION_PROMPT
+from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT
+from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT
+from onyx.prompts.dr_prompts import ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT
 from onyx.prompts.dr_prompts import (
-    SEQUENTIAL_FAST_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT,
+    ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT,
 )
-from onyx.prompts.dr_prompts import SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -89,17 +89,12 @@ def orchestrator(
     decision_prompt = None
 
     if time_budget == TimeBudget.FAST:
-
         prompt_question = _get_prompt_question(question, None)
 
         if iteration_nr == 1:
             remaining_time_budget = 2.0  # TODO: reorg
-
-            # TODO: maybe generate query in fast plan too so it can use chat history properly
-            # e.g., "find me X" -> "can you use the knowledge graph instead to answer" -> should use KG to search for X
-            # but right now, it directly searches for "can you use the knowledge graph instead to answer"
             decision_prompt = (
-                FAST_INITIAL_DECISION_PROMPT.replace(
+                ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT.replace(
                     "---possible_entities---", all_entity_types
                 )
                 .replace("---possible_relationships---", all_relationship_types)
@@ -109,7 +104,7 @@ def orchestrator(
 
         else:
             decision_prompt = (
-                SEQUENTIAL_FAST_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
+                ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT.replace(
                     "---answer_history_string---", answer_history_string
                 )
                 .replace("---question---", prompt_question)
@@ -117,7 +112,7 @@ def orchestrator(
                 .replace("---chat_history_string---", chat_history_string)
             )
 
-    elif time_budget != TimeBudget.FAST:
+    else:
         prompt_question = _get_prompt_question(question, feedback_request)
 
         if iteration_nr == 1 and not plan_of_record:
@@ -127,7 +122,7 @@ def orchestrator(
             remaining_time_budget = 4.0  # TODO: reorg
 
             plan_generation_prompt = (
-                PLAN_GENERATION_PROMPT.replace(
+                ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT.replace(
                     "---possible_entities---", all_entity_types
                 )
                 .replace("---possible_relationships---", all_relationship_types)
@@ -164,7 +159,7 @@ def orchestrator(
             )
 
         decision_prompt = (
-            SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
+            ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT.replace(
                 "---possible_entities---", all_entity_types
             )
             .replace("---possible_relationships---", all_relationship_types)
@@ -194,10 +189,6 @@ def orchestrator(
             raise e
 
         remaining_time_budget = remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
-
-    else:
-        query_path = DRPath.CLOSER
-        query_list = ["Answer the original question with the information you have."]
 
     return OrchestrationUpdate(
         query_path=[query_path],

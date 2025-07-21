@@ -103,7 +103,7 @@ def closer(
         get_final_context_sections=lambda: answer_generation_documents.context_documents,
         search_query_info=SearchQueryInfo(
             predicted_search=SearchType.KEYWORD,
-            # acl here is empty, because the searach alrady happened and
+            # acl here is empty, because the search already happened and
             # we are streaming out the results.
             final_filters=IndexFilters(access_control_list=user_acl),
             recency_bias_multiplier=1.0,

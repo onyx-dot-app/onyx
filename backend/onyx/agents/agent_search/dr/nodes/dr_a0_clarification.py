@@ -23,7 +23,7 @@ from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import MessageType
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import GET_FEEDBACK_PROMPT
+from onyx.prompts.dr_prompts import GET_CLARIFICATION_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -118,7 +118,7 @@ def clarifier(
         else:
             # ... if not, use the raw_user_query as the original question and ask for feedback
             get_feedback_prompt = (
-                GET_FEEDBACK_PROMPT.replace("---question---", original_question)
+                GET_CLARIFICATION_PROMPT.replace("---question---", original_question)
                 .replace("---possible_entities---", all_entity_types)
                 .replace("---possible_relationships---", all_relationship_types)
                 .replace("---chat_history_string---", chat_history_string)
