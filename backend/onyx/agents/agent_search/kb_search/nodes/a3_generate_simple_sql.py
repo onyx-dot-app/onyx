@@ -536,21 +536,13 @@ def generate_simple_sql(
                 query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
             except Exception as e:
                 logger.error(f"Error executing SQL query even after retry: {e}")
+                # TODO: raise error on frontend
                 drop_views(
                     allowed_docs_view_name=doc_temp_view,
                     kg_relationships_view_name=rel_temp_view,
                     kg_entity_view_name=ent_temp_view,
                 )
                 raise
-                # TODO: raise error on frontend
-                logger.error(f"Error executing SQL query: {e}")
-                drop_views(
-                    allowed_docs_view_name=doc_temp_view,
-                    kg_relationships_view_name=rel_temp_view,
-                    kg_entity_view_name=ent_temp_view,
-                )
-
-                raise e
 
         source_document_results = None
         if source_documents_sql is not None and source_documents_sql != sql_statement:
@@ -570,13 +562,6 @@ def generate_simple_sql(
                     ]
                 except Exception as e:
                     # TODO: raise warning on frontend
-
-                    drop_views(
-                        allowed_docs_view_name=doc_temp_view,
-                        kg_relationships_view_name=rel_temp_view,
-                        kg_entity_view_name=ent_temp_view,
-                    )
-
                     logger.error(f"Error executing Individualized SQL query: {e}")
 
         elif state.query_type == KGRelationshipDetection.NO_RELATIONSHIPS.value:
