@@ -86,6 +86,7 @@ def orchestrator(
     # default to closer
     query_path = DRPath.CLOSER
     query_list = ["Answer the question with the information you have."]
+    decision_prompt = None
 
     if time_budget == TimeBudget.FAST:
 
@@ -157,26 +158,26 @@ def orchestrator(
                 writer,
             )
 
-        # TODO: maybe check earlier to avoid unnecessary work
-        if remaining_time_budget > 0:
-            if not plan_of_record:
-                raise ValueError(
-                    "Plan information is required for iterative decision making"
-                )
-
-            decision_prompt = (
-                SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
-                    "---possible_entities---", all_entity_types
-                )
-                .replace("---possible_relationships---", all_relationship_types)
-                .replace("---answer_history_string---", answer_history_string)
-                .replace("---question---", prompt_question)
-                .replace("---iteration_nr---", str(iteration_nr))
-                .replace("---current_plan_of_record_string---", plan_of_record.plan)
-                .replace("---chat_history_string---", chat_history_string)
+        if not plan_of_record:
+            raise ValueError(
+                "Plan information is required for iterative decision making"
             )
 
+        decision_prompt = (
+            SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
+                "---possible_entities---", all_entity_types
+            )
+            .replace("---possible_relationships---", all_relationship_types)
+            .replace("---answer_history_string---", answer_history_string)
+            .replace("---question---", prompt_question)
+            .replace("---iteration_nr---", str(iteration_nr))
+            .replace("---current_plan_of_record_string---", plan_of_record.plan)
+            .replace("---chat_history_string---", chat_history_string)
+        )
+
     if remaining_time_budget > 0:
+        if decision_prompt is None:
+            raise ValueError("Decision prompt is required")
         try:
             orchestrator_action = invoke_llm_json(
                 llm=graph_config.tooling.primary_llm,
