@@ -6,7 +6,6 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import HIGH_LEVEL_PLAN_PREFIX
-from onyx.agents.agent_search.dr.constants import MAX_DR_ITERATION_DEPTH
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.dr.models import OrchestratorDecisonsNoPlan
@@ -18,7 +17,6 @@ from onyx.agents.agent_search.dr.utils import (
 )
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import TimeBudget
-from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
@@ -27,8 +25,11 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import FAST_PLAN_GENERATION_PROMPT
+from onyx.prompts.dr_prompts import FAST_INITIAL_DECISION_PROMPT
 from onyx.prompts.dr_prompts import PLAN_GENERATION_PROMPT
+from onyx.prompts.dr_prompts import (
+    SEQUENTIAL_FAST_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT,
+)
 from onyx.prompts.dr_prompts import SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT
 from onyx.utils.logger import setup_logger
 
@@ -86,33 +87,36 @@ def orchestrator(
     query_path = DRPath.CLOSER
     query_list = ["Answer the question with the information you have."]
 
-    if iteration_nr == 1 and time_budget == TimeBudget.FAST:
-        remaining_time_budget = 2.0  # TODO: reorg
+    if time_budget == TimeBudget.FAST:
 
-        # TODO: maybe generate query in fast plan too so it can use chat history properly
-        # e.g., "find me X" -> "can you use the knowledge graph instead to answer" -> should use KG to search for X
-        # but right now, it directly searches for "can you use the knowledge graph instead to answer"
-        decision_prompt = (
-            FAST_PLAN_GENERATION_PROMPT.replace(
-                "---possible_entities---", all_entity_types
+        prompt_question = _get_prompt_question(question, None)
+
+        if iteration_nr == 1:
+            remaining_time_budget = 2.0  # TODO: reorg
+
+            # TODO: maybe generate query in fast plan too so it can use chat history properly
+            # e.g., "find me X" -> "can you use the knowledge graph instead to answer" -> should use KG to search for X
+            # but right now, it directly searches for "can you use the knowledge graph instead to answer"
+            decision_prompt = (
+                FAST_INITIAL_DECISION_PROMPT.replace(
+                    "---possible_entities---", all_entity_types
+                )
+                .replace("---possible_relationships---", all_relationship_types)
+                .replace("---question---", prompt_question)
+                .replace("---chat_history_string---", chat_history_string)
             )
-            .replace("---possible_relationships---", all_relationship_types)
-            .replace("---question---", question)
-            .replace("---chat_history_string---", chat_history_string)
-        )
 
-        response_text = get_answer_from_llm(
-            llm=graph_config.tooling.primary_llm,
-            prompt=decision_prompt,
-            timeout=25,
-            timeout_override=5,
-            max_tokens=500,
-            stream=False,
-        )
-        query_path = DRPath(response_text.split("ANSWER:", 1)[-1].strip())
-        query_list = [question]
+        else:
+            decision_prompt = (
+                SEQUENTIAL_FAST_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT.replace(
+                    "---answer_history_string---", answer_history_string
+                )
+                .replace("---question---", prompt_question)
+                .replace("---iteration_nr---", str(iteration_nr))
+                .replace("---chat_history_string---", chat_history_string)
+            )
 
-    elif iteration_nr < MAX_DR_ITERATION_DEPTH and time_budget != TimeBudget.FAST:
+    elif time_budget != TimeBudget.FAST:
         prompt_question = _get_prompt_question(question, feedback_request)
 
         if iteration_nr == 1 and not plan_of_record:
@@ -172,22 +176,27 @@ def orchestrator(
                 .replace("---chat_history_string---", chat_history_string)
             )
 
-            try:
-                orchestrator_action = invoke_llm_json(
-                    llm=graph_config.tooling.primary_llm,
-                    prompt=decision_prompt,
-                    schema=OrchestratorDecisonsNoPlan,
-                    timeout_override=15,
-                    max_tokens=500,
-                )
-                next_step = orchestrator_action.next_step
-                query_path = next_step.tool
-                query_list = [q for q in (next_step.questions or []) if q is not None]
-            except Exception as e:
-                logger.error(f"Error in approach extraction: {e}")
-                raise
+    if remaining_time_budget > 0:
+        try:
+            orchestrator_action = invoke_llm_json(
+                llm=graph_config.tooling.primary_llm,
+                prompt=decision_prompt,
+                schema=OrchestratorDecisonsNoPlan,
+                timeout_override=15,
+                max_tokens=500,
+            )
+            next_step = orchestrator_action.next_step
+            query_path = next_step.tool
+            query_list = [q for q in (next_step.questions or []) if q is not None]
+        except Exception as e:
+            logger.error(f"Error in approach extraction: {e}")
+            raise e
 
-    remaining_time_budget = remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
+        remaining_time_budget = remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
+
+    else:
+        query_path = DRPath.CLOSER
+        query_list = ["Answer the original question with the information you have."]
 
     return OrchestrationUpdate(
         query_path=[query_path],

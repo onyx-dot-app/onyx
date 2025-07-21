@@ -43,6 +43,23 @@ the most relevant information to answer the question. You can also skip straight
 if there is sufficient information in the provided history to answer the question.
 """
 
+DR_SEARCH_TOOL_DESCRIPTIONS = f"""\
+You have two tools available, "{SEARCH}" and "{CLOSER}".
+
+- The "{SEARCH}" tool is used to answer questions that can be answered using the information \
+present in the connected documents.
+Note that the search tool is not well suited for time-ordered \
+questions ('...latest email...', '... last 2 jiras resolved...' etc.) and answering aggregation-type \
+questions (unless that info is present in the connected documents). If there are better suited tools \
+for answering those questions, use them instead. \
+The {SEARCH} tool supports parallel calls.
+
+- The "{CLOSER}" tool does not directly have access to the documents, but will use the results from \
+previous tool calls to generate a comprehensive final answer. You should skip straight to the {CLOSER} \
+if there is sufficient information in the provided history to answer the question.
+"""
+
+
 KG_TYPES_DESCRIPTIONS = f"""\
 Here are the entity types that are available in the knowledge graph:
 {SEPARATOR_LINE}
@@ -56,7 +73,7 @@ Here are the relationship types that are available in the knowledge graph:
 """
 
 
-FAST_PLAN_GENERATION_PROMPT = f"""
+FAST_INITIAL_DECISION_PROMPT = f"""
 You need to route a user query request to the appropriate tool, given the following tool \
 descriptions, as well as previous chat context.
 
@@ -70,9 +87,6 @@ Here is the user query that you need to route:
 {SEPARATOR_LINE}
 
 Finally, here are the past few chat messages for reference (if any). \
-Note that the chat history may already contain the answer to the user question, in which case you can \
-skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
-In any case, do not confuse the below with the user query. It is only there to provide context.
 {SEPARATOR_LINE}
 ---chat_history_string---
 {SEPARATOR_LINE}
@@ -86,12 +100,20 @@ to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all
    - also consider whether the user query implies whether a standard search query should be used or a \
 knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
-   - again, use the chat history (if provided) to see if you can skip straight to the {CLOSER}.
+   - again, use the chat history (if provided) to see whether it helps to provide helpful context.
 
+Please format your answer as a json dictionary in the following format:
 
-Please answer ONLY with '{SEARCH}', '{KNOWLEDGE_GRAPH}', or '{CLOSER}'.
-
-ANSWER:
+{{
+   "reasoning": "<your reasoning in 1-3 sentences. Think through it like a person would do it.>",
+   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {CLOSER}>",
+                  "questions": "<the list of questions you want to pose to the tool. Note that the \
+questions should be appropriate for the tool.
+If the tool is {SEARCH}, the question \
+to the tool should be written as a list of up to 3 search queries that would help to answer the question.
+If the tool is {CLOSER}, just return ['Answer the original question with the information you have.'].
+If the tool is {KNOWLEDGE_GRAPH}, return only one question in the list.>"}}
+}}
 """
 
 PLAN_GENERATION_PROMPT = f"""
@@ -238,6 +260,67 @@ the question. Just show the question.)>"
 # the question. Just show the question.)>"
 # }}
 # """
+
+
+SEQUENTIAL_FAST_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT = f"""
+Overall, you need to answer a user query. To do so, you may have to do various searches.
+
+You may already have some answers to earlier searches you generated in previous iterations.
+
+Your task is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
+considering the answers you already got, and guided by the initial plan.
+
+(You are planning for iteration ---iteration_nr--- now.).
+
+{DR_SEARCH_TOOL_DESCRIPTIONS}
+
+Here is the overall question that you need to answer:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+The current iteration is ---iteration_nr---:
+
+Finally, here are the past few chat messages for reference (if any). \
+
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
+Here is the answer history so far (if any) (Note that the answer history may already \
+contain the answer to the user question, in which case you can \
+skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
+In any case, do not confuse the below with the user query. It is only there to provide context.)
+{SEPARATOR_LINE}
+---answer_history_string---
+{SEPARATOR_LINE}
+
+
+HINTS:
+   - please first consider whether you already can answer the question with the information you already have. \
+Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
+   - if you think more information is needed because a sub-question was not sufficiently answered, \
+you can generate a modified version of the previous step, thus effectively modifying the plan.
+- you can only consider a tool that fits the remaining time budget! The tool cost must be below \
+the remaining time budget.
+
+YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
+the original question, the tools you have available, and the answers you have so far \
+(either from previous iterations or from the chat history). Make sure that the answer is \
+specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
+new targetted information that gets us to be able to answer the original question. (Note again, that sending \
+the request to the {CLOSER} tool is an option if you think the information is sufficient.)
+
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your reasoning in 1-3 sentences. Think through it like a person would do it.>",
+   "next_step": {{"tool": "<{SEARCH} or {CLOSER}>",
+                  "questions": "<the question you want to pose to the tool. Note that the \
+question should be appropriate for the tool. If the tool is {SEARCH}, the question \
+to the tool should be written as a list of up to 3 search queries that would help to answer the question.
+If the tool is {CLOSER}, just return ['Answer the original question with the information you have.']>"}}
+}}
+"""
 
 
 SEQUENTIAL_ITERATIVE_DR_SINGLE_PLAN_DECISION_PROMPT = f"""
