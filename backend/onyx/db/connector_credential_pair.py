@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import TypeVarTuple
 
 from fastapi import HTTPException
@@ -39,6 +40,11 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 logger = setup_logger()
 
 R = TypeVarTuple("R")
+
+
+class ConnectorType(str, Enum):
+    STANDARD = "standard"
+    USER_FILE = "user_file"
 
 
 def _add_user_filters(
@@ -619,14 +625,24 @@ def remove_credential_from_connector(
     )
 
 
-def fetch_connector_credential_pairs(
+def fetch_indexable_connector_credential_pair_ids(
     db_session: Session,
-    include_user_files: bool = False,
-) -> list[ConnectorCredentialPair]:
-    stmt = select(ConnectorCredentialPair)
-    if not include_user_files:
-        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
-    return list(db_session.scalars(stmt).unique().all())
+    connector_type: ConnectorType | None = None,
+    limit: int | None = None,
+) -> list[int]:
+    stmt = select(ConnectorCredentialPair.id)
+    stmt = stmt.where(
+        ConnectorCredentialPair.status.in_(
+            ConnectorCredentialPairStatus.active_statuses()
+        )
+    )
+    if connector_type == ConnectorType.USER_FILE:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_(True))
+    elif connector_type == ConnectorType.STANDARD:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_(False))
+    if limit:
+        stmt = stmt.limit(limit)
+    return list(db_session.scalars(stmt).all())
 
 
 def fetch_connector_credential_pair_for_connector(

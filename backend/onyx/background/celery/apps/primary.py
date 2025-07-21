@@ -21,6 +21,7 @@ from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.tasks.indexing.utils import (
     get_unfenced_index_attempt_ids,
 )
+from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
 from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
@@ -29,9 +30,6 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.redis.redis_connector_credential_pair import (
-    RedisGlobalConnectorCredentialPair,
-)
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
@@ -156,7 +154,10 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     r.delete(OnyxRedisConstants.ACTIVE_FENCES)
 
-    RedisGlobalConnectorCredentialPair.reset_all(r)
+    # NOTE: we want to remove the `Redis*` classes, prefer to just have functions
+    # This is the preferred way to do this going forward
+    reset_document_sync(r)
+
     RedisDocumentSet.reset_all(r)
     RedisUserGroup.reset_all(r)
     RedisConnectorDelete.reset_all(r)
