@@ -11,9 +11,10 @@ import {
   FiChevronRight,
   FiDatabase,
   FiBook,
+  FiChevronDown,
 } from "react-icons/fi";
 import { FilterManager } from "@/lib/hooks";
-import { DocumentSet, Tag } from "@/lib/types";
+import { DocumentSetSummary, Tag } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
@@ -21,12 +22,22 @@ import { Button } from "@/components/ui/button";
 import { SourceIcon } from "@/components/SourceIcon";
 import { SelectableDropdown, TagFilter } from "./TagFilter";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface FilterPopupProps {
   filterManager: FilterManager;
-  trigger: React.ReactNode;
+  trigger: {
+    name: string;
+    Icon: React.ComponentType<{ size?: number; className?: string }>;
+    tooltipContent?: React.ReactNode;
+  };
   availableSources: SourceMetadata[];
-  availableDocumentSets: DocumentSet[];
+  availableDocumentSets: DocumentSetSummary[];
   availableTags: Tag[];
 }
 
@@ -50,7 +61,7 @@ export function FilterPopup({
   const [currentDate, setCurrentDate] = useState(new Date());
   const [documentSetSearch, setDocumentSetSearch] = useState("");
   const [filteredDocumentSets, setFilteredDocumentSets] = useState<
-    DocumentSet[]
+    DocumentSetSummary[]
   >(availableDocumentSets);
 
   useEffect(() => {
@@ -238,10 +249,10 @@ export function FilterPopup({
     }
   };
 
-  const isDocumentSetSelected = (docSet: DocumentSet) =>
+  const isDocumentSetSelected = (docSet: DocumentSetSummary) =>
     filterManager.selectedDocumentSets.includes(docSet.name);
 
-  const toggleDocumentSet = (docSet: DocumentSet) => {
+  const toggleDocumentSet = (docSet: DocumentSetSummary) => {
     filterManager.setSelectedDocumentSets((prev) =>
       prev.includes(docSet.name)
         ? prev.filter((id) => id !== docSet.name)
@@ -252,7 +263,34 @@ export function FilterPopup({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button>{trigger}</button>
+        <button
+          className="
+            relative 
+            cursor-pointer 
+            flex 
+            items-center 
+            space-x-1
+            group
+            rounded
+            text-input-text
+            hover:bg-background-chat-hover
+            hover:text-neutral-900
+            dark:hover:text-neutral-50
+            py-1.5
+            px-2
+            flex-none 
+            whitespace-nowrap 
+            overflow-hidden
+          "
+        >
+          <trigger.Icon size={16} className="h-4 w-4 my-auto flex-none" />
+          <div className="flex items-center">
+            <span className="text-sm break-all line-clamp-1">
+              {trigger.name}
+            </span>
+            <FiChevronDown className="flex-none ml-1" size={12} />
+          </div>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         className="bg-background w-[400px] p-0 shadow-lg"
@@ -339,7 +377,9 @@ export function FilterPopup({
                     <SelectableDropdown
                       icon={
                         <SourceIcon
-                          sourceType={source.internalName}
+                          sourceType={
+                            source.baseSourceType || source.internalName
+                          }
                           iconSize={14}
                         />
                       }

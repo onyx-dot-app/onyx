@@ -186,8 +186,19 @@ class DocumentSource(str, Enum):
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
 
+    IMAP = "imap"
+
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
+
+
+class FederatedConnectorSource(str, Enum):
+    FEDERATED_SLACK = "federated_slack"
+
+    def to_non_federated_source(self) -> DocumentSource | None:
+        if self == FederatedConnectorSource.FEDERATED_SLACK:
+            return DocumentSource.SLACK
+        return None
 
 
 DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]

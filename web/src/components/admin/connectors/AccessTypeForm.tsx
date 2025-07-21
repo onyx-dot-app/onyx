@@ -5,7 +5,6 @@ import {
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
-import { useUser } from "@/components/user/UserProvider";
 import { useField } from "formik";
 import { AutoSyncOptions } from "./AutoSyncOptions";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -27,7 +26,6 @@ export function AccessTypeForm({
 
   const isPaidEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
-  const { isAdmin } = useUser();
 
   useEffect(
     () => {
@@ -55,16 +53,13 @@ export function AccessTypeForm({
       description:
         "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
     },
-  ];
-
-  if (isAdmin) {
-    options.push({
+    {
       name: "Public",
       value: "public",
       description:
         "Everyone with an account on Onyx can access the documents pulled in by this connector",
-    });
-  }
+    },
+  ];
 
   if (isAutoSyncSupported && isPaidEnterpriseEnabled) {
     options.push({
@@ -77,7 +72,7 @@ export function AccessTypeForm({
 
   return (
     <>
-      {isPaidEnterpriseEnabled && (isAdmin || isAutoSyncSupported) && (
+      {isPaidEnterpriseEnabled && (
         <>
           <div>
             <label className="text-text-950 font-medium">Document Access</label>
@@ -88,9 +83,9 @@ export function AccessTypeForm({
           <DefaultDropdown
             options={options}
             selected={access_type.value}
-            onSelect={(selected) =>
-              access_type_helpers.setValue(selected as AccessType)
-            }
+            onSelect={(selected) => {
+              access_type_helpers.setValue(selected as AccessType);
+            }}
             includeDefault={false}
           />
           {access_type.value === "sync" && isAutoSyncSupported && (

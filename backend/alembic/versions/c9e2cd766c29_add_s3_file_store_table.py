@@ -236,6 +236,9 @@ def _migrate_files_to_external_storage() -> None:
         print("No files found in PostgreSQL storage to migrate.")
         return
 
+    # might need to move this above the if statement when creating a new multi-tenant
+    # system. VERY extreme edge case.
+    external_store.initialize()
     print(f"Found {total_files} files to migrate from PostgreSQL to external storage.")
 
     _set_tenant_contextvar(session)

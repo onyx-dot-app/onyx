@@ -6,23 +6,22 @@ import {
   UserGroup,
   ConnectorStatus,
   CCPairBasicInfo,
-  ValidSources,
+  FederatedConnectorDetail,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import {
-  parseLlmDescriptor,
-  findProviderForModel,
-  structureValue,
-} from "./llm/utils";
+import { parseLlmDescriptor } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { Persona, PersonaLabel } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  PersonaLabel,
+} from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
@@ -125,6 +124,20 @@ export const useBasicConnectorStatus = () => {
   };
 };
 
+export const useFederatedConnectors = () => {
+  const { mutate } = useSWRConfig();
+  const url = "/api/federated";
+  const swrResponse = useSWR<FederatedConnectorDetail[]>(
+    url,
+    errorHandlingFetcher
+  );
+
+  return {
+    ...swrResponse,
+    refreshFederatedConnectors: () => mutate(url),
+  };
+};
+
 export const useLabels = () => {
   const { mutate } = useSWRConfig();
   const { data: labels, error } = useSWR<PersonaLabel[]>(
@@ -214,7 +227,7 @@ export interface FilterManager {
   getFilterString: () => string;
   buildFiltersFromQueryString: (
     filterString: string,
-    availableSources: ValidSources[],
+    availableSources: SourceMetadata[],
     availableDocumentSets: string[],
     availableTags: Tag[]
   ) => void;
@@ -271,7 +284,7 @@ export function useFilters(): FilterManager {
 
   function buildFiltersFromQueryString(
     filterString: string,
-    availableSources: ValidSources[],
+    availableSources: SourceMetadata[],
     availableDocumentSets: string[],
     availableTags: Tag[]
   ): void {
@@ -290,12 +303,11 @@ export function useFilters(): FilterManager {
     }
 
     // Parse sources
-    const availableSourcesMetadata = availableSources.map(getSourceMetadata);
     let newSelectedSources: SourceMetadata[] = [];
     const sourcesParam = params.get("sources");
     if (sourcesParam) {
       const sourceNames = sourcesParam.split(",").map(decodeURIComponent);
-      newSelectedSources = availableSourcesMetadata.filter((source) =>
+      newSelectedSources = availableSources.filter((source) =>
         sourceNames.includes(source.internalName)
       );
     }
@@ -371,7 +383,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAssistant: Persona | null;
+  liveAssistant: MinimalPersonaSnapshot | null;
   maxTemperature: number;
 }
 
@@ -419,7 +431,7 @@ providing appropriate defaults for new conversations based on the available tool
 export function useLlmManager(
   llmProviders: LLMProviderDescriptor[],
   currentChatSession?: ChatSession,
-  liveAssistant?: Persona
+  liveAssistant?: MinimalPersonaSnapshot
 ): LlmManager {
   const { user } = useUser();
 
@@ -503,7 +515,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.name };
+        return { ...model, provider: provider.provider };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -517,14 +529,7 @@ export function useLlmManager(
 
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
-    const provider =
-      newLlm.provider || findProviderForModel(llmProviders, newLlm.modelName);
-    const structuredValue = structureValue(
-      newLlm.name,
-      provider,
-      newLlm.modelName
-    );
-    setCurrentLlm(getValidLlmDescriptor(structuredValue));
+    setCurrentLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
   };
 

@@ -6,7 +6,6 @@ import {
   ArrowUp,
   ArrowDown,
   Trash,
-  Upload,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
@@ -30,6 +29,7 @@ const ALLOWED_FILE_TYPES = [
   ".pdf",
   ".doc",
   ".docx",
+  ".epub",
   ".txt",
   ".rtf",
   ".odt",

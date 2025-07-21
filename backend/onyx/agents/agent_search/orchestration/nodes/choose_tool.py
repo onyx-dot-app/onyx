@@ -127,6 +127,7 @@ def choose_tool(
     override_kwargs: SearchToolOverrideKwargs = (
         force_use_tool.override_kwargs or SearchToolOverrideKwargs()
     )
+    override_kwargs.original_query = agent_config.inputs.prompt_builder.raw_user_query
 
     using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
     prompt_builder = state.prompt_snapshot or agent_config.inputs.prompt_builder

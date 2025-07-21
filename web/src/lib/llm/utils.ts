@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import {
   LLMProviderDescriptor,
   ModelConfiguration,
@@ -7,7 +7,7 @@ import { LlmDescriptor } from "@/lib/hooks";
 
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
-  persona: Persona | null,
+  persona: MinimalPersonaSnapshot | null,
   currentLlm: LlmDescriptor | null
 ): [string, string] {
   const defaultProvider = llmProviders.find(
@@ -38,7 +38,7 @@ export function getFinalLLM(
 }
 
 export function getLLMProviderOverrideForPersona(
-  liveAssistant: Persona,
+  liveAssistant: MinimalPersonaSnapshot,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   const overrideProvider = liveAssistant.llm_model_provider_override;

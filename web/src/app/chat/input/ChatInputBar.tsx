@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiX, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
@@ -29,7 +29,7 @@ import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmPr
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
-import { DocumentSet, Tag } from "@/lib/types";
+import { DocumentSetSummary, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
@@ -39,7 +39,6 @@ import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
-import { UploadIntent } from "../ChatPage";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -182,17 +181,19 @@ interface ChatInputBarProps {
   onSubmit: () => void;
   llmManager: LlmManager;
   chatState: ChatState;
-  alternativeAssistant: Persona | null;
+  alternativeAssistant: MinimalPersonaSnapshot | null;
   // assistants
-  selectedAssistant: Persona;
-  setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
+  selectedAssistant: MinimalPersonaSnapshot;
+  setAlternativeAssistant: (
+    alternativeAssistant: MinimalPersonaSnapshot | null
+  ) => void;
   toggleDocumentSidebar: () => void;
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   filterManager: FilterManager;
   availableSources: SourceMetadata[];
-  availableDocumentSets: DocumentSet[];
+  availableDocumentSets: DocumentSetSummary[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
   proSearchEnabled: boolean;
@@ -306,7 +307,7 @@ export function ChatInputBar({
     };
   }, []);
 
-  const updatedTaggedAssistant = (assistant: Persona) => {
+  const updatedTaggedAssistant = (assistant: MinimalPersonaSnapshot) => {
     setAlternativeAssistant(
       assistant.id == selectedAssistant.id ? null : assistant
     );
@@ -854,27 +855,6 @@ export function ChatInputBar({
                   llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
-                  trigger={
-                    <button
-                      className="dark:text-white text-black focus:outline-none"
-                      data-testid="llm-popover-trigger"
-                    >
-                      <ChatInputOption
-                        minimize
-                        toggle
-                        flexPriority="stiff"
-                        name={getDisplayNameForModel(
-                          llmManager?.currentLlm.modelName || "Models"
-                        )}
-                        Icon={getProviderIcon(
-                          llmManager?.currentLlm.provider || "anthropic",
-                          llmManager?.currentLlm.modelName ||
-                            "claude-3-5-sonnet-20240620"
-                        )}
-                        tooltipContent="Switch models"
-                      />
-                    </button>
-                  }
                 />
 
                 {retrievalEnabled && (
@@ -888,15 +868,11 @@ export function ChatInputBar({
                     }
                     availableTags={availableTags}
                     filterManager={filterManager}
-                    trigger={
-                      <ChatInputOption
-                        flexPriority="stiff"
-                        name="Filters"
-                        Icon={FiFilter}
-                        toggle
-                        tooltipContent="Filter your search"
-                      />
-                    }
+                    trigger={{
+                      name: "Filters",
+                      Icon: FiFilter,
+                      tooltipContent: "Filter your search",
+                    }}
                   />
                 )}
               </div>

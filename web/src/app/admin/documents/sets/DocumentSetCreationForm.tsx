@@ -8,7 +8,13 @@ import {
   updateDocumentSet,
   DocumentSetCreationRequest,
 } from "./lib";
-import { ConnectorStatus, DocumentSet, UserGroup, UserRole } from "@/lib/types";
+import {
+  ConnectorStatus,
+  DocumentSetSummary,
+  UserGroup,
+  UserRole,
+  FederatedConnectorConfig,
+} from "@/lib/types";
 import { TextFormField } from "@/components/Field";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -18,13 +24,15 @@ import React, { useEffect, useState } from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
 import { NonSelectableConnectors } from "@/components/NonSelectableConnectors";
+import { FederatedConnectorSelector } from "@/components/FederatedConnectorSelector";
+import { useFederatedConnectors } from "@/lib/hooks";
 
 interface SetCreationPopupProps {
   ccPairs: ConnectorStatus<any, any>[];
   userGroups: UserGroup[] | undefined;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
-  existingDocumentSet?: DocumentSet;
+  existingDocumentSet?: DocumentSetSummary;
 }
 
 export const DocumentSetCreationForm = ({
@@ -38,6 +46,7 @@ export const DocumentSetCreationForm = ({
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
   const { user } = useUser();
+  const { data: federatedConnectors } = useFederatedConnectors();
 
   useEffect(() => {
     if (existingDocumentSet?.is_public) {
@@ -52,20 +61,42 @@ export const DocumentSetCreationForm = ({
           name: existingDocumentSet?.name ?? "",
           description: existingDocumentSet?.description ?? "",
           cc_pair_ids:
-            existingDocumentSet?.cc_pair_descriptors.map(
-              (ccPairDescriptor) => ccPairDescriptor.id
+            existingDocumentSet?.cc_pair_summaries.map(
+              (ccPairSummary) => ccPairSummary.id
             ) ?? [],
           is_public: existingDocumentSet?.is_public ?? true,
           users: existingDocumentSet?.users ?? [],
           groups: existingDocumentSet?.groups ?? [],
+          federated_connectors:
+            existingDocumentSet?.federated_connector_summaries?.map((fc) => ({
+              federated_connector_id: fc.id,
+              entities: fc.entities,
+            })) ?? [],
         }}
-        validationSchema={Yup.object().shape({
-          name: Yup.string().required("Please enter a name for the set"),
-          description: Yup.string().optional(),
-          cc_pair_ids: Yup.array()
-            .of(Yup.number().required())
-            .required("Please select at least one connector"),
-        })}
+        validationSchema={Yup.object()
+          .shape({
+            name: Yup.string().required("Please enter a name for the set"),
+            description: Yup.string().optional(),
+            cc_pair_ids: Yup.array().of(Yup.number().required()),
+            federated_connectors: Yup.array().of(
+              Yup.object().shape({
+                federated_connector_id: Yup.number().required(),
+                entities: Yup.object().required(),
+              })
+            ),
+          })
+          .test(
+            "at-least-one-connector",
+            "Please select at least one connector (regular or federated)",
+            function (values) {
+              const hasRegularConnectors =
+                values.cc_pair_ids && values.cc_pair_ids.length > 0;
+              const hasFederatedConnectors =
+                values.federated_connectors &&
+                values.federated_connectors.length > 0;
+              return hasRegularConnectors || hasFederatedConnectors;
+            }
+          )}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
           // If the document set is public, then we don't want to send any groups
@@ -210,6 +241,26 @@ export const DocumentSetCreationForm = ({
                     }}
                     placeholder="Search for connectors..."
                   />
+                )}
+
+                {/* Federated Connectors Section */}
+                {federatedConnectors && federatedConnectors.length > 0 && (
+                  <>
+                    <Separator className="my-4" />
+                    <FederatedConnectorSelector
+                      name="federated_connectors"
+                      label="Federated Connectors"
+                      federatedConnectors={federatedConnectors}
+                      selectedConfigs={props.values.federated_connectors}
+                      onChange={(selectedConfigs) => {
+                        props.setFieldValue(
+                          "federated_connectors",
+                          selectedConfigs
+                        );
+                      }}
+                      placeholder="Search for federated connectors..."
+                    />
+                  </>
                 )}
               </div>
 

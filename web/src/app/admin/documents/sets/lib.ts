@@ -1,3 +1,5 @@
+import { FederatedConnectorConfig } from "@/lib/types";
+
 export interface DocumentSetCreationRequest {
   name: string;
   description: string;
@@ -5,6 +7,7 @@ export interface DocumentSetCreationRequest {
   is_public: boolean;
   users: string[];
   groups: number[];
+  federated_connectors: FederatedConnectorConfig[];
 }
 
 export const createDocumentSet = async ({
@@ -14,6 +17,7 @@ export const createDocumentSet = async ({
   is_public,
   users,
   groups,
+  federated_connectors,
 }: DocumentSetCreationRequest) => {
   return fetch("/api/manage/admin/document-set", {
     method: "POST",
@@ -27,6 +31,7 @@ export const createDocumentSet = async ({
       is_public,
       users,
       groups,
+      federated_connectors,
     }),
   });
 };
@@ -38,6 +43,7 @@ interface DocumentSetUpdateRequest {
   is_public: boolean;
   users: string[];
   groups: number[];
+  federated_connectors: FederatedConnectorConfig[];
 }
 
 export const updateDocumentSet = async ({
@@ -47,6 +53,7 @@ export const updateDocumentSet = async ({
   is_public,
   users,
   groups,
+  federated_connectors,
 }: DocumentSetUpdateRequest) => {
   return fetch("/api/manage/admin/document-set", {
     method: "PATCH",
@@ -60,6 +67,7 @@ export const updateDocumentSet = async ({
       is_public,
       users,
       groups,
+      federated_connectors,
     }),
   });
 };

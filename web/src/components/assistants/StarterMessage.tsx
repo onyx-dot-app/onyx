@@ -1,12 +1,12 @@
 import { useContext } from "react";
-import { Persona } from "../../app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "../../app/admin/assistants/interfaces";
 import { SettingsContext } from "../settings/SettingsProvider";
 
 export function StarterMessages({
   currentPersona,
   onSubmit,
 }: {
-  currentPersona: Persona;
+  currentPersona: MinimalPersonaSnapshot;
   onSubmit: (messageOverride: string) => void;
 }) {
   const settings = useContext(SettingsContext);

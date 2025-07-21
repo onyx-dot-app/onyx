@@ -69,15 +69,17 @@ const RefreshFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
     .typeError("Property value must be a valid number")
     .integer("Property value must be an integer")
-    .min(60, "Property value must be greater than or equal to 60")
+    .min(1, "Property value must be greater than or equal to 1 minute")
     .required("Property value is required"),
 });
 
 const PruneFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
     .typeError("Property value must be a valid number")
-    .integer("Property value must be an integer")
-    .min(86400, "Property value must be greater than or equal to 86400")
+    .min(
+      0.083,
+      "Property value must be greater than or equal to 0.083 hours (5 minutes)"
+    )
     .required("Property value is required"),
 });
 
@@ -121,16 +123,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: `${buildCCPairInfoUrl(ccPairId)}/index-attempts`,
   });
 
-  const {
-    currentPageData: indexAttemptErrorsPage,
-    currentPage: errorsCurrentPage,
-    totalPages: errorsTotalPages,
-    goToPage: goToErrorsPage,
-  } = usePaginatedFetch<IndexAttemptError>({
-    itemsPerPage: 10,
-    pagesPerBatch: 1,
-    endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-  });
+  const { currentPageData: indexAttemptErrorsPage } =
+    usePaginatedFetch<IndexAttemptError>({
+      itemsPerPage: 10,
+      pagesPerBatch: 1,
+      endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+    });
 
   // Initialize hooks at top level to avoid conditional hook calls
   const { showReIndexModal, ReIndexModal } = useReIndexModal(
@@ -149,11 +147,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const indexAttemptErrors = indexAttemptErrorsPage
     ? {
         items: indexAttemptErrorsPage,
-        total_items:
-          errorsCurrentPage === errorsTotalPages &&
-          indexAttemptErrorsPage.length === 0
-            ? 0
-            : errorsTotalPages * 10,
+        total_items: indexAttemptErrorsPage.length,
       }
     : null;
 
@@ -161,6 +155,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [editingRefreshFrequency, setEditingRefreshFrequency] = useState(false);
   const [editingPruningFrequency, setEditingPruningFrequency] = useState(false);
   const [showIndexAttemptErrors, setShowIndexAttemptErrors] = useState(false);
+
   const [showIsResolvingKickoffLoader, setShowIsResolvingKickoffLoader] =
     useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
@@ -282,9 +277,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
     propertyName: string,
     propertyValue: string
   ) => {
-    const parsedRefreshFreq = parseInt(propertyValue, 10);
+    const parsedRefreshFreqMinutes = parseInt(propertyValue, 10);
 
-    if (isNaN(parsedRefreshFreq)) {
+    if (isNaN(parsedRefreshFreqMinutes)) {
       setPopup({
         message: "Invalid refresh frequency: must be an integer",
         type: "error",
@@ -292,11 +287,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
       return;
     }
 
+    // Convert minutes to seconds
+    const parsedRefreshFreqSeconds = parsedRefreshFreqMinutes * 60;
+
     try {
       const response = await updateConnectorCredentialPairProperty(
         ccPairId,
         propertyName,
-        String(parsedRefreshFreq)
+        String(parsedRefreshFreqSeconds)
       );
       if (!response.ok) {
         throw new Error(await response.text());
@@ -318,21 +316,24 @@ function Main({ ccPairId }: { ccPairId: number }) {
     propertyName: string,
     propertyValue: string
   ) => {
-    const parsedFreq = parseInt(propertyValue, 10);
+    const parsedFreqHours = parseFloat(propertyValue);
 
-    if (isNaN(parsedFreq)) {
+    if (isNaN(parsedFreqHours)) {
       setPopup({
-        message: "Invalid pruning frequency: must be an integer",
+        message: "Invalid pruning frequency: must be a valid number",
         type: "error",
       });
       return;
     }
 
+    // Convert hours to seconds
+    const parsedFreqSeconds = parsedFreqHours * 3600;
+
     try {
       const response = await updateConnectorCredentialPairProperty(
         ccPairId,
         propertyName,
-        String(parsedFreq)
+        String(parsedFreqSeconds)
       );
       if (!response.ok) {
         throw new Error(await response.text());
@@ -393,9 +394,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {editingRefreshFrequency && (
         <EditPropertyModal
           propertyTitle="Refresh Frequency"
-          propertyDetails="How often the connector should refresh (in seconds)"
+          propertyDetails="How often the connector should refresh (in minutes)"
           propertyName="refresh_frequency"
-          propertyValue={String(refreshFreq)}
+          propertyValue={String(Math.round((refreshFreq || 0) / 60))}
           validationSchema={RefreshFrequencySchema}
           onSubmit={handleRefreshSubmit}
           onClose={() => setEditingRefreshFrequency(false)}
@@ -405,9 +406,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {editingPruningFrequency && (
         <EditPropertyModal
           propertyTitle="Pruning Frequency"
-          propertyDetails="How often the connector should be pruned (in seconds)"
+          propertyDetails="How often the connector should be pruned (in hours)"
           propertyName="pruning_frequency"
-          propertyValue={String(pruneFreq)}
+          propertyValue={String(
+            ((pruneFreq || 0) / 3600).toFixed(3).replace(/\.?0+$/, "")
+          )}
           validationSchema={PruneFrequencySchema}
           onSubmit={handlePruningSubmit}
           onClose={() => setEditingPruningFrequency(false)}
@@ -424,8 +427,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
             await triggerReIndex(true);
           }}
           isResolvingErrors={isResolvingErrors}
-          onPageChange={goToErrorsPage}
-          currentPage={errorsCurrentPage}
         />
       )}
 

@@ -10,7 +10,6 @@ class TeamsThread(BaseModel):
 
     @classmethod
     def from_doc(cls, document: Document) -> "TeamsThread":
-
         assert (
             document.external_access
         ), f"ExternalAccess should always be available, instead got {document=}"

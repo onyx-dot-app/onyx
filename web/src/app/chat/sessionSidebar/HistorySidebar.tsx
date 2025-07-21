@@ -27,7 +27,7 @@ import {
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DragEndEvent } from "@dnd-kit/core";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
@@ -56,7 +56,7 @@ import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
 
 interface HistorySidebarProps {
-  liveAssistant?: Persona | null;
+  liveAssistant?: MinimalPersonaSnapshot | null;
   page: pageType;
   existingChats?: ChatSession[];
   currentChatSession?: ChatSession | null | undefined;
@@ -73,7 +73,7 @@ interface HistorySidebarProps {
 }
 
 interface SortableAssistantProps {
-  assistant: Persona;
+  assistant: MinimalPersonaSnapshot;
   active: boolean;
   onClick: () => void;
   onPinAction: (e: React.MouseEvent) => void;
@@ -213,18 +213,22 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
         const { active, over } = event;
 
         if (active.id !== over?.id) {
-          setPinnedAssistants((prevAssistants: Persona[]) => {
+          setPinnedAssistants((prevAssistants: MinimalPersonaSnapshot[]) => {
             const oldIndex = prevAssistants.findIndex(
-              (a: Persona) => (a.id === 0 ? "assistant-0" : a.id) === active.id
+              (a: MinimalPersonaSnapshot) =>
+                (a.id === 0 ? "assistant-0" : a.id) === active.id
             );
             const newIndex = prevAssistants.findIndex(
-              (a: Persona) => (a.id === 0 ? "assistant-0" : a.id) === over?.id
+              (a: MinimalPersonaSnapshot) =>
+                (a.id === 0 ? "assistant-0" : a.id) === over?.id
             );
 
             const newOrder = arrayMove(prevAssistants, oldIndex, newIndex);
 
             // Ensure we're sending the correct IDs to the API
-            const reorderedIds = newOrder.map((a: Persona) => a.id);
+            const reorderedIds = newOrder.map(
+              (a: MinimalPersonaSnapshot) => a.id
+            );
             reorderPinnedAssistants(reorderedIds);
 
             return newOrder;
@@ -351,7 +355,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 strategy={verticalListSortingStrategy}
               >
                 <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
-                  {pinnedAssistants.map((assistant: Persona) => (
+                  {pinnedAssistants.map((assistant: MinimalPersonaSnapshot) => (
                     <SortableAssistant
                       key={assistant.id === 0 ? "assistant-0" : assistant.id}
                       assistant={assistant}

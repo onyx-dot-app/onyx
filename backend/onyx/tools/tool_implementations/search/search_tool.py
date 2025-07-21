@@ -285,6 +285,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
+        original_query = None
         precomputed_query_embedding = None
         precomputed_is_keyword = None
         precomputed_keywords = None
@@ -303,6 +304,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         kg_sources = None
         kg_chunk_id_zero_only = False
         if override_kwargs:
+            original_query = override_kwargs.original_query
+            precomputed_is_keyword = override_kwargs.precomputed_is_keyword
+            precomputed_keywords = override_kwargs.precomputed_keywords
+            precomputed_query_embedding = override_kwargs.precomputed_query_embedding
             force_no_rerank = use_alt_not_None(override_kwargs.force_no_rerank, False)
             alternate_db_session = override_kwargs.alternate_db_session
             retrieved_sections_callback = override_kwargs.retrieved_sections_callback
@@ -395,6 +400,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 precomputed_keywords=precomputed_keywords,
                 # add expanded queries
                 expanded_queries=expanded_queries,
+                original_query=original_query,
             ),
             user=self.user,
             llm=self.llm,
