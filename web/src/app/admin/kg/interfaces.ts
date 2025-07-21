@@ -23,7 +23,7 @@ export type SourceAndEntityTypeView = {
 
 export type SourceStatistics = {
   source_name: string;
-  last_updated: string | null;
+  last_updated: string;
   entities_count: number;
 };
 
@@ -31,5 +31,5 @@ export type EntityType = {
   name: string;
   description: string;
   active: boolean;
-  grounded_source_name?: string | null;
+  grounded_source_name: string;
 };
