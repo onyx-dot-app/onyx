@@ -23,7 +23,7 @@ export type SourceAndEntityTypeView = {
 
 export type SourceStatistics = {
   source_name: string;
-  last_updated: Date;
+  last_updated: string | null;
   entities_count: number;
 };
 
