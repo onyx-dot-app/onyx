@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
+from onyx.configs.constants import DocumentSource
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -475,6 +477,7 @@ def get_external_access_from_sharepoint(
     graph_client: GraphClient,
     drive_name: str,
     drive_item: DriveItem,
+    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Get external access information from SharePoint.
@@ -510,6 +513,19 @@ def get_external_access_from_sharepoint(
     ) -> None:
         nonlocal user_emails, groups
         for assignment in role_assignments:
+            logger.info(f"Assignment: {assignment.to_json()}")
+            if assignment.role_definition_bindings:
+                role_names = [
+                    role_definition_binding.name
+                    for role_definition_binding in assignment.role_definition_bindings
+                ]
+
+                # Skip if the role is only Limited Access, because this is not a actual permission its a travel through permission
+                if role_names == ["Limited Access"]:
+                    logger.info(
+                        "Skipping assignment because it has only Limited Access role"
+                    )
+                    continue
             if assignment.member:
                 member = assignment.member
                 if hasattr(member, "principal_type"):
@@ -533,7 +549,7 @@ def get_external_access_from_sharepoint(
                         )
 
     _sleep_and_retry(
-        item.role_assignments.expand(["Member"]).get_all(
+        item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
             page_loaded=add_user_and_group_to_sets
         ),
         "get_external_access_from_sharepoint",
@@ -542,6 +558,10 @@ def get_external_access_from_sharepoint(
         client_context, graph_client, groups
     )
     for group_name, _ in groups_and_members.items():
+        if add_prefix:
+            group_name = build_ext_group_name_for_onyx(
+                group_name, DocumentSource.SHAREPOINT
+            )
         group_ids.add(group_name.lower())
 
     return ExternalAccess(
@@ -565,6 +585,19 @@ def get_sharepoint_external_groups(
     def add_group_to_sets(role_assignments: RoleAssignmentCollection) -> None:
         nonlocal groups
         for assignment in role_assignments:
+            logger.info(f"Assignment: {assignment.to_json()}")
+            if assignment.role_definition_bindings:
+                role_names = [
+                    role_definition_binding.name
+                    for role_definition_binding in assignment.role_definition_bindings
+                ]
+
+                # Skip if the role is only Limited Access, because this is not a actual permission its a travel through permission
+                if role_names == ["Limited Access"]:
+                    logger.info(
+                        "Skipping assignment because it has only Limited Access role"
+                    )
+                    continue
             if assignment.member:
                 member = assignment.member
                 if hasattr(member, "principal_type"):
@@ -581,9 +614,9 @@ def get_sharepoint_external_groups(
                         )
 
     _sleep_and_retry(
-        client_context.web.role_assignments.expand(["Member"]).get_all(
-            page_loaded=add_group_to_sets
-        ),
+        client_context.web.role_assignments.expand(
+            ["Member", "RoleDefinitionBindings"]
+        ).get_all(page_loaded=add_group_to_sets),
         "get_sharepoint_external_groups",
     )
     groups_and_members: dict[str, set[str]] = _get_groups_and_members_recursively(

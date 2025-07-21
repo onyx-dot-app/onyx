@@ -196,6 +196,7 @@ def _convert_driveitem_to_document_with_permissions(
 
     # Proceed with download if size is acceptable or not available
     content = _sleep_and_retry(driveitem.get_content(), "get_content")
+
     if content is None:
         logger.warning(f"Could not access content for '{driveitem.name}'")
         return None
@@ -217,7 +218,7 @@ def _convert_driveitem_to_document_with_permissions(
     if include_permissions and ctx is not None:
         try:
             external_access = get_sharepoint_external_access(
-                driveitem, drive_name, ctx, graph_client
+                driveitem, drive_name, ctx, graph_client, True
             )
         except Exception as e:
             logger.warning(

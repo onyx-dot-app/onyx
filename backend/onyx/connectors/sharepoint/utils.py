@@ -15,6 +15,7 @@ def get_sharepoint_external_access(
     drive_name: str,
     ctx: ClientContext,
     graph_client: GraphClient,
+    add_prefix: bool = False,
 ) -> ExternalAccess:
     if drive_item.id is None:
         raise ValueError("DriveItem ID is required")
@@ -30,7 +31,7 @@ def get_sharepoint_external_access(
     )
 
     external_access = get_external_access_func(
-        ctx, graph_client, drive_name, drive_item
+        ctx, graph_client, drive_name, drive_item, add_prefix
     )
 
     return external_access
