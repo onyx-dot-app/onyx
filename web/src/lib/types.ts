@@ -434,6 +434,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  Imap = "imap",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",

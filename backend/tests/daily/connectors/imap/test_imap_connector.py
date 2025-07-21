@@ -51,12 +51,12 @@ def imap_connector() -> ImapConnector:
         [
             EmailDoc(
                 subject="Testing",
-                recipients=set(["admin@onyx-test.com"]),
+                recipients=set(["admin@onyx-test.com", "raunak@onyx.app"]),
                 body="Hello, testing.",
             ),
             EmailDoc(
                 subject="Hello world",
-                recipients=set(["admin@onyx-test.com", "r@rabh.io"]),
+                recipients=set(["admin@onyx-test.com", "r@rabh.io", "raunak@onyx.app"]),
                 body='Hello world, this is an email that contains multiple "To" recipients.',
             ),
         ]

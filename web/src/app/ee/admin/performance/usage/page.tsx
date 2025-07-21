@@ -10,9 +10,11 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import { FiActivity } from "react-icons/fi";
 import UsageReports from "./UsageReports";
 import { Separator } from "@/components/ui/separator";
+import { useAdminPersonas } from "@/app/admin/assistants/hooks";
 
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useTimeRange();
+  const { personas } = useAdminPersonas();
 
   return (
     <main className="pt-4 mx-auto container">
@@ -27,7 +29,10 @@ export default function AnalyticsPage() {
       <QueryPerformanceChart timeRange={timeRange} />
       <FeedbackChart timeRange={timeRange} />
       <OnyxBotChart timeRange={timeRange} />
-      <PersonaMessagesChart timeRange={timeRange} />
+      <PersonaMessagesChart
+        availablePersonas={personas}
+        timeRange={timeRange}
+      />
       <Separator />
       <UsageReports />
     </main>

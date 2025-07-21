@@ -47,12 +47,15 @@ def overwrite_full_gated_set(tenant_ids: list[str]) -> None:
 
     pipeline = redis_client.pipeline()
 
+    # using pipeline doesn't automatically add the tenant_id prefix
+    full_gated_set_key = f"{ONYX_CLOUD_TENANT_ID}:{GATED_TENANTS_KEY}"
+
     # Clear the existing set
-    pipeline.delete(GATED_TENANTS_KEY)
+    pipeline.delete(full_gated_set_key)
 
     # Add all tenant IDs to the set and set their status
     for tenant_id in tenant_ids:
-        pipeline.sadd(GATED_TENANTS_KEY, tenant_id)
+        pipeline.sadd(full_gated_set_key, tenant_id)
 
     # Execute all commands at once
     pipeline.execute()

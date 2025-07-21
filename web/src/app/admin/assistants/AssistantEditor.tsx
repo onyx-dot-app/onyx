@@ -36,8 +36,9 @@ import {
 } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
 import {
   PersonaUpsertParameters,
@@ -141,6 +142,7 @@ export function AssistantEditor({
   const { popup, setPopup } = usePopup();
   const { labels, refreshLabels, createLabel, updateLabel, deleteLabel } =
     useLabels();
+  const settings = useContext(SettingsContext);
 
   const colorOptions = [
     "#FF6FBF",
@@ -236,6 +238,9 @@ export function AssistantEditor({
     searchTool &&
     !(user?.role === UserRole.BASIC && documentSets.length === 0);
 
+  const userKnowledgeEnabled =
+    settings?.settings?.user_knowledge_enabled ?? true;
+
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
@@ -276,10 +281,12 @@ export function AssistantEditor({
     user_folder_ids: existingPersona?.user_folder_ids ?? [],
     knowledge_source: !canShowKnowledgeSource
       ? "user_files"
-      : (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
-          (existingPersona?.user_folder_ids?.length ?? 0) > 0
-        ? "user_files"
-        : "team_knowledge",
+      : !userKnowledgeEnabled
+        ? "team_knowledge"
+        : (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
+            (existingPersona?.user_folder_ids?.length ?? 0) > 0
+          ? "user_files"
+          : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
   };
 
@@ -517,6 +524,14 @@ export function AssistantEditor({
           let enabledTools = Object.keys(values.enabled_tools_map)
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
+
+          if (
+            internetSearchTool &&
+            enabledTools.includes(internetSearchTool.id)
+          ) {
+            // Internet searches should generally be datetime-aware
+            formikHelpers.setFieldValue("datetime_aware", true);
+          }
 
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
@@ -940,26 +955,28 @@ export function AssistantEditor({
                                   </p>
                                 </div>
 
-                                <div
-                                  className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
-                                    values.knowledge_source === "user_files"
-                                      ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                                      : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
-                                  }`}
-                                  onClick={() =>
-                                    setFieldValue(
-                                      "knowledge_source",
-                                      "user_files"
-                                    )
-                                  }
-                                >
-                                  <div className="text-blue-500 mb-2">
-                                    <FileIcon size={24} />
+                                {userKnowledgeEnabled && (
+                                  <div
+                                    className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                      values.knowledge_source === "user_files"
+                                        ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                        : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                    }`}
+                                    onClick={() =>
+                                      setFieldValue(
+                                        "knowledge_source",
+                                        "user_files"
+                                      )
+                                    }
+                                  >
+                                    <div className="text-blue-500 mb-2">
+                                      <FileIcon size={24} />
+                                    </div>
+                                    <p className="font-medium text-xs">
+                                      User Knowledge
+                                    </p>
                                   </div>
-                                  <p className="font-medium text-xs">
-                                    User Knowledge
-                                  </p>
-                                </div>
+                                )}
                               </div>
                             </div>
                           </>

@@ -23,6 +23,7 @@ class OptionalSearchSetting(str, Enum):
 class SearchType(str, Enum):
     KEYWORD = "keyword"
     SEMANTIC = "semantic"
+    INTERNET = "internet"
 
 
 class LLMEvaluationType(str, Enum):

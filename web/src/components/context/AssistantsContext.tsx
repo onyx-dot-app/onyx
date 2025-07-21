@@ -25,9 +25,6 @@ interface AssistantsContextProps {
   ownedButHiddenAssistants: MinimalPersonaSnapshot[];
   refreshAssistants: () => Promise<void>;
   isImageGenerationAvailable: boolean;
-  // Admin only
-  editablePersonas: MinimalPersonaSnapshot[];
-  allAssistants: MinimalPersonaSnapshot[];
   pinnedAssistants: MinimalPersonaSnapshot[];
   setPinnedAssistants: Dispatch<SetStateAction<MinimalPersonaSnapshot[]>>;
 }
@@ -41,22 +38,11 @@ export const AssistantsProvider: React.FC<{
   initialAssistants: MinimalPersonaSnapshot[];
   hasAnyConnectors?: boolean;
   hasImageCompatibleModel?: boolean;
-}> = ({
-  children,
-  initialAssistants,
-  hasAnyConnectors,
-  hasImageCompatibleModel,
-}) => {
+}> = ({ children, initialAssistants }) => {
   const [assistants, setAssistants] = useState<MinimalPersonaSnapshot[]>(
     initialAssistants || []
   );
-  const { user, isAdmin, isCurator } = useUser();
-  const [editablePersonas, setEditablePersonas] = useState<
-    MinimalPersonaSnapshot[]
-  >([]);
-  const [allAssistants, setAllAssistants] = useState<MinimalPersonaSnapshot[]>(
-    []
-  );
+  const { user } = useUser();
 
   const [pinnedAssistants, setPinnedAssistants] = useState<
     MinimalPersonaSnapshot[]
@@ -107,37 +93,6 @@ export const AssistantsProvider: React.FC<{
     checkImageGenerationAvailability();
   }, []);
 
-  const fetchPersonas = async () => {
-    if (!isAdmin && !isCurator) {
-      return;
-    }
-
-    try {
-      const [editableResponse, allResponse] = await Promise.all([
-        fetch("/api/admin/persona?get_editable=true"),
-        fetch("/api/admin/persona"),
-      ]);
-
-      if (editableResponse.ok) {
-        const editablePersonas = await editableResponse.json();
-        setEditablePersonas(editablePersonas);
-      }
-
-      if (allResponse.ok) {
-        const allPersonas = await allResponse.json();
-        setAllAssistants(allPersonas);
-      } else {
-        console.error("Error fetching personas:", allResponse);
-      }
-    } catch (error) {
-      console.error("Error fetching personas:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchPersonas();
-  }, [isAdmin, isCurator]);
-
   const refreshAssistants = async () => {
     try {
       const response = await fetch("/api/persona", {
@@ -148,13 +103,7 @@ export const AssistantsProvider: React.FC<{
       });
       if (!response.ok) throw new Error("Failed to fetch assistants");
       let assistants: MinimalPersonaSnapshot[] = await response.json();
-
-      let filteredAssistants = filterAssistants(assistants);
-
-      setAssistants(filteredAssistants);
-
-      // Fetch and update allAssistants for admins and curators
-      await fetchPersonas();
+      setAssistants(filterAssistants(assistants));
     } catch (error) {
       console.error("Error refreshing assistants:", error);
     }
@@ -197,8 +146,6 @@ export const AssistantsProvider: React.FC<{
         finalAssistants,
         ownedButHiddenAssistants,
         refreshAssistants,
-        editablePersonas,
-        allAssistants,
         isImageGenerationAvailable,
         setPinnedAssistants,
         pinnedAssistants,

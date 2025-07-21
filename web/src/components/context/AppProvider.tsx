@@ -14,8 +14,6 @@ interface AppProviderProps {
   user: User | null;
   settings: CombinedSettings;
   assistants: MinimalPersonaSnapshot[];
-  hasAnyConnectors: boolean;
-  hasImageCompatibleModel: boolean;
   authTypeMetadata: AuthTypeMetadata;
 }
 
@@ -24,8 +22,6 @@ export const AppProvider = ({
   user,
   settings,
   assistants,
-  hasAnyConnectors,
-  hasImageCompatibleModel,
   authTypeMetadata,
 }: AppProviderProps) => {
   return (
@@ -36,11 +32,7 @@ export const AppProvider = ({
         authTypeMetadata={authTypeMetadata}
       >
         <ProviderContextProvider>
-          <AssistantsProvider
-            initialAssistants={assistants}
-            hasAnyConnectors={hasAnyConnectors}
-            hasImageCompatibleModel={hasImageCompatibleModel}
-          >
+          <AssistantsProvider initialAssistants={assistants}>
             <ModalProvider user={user}>{children}</ModalProvider>
           </AssistantsProvider>
         </ProviderContextProvider>
