@@ -66,8 +66,8 @@ class EntityType(BaseModel):
 
 class SourceStatistics(BaseModel):
     source_name: str
-    last_updated: datetime | None = None
-    entities_count: int | None = None
+    last_updated: datetime
+    entities_count: int
 
 
 class SourceAndEntityTypeView(BaseModel):
