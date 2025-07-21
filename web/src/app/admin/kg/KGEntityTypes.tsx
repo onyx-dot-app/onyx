@@ -186,8 +186,6 @@ interface KGEntityTypesProps {
 export default function KGEntityTypes({
   sourceAndEntityTypes,
 }: KGEntityTypesProps) {
-  console.log(sourceAndEntityTypes);
-
   // State to control open/close of all CollapsibleCards
   const [openCards, setOpenCards] = useState<{ [key: string]: boolean }>({});
   // State for search query
