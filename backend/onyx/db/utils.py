@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any
 
 from psycopg2 import errorcodes
@@ -34,3 +35,8 @@ class DocumentRow(BaseModel):
     id: str
     doc_metadata: dict[str, Any]
     external_user_group_ids: list[str]
+
+
+class SortOrder(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
