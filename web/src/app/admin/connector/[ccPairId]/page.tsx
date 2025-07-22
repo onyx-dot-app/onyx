@@ -161,8 +161,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   const latestIndexAttempt = indexAttempts?.[0];
-  console.log("indexAttempts", indexAttempts);
-
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
       latestIndexAttempt?.status === "not_started") &&
