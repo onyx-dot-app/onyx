@@ -1060,9 +1060,14 @@ def connector_document_extraction(
                 connector=connector_runner.connector,
             )
 
+            # checkpoint resumption OR the connector already finished.
             if (
                 isinstance(connector_runner.connector, CheckpointedConnector)
                 and resuming_from_checkpoint
+            ) or (
+                most_recent_attempt
+                and most_recent_attempt.total_batches is not None
+                and not checkpoint.has_more
             ):
                 reissued_batch_count, completed_batches = reissue_old_batches(
                     batch_storage,
