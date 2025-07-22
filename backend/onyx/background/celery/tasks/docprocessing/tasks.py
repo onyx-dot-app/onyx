@@ -57,6 +57,7 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
@@ -294,6 +295,7 @@ def monitor_indexing_attempt_progress(
         db_session, attempt.id
     )
 
+    current_db_time = get_db_current_time(db_session)
     if coordination_status.found:
         task_logger.info(
             f"Indexing attempt progress: "
@@ -304,7 +306,7 @@ def monitor_indexing_attempt_progress(
             f"total_batches={coordination_status.total_batches or '?'} "
             f"total_docs={coordination_status.total_docs} "
             f"total_failures={coordination_status.total_failures}"
-            f"elapsed={time.monotonic() - attempt.time_created.timestamp()/1000}"
+            f"elapsed={(current_db_time - attempt.time_created).seconds}"
         )
 
     if coordination_status.cancellation_requested:

@@ -391,10 +391,10 @@ celery_worker_docprocessing:
   resources:
     requests:
       cpu: 500m
-      memory: 8Gi
+      memory: 4Gi
     limits:
       cpu: 1000m
-      memory: 16Gi
+      memory: 12Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
@@ -553,11 +553,11 @@ celery_worker_docfetching:
     runAsUser: 0
   resources:
     requests:
+      cpu: 500m
+      memory: 8Gi
+    limits:
       cpu: 2000m
       memory: 16Gi
-    limits:
-      cpu: 4000m
-      memory: 32Gi
   volumes: []  # Additional volumes on the output Deployment definition.
   volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
