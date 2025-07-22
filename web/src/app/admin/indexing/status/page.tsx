@@ -85,8 +85,6 @@ function Main() {
       return 0;
     }
   });
-  console.log("indexAttemptData", indexAttemptData);
-  console.log("editableIndexAttemptData", editableIndexAttemptData);
 
   return (
     <CCPairIndexingStatusTable
