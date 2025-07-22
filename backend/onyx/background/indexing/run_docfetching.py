@@ -1146,7 +1146,7 @@ def connector_document_extraction(
                     checkpoint = next_checkpoint
 
                 # below is all document processing task, so if no batch we can just continue
-                if document_batch is None:
+                if not document_batch:
                     continue
 
                 # Clean documents and create batch

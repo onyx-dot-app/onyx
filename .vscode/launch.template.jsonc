@@ -430,7 +430,7 @@
       },
       "args": [
         "--filename",
-        "generated/openapi.json",
+        "generated/openapi.json"
       ]
     },
     {
