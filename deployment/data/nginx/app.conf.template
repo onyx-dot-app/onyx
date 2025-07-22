@@ -145,6 +145,7 @@ server {
     proxy_send_timeout 200;
     proxy_read_timeout 200;
     location / {
+        client_max_body_size 5G;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_pass http://localhost:81;
