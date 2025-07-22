@@ -26,7 +26,6 @@ from onyx.connectors.models import TextSection
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.models import Persona
 from onyx.db.search_settings import get_current_search_settings
 from onyx.indexing.chunker import Chunker
@@ -96,11 +95,13 @@ class InternetSearchTool(Tool[None]):
         answer_style_config: AnswerStyleConfig,
         provider: str | None = None,
         num_results: int = 10,
+        max_chunks: int = 50,
     ) -> None:
         self.db_session = db_session
         self.persona = persona
         self.prompt_config = prompt_config
         self.llm = llm
+        self.max_chunks = max_chunks
 
         self.chunks_above = (
             persona.chunks_above
@@ -333,37 +334,21 @@ class InternetSearchTool(Tool[None]):
             )
             inference_chunks.append(inference_chunk)
 
-        # Group chunks by document ID
-        doc_chunks_map: dict[str, list[InferenceChunk]] = {}
-        for inference_chunk in inference_chunks:
-            if inference_chunk.document_id not in doc_chunks_map:
-                doc_chunks_map[inference_chunk.document_id] = []
-            doc_chunks_map[inference_chunk.document_id].append(inference_chunk)
+        # Limit to max_chunks results to process
+        sorted_inference_chunks = sorted(
+            inference_chunks, key=lambda x: x.score or 0, reverse=True
+        )
+        sorted_inference_chunks = sorted_inference_chunks[: self.max_chunks]
 
-        # Create sections for each document
+        # Create sections from chunks
         sections: list[InferenceSection] = []
-        for _, doc_chunks in doc_chunks_map.items():
-            # Sort chunks by chunk_id to maintain order
-            sorted_chunks = sorted(doc_chunks, key=lambda x: x.chunk_id)
-
-            # Use the chunk with highest score as the center chunk
-            if all(chunk.score is None for chunk in doc_chunks):
-                # If all scores are None, use the first chunk as center
-                center_chunk = doc_chunks[0]
-            else:
-                center_chunk = max(doc_chunks, key=lambda x: x.score or 0)
-
-            # Create section using the utility function
-            section = inference_section_from_chunks(
-                center_chunk=center_chunk,
-                chunks=sorted_chunks,
+        for inference_chunk in sorted_inference_chunks:
+            new_section = InferenceSection(
+                center_chunk=inference_chunk,
+                chunks=[inference_chunk],
+                combined_content=inference_chunk.content,
             )
-
-            if section is not None:
-                sections.append(section)
-
-        # Sort sections by center chunk score (highest first)
-        sections.sort(key=lambda x: x.center_chunk.score or 0, reverse=True)
+            sections.append(new_section)
 
         return sections
 

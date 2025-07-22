@@ -254,6 +254,7 @@ def construct_tools(
                             answer_style_config=internet_search_tool_config.answer_style_config,
                             provider=None,  # Will use default provider
                             num_results=10,
+                            max_chunks=50,
                         )
                     ]
                 except ValueError as e:
