@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from onyx.context.search.models import InferenceChunk
 from onyx.db.utils import DocumentRow
+from onyx.db.utils import SortOrder
 
 # Avoid circular imports
 if TYPE_CHECKING:
@@ -24,6 +25,7 @@ class FetchAllDocumentsFunction(Protocol):
 
     def __call__(
         self,
+        sort_order: SortOrder | None,
     ) -> list[DocumentRow]:
         """
         Fetches documents for a connector credential pair.

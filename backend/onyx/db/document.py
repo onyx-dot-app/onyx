@@ -50,6 +50,7 @@ from onyx.db.relationships import (
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
+from onyx.db.utils import SortOrder
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -166,6 +167,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
     db_session: Session,
     connector_id: int,
     credential_id: int,
+    sort_order: SortOrder | None = None,
 ) -> Sequence[DocumentRow]:
 
     doc_ids_subquery = select(DocumentByConnectorCredentialPair.id).where(
@@ -182,9 +184,12 @@ def get_documents_for_connector_credential_pair_limited_columns(
         DbDocument.id, DbDocument.doc_metadata, DbDocument.external_user_group_ids
     )
 
-    stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery)).order_by(
-        DbDocument.last_modified.asc()
-    )
+    stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
+
+    if sort_order == SortOrder.ASC:
+        stmt = stmt.order_by(DbDocument.last_modified.asc())
+    elif sort_order == SortOrder.DESC:
+        stmt = stmt.order_by(DbDocument.last_modified.desc())
 
     rows = db_session.execute(stmt).mappings().all()
 

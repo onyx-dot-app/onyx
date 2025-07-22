@@ -61,6 +61,7 @@ from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import is_retryable_sqlalchemy_error
+from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
@@ -500,11 +501,14 @@ def connector_permission_sync_generator_task(
             # this is can be used to determine documents that are "missing" and thus
             # should no longer be accessible. The decision as to whether we should find
             # every document during the doc sync process is connector-specific.
-            def fetch_all_existing_docs_fn() -> list[DocumentRow]:
+            def fetch_all_existing_docs_fn(
+                sort_order: SortOrder | None = None,
+            ) -> list[DocumentRow]:
                 result = get_documents_for_connector_credential_pair_limited_columns(
                     db_session=db_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
+                    sort_order=sort_order,
                 )
                 return list(result)
 

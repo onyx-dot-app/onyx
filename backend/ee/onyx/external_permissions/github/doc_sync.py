@@ -22,6 +22,7 @@ from onyx.connectors.github.connector import DocMetadata
 from onyx.connectors.github.connector import GithubConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
+from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -81,16 +82,21 @@ def github_doc_sync(
         raise
 
     repo_to_doc_list_map: dict[str, list[DocumentRow]] = {}
-    existing_docs: list[DocumentRow] = fetch_all_existing_docs_fn()
+    # sort order is ascending because we want to get the oldest documents first
+    existing_docs: list[DocumentRow] = fetch_all_existing_docs_fn(
+        sort_order=SortOrder.ASC
+    )
+    logger.info(f"Found {len(existing_docs)} documents to check")
     for doc in existing_docs:
         try:
             doc_metadata = DocMetadata.model_validate_json(json.dumps(doc.doc_metadata))
+            if doc_metadata.repo not in repo_to_doc_list_map:
+                repo_to_doc_list_map[doc_metadata.repo] = []
             repo_to_doc_list_map[doc_metadata.repo].append(doc)
         except Exception as e:
             logger.error(f"Failed to parse doc metadata: {e} for doc {doc.id}")
             continue
     logger.info(f"Found {len(repo_to_doc_list_map)} documents to check")
-
     # Process each repository individually
     for repo in repos:
         try:
