@@ -101,8 +101,6 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.db.search_settings import get_current_search_settings
-from onyx.db.search_settings import get_secondary_search_settings
 from onyx.file_processing.extract_file_text import convert_docx_to_txt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -711,6 +709,9 @@ def get_connector_indexing_status(
     )
     cc_pairs = cast(list[ConnectorCredentialPair], cc_pairs)
     latest_index_attempts = cast(list[IndexAttempt], latest_index_attempts)
+    latest_finished_index_attempts = cast(
+        list[IndexAttempt], latest_finished_index_attempts
+    )
 
     cc_pair_to_latest_index_attempt = {
         (
@@ -768,12 +769,6 @@ def get_connector_indexing_status(
     for cc_pair in cc_pairs:
         connector_to_cc_pair_ids.setdefault(cc_pair.connector_id, []).append(cc_pair.id)
 
-    get_search_settings = (
-        get_secondary_search_settings
-        if secondary_index
-        else get_current_search_settings
-    )
-    get_search_settings(db_session)
     for cc_pair in cc_pairs:
         # TODO remove this to enable ingestion API
         if cc_pair.name == "DefaultCCPair":

@@ -428,7 +428,10 @@ def check_indexing_completion(
             )
 
         if attempt.status.is_successful():
-            cc_pair.last_successful_index_time = attempt.poll_range_end
+            # NOTE: we define the last successful index time as the time the last successful
+            # attempt finished. This is distinct from the poll_range_end of the last successful
+            # attempt, which is the time up to which documents have been fetched.
+            cc_pair.last_successful_index_time = attempt.time_updated
             if cc_pair.status in [
                 ConnectorCredentialPairStatus.SCHEDULED,
                 ConnectorCredentialPairStatus.INITIAL_INDEXING,
