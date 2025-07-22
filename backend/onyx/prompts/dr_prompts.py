@@ -261,11 +261,12 @@ you can generate a modified version of the previous step, thus effectively modif
 the remaining time budget.
    -- if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
-   - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
+   - be careful NOT TO REPEAT NEARLY THE SAME QUESTION IN THE SAME TOOL AGAIN! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
 the other tool seems suitable too!
-   - More importantly, look for questions that address gaps in the information, or that are interesting \
-follow-ups to questions answered so far, if you think the user would be interested in it.
+   - Again, focus is of generating NEW INFORMATION! Try to generate questions that
+         - address gaps in the information relative to the original question
+         - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
 
 Here is roughly how you shouold decide whether you are done to call the {CLOSER} tool:
 {DONE_STANDARD[DRTimeBudget.FAST]}
@@ -288,7 +289,8 @@ written as a list of suitable search of up to 4 queries. If the tool is {KNOWLED
 return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
-science'. If the tool is {CLOSER}, just return ['Answer the original question with the information you have.']>"}}
+science'. If the tool is {CLOSER}, just return ['Answer the original question with \
+the information you have.']>"}}
 }}
 
 
@@ -376,6 +378,11 @@ then you should consider sending a new request to the {INTERNET_SEARCH} tool and
    - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
 the other tool seems suitable too!
+
+   - Again, focus is of generating NEW INFORMATION! Try to generate questions that
+         - address gaps in the information relative to the original question
+         - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
+         - checks of whether the original piece of information is correct, or whether it is missing some details.
 
 YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
 the original question, the high-level plan, the tools you have available, and the answers you have so far \

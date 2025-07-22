@@ -33,7 +33,7 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
 
     # send search/kg requests (parallel only for search)
     queries = (
-        state.query_list[:2]
+        state.query_list
         if next_path == DRPath.SEARCH or next_path == DRPath.INTERNET_SEARCH
         else state.query_list[:1]
     )

@@ -103,6 +103,7 @@ def internet_search(
             ),
             provider=ProviderType.EXA.value,
             num_results=10,
+            max_chunks=10,
         )
 
         for tool_response in internet_search_tool.run(
