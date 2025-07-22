@@ -24,7 +24,8 @@
           "Celery primary",
           "Celery light",
           "Celery heavy",
-          "Celery indexing",
+          "Celery docfetching",
+          "Celery docprocessing",
           "Celery user files indexing",
           "Celery beat",
           "Celery monitoring"
