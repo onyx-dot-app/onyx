@@ -16,11 +16,13 @@ from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
+from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -62,6 +64,10 @@ SLIM_BATCH_SIZE = 100
 # things to check:
 # checkpoint state on return
 # checkpoint progress (no infinite loop)
+
+
+class DocMetadata(BaseModel):
+    repo: str
 
 
 def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
@@ -227,6 +233,8 @@ def _get_userinfo(user: NamedUser) -> dict[str, str]:
 def _convert_pr_to_document(
     pull_request: PullRequest, repo_external_access: ExternalAccess | None
 ) -> Document:
+    repo_name = pull_request.base.repo.full_name if pull_request.base else ""
+    doc_metadata = DocMetadata(repo=repo_name)
     return Document(
         id=pull_request.html_url,
         sections=[
@@ -244,9 +252,7 @@ def _convert_pr_to_document(
             else None
         ),
         # this metadata is used in perm sync
-        doc_metadata={
-            "repo": pull_request.base.repo.full_name if pull_request.base else None,
-        },
+        doc_metadata=doc_metadata.model_dump(),
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -303,6 +309,8 @@ def _fetch_issue_comments(issue: Issue) -> str:
 def _convert_issue_to_document(
     issue: Issue, repo_external_access: ExternalAccess | None
 ) -> Document:
+    repo_name = issue.repository.full_name if issue.repository else ""
+    doc_metadata = DocMetadata(repo=repo_name)
     return Document(
         id=issue.html_url,
         sections=[TextSection(link=issue.html_url, text=issue.body or "")],
@@ -312,9 +320,7 @@ def _convert_issue_to_document(
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
         # this metadata is used in perm sync
-        doc_metadata={
-            "repo": issue.repository.full_name if issue.repository else None,
-        },
+        doc_metadata=doc_metadata.model_dump(),
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -915,27 +921,27 @@ if __name__ == "__main__":
             connector.github_client,
         )
 
-    # # Create a time range from epoch to now
-    # end_time = datetime.now(timezone.utc)
-    # start_time = datetime.fromtimestamp(0, tz=timezone.utc)
-    # time_range = (start_time, end_time)
+    # Create a time range from epoch to now
+    end_time = datetime.now(timezone.utc)
+    start_time = datetime.fromtimestamp(0, tz=timezone.utc)
+    time_range = (start_time, end_time)
 
-    # # Initialize the runner with a batch size of 10
-    # runner: ConnectorRunner[GithubConnectorCheckpoint] = ConnectorRunner(
-    #     connector, batch_size=10, include_permissions=False, time_range=time_range
-    # )
+    # Initialize the runner with a batch size of 10
+    runner: ConnectorRunner[GithubConnectorCheckpoint] = ConnectorRunner(
+        connector, batch_size=10, include_permissions=False, time_range=time_range
+    )
 
-    # # Get initial checkpoint
-    # checkpoint = connector.build_dummy_checkpoint()
+    # Get initial checkpoint
+    checkpoint = connector.build_dummy_checkpoint()
 
-    # # Run the connector
-    # while checkpoint.has_more:
-    #     for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
-    #         if doc_batch:
-    #             print(f"Retrieved batch of {len(doc_batch)} documents")
-    #             for doc in doc_batch:
-    #                 print(f"Document: {doc.semantic_identifier}")
-    #         if failure:
-    #             print(f"Failure: {failure.failure_message}")
-    #         if next_checkpoint:
-    #             checkpoint = next_checkpoint
+    # Run the connector
+    while checkpoint.has_more:
+        for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
+            if doc_batch:
+                print(f"Retrieved batch of {len(doc_batch)} documents")
+                for doc in doc_batch:
+                    print(f"Document: {doc.semantic_identifier}")
+            if failure:
+                print(f"Failure: {failure.failure_message}")
+            if next_checkpoint:
+                checkpoint = next_checkpoint

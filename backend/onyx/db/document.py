@@ -6,7 +6,6 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
-from typing import Any
 
 from sqlalchemy import and_
 from sqlalchemy import delete
@@ -41,7 +40,6 @@ from onyx.db.models import Credential
 from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
-from onyx.db.models import DocumentColumns
 from onyx.db.models import KGEntity
 from onyx.db.models import KGRelationship
 from onyx.db.models import User
@@ -50,10 +48,8 @@ from onyx.db.relationships import (
     delete_from_kg_relationships_extraction_staging__no_commit,
 )
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
-from onyx.db.utils import build_where_clause_from_filter
-from onyx.db.utils import DocumentFilter
+from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
-from onyx.db.utils import SortOrder
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -155,7 +151,7 @@ def get_documents_for_cc_pair(
 
 
 def get_document_ids_for_connector_credential_pair(
-    db_session: Session, connector_id: int, credential_id: int, limit: int | None = None
+    db_session: Session, connector_id: int, credential_id: int
 ) -> list[str]:
     doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
         and_(
@@ -166,79 +162,41 @@ def get_document_ids_for_connector_credential_pair(
     return list(db_session.execute(doc_ids_stmt).scalars().all())
 
 
-def get_documents_for_connector_credential_pair_filtered(
+def get_documents_for_connector_credential_pair_limited_columns(
     db_session: Session,
     connector_id: int,
     credential_id: int,
-    document_filter: DocumentFilter | None = None,
-    limit: int | None = None,
-    columns: list[DocumentColumns] | None = None,
-    sort_order: SortOrder | None = None,
-) -> Sequence[dict[DocumentColumns, Any]]:
-    """Get documents for a connector credential pair with optional filtering and column selection.
+) -> Sequence[DocumentRow]:
 
-    Args:
-        db_session: Database session
-        connector_id: ID of the connector
-        credential_id: ID of the credential
-        document_filter: Optional document filter for additional filtering
-        limit: Optional limit on number of results
-        columns: Optional list of specific columns to select (if None, selects all document columns)
-        sort_order: Optional sort order for results (ASC or DESC). If None, no ordering is applied for better performance.
-
-    Returns:
-        Sequence of Document objects matching the criteria
-    """
-    where_clause = None
-    if document_filter:
-        where_clause = build_where_clause_from_filter(document_filter)
-
-    # Build the base subquery to get document IDs for the connector credential pair
     doc_ids_subquery = select(DocumentByConnectorCredentialPair.id).where(
         and_(
             DocumentByConnectorCredentialPair.connector_id == connector_id,
             DocumentByConnectorCredentialPair.credential_id == credential_id,
         )
     )
+    doc_ids_subquery = doc_ids_subquery.join(
+        DbDocument, DocumentByConnectorCredentialPair.id == DbDocument.id
+    )
 
-    # If we need ordering or filtering by Document fields, we need to join and apply those constraints
-    # in the subquery for proper limit behavior
-    if sort_order is not None or where_clause is not None:
-        doc_ids_subquery = doc_ids_subquery.join(
-            DbDocument, DocumentByConnectorCredentialPair.id == DbDocument.id
+    stmt = select(
+        DbDocument.id, DbDocument.doc_metadata, DbDocument.external_user_group_ids
+    )
+
+    stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery)).order_by(
+        DbDocument.last_modified.asc()
+    )
+
+    rows = db_session.execute(stmt).mappings().all()
+
+    doc_rows: list[DocumentRow] = []
+    for row in rows:
+        doc_row = DocumentRow(
+            id=row.id,
+            doc_metadata=row.doc_metadata,
+            external_user_group_ids=row.external_user_group_ids,
         )
-
-        if where_clause is not None:
-            logger.info(f"Where clause: {where_clause}")
-            doc_ids_subquery = doc_ids_subquery.where(where_clause)
-
-        if sort_order is not None:
-            order_by_clause = (
-                DbDocument.last_modified.asc()
-                if sort_order == SortOrder.ASC
-                else DbDocument.last_modified.desc()
-            )
-            doc_ids_subquery = doc_ids_subquery.order_by(order_by_clause)
-
-    if limit:
-        doc_ids_subquery = doc_ids_subquery.limit(limit)
-
-    if columns:
-        stmt = select(*[getattr(DbDocument, col) for col in columns])
-    else:
-        stmt = select(DbDocument)
-
-    stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
-
-    if sort_order is not None:
-        order_by_clause = (
-            DbDocument.last_modified.asc()
-            if sort_order == SortOrder.ASC
-            else DbDocument.last_modified.desc()
-        )
-        stmt = stmt.order_by(order_by_clause)
-
-    return [dict(row) for row in db_session.execute(stmt).mappings().all()]
+        doc_rows.append(doc_row)
+    return doc_rows
 
 
 def get_documents_for_connector_credential_pair(
@@ -1113,7 +1071,7 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
 
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0
+    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
 
 
 def update_document_kg_stages(
@@ -1136,7 +1094,7 @@ def update_document_kg_stages(
     result = db_session.execute(stmt)
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0
+    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
 
 
 def get_skipped_kg_documents(db_session: Session) -> list[str]:

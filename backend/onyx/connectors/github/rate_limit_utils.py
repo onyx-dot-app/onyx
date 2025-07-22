@@ -22,4 +22,4 @@ def sleep_after_rate_limit_exception(github_client: Github) -> None:
     ) - datetime.now(tz=timezone.utc)
     sleep_time += timedelta(minutes=1)  # add an extra minute just to be safe
     logger.notice(f"Ran into Github rate-limit. Sleeping {sleep_time.seconds} seconds.")
-    time.sleep(sleep_time.seconds)
+    time.sleep(sleep_time.total_seconds())
