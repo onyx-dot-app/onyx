@@ -1,4 +1,6 @@
+from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.states import DRPath
+
 
 # Standards
 SEPARATOR_LINE = "-------"
@@ -12,6 +14,22 @@ SEARCH = DRPath.SEARCH.value
 CLOSER = DRPath.CLOSER.value
 INTERNET_SEARCH = DRPath.INTERNET_SEARCH.value
 
+
+DONE_STANDARD: dict[str, str] = {}
+
+DONE_STANDARD[DRTimeBudget.FAST] = (
+    "Try to make sure that you think you have enough information to \
+answer the question in the spirit and the level of detail that is pretty explicit in the question."
+)
+
+DONE_STANDARD[DRTimeBudget.DEEP] = (
+    "Try to make sure that you think you have enough information to \
+answer the question in the spirit and the level of detail that is pretty explicit in the question. \
+Be particularly sensitive to details that you think the user would be interested in. Consider \
+asking follow-up questions as necessary."
+)
+
+
 # TODO: restructure this so each tool is a class with a description, and agents can select which tools to use
 TOOL_DESCRIPTION: dict[str, str] = {}
 TOOL_DESCRIPTION[
@@ -24,6 +42,10 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 (unless that info is present in the connected documents). If there are better suited tools \
 for answering those questions, use them instead. \
 The {SEARCH} tool supports parallel calls.
+Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
+then you should consider sending a new request to the {SEARCH} tool and vice versa!
+
+The {SEARCH} tool DOES support parallel calls of up to 4 queries.
 """
 
 TOOL_DESCRIPTION[
@@ -35,8 +57,10 @@ you should think about whether the data is likely private data (in which case th
 {KNOWLEDGE_GRAPH} tools should be used), or likely public data (in which case the {INTERNET_SEARCH} tool \
 should be used). If in doubt you should consider the data to be private and you should not user the \
 {INTERNET_SEARCH} tool.
+Note also that if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
+then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
 
-The {INTERNET_SEARCH} tool does NOT support parallel calls.
+The {INTERNET_SEARCH} tool DOES support parallel calls of up to 4 queries.
 """
 
 TOOL_DESCRIPTION[
@@ -119,10 +143,10 @@ Please format your answer as a json dictionary in the following format:
    "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {CLOSER}>",
                   "questions": "<the list of questions you want to pose to the tool. Note that the \
 questions should be appropriate for the tool.
-If the tool is {SEARCH}, the question \
-to the tool should be written as a list of up to 3 search queries that would help to answer the question.
+If the tool is {SEARCH} or {INTERNET_SEARCH}, the question \
+to the tool should be written as a list of up to 4 search queries that would help to answer the question.
 If the tool is {CLOSER}, just return ['Answer the original question with the information you have.'].
-If the tool is {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH}, return only one question in the list.>"}}
+If the tool is {KNOWLEDGE_GRAPH} return only one question in the list.>"}}
 }}
 """
 
@@ -198,9 +222,10 @@ considering the answers you already got, and guided by the initial plan.
 
 (You are planning for iteration ---iteration_nr--- now.).
 
-You have two tools available, "{SEARCH}" and "{CLOSER}".
+You have three tools available, "{SEARCH}", "{INTERNET_SEARCH}", and "{CLOSER}".
 
 {TOOL_DESCRIPTION[SEARCH]}
+{TOOL_DESCRIPTION[INTERNET_SEARCH]}
 {TOOL_DESCRIPTION[CLOSER]}
 
 Here is the overall question that you need to answer:
@@ -232,8 +257,18 @@ HINTS:
 Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
    - if you think more information is needed because a sub-question was not sufficiently answered, \
 you can generate a modified version of the previous step, thus effectively modifying the plan.
-- you can only consider a tool that fits the remaining time budget! The tool cost must be below \
+   - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
 the remaining time budget.
+   -- if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
+then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
+   - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
+good answer from one tool you may want to query another tool for the same purpose, but only of the \
+the other tool seems suitable too!
+   - More importantly, look for questions that address gaps in the information, or that are interesting \
+follow-ups to questions answered so far, if you think the user would be interested in it.
+
+Here is roughly how you shouold decide whether you are done to call the {CLOSER} tool:
+{DONE_STANDARD[DRTimeBudget.FAST]}
 
 YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
 the original question, the tools you have available, and the answers you have so far \
@@ -245,12 +280,20 @@ the request to the {CLOSER} tool is an option if you think the information is su
 Please format your answer as a json dictionary in the following format:
 {{
    "reasoning": "<your reasoning in 1-3 sentences. Think through it like a person would do it.>",
-   "next_step": {{"tool": "<{SEARCH} or {CLOSER}>",
+   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH} or {CLOSER}>",
                   "questions": "<the question you want to pose to the tool. Note that the \
-question should be appropriate for the tool. If the tool is {SEARCH}, the question \
-to the tool should be written as a list of up to 3 search queries that would help to answer the question.
-If the tool is {CLOSER}, just return ['Answer the original question with the information you have.']>"}}
+question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
+{INTERNET_SEARCH}, the question should be \
+written as a list of suitable search of up to 4 queries. If the tool is {KNOWLEDGE_GRAPH} \
+return only one question in the list.
+Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
+'show me some other examples', but more like 'some me examples that are not about \
+science'. If the tool is {CLOSER}, just return ['Answer the original question with the information you have.']>"}}
 }}
+
+
+
+
 """
 
 ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT = f"""
@@ -265,7 +308,7 @@ considering the answers you already got, and guided by the initial plan.
 
 (You are planning for iteration ---iteration_nr--- now.).
 
-You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
+You have four tools available, "{SEARCH}", "{INTERNET_SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
 {TOOL_DESCRIPTION[SEARCH]}
 {TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
@@ -328,7 +371,11 @@ whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge 
    - the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, so DO NOT \
    try to first find socuments and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
    tool directly, like 'summarize the most recent jira created by John'.
-   - you can only send one request to each tool.
+   - if an earliert call was sent to the {SEARCH} tool, and the request was essentially not answered, \
+then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
+   - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
+good answer from one tool you may want to query another tool for the same purpose, but only of the \
+the other tool seems suitable too!
 
 YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
 the original question, the high-level plan, the tools you have available, and the answers you have so far \
@@ -337,6 +384,8 @@ specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings
 new targetted information that gets us to be able to answer the original question. (Note again, that sending \
 the request to the CLOSER tool is an option if you think the information is sufficient.)
 
+Here is roughly how you shouold decide whether you are done to call the {CLOSER} tool:
+{DONE_STANDARD[DRTimeBudget.DEEP]}
 
 Please format your answer as a json dictionary in the following format:
 {{
@@ -344,9 +393,14 @@ Please format your answer as a json dictionary in the following format:
 guided by the question you need to answer, the answers you have so far, and the plan of record.>",
    "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH} or {CLOSER}>",
                   "questions": "<the question you want to pose to the tool. Note that the \
-question should be appropriate for the tool. For example, if the tool is {SEARCH}, the question should be \
-written as a list of suitable search queries. If the tool is {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH}, \
-return only one question in the list.>"}}
+question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
+{INTERNET_SEARCH}, the question should be \
+written as a list of suitable search of up to 4 queries. If the tool is {KNOWLEDGE_GRAPH} \
+return only one question in the list.
+Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
+'show me some other examples', but more like 'some me examples that are not about \
+science'.
+If the tool is {CLOSER}, just return ['Answer the original question with the information you have.']>"}}
 }}
 """
 

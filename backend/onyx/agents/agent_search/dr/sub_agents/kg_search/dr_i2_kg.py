@@ -3,6 +3,7 @@ from datetime import datetime
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
 from onyx.agents.agent_search.dr.states import MainState
@@ -70,6 +71,7 @@ def kg_query(
     return AnswerUpdate(
         iteration_responses=[
             IterationAnswer(
+                tool=DRPath.KNOWLEDGE_GRAPH,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
                 question=search_query,

@@ -4,10 +4,15 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
-from onyx.agents.agent_search.dr.states import AnswerUpdate
-from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+    BranchInput,
+)
+from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+    BranchUpdate,
+)
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
@@ -17,23 +22,30 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import AnswerStyleConfig
+from onyx.chat.models import CitationConfig
+from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import LlmDoc
+from onyx.chat.models import PromptConfig
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPT
-from onyx.tools.models import SearchToolOverrideKwargs
-from onyx.tools.tool_implementations.search.search_tool import (
-    SEARCH_RESPONSE_SUMMARY_ID,
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
 )
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
+from onyx.tools.tool_implementations.internet_search.models import ProviderType
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def search(
-    state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
-) -> AnswerUpdate:
+def internet_search(
+    state: BranchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
+) -> BranchUpdate:
     """
     LangGraph node to perform a standard search as part of the DR process.
     """
@@ -42,23 +54,16 @@ def search(
     iteration_nr = state.iteration_nr
     parallelization_nr = state.parallelization_nr
 
-    search_query = state.question
+    search_query = state.branch_question
     if not search_query:
         raise ValueError("search_query is not set")
-
-    graph_config = cast(GraphConfig, config["metadata"]["config"])
-    base_question = graph_config.inputs.prompt_builder.raw_user_query
-
-    search_tool = graph_config.tooling.search_tool
-    if search_tool is None:
-        raise ValueError("search_tool must be provided for agentic search")
 
     write_custom_event(
         "basic_response",
         AgentAnswerPiece(
             answer_piece=(
                 f"SUB-QUESTION {iteration_nr}.{parallelization_nr} "
-                f"(SEARCH): {search_query}\n\n"
+                f"(INTERNET SEARCH): {search_query}\n\n"
             ),
             level=0,
             level_question_num=0,
@@ -67,61 +72,50 @@ def search(
         writer,
     )
 
+    graph_config = cast(GraphConfig, config["metadata"]["config"])
+    base_question = graph_config.inputs.prompt_builder.raw_user_query
+
     logger.debug(
-        f"Search start for Standard Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"Search start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
+    if graph_config.inputs.persona is None:
+        raise ValueError("persona is not set")
+
     retrieved_docs: list[InferenceSection] = []
-    callback_container: list[list[InferenceSection]] = []
 
     # new db session to avoid concurrency issues
     with get_session_with_current_tenant() as search_db_session:
-        for tool_response in search_tool.run(
-            query=search_query,
-            override_kwargs=SearchToolOverrideKwargs(
-                force_no_rerank=True,
-                alternate_db_session=search_db_session,
-                retrieved_sections_callback=callback_container.append,
-                skip_query_analysis=True,
+
+        internet_search_tool = InternetSearchTool(
+            db_session=search_db_session,
+            persona=graph_config.inputs.persona,
+            prompt_config=PromptConfig(
+                system_prompt="You are a helpful assistant that can search the internet for information.",
+                task_prompt=f"Search the internet for information about the following question: {search_query}",
+                datetime_aware=True,
+                include_citations=True,
             ),
+            llm=graph_config.tooling.primary_llm,
+            document_pruning_config=DocumentPruningConfig(),
+            answer_style_config=AnswerStyleConfig(
+                citation_config=CitationConfig(), structured_response_format=None
+            ),
+            provider=ProviderType.EXA.value,
+            num_results=10,
+        )
+
+        for tool_response in internet_search_tool.run(
+            internet_search_query=search_query
         ):
             # get retrieved docs to send to the rest of the graph
-            if tool_response.id == SEARCH_RESPONSE_SUMMARY_ID:
+            if tool_response.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
                 response = cast(SearchResponseSummary, tool_response.response)
                 retrieved_docs = response.top_sections
-
                 break
 
     # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
 
-    """
-    # keep for later use
-    for tool_response in yield_search_responses(
-        query=query_to_retrieve,
-        get_retrieved_sections=lambda: retrieved_docs,
-        get_final_context_sections=lambda: retrieved_docs,
-        search_query_info=SearchQueryInfo(
-            predicted_search=SearchType.KEYWORD,
-            # acl here is empty, because the searach alrady happened and
-            # we are streaming out the results.
-            final_filters=IndexFilters(access_control_list=user_acl),
-            recency_bias_multiplier=1.0,
-        ),
-        get_section_relevance=lambda: relevance_list,
-        search_tool=search_tool,
-    ):
-        write_custom_event(
-            "tool_response",
-            ExtendedToolResponse(
-                id=tool_response.id,
-                response=tool_response.response,
-                level=0,
-                level_question_num=0,  # 0, 0 is the base question
-            ),
-            writer,
-        )
-
-    """
     document_texts_list = []
 
     for doc_num, retrieved_doc in enumerate(retrieved_docs[:15]):
@@ -133,7 +127,7 @@ def search(
     document_texts = "\n\n".join(document_texts_list)
 
     logger.debug(
-        f"Search end/LLM start for Standard Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"Search end/LLM start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
     # Built prompt
@@ -155,7 +149,7 @@ def search(
     )
 
     logger.debug(
-        f"LLM/all done for Standard Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"LLM/all done for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
     write_custom_event(
@@ -182,9 +176,10 @@ def search(
         retrieved_docs[citation_number - 1] for citation_number in citation_numbers
     ]
 
-    return AnswerUpdate(
-        iteration_responses=[
+    return BranchUpdate(
+        branch_iteration_responses=[
             IterationAnswer(
+                tool=DRPath.INTERNET_SEARCH,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
                 question=search_query,

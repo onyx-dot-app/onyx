@@ -3,7 +3,6 @@ from collections.abc import Hashable
 from langgraph.graph import END
 from langgraph.types import Send
 
-from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import QuestionUpdate
@@ -22,6 +21,9 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
     elif next_path == DRPath.ORCHESTRATOR:
         return DRPath.ORCHESTRATOR
 
+    elif next_path == DRPath.INTERNET_SEARCH:
+        return DRPath.INTERNET_SEARCH
+
     elif (
         next_path == DRPath.CLOSER
         or (len(state.query_list) == 0)
@@ -31,8 +33,8 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
 
     # send search/kg requests (parallel only for search)
     queries = (
-        state.query_list[:MAX_DR_PARALLEL_SEARCH]
-        if next_path == DRPath.SEARCH
+        state.query_list[:2]
+        if next_path == DRPath.SEARCH or next_path == DRPath.INTERNET_SEARCH
         else state.query_list[:1]
     )
     return [

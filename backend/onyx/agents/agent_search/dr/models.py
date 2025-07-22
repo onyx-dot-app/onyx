@@ -45,6 +45,7 @@ class SearchAnswer(BaseModel):
 
 
 class IterationAnswer(BaseModel):
+    tool: DRPath
     iteration_nr: int
     parallelization_nr: int
     question: str
