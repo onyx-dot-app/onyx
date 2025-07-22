@@ -1,6 +1,5 @@
 import os
 import time
-from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -11,8 +10,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentColumns
-from onyx.db.utils import DocumentFilter
+from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
@@ -106,15 +104,15 @@ def test_confluence_connector_restriction_handling(
 
     # Call the confluence_doc_sync function directly with the mock cc_pair
     def mock_fetch_all_docs_fn(
-        columns: list[DocumentColumns] | None = None,
-        document_filter: DocumentFilter | None = None,
-        limit: int | None = None,
         sort_order: SortOrder | None = None,
-    ) -> list[dict[DocumentColumns, Any]]:
+    ) -> list[DocumentRow]:
+        return []
+
+    def mock_fetch_all_docs_ids_fn() -> list[str]:
         return []
 
     doc_access_generator = confluence_doc_sync(
-        mock_cc_pair, mock_fetch_all_docs_fn, None
+        mock_cc_pair, mock_fetch_all_docs_fn, mock_fetch_all_docs_ids_fn, None
     )
     doc_access_list = list(doc_access_generator)
     assert len(doc_access_list) == 7
