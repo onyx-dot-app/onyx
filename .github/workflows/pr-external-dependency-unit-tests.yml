@@ -13,6 +13,14 @@ env:
   # MinIO
   S3_ENDPOINT_URL: "http://localhost:9004"
 
+  # Confluence
+  CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
+  CONFLUENCE_TEST_SPACE: ${{ secrets.CONFLUENCE_TEST_SPACE }}
+  CONFLUENCE_TEST_PAGE_ID: ${{ secrets.CONFLUENCE_TEST_PAGE_ID }}
+  CONFLUENCE_IS_CLOUD: ${{ secrets.CONFLUENCE_IS_CLOUD }}
+  CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
+  CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
+
 jobs:
   discover-test-dirs:
     runs-on: ubuntu-latest

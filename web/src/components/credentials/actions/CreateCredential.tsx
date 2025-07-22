@@ -3,17 +3,13 @@ import { Button } from "@/components/ui/button";
 import { ValidSources, AccessType } from "@/lib/types";
 import { FaAccusoft } from "react-icons/fa";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
-import { BooleanFormField, TextFormField } from "@/components/Field";
+import { TextFormField } from "@/components/Field";
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { getSourceDocLink } from "@/lib/sources";
 import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
-import {
-  Credential,
-  credentialTemplates,
-  getDisplayNameForCredentialKey,
-} from "@/lib/connectors/credentials";
+import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import { PlusCircleIcon } from "../../icons/icons";
 import { GmailMain } from "@/app/admin/connectors/[connector]/pages/gmail/GmailPage";
 import { ActionType, dictionaryType } from "../types";

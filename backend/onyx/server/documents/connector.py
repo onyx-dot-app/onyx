@@ -73,6 +73,9 @@ from onyx.db.connector import get_connector_credential_ids
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.connector_credential_pair import (
+    fetch_connector_credential_pair_for_connector,
+)
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids_parallel
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -103,7 +106,6 @@ from onyx.db.search_settings import get_secondary_search_settings
 from onyx.file_processing.extract_file_text import convert_docx_to_txt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
-from onyx.redis.redis_connector import RedisConnector
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -418,7 +420,7 @@ def extract_zip_metadata(zf: zipfile.ZipFile) -> dict[str, Any]:
     return zip_metadata
 
 
-def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResponse:
+def upload_files(files: list[UploadFile]) -> FileUploadResponse:
     for file in files:
         if not file.filename:
             raise HTTPException(status_code=400, detail="File name cannot be empty")
@@ -431,7 +433,7 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
     deduped_file_paths = []
     zip_metadata = {}
     try:
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         seen_zip = False
         for file in files:
             if file.content_type and file.content_type.startswith("application/zip"):
@@ -488,9 +490,8 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
 def upload_files_api(
     files: list[UploadFile],
     _: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
 ) -> FileUploadResponse:
-    return upload_files(files, db_session)
+    return upload_files(files)
 
 
 @router.get("/admin/connector")
@@ -772,7 +773,7 @@ def get_connector_indexing_status(
         if secondary_index
         else get_current_search_settings
     )
-    search_settings = get_search_settings(db_session)
+    get_search_settings(db_session)
     for cc_pair in cc_pairs:
         # TODO remove this to enable ingestion API
         if cc_pair.name == "DefaultCCPair":
@@ -784,15 +785,12 @@ def get_connector_indexing_status(
             # This may happen if background deletion is happening
             continue
 
-        in_progress = False
-        if search_settings:
-            redis_connector = RedisConnector(tenant_id, cc_pair.id)
-            redis_connector_index = redis_connector.new_index(search_settings.id)
-            if redis_connector_index.fenced:
-                in_progress = True
-
         latest_index_attempt = cc_pair_to_latest_index_attempt.get(
             (connector.id, credential.id)
+        )
+        in_progress = bool(
+            latest_index_attempt
+            and latest_index_attempt.status == IndexingStatus.IN_PROGRESS
         )
 
         latest_finished_attempt = cc_pair_to_latest_finished_index_attempt.get(
@@ -890,6 +888,7 @@ def create_connector_from_model(
             target_group_ids=connector_data.groups,
             object_is_public=connector_data.access_type == AccessType.PUBLIC,
             object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
+            object_is_new=True,
         )
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1002,6 +1001,7 @@ def update_connector_from_model(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ConnectorSnapshot | StatusResponse[int]:
+    cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     try:
         _validate_connector_allowed(connector_data.source)
         fetch_ee_implementation_or_noop(
@@ -1012,6 +1012,7 @@ def update_connector_from_model(
             target_group_ids=connector_data.groups,
             object_is_public=connector_data.access_type == AccessType.PUBLIC,
             object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
+            object_is_owned_by_user=cc_pair and user and cc_pair.creator_id == user.id,
         )
         connector_base = connector_data.to_connector_base()
     except ValueError as e:

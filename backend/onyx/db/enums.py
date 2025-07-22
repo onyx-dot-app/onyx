@@ -86,12 +86,16 @@ class ConnectorCredentialPairStatus(str, PyEnum):
     DELETING = "DELETING"
     INVALID = "INVALID"
 
+    @classmethod
+    def active_statuses(cls) -> list["ConnectorCredentialPairStatus"]:
+        return [
+            ConnectorCredentialPairStatus.ACTIVE,
+            ConnectorCredentialPairStatus.SCHEDULED,
+            ConnectorCredentialPairStatus.INITIAL_INDEXING,
+        ]
+
     def is_active(self) -> bool:
-        return (
-            self == ConnectorCredentialPairStatus.ACTIVE
-            or self == ConnectorCredentialPairStatus.SCHEDULED
-            or self == ConnectorCredentialPairStatus.INITIAL_INDEXING
-        )
+        return self in self.active_statuses()
 
 
 class AccessType(str, PyEnum):

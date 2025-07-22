@@ -1,7 +1,12 @@
 "use client";
 
 import React, { createContext, useContext, useState } from "react";
-import { CCPairBasicInfo, DocumentSet, Tag, ValidSources } from "@/lib/types";
+import {
+  CCPairBasicInfo,
+  DocumentSetSummary,
+  Tag,
+  ValidSources,
+} from "@/lib/types";
 import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
@@ -14,8 +19,8 @@ interface ChatContextProps {
   availableSources: ValidSources[];
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
-  documentSets: DocumentSet[];
-  availableDocumentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
+  availableDocumentSets: DocumentSetSummary[];
   availableTags: Tag[];
   llmProviders: LLMProviderDescriptor[];
   folders: Folder[];

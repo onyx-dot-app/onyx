@@ -33,6 +33,7 @@ from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
+from onyx.connectors.imap.connector import ImapConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CredentialsConnector
@@ -121,6 +122,7 @@ def identify_connector_class(
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
+        DocumentSource.IMAP: ImapConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }

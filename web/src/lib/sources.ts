@@ -44,6 +44,7 @@ import {
   FileIcon2,
   GitbookIcon,
   HighspotIcon,
+  EmailIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -345,6 +346,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/highspot",
   },
+  imap: {
+    icon: EmailIcon,
+    displayName: "Email",
+    category: SourceCategory.Messaging,
+  },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
   not_applicable: {
@@ -418,9 +424,9 @@ export function getSourceMetadataForSources(sources: ValidSources[]) {
 export function getSourcesForPersona(persona: Persona): ValidSources[] {
   const personaSources: ValidSources[] = [];
   persona.document_sets.forEach((documentSet) => {
-    documentSet.cc_pair_descriptors.forEach((ccPair) => {
-      if (!personaSources.includes(ccPair.connector.source)) {
-        personaSources.push(ccPair.connector.source);
+    documentSet.cc_pair_summaries.forEach((ccPair) => {
+      if (!personaSources.includes(ccPair.source)) {
+        personaSources.push(ccPair.source);
       }
     });
   });

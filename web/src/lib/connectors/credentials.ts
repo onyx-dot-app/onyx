@@ -244,6 +244,11 @@ export interface HighspotCredentialJson {
   highspot_secret: string;
 }
 
+export interface ImapCredentialJson {
+  imap_username: string;
+  imap_password: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -400,6 +405,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     highspot_key: "",
     highspot_secret: "",
   } as HighspotCredentialJson,
+  imap: {
+    imap_username: "",
+    imap_password: "",
+  } as ImapCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -484,6 +493,10 @@ export const credentialDisplayNames: Record<string, string> = {
   account_id: "R2 Account ID",
   r2_access_key_id: "R2 Access Key ID",
   r2_secret_access_key: "R2 Secret Access Key",
+
+  // IMAP
+  imap_username: "IMAP Username",
+  imap_password: "IMAP Password",
 
   // S3
   aws_access_key_id: "AWS Access Key ID",

@@ -82,6 +82,7 @@ def _add_user_filters(
             .where(~DocumentSet__UG.user_group_id.in_(user_groups))
             .correlate(DocumentSetDBModel)
         )
+        where_clause |= DocumentSetDBModel.user_id == user.id
     else:
         where_clause |= DocumentSetDBModel.is_public == True  # noqa: E712
 

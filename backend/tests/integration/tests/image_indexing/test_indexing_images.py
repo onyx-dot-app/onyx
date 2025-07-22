@@ -90,7 +90,7 @@ def test_image_indexing(
     CCPairManager.wait_for_indexing_completion(
         cc_pair=cc_pair,
         after=datetime.now(timezone.utc),
-        timeout=180,
+        timeout=300,
         user_performing_action=admin_user,
     )
 

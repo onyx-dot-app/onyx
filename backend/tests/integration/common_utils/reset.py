@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from types import SimpleNamespace
 
@@ -21,6 +22,7 @@ from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa.index import VespaIndex
+from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.models import IndexingSetting
 from onyx.setup import setup_postgres
 from onyx.setup import setup_vespa
@@ -397,11 +399,24 @@ def reset_vespa_multitenant() -> None:
                 time.sleep(5)
 
 
+def reset_file_store() -> None:
+    """Reset the FileStore."""
+    filestore = get_default_file_store()
+    for file_record in filestore.list_files_by_prefix(""):
+        filestore.delete_file(file_record.file_id)
+
+
 def reset_all() -> None:
+    if os.environ.get("SKIP_RESET", "").lower() == "true":
+        logger.info("Skipping reset.")
+        return
+
     logger.info("Resetting Postgres...")
     reset_postgres()
     logger.info("Resetting Vespa...")
     reset_vespa()
+    logger.info("Resetting FileStore...")
+    reset_file_store()
 
 
 def reset_all_multitenant() -> None:

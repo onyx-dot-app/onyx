@@ -1,5 +1,5 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
-import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
+import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 
 export interface StarterMessageBase {
   message: string;
@@ -18,29 +18,36 @@ export interface Prompt {
   datetime_aware: boolean;
   default_prompt: boolean;
 }
-export interface Persona {
+
+export interface MinimalPersonaSnapshot {
   id: number;
   name: string;
   description: string;
-  is_public: boolean;
-  is_visible: boolean;
+  tools: ToolSnapshot[];
+  starter_messages: StarterMessage[] | null;
+  document_sets: DocumentSetSummary[];
+  llm_model_version_override?: string;
+  llm_model_provider_override?: string;
+
+  uploaded_image_id?: string;
   icon_shape?: number;
   icon_color?: string;
-  uploaded_image_id?: string;
-  user_file_ids: number[];
-  user_folder_ids: number[];
+
+  is_public: boolean;
+  is_visible: boolean;
   display_priority: number | null;
   is_default_persona: boolean;
   builtin_persona: boolean;
-  starter_messages: StarterMessage[] | null;
-  tools: ToolSnapshot[];
+
   labels?: PersonaLabel[];
   owner: MinimalUserSnapshot | null;
+}
+
+export interface Persona extends MinimalPersonaSnapshot {
+  user_file_ids: number[];
+  user_folder_ids: number[];
   users: MinimalUserSnapshot[];
   groups: number[];
-  document_sets: DocumentSet[];
-  llm_model_provider_override?: string;
-  llm_model_version_override?: string;
   num_chunks?: number;
 }
 

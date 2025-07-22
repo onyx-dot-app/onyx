@@ -5,7 +5,6 @@ import { AdminPageTitle } from "@/components/admin/Title";
 import {
   DatePickerField,
   FieldLabel,
-  TextAreaField,
   TextArrayField,
   TextFormField,
 } from "@/components/Field";
@@ -13,33 +12,19 @@ import { BrainIcon } from "@/components/icons/icons";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { SwitchField } from "@/components/ui/switch";
-import {
-  Form,
-  Formik,
-  FormikProps,
-  FormikState,
-  useFormikContext,
-} from "formik";
+import { Form, Formik, FormikState, useFormikContext } from "formik";
 import { useState } from "react";
 import { FiSettings } from "react-icons/fi";
 import * as Yup from "yup";
-import {
-  EntityType,
-  KGConfig,
-  EntityTypeValues,
-  sanitizeKGConfig,
-  KGConfigRaw,
-  sanitizeKGEntityTypes,
-} from "./interfaces";
-import { ColumnDef } from "@tanstack/react-table";
-import { DataTable } from "@/components/ui/dataTable";
+import { KGConfig, KGConfigRaw, SourceAndEntityTypeView } from "./interfaces";
+import { sanitizeKGConfig } from "./utils";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { useIsKGExposed } from "./utils";
+import KGEntityTypes from "./KGEntityTypes";
 
 function createDomainField(
   name: string,
@@ -225,191 +210,6 @@ function KGConfiguration({
   );
 }
 
-function KGEntityTypes({
-  kgEntityTypes,
-  sortedKGEntityTypes: sorted,
-  setPopup,
-  refreshKGEntityTypes,
-}: {
-  kgEntityTypes: EntityTypeValues;
-  sortedKGEntityTypes: EntityType[];
-  setPopup?: (spec: PopupSpec | null) => void;
-  refreshKGEntityTypes?: () => void;
-}) {
-  const [sortedKGEntityTypes, setSortedKGEntityTypes] = useState(sorted);
-  console.log({ sortedKGEntityTypes });
-
-  const columns: ColumnDef<EntityType>[] = [
-    {
-      accessorKey: "name",
-      header: "Name",
-    },
-    {
-      accessorKey: "description",
-      header: "Description",
-      cell: ({ row }) => (
-        <div className="h-20 w-[800px]">
-          <TextAreaField
-            name={`${row.original.name.toLowerCase()}.description`}
-            className="resize-none border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"
-          />
-        </div>
-      ),
-    },
-    {
-      accessorKey: "active",
-      header: "Active",
-      cell: ({ row }) => (
-        <SwitchField name={`${row.original.name.toLowerCase()}.active`} />
-      ),
-    },
-  ];
-
-  const validationSchema = Yup.array(
-    Yup.object({
-      active: Yup.boolean().required(),
-    })
-  );
-
-  const onSubmit = async (
-    values: EntityTypeValues,
-    {
-      resetForm,
-    }: {
-      resetForm: (nextState?: Partial<FormikState<EntityTypeValues>>) => void;
-    }
-  ) => {
-    const diffs: EntityType[] = [];
-
-    for (const key in kgEntityTypes) {
-      const initialValue = kgEntityTypes[key]!;
-      const currentValue = values[key]!;
-      const equals =
-        initialValue.description === currentValue.description &&
-        initialValue.active === currentValue.active;
-      if (!equals) {
-        diffs.push(currentValue);
-      }
-    }
-
-    if (diffs.length === 0) return;
-
-    const response = await fetch("/api/admin/kg/entity-types", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(diffs),
-    });
-
-    if (!response.ok) {
-      const errorMsg = (await response.json()).detail;
-      console.warn({ errorMsg });
-      setPopup?.({
-        message: "Failed to configure Entity Types.",
-        type: "error",
-      });
-      return;
-    }
-
-    setPopup?.({
-      message: "Successfully updated Entity Types.",
-      type: "success",
-    });
-
-    refreshKGEntityTypes?.();
-
-    resetForm({ values });
-  };
-
-  const reset = async (props: FormikProps<EntityTypeValues>) => {
-    const result = await fetch("/api/admin/kg/reset", { method: "PUT" });
-
-    if (!result.ok) {
-      setPopup?.({
-        message: "Failed to reset Knowledge Graph.",
-        type: "error",
-      });
-      return;
-    }
-
-    const rawData = (await result.json()) as EntityType[];
-    const [newEntityTypes, newSortedEntityTypes] =
-      sanitizeKGEntityTypes(rawData);
-    props.resetForm({ values: newEntityTypes });
-    setSortedKGEntityTypes(newSortedEntityTypes);
-
-    setPopup?.({
-      message: "Successfully reset Knowledge Graph.",
-      type: "success",
-    });
-
-    refreshKGEntityTypes?.();
-  };
-
-  return (
-    <Formik
-      initialValues={kgEntityTypes}
-      validationSchema={validationSchema}
-      onSubmit={onSubmit}
-    >
-      {(props) => (
-        <Form className="flex flex-col gap-y-8">
-          <CardSection className="flex flex-col w-min px-10 gap-y-4">
-            <DataTable
-              columns={columns}
-              data={sortedKGEntityTypes}
-              emptyMessage={
-                <div className="flex flex-col gap-y-4">
-                  <p>No results available.</p>
-                  <p>
-                    To configure Knowledge Graph, first connect some {` `}
-                    <Link href={`/admin/add-connector`} className="underline">
-                      Connectors.
-                    </Link>
-                  </p>
-                </div>
-              }
-            />
-            <div className="flex flex-row items-center gap-x-4">
-              <Button type="submit" variant="submit" disabled={!props.dirty}>
-                Save
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!props.dirty}
-                onClick={() => props.resetForm()}
-              >
-                Cancel
-              </Button>
-            </div>
-          </CardSection>
-          <div className="border border-red-700 p-8 rounded-md flex flex-col w-full">
-            <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
-              Danger
-            </p>
-            <div className="flex flex-col gap-y-4">
-              <p>
-                Resetting will delete all extracted entities and relationships
-                and deactivate all entity types. After reset, you can reactivate
-                entity types to begin populating the Knowledge Graph again.
-              </p>
-              <Button
-                type="button"
-                variant="destructive"
-                className="w-min"
-                onClick={() => reset(props)}
-              >
-                Reset Knowledge Graph
-              </Button>
-            </div>
-          </div>
-        </Form>
-      )}
-    </Formik>
-  );
-}
-
 function Main() {
   // Data:
   const {
@@ -418,10 +218,13 @@ function Main() {
     mutate: configMutate,
   } = useSWR<KGConfigRaw>("/api/admin/kg/config", errorHandlingFetcher);
   const {
-    data: entityTypesData,
+    data: sourceAndEntityTypesData,
     isLoading: entityTypesIsLoading,
     mutate: entityTypesMutate,
-  } = useSWR<EntityType[]>("/api/admin/kg/entity-types", errorHandlingFetcher);
+  } = useSWR<SourceAndEntityTypeView>(
+    "/api/admin/kg/entity-types",
+    errorHandlingFetcher
+  );
 
   // Local State:
   const { popup, setPopup } = usePopup();
@@ -431,14 +234,12 @@ function Main() {
     configIsLoading ||
     entityTypesIsLoading ||
     !configData ||
-    !entityTypesData
+    !sourceAndEntityTypesData
   ) {
     return <></>;
   }
 
   const kgConfig = sanitizeKGConfig(configData);
-  const [kgEntityTypes, sortedKGEntityTypes] =
-    sanitizeKGEntityTypes(entityTypesData);
 
   return (
     <div className="flex flex-col py-4 gap-y-8">
@@ -484,15 +285,10 @@ function Main() {
       </CardSection>
       {kgConfig.enabled && (
         <>
-          <p className="text-2xl font-bold mb-4 text-text border-b border-b-border pb-2">
+          <p className="text-2xl font-bold text-text border-b border-b-border">
             Entity Types
           </p>
-          <KGEntityTypes
-            kgEntityTypes={kgEntityTypes}
-            sortedKGEntityTypes={sortedKGEntityTypes}
-            setPopup={setPopup}
-            refreshKGEntityTypes={entityTypesMutate}
-          />
+          <KGEntityTypes sourceAndEntityTypes={sourceAndEntityTypesData} />
         </>
       )}
       {configureModalShown && (

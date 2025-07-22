@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { usePopup, PopupSpec } from "@/components/admin/connectors/Popup";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { triggerIndexing } from "./lib";
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";

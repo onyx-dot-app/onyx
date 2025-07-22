@@ -203,6 +203,8 @@ def generate_simple_sql(
     if state.kg_entity_temp_view_name is None:
         raise ValueError("kg_entity_temp_view_name is not set")
 
+    sql_statement_display: str | None = None
+
     ## STEP 3 - articulate goals
 
     stream_write_step_activities(writer, _KG_STEP_NR)
@@ -381,7 +383,18 @@ def generate_simple_sql(
 
                 raise e
 
-        logger.debug(f"A3 - sql_statement after correction: {sql_statement}")
+        # display sql statement with view names replaced by general view names
+        sql_statement_display = sql_statement.replace(
+            state.kg_doc_temp_view_name, "<your_allowed_docs_view_name>"
+        )
+        sql_statement_display = sql_statement_display.replace(
+            state.kg_rel_temp_view_name, "<your_relationship_view_name>"
+        )
+        sql_statement_display = sql_statement_display.replace(
+            state.kg_entity_temp_view_name, "<your_entity_view_name>"
+        )
+
+        logger.debug(f"A3 - sql_statement after correction: {sql_statement_display}")
 
         # Get SQL for source documents
 
@@ -409,7 +422,20 @@ def generate_simple_sql(
                     "relationship_table", rel_temp_view
                 )
 
-            logger.debug(f"A3 source_documents_sql: {source_documents_sql}")
+            if source_documents_sql:
+                source_documents_sql_display = source_documents_sql.replace(
+                    state.kg_doc_temp_view_name, "<your_allowed_docs_view_name>"
+                )
+                source_documents_sql_display = source_documents_sql_display.replace(
+                    state.kg_rel_temp_view_name, "<your_relationship_view_name>"
+                )
+                source_documents_sql_display = source_documents_sql_display.replace(
+                    state.kg_entity_temp_view_name, "<your_entity_view_name>"
+                )
+            else:
+                source_documents_sql_display = "(No source documents SQL generated)"
+
+            logger.debug(f"A3 source_documents_sql: {source_documents_sql_display}")
 
         scalar_result = None
         query_results = None
@@ -435,7 +461,13 @@ def generate_simple_sql(
                     rows = result.fetchall()
                     query_results = [dict(row._mapping) for row in rows]
             except Exception as e:
+                # TODO: raise error on frontend
                 logger.error(f"Error executing SQL query: {e}")
+                drop_views(
+                    allowed_docs_view_name=doc_temp_view,
+                    kg_relationships_view_name=rel_temp_view,
+                    kg_entity_view_name=ent_temp_view,
+                )
 
                 raise e
 
@@ -459,8 +491,14 @@ def generate_simple_sql(
                         for source_document_result in query_source_document_results
                     ]
                 except Exception as e:
-                    # No stopping here, the individualized SQL query is not mandatory
                     # TODO: raise error on frontend
+
+                    drop_views(
+                        allowed_docs_view_name=doc_temp_view,
+                        kg_relationships_view_name=rel_temp_view,
+                        kg_entity_view_name=ent_temp_view,
+                    )
+
                     logger.error(f"Error executing Individualized SQL query: {e}")
 
         else:
@@ -493,11 +531,11 @@ def generate_simple_sql(
     if reasoning:
         stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
 
-    if main_sql_statement:
+    if sql_statement_display:
         stream_write_step_answer_explicit(
             writer,
             step_nr=_KG_STEP_NR,
-            answer=f" \n Generated SQL: {main_sql_statement}",
+            answer=f" \n Generated SQL: {sql_statement_display}",
         )
 
     stream_close_step_answer(writer, _KG_STEP_NR)

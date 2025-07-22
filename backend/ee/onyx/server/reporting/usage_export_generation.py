@@ -112,7 +112,7 @@ def create_new_usage_report(
     period: tuple[datetime, datetime] | None,
 ) -> UsageReportMetadata:
     report_id = str(uuid.uuid4())
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
 
     messages_file_id = generate_chat_messages_report(
         db_session, file_store, report_id, period

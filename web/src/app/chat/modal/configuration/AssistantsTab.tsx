@@ -13,7 +13,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { getFinalLLM } from "@/lib/llm/utils";
 import React, { useEffect, useState } from "react";
@@ -27,9 +27,9 @@ export function AssistantsTab({
   llmProviders,
   onSelect,
 }: {
-  selectedAssistant: Persona;
+  selectedAssistant: MinimalPersonaSnapshot;
   llmProviders: LLMProviderDescriptor[];
-  onSelect: (assistant: Persona) => void;
+  onSelect: (assistant: MinimalPersonaSnapshot) => void;
 }) {
   const { refreshUser } = useUser();
   const [_, llmName] = getFinalLLM(llmProviders, null, null);

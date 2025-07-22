@@ -5,7 +5,7 @@ import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import {
-  DocumentSet,
+  DocumentSetSummary,
   SlackChannelConfig,
   SlackBotResponseType,
 } from "@/lib/types";
@@ -16,7 +16,7 @@ import {
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
@@ -29,8 +29,8 @@ export const SlackChannelConfigCreationForm = ({
   existingSlackChannelConfig,
 }: {
   slack_bot_id: number;
-  documentSets: DocumentSet[];
-  personas: Persona[];
+  documentSets: DocumentSetSummary[];
+  personas: MinimalPersonaSnapshot[];
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   existingSlackChannelConfig?: SlackChannelConfig;
 }) => {
@@ -59,7 +59,7 @@ export const SlackChannelConfigCreationForm = ({
         }
         return acc;
       },
-      [[], []] as [Persona[], Persona[]]
+      [[], []] as [MinimalPersonaSnapshot[], MinimalPersonaSnapshot[]]
     );
   }, [personas]);
 

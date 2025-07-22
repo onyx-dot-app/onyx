@@ -9,9 +9,9 @@ interface FullSearchBarProps {
   agentic?: boolean;
   toggleAgentic?: () => void;
   ccPairs: CCPairBasicInfo[];
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
   filterManager: any; // You might want to replace 'any' with a more specific type
-  finalAvailableDocumentSets: DocumentSet[];
+  finalAvailableDocumentSets: DocumentSetSummary[];
   finalAvailableSources: string[];
   tags: Tag[];
   showingSidebar: boolean;
@@ -27,7 +27,7 @@ import { useRef } from "react";
 import { SendIcon } from "../icons/icons";
 import { Separator } from "@/components/ui/separator";
 import KeyboardSymbol from "@/lib/browserUtilities";
-import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
+import { CCPairBasicInfo, DocumentSetSummary, Tag } from "@/lib/types";
 import { HorizontalSourceSelector } from "./filtering/HorizontalSourceSelector";
 
 export const AnimatedToggle = ({

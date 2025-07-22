@@ -1,5 +1,5 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { DocumentSet, ValidSources } from "./types";
+import { DocumentSetSummary, ValidSources } from "./types";
 import { getSourcesForPersona } from "./sources";
 
 export function computeAvailableFilters({
@@ -9,8 +9,8 @@ export function computeAvailableFilters({
 }: {
   selectedPersona: Persona | undefined | null;
   availableSources: ValidSources[];
-  availableDocumentSets: DocumentSet[];
-}): [ValidSources[], DocumentSet[]] {
+  availableDocumentSets: DocumentSetSummary[];
+}): [ValidSources[], DocumentSetSummary[]] {
   const finalAvailableSources =
     selectedPersona && selectedPersona.document_sets.length
       ? getSourcesForPersona(selectedPersona)

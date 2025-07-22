@@ -62,3 +62,14 @@ class EntityType(BaseModel):
             active=model.active,
             grounded_source_name=model.grounded_source_name,
         )
+
+
+class SourceStatistics(BaseModel):
+    source_name: str
+    last_updated: datetime
+    entities_count: int
+
+
+class SourceAndEntityTypeView(BaseModel):
+    source_statistics: dict[str, SourceStatistics]
+    entity_types: dict[str, list[EntityType]]

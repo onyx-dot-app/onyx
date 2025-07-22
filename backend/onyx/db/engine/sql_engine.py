@@ -31,6 +31,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -304,6 +305,18 @@ def get_session_with_current_tenant() -> Generator[Session, None, None]:
         yield session
 
 
+@contextmanager
+def get_session_with_current_tenant_if_none(
+    session: Session | None,
+) -> Generator[Session, None, None]:
+    if session is None:
+        tenant_id = get_current_tenant_id()
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            yield session
+    else:
+        yield session
+
+
 # Used in multi tenant mode when need to refer to the shared `public` schema
 @contextmanager
 def get_session_with_shared_schema() -> Generator[Session, None, None]:
@@ -324,7 +337,7 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
     # no need to use the schema translation map for self-hosted + default schema
-    if not MULTI_TENANT:
+    if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
         with Session(bind=engine, expire_on_commit=False) as session:
             yield session
         return
@@ -370,12 +383,11 @@ def get_db_readonly_user_session_with_current_tenant() -> (
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
     # no need to use the schema translation map for self-hosted + default schema
-    if not MULTI_TENANT:
+    if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
         with Session(readonly_engine, expire_on_commit=False) as session:
             yield session
         return
 
-    # no need to use the schema translation map for self-hosted + default schema
     schema_translate_map = {None: tenant_id}
     with readonly_engine.connect().execution_options(
         schema_translate_map=schema_translate_map

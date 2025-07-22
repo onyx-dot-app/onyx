@@ -14,11 +14,13 @@ Guidelines:
 1. Remove stop-words and obvious noise.
 2. Remove or down-weight meta-instructions (e.g., "show me", "summary of", "how do I") that are \
 unlikely to appear in the target messages.
-3. If the query has many keywords, produce several focused queries that keep related words together; \
+3. Stick with words used in the original query. If you need to add implied keywords (e.g., "when did" -> "date"), \
+create a separate query for it.
+4. If the query has many keywords, produce several focused queries that keep related words together; \
 never explode into single-word queries.
-4. Preserve phrases that belong together (e.g., "performance issues"); a word may appear in multiple queries.
-5. When unsure, produce both a broad and a narrow query.
-6. If the user asks for X or Y, create separate queries for X and Y.
+5. Preserve phrases that belong together (e.g., "performance issues"); a word may appear in multiple queries.
+6. When unsure, produce both a broad and a narrow query.
+7. If the user asks for X or Y, create separate queries for X and Y.
 
 Here is the original query:
 {{query}}

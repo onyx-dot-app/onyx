@@ -2,7 +2,6 @@ import React from "react";
 import { cn, truncateString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { X, FolderIcon, Loader2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { FolderResponse, FileResponse } from "../DocumentsContext";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";

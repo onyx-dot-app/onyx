@@ -1,15 +1,18 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { User } from "../types";
 import { checkUserIsNoAuthUser } from "../user";
 import { personaComparator } from "@/app/admin/assistants/lib";
 
-export function checkUserOwnsAssistant(user: User | null, assistant: Persona) {
+export function checkUserOwnsAssistant(
+  user: User | null,
+  assistant: MinimalPersonaSnapshot
+) {
   return checkUserIdOwnsAssistant(user?.id, assistant);
 }
 
 export function checkUserIdOwnsAssistant(
   userId: string | undefined,
-  assistant: Persona
+  assistant: MinimalPersonaSnapshot
 ) {
   return (
     (!userId ||
@@ -19,7 +22,10 @@ export function checkUserIdOwnsAssistant(
   );
 }
 
-export function classifyAssistants(user: User | null, assistants: Persona[]) {
+export function classifyAssistants(
+  user: User | null,
+  assistants: MinimalPersonaSnapshot[]
+) {
   if (!user) {
     return {
       visibleAssistants: assistants.filter(
@@ -59,7 +65,7 @@ export function classifyAssistants(user: User | null, assistants: Persona[]) {
 }
 
 export function orderAssistantsForUser(
-  assistants: Persona[],
+  assistants: MinimalPersonaSnapshot[],
   user: User | null
 ) {
   let orderedAssistants = [...assistants];
@@ -112,7 +118,7 @@ export function orderAssistantsForUser(
 
 export function getUserCreatedAssistants(
   user: User | null,
-  assistants: Persona[]
+  assistants: MinimalPersonaSnapshot[]
 ) {
   return assistants.filter((assistant) =>
     checkUserOwnsAssistant(user, assistant)
@@ -121,29 +127,10 @@ export function getUserCreatedAssistants(
 
 // Filter assistants based on connector status, image compatibility and visibility
 export function filterAssistants(
-  assistants: Persona[],
-  hasAnyConnectors: boolean,
-  hasImageCompatibleModel: boolean
-): Persona[] {
+  assistants: MinimalPersonaSnapshot[]
+): MinimalPersonaSnapshot[] {
   let filteredAssistants = assistants.filter(
     (assistant) => assistant.is_visible
   );
-
-  if (!hasAnyConnectors) {
-    filteredAssistants = filteredAssistants.filter(
-      (assistant) =>
-        assistant.num_chunks === 0 || assistant.document_sets.length > 0
-    );
-  }
-
-  if (!hasImageCompatibleModel) {
-    filteredAssistants = filteredAssistants.filter(
-      (assistant) =>
-        !assistant.tools.some(
-          (tool) => tool.in_code_tool_id === "ImageGenerationTool"
-        )
-    );
-  }
-
   return filteredAssistants.sort(personaComparator);
 }

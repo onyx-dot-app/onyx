@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from enum import Enum
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -10,7 +11,6 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import aliased
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
@@ -37,7 +38,9 @@ from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
 from onyx.server.features.persona.models import FullPersonaSnapshot
+from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
+from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -45,9 +48,15 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
+class PersonaLoadType(Enum):
+    NONE = "none"
+    MINIMAL = "minimal"
+    FULL = "full"
+
+
 def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
-) -> Select:
+    stmt: Select[tuple[Persona]], user: User | None, get_editable: bool = True
+) -> Select[tuple[Persona]]:
     # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
@@ -321,7 +330,45 @@ def update_persona_public_status(
     db_session.commit()
 
 
-def get_personas_for_user(
+def _build_persona_filters(
+    stmt: Select[tuple[Persona]],
+    include_default: bool,
+    include_slack_bot_personas: bool,
+    include_deleted: bool,
+) -> Select[tuple[Persona]]:
+    if not include_default:
+        stmt = stmt.where(Persona.builtin_persona.is_(False))
+    if not include_slack_bot_personas:
+        stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
+    if not include_deleted:
+        stmt = stmt.where(Persona.deleted.is_(False))
+    return stmt
+
+
+def get_minimal_persona_snapshots_for_user(
+    user: User | None,
+    db_session: Session,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
+) -> list[MinimalPersonaSnapshot]:
+    stmt = select(Persona)
+    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _build_persona_filters(
+        stmt, include_default, include_slack_bot_personas, include_deleted
+    )
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets),
+        selectinload(Persona.user),
+    )
+    results = db_session.scalars(stmt).all()
+    return [MinimalPersonaSnapshot.from_model(persona) for persona in results]
+
+
+def get_persona_snapshots_for_user(
     # if user is `None` assume the user is an admin or auth is disabled
     user: User | None,
     db_session: Session,
@@ -329,35 +376,37 @@ def get_personas_for_user(
     include_default: bool = True,
     include_slack_bot_personas: bool = False,
     include_deleted: bool = False,
-    joinedload_all: bool = False,
-    # a bit jank
-    include_prompt: bool = True,
+) -> list[PersonaSnapshot]:
+    stmt = select(Persona)
+    stmt = _add_user_filters(stmt, user, get_editable)
+    stmt = _build_persona_filters(
+        stmt, include_default, include_slack_bot_personas, include_deleted
+    )
+    stmt = stmt.options(
+        selectinload(Persona.tools),
+        selectinload(Persona.labels),
+        selectinload(Persona.document_sets),
+        selectinload(Persona.user),
+    )
+
+    results = db_session.scalars(stmt).all()
+    return [PersonaSnapshot.from_model(persona) for persona in results]
+
+
+def get_raw_personas_for_user(
+    user: User | None,
+    db_session: Session,
+    get_editable: bool = True,
+    include_default: bool = True,
+    include_slack_bot_personas: bool = False,
+    include_deleted: bool = False,
 ) -> Sequence[Persona]:
     stmt = select(Persona)
     stmt = _add_user_filters(stmt, user, get_editable)
-
-    if not include_default:
-        stmt = stmt.where(Persona.builtin_persona.is_(False))
-    if not include_slack_bot_personas:
-        stmt = stmt.where(not_(Persona.name.startswith(SLACK_BOT_PERSONA_PREFIX)))
-    if not include_deleted:
-        stmt = stmt.where(Persona.deleted.is_(False))
-
-    if joinedload_all:
-        stmt = stmt.options(
-            selectinload(Persona.tools),
-            selectinload(Persona.document_sets),
-            selectinload(Persona.groups),
-            selectinload(Persona.users),
-            selectinload(Persona.labels),
-            selectinload(Persona.user_files),
-            selectinload(Persona.user_folders),
-        )
-        if include_prompt:
-            stmt = stmt.options(selectinload(Persona.prompts))
-
-    results = db_session.execute(stmt).scalars().all()
-    return results
+    stmt = _build_persona_filters(
+        stmt, include_default, include_slack_bot_personas, include_deleted
+    )
+    return db_session.scalars(stmt).all()
 
 
 def get_personas(db_session: Session) -> Sequence[Persona]:
@@ -465,6 +514,13 @@ def upsert_persona(
         existing_persona = _get_persona_by_name(
             persona_name=name, user=user, db_session=db_session
         )
+
+        # Check for duplicate names when creating new personas
+        # Deleted personas are allowed to be overwritten
+        if existing_persona and not existing_persona.deleted:
+            raise ValueError(
+                f"Assistant with name '{name}' already exists. Please rename your assistant."
+            )
 
     if existing_persona:
         # this checks if the user has permission to edit the persona
@@ -695,9 +751,9 @@ def update_persona_visibility(
 
 def validate_persona_tools(tools: list[Tool]) -> None:
     for tool in tools:
-        if tool.name == "InternetSearchTool" and not BING_API_KEY:
+        if tool.name == "InternetSearchTool" and not (BING_API_KEY or EXA_API_KEY):
             raise ValueError(
-                "Bing API key not found, please contact your Onyx admin to get it added!"
+                "Internet Search API key not found, please contact your Onyx admin to get it added!"
             )
 
 
@@ -818,7 +874,7 @@ def delete_persona_label(label_id: int, db_session: Session) -> None:
 def persona_has_search_tool(persona_id: int, db_session: Session) -> bool:
     persona = (
         db_session.query(Persona)
-        .options(joinedload(Persona.tools))
+        .options(selectinload(Persona.tools))
         .filter(Persona.id == persona_id)
         .one_or_none()
     )

@@ -9,7 +9,7 @@ from onyx.db.models import Persona
 from onyx.db.models import PersonaLabel
 from onyx.db.models import Prompt
 from onyx.db.models import StarterMessage
-from onyx.server.features.document_set.models import DocumentSet
+from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.models import MinimalUserSnapshot
 from onyx.utils.logger import setup_logger
@@ -89,6 +89,70 @@ class PersonaUpsertRequest(BaseModel):
     user_folder_ids: list[int] | None = None
 
 
+class MinimalPersonaSnapshot(BaseModel):
+    """Minimal persona model optimized for ChatPage.tsx - only includes fields actually used"""
+
+    # Core fields used by ChatPage
+    id: int
+    name: str
+    description: str
+    # Used for retrieval capability checking
+    tools: list[ToolSnapshot]
+    starter_messages: list[StarterMessage] | None
+
+    # only show document sets in the UI that the assistant has access to
+    document_sets: list[DocumentSetSummary]
+    llm_model_version_override: str | None
+    llm_model_provider_override: str | None
+
+    uploaded_image_id: str | None
+    icon_shape: int | None
+    icon_color: str | None
+
+    is_public: bool
+    is_visible: bool
+    display_priority: int | None
+    is_default_persona: bool
+    builtin_persona: bool
+
+    # Used for filtering
+    labels: list["PersonaLabelSnapshot"]
+
+    # Used to display ownership
+    owner: MinimalUserSnapshot | None
+
+    @classmethod
+    def from_model(cls, persona: Persona) -> "MinimalPersonaSnapshot":
+        return MinimalPersonaSnapshot(
+            # Core fields actually used by ChatPage
+            id=persona.id,
+            name=persona.name,
+            description=persona.description,
+            tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
+            starter_messages=persona.starter_messages,
+            document_sets=[
+                DocumentSetSummary.from_model(document_set)
+                for document_set in persona.document_sets
+            ],
+            llm_model_version_override=persona.llm_model_version_override,
+            llm_model_provider_override=persona.llm_model_provider_override,
+            uploaded_image_id=persona.uploaded_image_id,
+            icon_shape=persona.icon_shape,
+            icon_color=persona.icon_color,
+            is_public=persona.is_public,
+            is_visible=persona.is_visible,
+            display_priority=persona.display_priority,
+            is_default_persona=persona.is_default_persona,
+            builtin_persona=persona.builtin_persona,
+            labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            owner=(
+                MinimalUserSnapshot(id=persona.user.id, email=persona.user.email)
+                if persona.user
+                else None
+            ),
+        )
+
+
 class PersonaSnapshot(BaseModel):
     id: int
     name: str
@@ -109,7 +173,7 @@ class PersonaSnapshot(BaseModel):
     owner: MinimalUserSnapshot | None
     users: list[MinimalUserSnapshot]
     groups: list[int]
-    document_sets: list[DocumentSet]
+    document_sets: list[DocumentSetSummary]
     llm_model_provider_override: str | None
     llm_model_version_override: str | None
     num_chunks: float | None
@@ -144,7 +208,7 @@ class PersonaSnapshot(BaseModel):
             ],
             groups=[user_group.id for user_group in persona.groups],
             document_sets=[
-                DocumentSet.from_model(document_set_model)
+                DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
             llm_model_provider_override=persona.llm_model_provider_override,
@@ -200,7 +264,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 else None
             ),
             document_sets=[
-                DocumentSet.from_model(document_set_model)
+                DocumentSetSummary.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
             num_chunks=persona.num_chunks,

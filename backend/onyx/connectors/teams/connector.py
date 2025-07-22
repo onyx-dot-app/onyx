@@ -286,9 +286,14 @@ class TeamsConnector(
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: Message) -> str:
-    top_message_user_name = (
-        top_message.from_.user.display_name if top_message.from_ else "Unknown User"
-    )
+    top_message_user_name: str
+
+    if top_message.from_ and top_message.from_.user:
+        top_message_user_name = top_message.from_.user.display_name
+    else:
+        logger.warn(f"Message {top_message=} has no `from.user` field")
+        top_message_user_name = "Unknown User"
+
     top_message_content = top_message.body.content or ""
     top_message_subject = top_message.subject or "Unknown Subject"
     channel_name = channel.properties.get("displayName", "Unknown")

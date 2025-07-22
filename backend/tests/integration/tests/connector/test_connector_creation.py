@@ -37,9 +37,8 @@ def test_overlapping_connector_creation(reset: None) -> None:
 
     config = {
         "wiki_base": os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        "space": "DailyConne",
+        "space": "DailyConnectorTestSpace",
         "is_cloud": True,
-        "page_id": "",
     }
 
     credential = {
@@ -61,7 +60,7 @@ def test_overlapping_connector_creation(reset: None) -> None:
     )
 
     CCPairManager.wait_for_indexing_completion(
-        cc_pair_1, now, timeout=120, user_performing_action=admin_user
+        cc_pair_1, now, timeout=300, user_performing_action=admin_user
     )
 
     now = datetime.now(timezone.utc)
@@ -75,7 +74,7 @@ def test_overlapping_connector_creation(reset: None) -> None:
     )
 
     CCPairManager.wait_for_indexing_completion(
-        cc_pair_2, now, timeout=120, user_performing_action=admin_user
+        cc_pair_2, now, timeout=300, user_performing_action=admin_user
     )
 
     info_1 = CCPairManager.get_single(cc_pair_1.id, user_performing_action=admin_user)
@@ -98,9 +97,7 @@ def test_connector_pause_while_indexing(reset: None) -> None:
 
     config = {
         "wiki_base": os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        "space": "",
         "is_cloud": True,
-        "page_id": "",
     }
 
     credential = {

@@ -29,6 +29,7 @@ SCOPES = [
     "groups:history",
     "im:history",
     "mpim:history",
+    "users.profile:read",
 ]
 
 

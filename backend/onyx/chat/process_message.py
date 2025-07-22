@@ -128,16 +128,16 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    INTERNET_SEARCH_RESPONSE_ID,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    internet_search_response_to_search_docs,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchResponse,
+    INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
+)
+from onyx.tools.tool_implementations.internet_search.models import (
+    InternetSearchResponseSummary,
+)
+from onyx.tools.tool_implementations.internet_search.utils import (
+    internet_search_response_to_search_docs,
 )
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
@@ -281,7 +281,7 @@ def _handle_internet_search_tool_response_summary(
     packet: ToolResponse,
     db_session: Session,
 ) -> tuple[QADocsResponse, list[DbSearchDoc]]:
-    internet_search_response = cast(InternetSearchResponse, packet.response)
+    internet_search_response = cast(InternetSearchResponseSummary, packet.response)
     server_search_docs = internet_search_response_to_search_docs(
         internet_search_response
     )
@@ -296,10 +296,10 @@ def _handle_internet_search_tool_response_summary(
     ]
     return (
         QADocsResponse(
-            rephrased_query=internet_search_response.revised_query,
+            rephrased_query=internet_search_response.query,
             top_documents=response_docs,
             predicted_flow=QueryFlow.QUESTION_ANSWER,
-            predicted_search=SearchType.SEMANTIC,
+            predicted_search=SearchType.INTERNET,
             applied_source_filters=[],
             applied_time_cutoff=None,
             recency_bias_multiplier=1.0,
@@ -491,7 +491,7 @@ def _process_tool_response(
             ]
         )
         yield FileChatDisplay(file_ids=[str(file_id) for file_id in file_ids])
-    elif packet.id == INTERNET_SEARCH_RESPONSE_ID:
+    elif packet.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
         (
             info.qa_docs_response,
             info.reference_db_search_docs,
@@ -725,9 +725,7 @@ def stream_chat_message_objects(
                     )
 
         # load all files needed for this chat chain in memory
-        files = load_all_chat_files(
-            history_msgs, new_msg_req.file_descriptors, db_session
-        )
+        files = load_all_chat_files(history_msgs, new_msg_req.file_descriptors)
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
         user_file_ids = new_msg_req.user_file_ids or []
@@ -906,7 +904,6 @@ def stream_chat_message_objects(
             citation_config=CitationConfig(
                 all_docs_useful=selected_db_search_docs is not None
             ),
-            document_pruning_config=document_pruning_config,
             structured_response_format=new_msg_req.structured_response_format,
         )
 
@@ -936,6 +933,7 @@ def stream_chat_message_objects(
             ),
             internet_search_tool_config=InternetSearchToolConfig(
                 answer_style_config=answer_style_config,
+                document_pruning_config=document_pruning_config,
             ),
             image_generation_tool_config=ImageGenerationToolConfig(
                 additional_headers=litellm_additional_headers,
@@ -1012,6 +1010,7 @@ def stream_chat_message_objects(
             tools=tools,
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
+            skip_gen_ai_answer_generation=new_msg_req.skip_gen_ai_answer_generation,
         )
 
         info_by_subq: dict[SubQuestionKey, AnswerPostInfo] = defaultdict(

@@ -4,7 +4,7 @@ import { UserProvider } from "../user/UserProvider";
 import { ProviderContextProvider } from "../chat/ProviderContext";
 import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 import { ModalProvider } from "./ModalContext";
 import { AuthTypeMetadata } from "@/lib/userSS";
@@ -13,9 +13,7 @@ interface AppProviderProps {
   children: React.ReactNode;
   user: User | null;
   settings: CombinedSettings;
-  assistants: Persona[];
-  hasAnyConnectors: boolean;
-  hasImageCompatibleModel: boolean;
+  assistants: MinimalPersonaSnapshot[];
   authTypeMetadata: AuthTypeMetadata;
 }
 
@@ -24,8 +22,6 @@ export const AppProvider = ({
   user,
   settings,
   assistants,
-  hasAnyConnectors,
-  hasImageCompatibleModel,
   authTypeMetadata,
 }: AppProviderProps) => {
   return (
@@ -36,11 +32,7 @@ export const AppProvider = ({
         authTypeMetadata={authTypeMetadata}
       >
         <ProviderContextProvider>
-          <AssistantsProvider
-            initialAssistants={assistants}
-            hasAnyConnectors={hasAnyConnectors}
-            hasImageCompatibleModel={hasImageCompatibleModel}
-          >
+          <AssistantsProvider initialAssistants={assistants}>
             <ModalProvider user={user}>{children}</ModalProvider>
           </AssistantsProvider>
         </ProviderContextProvider>

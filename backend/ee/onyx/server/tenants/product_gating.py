@@ -16,10 +16,6 @@ logger = setup_logger()
 def update_tenant_gating(tenant_id: str, status: ApplicationStatus) -> None:
     redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
 
-    # Store the full status
-    status_key = f"tenant:{tenant_id}:status"
-    redis_client.set(status_key, status.value)
-
     # Maintain the GATED_ACCESS set
     if status == ApplicationStatus.GATED_ACCESS:
         redis_client.sadd(GATED_TENANTS_KEY, tenant_id)
@@ -44,6 +40,25 @@ def store_product_gating(tenant_id: str, application_status: ApplicationStatus) 
     except Exception:
         logger.exception("Failed to gate product")
         raise
+
+
+def overwrite_full_gated_set(tenant_ids: list[str]) -> None:
+    redis_client = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+
+    pipeline = redis_client.pipeline()
+
+    # using pipeline doesn't automatically add the tenant_id prefix
+    full_gated_set_key = f"{ONYX_CLOUD_TENANT_ID}:{GATED_TENANTS_KEY}"
+
+    # Clear the existing set
+    pipeline.delete(full_gated_set_key)
+
+    # Add all tenant IDs to the set and set their status
+    for tenant_id in tenant_ids:
+        pipeline.sadd(full_gated_set_key, tenant_id)
+
+    # Execute all commands at once
+    pipeline.execute()
 
 
 def get_gated_tenants() -> set[str]:

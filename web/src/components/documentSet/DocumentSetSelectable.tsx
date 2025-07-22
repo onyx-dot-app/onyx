@@ -1,6 +1,6 @@
 "use client";
 
-import { DocumentSet, ValidSources } from "@/lib/types";
+import { DocumentSetSummary, ValidSources } from "@/lib/types";
 import { CustomCheckbox } from "../CustomCheckbox";
 import { SourceIcon } from "../SourceIcon";
 import {
@@ -17,7 +17,7 @@ export function DocumentSetSelectable({
   disabled,
   disabledTooltip,
 }: {
-  documentSet: DocumentSet;
+  documentSet: DocumentSetSummary;
   isSelected: boolean;
   onSelect: () => void;
   disabled?: boolean;
@@ -25,8 +25,8 @@ export function DocumentSetSelectable({
 }) {
   // Collect unique connector sources
   const uniqueSources = new Set<ValidSources>();
-  documentSet.cc_pair_descriptors.forEach((ccPairDescriptor) => {
-    uniqueSources.add(ccPairDescriptor.connector.source);
+  documentSet.cc_pair_summaries.forEach((ccPairSummary) => {
+    uniqueSources.add(ccPairSummary.source);
   });
 
   return (

@@ -66,6 +66,7 @@ class SearchQueryInfo(BaseModel):
 
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
+    original_query: str | None = None
     force_no_rerank: bool | None = None
     alternate_db_session: Session | None = None
     retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None = None

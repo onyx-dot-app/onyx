@@ -34,12 +34,17 @@ module.exports = {
           "0%": { opacity: "0", transform: "scale(0.95)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        "fade-out-scale": {
+          "0%": { opacity: "1", transform: "scale(1)" },
+          "100%": { opacity: "0", transform: "scale(0.95)" },
+        },
       },
       animation: {
         "fade-in-up": "fadeInUp 0.5s ease-out",
         "subtle-pulse": "subtle-pulse 2s ease-in-out infinite",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "fade-in-scale": "fade-in-scale 0.3s ease-out",
+        "fade-in-scale": "fade-in-scale 0.2s ease-out forwards",
+        "fade-out-scale": "fade-out-scale 0.2s ease-in forwards",
       },
 
       gradientColorStops: {

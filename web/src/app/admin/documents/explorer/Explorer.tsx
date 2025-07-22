@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useFilters } from "@/lib/hooks";
 import { buildFilters } from "@/lib/search/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
-import { DocumentSet } from "@/lib/types";
+import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Connector } from "@/lib/connectors/connectors";
 import { HorizontalFilters } from "@/components/filters/SourceSelector";
@@ -110,7 +110,7 @@ export function Explorer({
 }: {
   initialSearchValue: string | undefined;
   connectors: Connector<any>[];
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
 }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();

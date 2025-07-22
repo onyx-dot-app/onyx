@@ -29,7 +29,7 @@ import {
 import Prism from "prismjs";
 import Cookies from "js-cookie";
 import { HistorySidebar } from "./sessionSidebar/HistorySidebar";
-import { Persona } from "../admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "../admin/assistants/interfaces";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
   buildChatUrl,
@@ -49,7 +49,6 @@ import {
   setMessageAsLatest,
   updateLlmOverrideForChatSession,
   updateParentChildren,
-  uploadFilesForChat,
   useScrollonStream,
 } from "./lib";
 import {
@@ -151,6 +150,20 @@ export enum UploadIntent {
   ADD_TO_DOCUMENTS, // For files uploaded via FilePickerModal or similar (just add to repo)
 }
 
+// ---
+// File Attachment Behavior in ChatPage
+//
+// When a user attaches a file to a message:
+// - If the file is small enough, it will be directly embedded into the query and sent with the message.
+//   These files are transient and only persist for the current message.
+// - If the file is too large to embed, it will be uploaded to the backend, processed (chunked),
+//   and then used for retrieval-augmented generation (RAG) instead. These files may persist across messages
+//   and can be referenced in future queries.
+//
+// As a result, depending on the size of the attached file, it could either persist only for the current message
+// or be available for retrieval in subsequent messages.
+// ---
+
 export function ChatPage({
   toggle,
   documentSidebarInitialWidth,
@@ -202,6 +215,13 @@ export function ChatPage({
     loading: oauthLoading,
     refetch: refetchFederatedConnectors,
   } = useFederatedOAuthStatus();
+
+  // This state is needed to avoid a UI flicker for the source-chip above the message input.
+  // When a message is submitted, the state transitions to "loading" and the source-chip (which shows attached files)
+  // would disappear if we only relied on the files in the streamed-back answer. By keeping a local copy of the files
+  // in messageFiles, we ensure the chip remains visible during loading, preventing a flicker before the server response
+  // (which re-includes the files in the streamed answer and re-renders the chip). This provides a smoother user experience.
+  const [messageFiles, setMessageFiles] = useState<FileDescriptor[]>([]);
 
   // Also fetch federated connectors for the sources list
   const { data: federatedConnectorsData } = useFederatedConnectors();
@@ -405,7 +425,7 @@ export function ChatPage({
 
   const existingChatSessionAssistantId = selectedChatSession?.persona_id;
   const [selectedAssistant, setSelectedAssistant] = useState<
-    Persona | undefined
+    MinimalPersonaSnapshot | undefined
   >(
     // NOTE: look through available assistants here, so that even if the user
     // has hidden this assistant it still shows the correct assistant when
@@ -435,7 +455,7 @@ export function ChatPage({
   };
 
   const [alternativeAssistant, setAlternativeAssistant] =
-    useState<Persona | null>(null);
+    useState<MinimalPersonaSnapshot | null>(null);
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
@@ -446,7 +466,7 @@ export function ChatPage({
   // 3. First pinned assistants (ordered list of pinned assistants)
   // 4. Available assistants (ordered list of available assistants)
   // Relevant test: `live_assistant.spec.ts`
-  const liveAssistant: Persona | undefined = useMemo(
+  const liveAssistant: MinimalPersonaSnapshot | undefined = useMemo(
     () =>
       alternativeAssistant ||
       selectedAssistant ||
@@ -535,7 +555,7 @@ export function ChatPage({
   // 2. we "@"ed the `GPT` assistant and sent a message
   // 3. while the `GPT` assistant message is generating, we "@" the `Paraphrase` assistant
   const [alternativeGeneratingAssistant, setAlternativeGeneratingAssistant] =
-    useState<Persona | null>(null);
+    useState<MinimalPersonaSnapshot | null>(null);
 
   // used to track whether or not the initial "submit on load" has been performed
   // this only applies if `?submit-on-load=true` or `?submit-on-load=1` is in the URL
@@ -1238,6 +1258,17 @@ export function ChatPage({
     // If under the context limit, the files will be included in the chat history
     // so we don't need to keep them around.
     if (selectedDocumentTokens < maxTokens) {
+      // Persist the selected files in `messageFiles` before clearing them below.
+      // This ensures that the files remain visible in the UI during the loading state,
+      // even though `setSelectedFiles([])` below will clear the `selectedFiles` state.
+      // Without this, the source-chip would disappear before the server response arrives.
+      setMessageFiles(
+        selectedFiles.map((selectedFile) => ({
+          id: selectedFile.id.toString(),
+          type: selectedFile.chat_file_type,
+          name: selectedFile.name,
+        }))
+      );
       setSelectedFiles([]);
     }
 
@@ -1327,7 +1358,7 @@ export function ChatPage({
     queryOverride?: string;
     forceSearch?: boolean;
     isSeededChat?: boolean;
-    alternativeAssistantOverride?: Persona | null;
+    alternativeAssistantOverride?: MinimalPersonaSnapshot | null;
     modelOverride?: LlmDescriptor;
     regenerationRequest?: RegenerationRequest | null;
     overrideFileDescriptors?: FileDescriptor[];
@@ -2197,10 +2228,7 @@ export function ChatPage({
   useEffect(() => {
     if (liveAssistant) {
       const hasSearchTool = liveAssistant.tools.some(
-        (tool) =>
-          tool.in_code_tool_id === SEARCH_TOOL_ID &&
-          liveAssistant.user_file_ids?.length == 0 &&
-          liveAssistant.user_folder_ids?.length == 0
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
       );
       setRetrievalEnabled(hasSearchTool);
       if (!hasSearchTool) {
@@ -2212,10 +2240,7 @@ export function ChatPage({
   const [retrievalEnabled, setRetrievalEnabled] = useState(() => {
     if (liveAssistant) {
       return liveAssistant.tools.some(
-        (tool) =>
-          tool.in_code_tool_id === SEARCH_TOOL_ID &&
-          liveAssistant.user_file_ids?.length == 0 &&
-          liveAssistant.user_folder_ids?.length == 0
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
       );
     }
     return false;
@@ -3357,6 +3382,7 @@ export function ChatPage({
                                 key={-2}
                                 messageId={-1}
                                 content={submittedMessage}
+                                files={messageFiles}
                               />
                             )}
 

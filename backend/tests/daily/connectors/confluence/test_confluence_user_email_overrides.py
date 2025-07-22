@@ -117,5 +117,7 @@ def test_paginated_cql_user_retrieval_no_overrides_cloud() -> None:
 
         # Check that the cloud-specific user search URL is called
         mock_paginate.assert_called_once_with(
-            "rest/api/search/user?cql=type=user", None
+            "rest/api/search/user?cql=type=user",
+            None,
+            force_offset_pagination=True,
         )

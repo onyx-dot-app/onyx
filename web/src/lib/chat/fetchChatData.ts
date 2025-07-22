@@ -6,7 +6,7 @@ import {
 import { fetchSS } from "@/lib/utilsSS";
 import {
   CCPairBasicInfo,
-  DocumentSet,
+  DocumentSetSummary,
   Tag,
   User,
   ValidSources,
@@ -35,7 +35,7 @@ interface FetchChatDataResult {
   chatSessions: ChatSession[];
   ccPairs: CCPairBasicInfo[];
   availableSources: ValidSources[];
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
   tags: Tag[];
   llmProviders: LLMProviderDescriptor[];
   folders: Folder[];
@@ -167,7 +167,7 @@ export async function fetchChatData(searchParams: {
       new Date(b.time_updated).getTime() - new Date(a.time_updated).getTime()
   );
 
-  let documentSets: DocumentSet[] = [];
+  let documentSets: DocumentSetSummary[] = [];
   if (documentSetsResponse?.ok) {
     documentSets = await documentSetsResponse.json();
   } else {

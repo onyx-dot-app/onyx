@@ -19,6 +19,10 @@ class ProductGatingRequest(BaseModel):
     application_status: ApplicationStatus
 
 
+class ProductGatingFullSyncRequest(BaseModel):
+    gated_tenant_ids: list[str]
+
+
 class SubscriptionStatusResponse(BaseModel):
     subscribed: bool
 

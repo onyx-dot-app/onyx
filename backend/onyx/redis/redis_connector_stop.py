@@ -23,10 +23,7 @@ class RedisConnectorStop:
 
     @property
     def fenced(self) -> bool:
-        if self.redis.exists(self.fence_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.fence_key))
 
     def set_fence(self, value: bool) -> None:
         if not value:
@@ -37,10 +34,7 @@ class RedisConnectorStop:
 
     @property
     def timed_out(self) -> bool:
-        if self.redis.exists(self.timeout_key):
-            return False
-
-        return True
+        return not bool(self.redis.exists(self.timeout_key))
 
     def set_timeout(self) -> None:
         """After calling this, call timed_out to determine if the timeout has been

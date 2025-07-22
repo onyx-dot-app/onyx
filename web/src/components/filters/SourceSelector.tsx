@@ -1,5 +1,5 @@
 import React from "react";
-import { DocumentSet, Tag, ValidSources } from "@/lib/types";
+import { DocumentSetSummary, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { InfoIcon, defaultTailwindCSS } from "@/components/icons/icons";
 import { HoverPopup } from "@/components/HoverPopup";
@@ -34,7 +34,7 @@ export interface SourceSelectorProps {
   setSelectedDocumentSets: React.Dispatch<React.SetStateAction<string[]>>;
   selectedTags: Tag[];
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
-  availableDocumentSets: DocumentSet[];
+  availableDocumentSets: DocumentSetSummary[];
   existingSources: ValidSources[];
   availableTags: Tag[];
   toggleFilters: () => void;

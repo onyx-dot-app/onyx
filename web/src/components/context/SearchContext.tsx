@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext } from "react";
-import { CCPairBasicInfo, DocumentSet, Tag } from "@/lib/types";
+import { CCPairBasicInfo, DocumentSetSummary, Tag } from "@/lib/types";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { ChatSession } from "@/app/chat/interfaces";
 
@@ -9,7 +9,7 @@ interface SearchContextProps {
   querySessions: ChatSession[];
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
-  documentSets: DocumentSet[];
+  documentSets: DocumentSetSummary[];
   assistants: Persona[];
   agenticSearchEnabled: boolean;
   disabledAgentic: boolean;

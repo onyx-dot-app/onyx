@@ -1,7 +1,6 @@
 "use client";
-import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { AlertIcon, ConnectorIcon, InfoIcon } from "@/components/icons/icons";
+import { ConnectorIcon } from "@/components/icons/icons";
 import { SourceCategory, SourceMetadata } from "@/lib/search/interfaces";
 import { listSourceMetadata } from "@/lib/sources";
 import Title from "@/components/ui/title";
@@ -24,8 +23,9 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 import { Credential } from "@/lib/connectors/credentials";
+import SourceTile from "@/components/SourceTile";
 
-function SourceTile({
+function SourceTileTooltipWrapper({
   sourceMetadata,
   preSelect,
   federatedConnectors,
@@ -74,46 +74,36 @@ function SourceTile({
     sourceMetadata.adminUrl,
   ]);
 
+  // Compute whether to hide the tooltip based on the provided condition
+  const shouldHideTooltip =
+    !(existingFederatedConnector && !hasExistingSlackCredentials) &&
+    !hasExistingSlackCredentials &&
+    !sourceMetadata.federated;
+
+  // If tooltip should be hidden, just render the tile as a component
+  if (shouldHideTooltip) {
+    return (
+      <SourceTile
+        sourceMetadata={sourceMetadata}
+        preSelect={preSelect}
+        navigationUrl={navigationUrl}
+        hasExistingSlackCredentials={!!hasExistingSlackCredentials}
+      />
+    );
+  }
+
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Link
-            className={`flex
-              flex-col
-              items-center
-              justify-center
-              p-4
-              rounded-lg
-              w-40
-              cursor-pointer
-              shadow-md
-              hover:bg-accent-background-hovered
-              relative
-              ${
-                preSelect
-                  ? "bg-accent-background-hovered subtle-pulse"
-                  : "bg-accent-background"
-              }
-            `}
-            href={navigationUrl}
-          >
-            {sourceMetadata.federated && !hasExistingSlackCredentials && (
-              <div className="absolute -top-2 -left-2 z-10 bg-white rounded-full p-1 shadow-md border border-orange-200">
-                <AlertIcon
-                  size={18}
-                  className="text-orange-500 font-bold stroke-2"
-                />
-              </div>
-            )}
-            <SourceIcon
-              sourceType={sourceMetadata.internalName}
-              iconSize={24}
+          <div>
+            <SourceTile
+              sourceMetadata={sourceMetadata}
+              preSelect={preSelect}
+              navigationUrl={navigationUrl}
+              hasExistingSlackCredentials={!!hasExistingSlackCredentials}
             />
-            <p className="font-medium text-sm mt-2">
-              {sourceMetadata.displayName}
-            </p>
-          </Link>
+          </div>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm">
           {existingFederatedConnector && !hasExistingSlackCredentials ? (
@@ -254,7 +244,7 @@ export default function Page() {
             <p>{getCategoryDescription(category as SourceCategory)}</p>
             <div className="flex flex-wrap gap-4 p-4">
               {sources.map((source, sourceInd) => (
-                <SourceTile
+                <SourceTileTooltipWrapper
                   preSelect={
                     searchTerm.length > 0 && categoryInd == 0 && sourceInd == 0
                   }

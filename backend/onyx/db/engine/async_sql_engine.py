@@ -29,6 +29,7 @@ from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.engine.sql_engine import USE_IAM_AUTH
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -118,7 +119,7 @@ async def get_async_session(
     engine = get_sqlalchemy_async_engine()
 
     # no need to use the schema translation map for self-hosted + default schema
-    if not MULTI_TENANT:
+    if not MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
         async with AsyncSession(bind=engine, expire_on_commit=False) as session:
             yield session
         return

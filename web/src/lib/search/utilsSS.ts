@@ -1,4 +1,4 @@
-import { DocumentSet } from "../types";
+import { DocumentSetSummary } from "../types";
 import { fetchSS } from "../utilsSS";
 import { Connector } from "../connectors/connectors";
 
@@ -17,9 +17,9 @@ export async function fetchValidFilterInfo() {
     );
   }
 
-  let documentSets = [] as DocumentSet[];
+  let documentSets = [] as DocumentSetSummary[];
   if (documentSetResponse.ok) {
-    documentSets = (await documentSetResponse.json()) as DocumentSet[];
+    documentSets = (await documentSetResponse.json()) as DocumentSetSummary[];
   } else {
     console.log(
       `Failed to fetch document sets - ${documentSetResponse.status} - ${documentSetResponse.statusText}`

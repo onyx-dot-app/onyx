@@ -6,7 +6,6 @@ import {
   ArrowUp,
   ArrowDown,
   Trash,
-  Upload,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";

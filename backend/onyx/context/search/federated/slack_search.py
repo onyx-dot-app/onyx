@@ -48,8 +48,8 @@ def build_slack_queries(query: SearchQuery, llm: LLM) -> list[str]:
         time_cutoff = time_cutoff - timedelta(days=1)
         time_filter = f" after:{time_cutoff.strftime('%Y-%m-%d')}"
 
-    # use llm to generate slack queries
-    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query.query)
+    # use llm to generate slack queries (use original query to use same keywords as the user)
+    prompt = SLACK_QUERY_EXPANSION_PROMPT.format(query=query.original_query)
     try:
         msg = HumanMessage(content=prompt)
         response = llm.invoke([msg])

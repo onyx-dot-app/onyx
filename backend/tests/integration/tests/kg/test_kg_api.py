@@ -17,6 +17,7 @@ from onyx.server.kg.models import DisableKGConfigRequest
 from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
+from onyx.server.kg.models import SourceAndEntityTypeView
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.reset import reset_all
@@ -169,6 +170,7 @@ def test_update_kg_entity_types(connectors: None) -> None:
     assert (
         res2.status_code == HTTPStatus.OK
     ), f"Error response: {res2.status_code} - {res2.text}"
+    res2_parsed = SourceAndEntityTypeView.model_validate(res2.json())
 
     # Update entity types
     req3 = [
@@ -210,16 +212,20 @@ def test_update_kg_entity_types(connectors: None) -> None:
     assert (
         res4.status_code == HTTPStatus.OK
     ), f"Error response: {res4.status_code} - {res4.text}"
+    res4_parsed = SourceAndEntityTypeView.model_validate(res4.json())
 
-    new_entity_types = {
-        entity_type["name"]: EntityType.model_validate(entity_type)
-        for entity_type in res4.json()
-    }
+    def to_entity_type_map(map: dict[str, list[EntityType]]) -> dict[str, EntityType]:
+        return {
+            entity_type.name: entity_type
+            for entity_types in map.values()
+            for entity_type in entity_types
+        }
 
-    expected_entity_types = {
-        entity_type["name"]: EntityType.model_validate(entity_type)
-        for entity_type in res2.json()
-    }
+    expected_entity_types = to_entity_type_map(map=res2_parsed.entity_types)
+    new_entity_types = to_entity_type_map(map=res4_parsed.entity_types)
+
+    # These are the updates.
+    # We're just manually updating them.
     expected_entity_types["ACCOUNT"].active = True
     expected_entity_types["ACCOUNT"].description = "Test."
     expected_entity_types["OPPORTUNITY"].active = False

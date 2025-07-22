@@ -44,11 +44,17 @@ def _get_all_folders(
 
     TODO: tweak things so we can fetch deltas.
     """
+    MAX_FAILED_PERCENTAGE = 0.5
+
     all_folders: list[FolderInfo] = []
     seen_folder_ids: set[str] = set()
 
-    user_emails = google_drive_connector._get_all_user_emails()
-    for user_email in user_emails:
+    def _get_all_folders_for_user(
+        google_drive_connector: GoogleDriveConnector,
+        skip_folders_without_permissions: bool,
+        user_email: str,
+    ) -> None:
+        """Helper to get folders for a specific user + update shared seen_folder_ids"""
         drive_service = get_drive_service(
             google_drive_connector.creds,
             user_email,
@@ -97,6 +103,20 @@ def _get_all_folders(
                     permissions=permissions,
                 )
             )
+
+    failed_count = 0
+    user_emails = google_drive_connector._get_all_user_emails()
+    for user_email in user_emails:
+        try:
+            _get_all_folders_for_user(
+                google_drive_connector, skip_folders_without_permissions, user_email
+            )
+        except Exception:
+            logger.exception(f"Error getting folders for user {user_email}")
+            failed_count += 1
+
+            if failed_count > MAX_FAILED_PERCENTAGE * len(user_emails):
+                raise RuntimeError("Too many failed folder fetches during group sync")
 
     return all_folders
 

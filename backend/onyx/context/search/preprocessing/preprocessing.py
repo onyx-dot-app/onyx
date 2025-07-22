@@ -250,6 +250,7 @@ def retrieval_preprocessing(
 
     return SearchQuery(
         query=query,
+        original_query=search_request.original_query,
         processed_keywords=processed_keywords,
         search_type=SearchType.KEYWORD if is_keyword else SearchType.SEMANTIC,
         evaluation_type=llm_evaluation_type,

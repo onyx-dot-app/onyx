@@ -59,6 +59,9 @@ class Settings(BaseModel):
     search_time_image_analysis_enabled: bool | None = False
     image_analysis_max_size_mb: int | None = 20
 
+    # User Knowledge settings
+    user_knowledge_enabled: bool | None = True
+
 
 class UserSettings(Settings):
     notifications: list[Notification]

@@ -10,7 +10,7 @@ import {
 } from "./lib";
 import {
   ConnectorStatus,
-  DocumentSet,
+  DocumentSetSummary,
   UserGroup,
   UserRole,
   FederatedConnectorConfig,
@@ -32,7 +32,7 @@ interface SetCreationPopupProps {
   userGroups: UserGroup[] | undefined;
   onClose: () => void;
   setPopup: (popupSpec: PopupSpec | null) => void;
-  existingDocumentSet?: DocumentSet;
+  existingDocumentSet?: DocumentSetSummary;
 }
 
 export const DocumentSetCreationForm = ({
@@ -61,14 +61,14 @@ export const DocumentSetCreationForm = ({
           name: existingDocumentSet?.name ?? "",
           description: existingDocumentSet?.description ?? "",
           cc_pair_ids:
-            existingDocumentSet?.cc_pair_descriptors.map(
-              (ccPairDescriptor) => ccPairDescriptor.id
+            existingDocumentSet?.cc_pair_summaries.map(
+              (ccPairSummary) => ccPairSummary.id
             ) ?? [],
           is_public: existingDocumentSet?.is_public ?? true,
           users: existingDocumentSet?.users ?? [],
           groups: existingDocumentSet?.groups ?? [],
           federated_connectors:
-            existingDocumentSet?.federated_connectors?.map((fc) => ({
+            existingDocumentSet?.federated_connector_summaries?.map((fc) => ({
               federated_connector_id: fc.id,
               entities: fc.entities,
             })) ?? [],
