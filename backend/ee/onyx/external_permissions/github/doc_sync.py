@@ -1,5 +1,5 @@
+import json
 from collections.abc import Generator
-from typing import Any
 
 from github import Github
 from github.Repository import Repository
@@ -14,15 +14,14 @@ from ee.onyx.external_permissions.github.utils import get_external_access_permis
 from ee.onyx.external_permissions.github.utils import get_repository_visibility
 from ee.onyx.external_permissions.github.utils import GitHubVisibility
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.github.connector import DocMetadata
 from onyx.connectors.github.connector import GithubConnector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentColumns
-from onyx.db.utils import DocumentFilter
-from onyx.db.utils import FilterOperation
-from onyx.db.utils import SortOrder
+from onyx.db.utils import DocumentRow
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -34,6 +33,7 @@ GITHUB_DOC_SYNC_LABEL = "github_doc_sync"
 def github_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
@@ -41,14 +41,6 @@ def github_doc_sync(
 
     This function checks each repository for visibility/team changes and updates
     document permissions accordingly without using checkpoints.
-
-    Args:
-        cc_pair: Connector credential pair for GitHub authentication
-        fetch_all_existing_docs_fn: Function to fetch existing documents
-        callback: Indexing heartbeat interface for progress tracking
-
-    Yields:
-        DocExternalAccess: Document external access records for updated documents
     """
     logger.info(f"Starting GitHub document sync for CC pair ID: {cc_pair.id}")
 
@@ -88,16 +80,36 @@ def github_doc_sync(
         logger.error(f"Failed to fetch repositories: {e}")
         raise
 
+    repo_to_doc_list_map: dict[str, list[DocumentRow]] = {}
+    existing_docs: list[DocumentRow] = fetch_all_existing_docs_fn()
+    for doc in existing_docs:
+        try:
+            doc_metadata = DocMetadata.model_validate_json(json.dumps(doc.doc_metadata))
+            repo_to_doc_list_map[doc_metadata.repo].append(doc)
+        except Exception as e:
+            logger.error(f"Failed to parse doc metadata: {e} for doc {doc.id}")
+            continue
+    logger.info(f"Found {len(repo_to_doc_list_map)} documents to check")
+
     # Process each repository individually
     for repo in repos:
         try:
             logger.info(f"Processing repository: {repo.id} (name: {repo.name})")
+            repo_doc_list: list[DocumentRow] = repo_to_doc_list_map.get(
+                repo.full_name, []
+            )
+            if not repo_doc_list:
+                logger.warning(
+                    f"No documents found for repository {repo.id} ({repo.name})"
+                )
+                continue
 
+            current_external_group_ids = repo_doc_list[0].external_user_group_ids or []
             # Check if repository has any permission changes
             has_changes = _check_repository_for_changes(
                 repo=repo,
                 github_client=github_connector.github_client,
-                fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
+                current_external_group_ids=current_external_group_ids,
             )
 
             if has_changes:
@@ -110,29 +122,17 @@ def github_doc_sync(
                     repo, github_connector.github_client
                 )
 
-                repo_documents: list[dict[DocumentColumns, Any]] = (
-                    fetch_all_existing_docs_fn(
-                        columns=["id"],
-                        document_filter=DocumentFilter(
-                            field="doc_metadata",
-                            operation=FilterOperation.JSON_CONTAINS,
-                            value=repo.full_name,
-                            json_key="repo",
-                        ),
-                    )
-                )
-
                 logger.info(
-                    f"Found {len(repo_documents)} documents for repository {repo.full_name}"
+                    f"Found {len(repo_doc_list)} documents for repository {repo.full_name}"
                 )
 
                 # Yield updated external access for each document
-                for doc in repo_documents:
+                for doc in repo_doc_list:
                     if callback:
                         callback.progress(GITHUB_DOC_SYNC_LABEL, 1)
 
                     yield DocExternalAccess(
-                        doc_id=doc["id"],
+                        doc_id=doc.id,
                         external_access=new_external_access,
                     )
             else:
@@ -148,42 +148,12 @@ def github_doc_sync(
 def _check_repository_for_changes(
     repo: Repository,
     github_client: Github,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    current_external_group_ids: list[str],
 ) -> bool:
     """
     Check if repository has any permission changes (visibility or team updates).
-
-    Optimized to use a single database query and reuse the data for all checks.
-
-    Args:
-        repo: GitHub repository object
-        github_client: GitHub client instance
-        fetch_all_existing_docs_fn: Function to fetch existing documents
-
-    Returns:
-        True if repository has changes that require document permission updates
     """
     logger.info(f"Checking repository {repo.id} ({repo.name}) for changes")
-
-    docs: list[dict[DocumentColumns, Any]] = fetch_all_existing_docs_fn(
-        columns=["id", "external_user_group_ids"],
-        document_filter=DocumentFilter(
-            field="doc_metadata",
-            operation=FilterOperation.JSON_CONTAINS,
-            value=repo.full_name,
-            json_key="repo",
-        ),
-        limit=1,
-        sort_order=SortOrder.ASC,
-    )
-
-    # If no documents exist for this connector/credential pair, no changes to process
-    if not docs:
-        logger.info(f"No documents found for repository {repo.id} ({repo.name})")
-        return False
-
-    doc = docs[0]
-    current_external_group_ids = doc.get("external_user_group_ids", []) or []
 
     # Check for repository visibility changes using the sample document data
     if _is_repo_visibility_changed_from_groups(
@@ -268,14 +238,6 @@ def _teams_updated_from_groups(
 ) -> bool:
     """
     Check if repository team memberships have changed using existing group IDs.
-
-    Args:
-        repo: GitHub repository object
-        github_client: GitHub client instance
-        current_external_group_ids: List of external group IDs from existing document
-
-    Returns:
-        True if team count differs from existing groups
     """
     # Fetch current team slugs for the repository
     current_teams = fetch_repository_team_slugs(repo=repo, github_client=github_client)

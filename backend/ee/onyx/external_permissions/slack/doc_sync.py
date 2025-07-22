@@ -3,6 +3,7 @@ from collections.abc import Generator
 from slack_sdk import WebClient
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
@@ -130,6 +131,7 @@ def _get_slack_document_access(
 def slack_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """

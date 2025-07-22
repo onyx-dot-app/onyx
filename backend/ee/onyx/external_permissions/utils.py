@@ -1,13 +1,11 @@
 from collections.abc import Generator
-from typing import Any
 
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import SlimConnector
 from onyx.db.models import ConnectorCredentialPair
-from onyx.db.models import DocumentColumns
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -16,7 +14,7 @@ logger = setup_logger()
 
 def generic_doc_sync(
     cc_pair: ConnectorCredentialPair,
-    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
     doc_source: DocumentSource,
     slim_connector: SlimConnector,
@@ -64,12 +62,9 @@ def generic_doc_sync(
             )
 
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id=}")
-    existing_docs: list[dict[DocumentColumns, Any]] = fetch_all_existing_docs_fn(
-        columns=["id"],
-    )
-    existing_doc_ids = set(doc["id"] for doc in existing_docs)
+    existing_doc_ids: list[str] = fetch_all_existing_docs_ids_fn()
 
-    missing_doc_ids = existing_doc_ids - newly_fetched_doc_ids
+    missing_doc_ids = set(existing_doc_ids) - newly_fetched_doc_ids
 
     if not missing_doc_ids:
         return
