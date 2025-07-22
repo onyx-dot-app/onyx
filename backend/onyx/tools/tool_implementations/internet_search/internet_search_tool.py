@@ -19,6 +19,8 @@ from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_toke
 from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_CHUNKS
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.connectors.models import Document
@@ -94,8 +96,8 @@ class InternetSearchTool(Tool[None]):
         document_pruning_config: DocumentPruningConfig,
         answer_style_config: AnswerStyleConfig,
         provider: str | None = None,
-        num_results: int = 10,
-        max_chunks: int = 50,
+        num_results: int = NUM_INTERNET_SEARCH_RESULTS,
+        max_chunks: int = NUM_INTERNET_SEARCH_CHUNKS,
     ) -> None:
         self.db_session = db_session
         self.persona = persona
@@ -318,7 +320,7 @@ class InternetSearchTool(Tool[None]):
             image_file_id=None,
         )
 
-    def _combine_chunks_into_sections(
+    def _convert_chunks_into_sections(
         self, chunks: list[IndexChunk], similarity_scores: dict[str, float]
     ) -> list[InferenceSection]:
         inference_chunks: list[InferenceChunk] = []
@@ -340,9 +342,9 @@ class InternetSearchTool(Tool[None]):
         )
         sorted_inference_chunks = sorted_inference_chunks[: self.max_chunks]
 
-        # Create sections from chunks
         # NOTE: chunks_above and chunks_below are set to 0
         # If we ever decide to use them, we need to add that logic to the inference section
+        # Section merging/pruning happens after this in run()
         sections: list[InferenceSection] = []
         for inference_chunk in sorted_inference_chunks:
             new_section = InferenceSection(
@@ -382,11 +384,10 @@ class InternetSearchTool(Tool[None]):
         similarity_scores = self._calculate_cosine_similarity_scores(
             query_embedding, chunks_with_embeddings
         )
-        sections = self._combine_chunks_into_sections(
+        sections = self._convert_chunks_into_sections(
             chunks_with_embeddings, similarity_scores
         )
 
-        # Apply pruning and merging to fit within token budget
         if sections:
             pruned_sections = prune_and_merge_sections(
                 sections=sections,

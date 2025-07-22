@@ -14,6 +14,8 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_CHUNKS
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
@@ -253,8 +255,8 @@ def construct_tools(
                             document_pruning_config=internet_search_tool_config.document_pruning_config,
                             answer_style_config=internet_search_tool_config.answer_style_config,
                             provider=None,  # Will use default provider
-                            num_results=10,
-                            max_chunks=50,
+                            num_results=NUM_INTERNET_SEARCH_RESULTS,
+                            max_chunks=NUM_INTERNET_SEARCH_CHUNKS,
                         )
                     ]
                 except ValueError as e:
