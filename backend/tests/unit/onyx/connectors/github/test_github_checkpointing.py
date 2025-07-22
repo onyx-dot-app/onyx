@@ -97,6 +97,10 @@ def create_mock_pr() -> Callable[..., MagicMock]:
             else f"https://github.com/test-org/test-repo/pull/{number}"
         )
         mock_pr.raw_data = {}
+        mock_pr.base = MagicMock()
+        mock_pr.base.repo = MagicMock()
+        mock_pr.base.repo.full_name = "test-org/test-repo"
+
         return mock_pr
 
     return _create_mock_pr
@@ -121,6 +125,11 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         mock_issue.html_url = f"https://github.com/test-org/test-repo/issues/{number}"
         mock_issue.pull_request = None  # Not a PR
         mock_issue.raw_data = {}
+
+        # Mock the nested base.repo.full_name attribute
+        mock_issue.repository = MagicMock()
+        mock_issue.repository.full_name = "test-org/test-repo"
+
         return mock_issue
 
     return _create_mock_issue
