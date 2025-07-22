@@ -341,6 +341,8 @@ class InternetSearchTool(Tool[None]):
         sorted_inference_chunks = sorted_inference_chunks[: self.max_chunks]
 
         # Create sections from chunks
+        # NOTE: chunks_above and chunks_below are set to 0
+        # If we ever decide to use them, we need to add that logic to the inference section
         sections: list[InferenceSection] = []
         for inference_chunk in sorted_inference_chunks:
             new_section = InferenceSection(
