@@ -12,7 +12,7 @@ from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
 from office365.onedrive.sites.site import Site  # type: ignore
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore
-from office365.runtime.client_request import ClientRequestException
+from office365.runtime.client_request import ClientRequestException  # type: ignore
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
