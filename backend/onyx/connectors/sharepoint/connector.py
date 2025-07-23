@@ -7,6 +7,7 @@ from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 from urllib.parse import unquote
 
 import msal  # type: ignore
@@ -34,6 +35,9 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+ASPX_EXTENSION = ".aspx"
 
 
 class SiteDescriptor(BaseModel):
@@ -139,14 +143,16 @@ def _convert_driveitem_to_document(
     return doc
 
 
-def _convert_sitepage_to_document(site_page: dict[str, Any]) -> Document:
+def _convert_sitepage_to_document(
+    site_page: dict[str, Any], site_name: str | None
+) -> Document:
     """Convert a SharePoint site page to a Document object."""
     # Extract text content from the site page
     page_text = ""
 
     # Get title and description
-    title = site_page.get("title", "")
-    description = site_page.get("description", "")
+    title = cast(str, site_page.get("title", ""))
+    description = cast(str, site_page.get("description", ""))
 
     # Build the text content
     if title:
@@ -222,8 +228,10 @@ def _convert_sitepage_to_document(site_page: dict[str, Any]) -> Document:
                         if webpart_title and webpart_title != description:
                             page_text += f"## {webpart_title}\n\n"
 
+    page_text = page_text.strip()
+
     # If no content extracted, use the title as fallback
-    if not page_text.strip() and title:
+    if not page_text and title:
         page_text = title
 
     # Parse creation and modification info
@@ -256,16 +264,25 @@ def _convert_sitepage_to_document(site_page: dict[str, Any]) -> Document:
             )
         )
 
+    web_url = site_page["webUrl"]
+    semantic_identifier = cast(str, site_page.get("name", title))
+    if semantic_identifier.endswith(ASPX_EXTENSION):
+        semantic_identifier = semantic_identifier[: -len(ASPX_EXTENSION)]
+
     doc = Document(
         id=site_page["id"],
-        sections=[TextSection(link=site_page.get("webUrl", ""), text=page_text)],
+        sections=[TextSection(link=web_url, text=page_text)],
         source=DocumentSource.SHAREPOINT,
-        semantic_identifier=site_page.get("name", title),
+        semantic_identifier=semantic_identifier,
         doc_updated_at=last_modified_datetime or created_datetime,
         primary_owners=primary_owners,
-        metadata={
-            "type": "site_page",
-        },
+        metadata=(
+            {
+                "site": site_name,
+            }
+            if site_name
+            else {}
+        ),
     )
     return doc
 
@@ -470,8 +487,6 @@ class SharepointConnector(LoadConnector, PollConnector):
         end: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
-        site_pages = []
-
         # Get the site to extract the site ID
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
         site.execute_query()  # Execute the query to actually fetch the data
@@ -555,9 +570,7 @@ class SharepointConnector(LoadConnector, PollConnector):
                 filtered_pages.append(page)
             all_pages = filtered_pages
 
-        site_pages.extend(all_pages)
-
-        return site_pages
+        return all_pages
 
     def _fetch_from_sharepoint(
         self, start: datetime | None = None, end: datetime | None = None
@@ -590,7 +603,11 @@ class SharepointConnector(LoadConnector, PollConnector):
                     logger.debug(
                         f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
                     )
-                    doc_batch.append(_convert_sitepage_to_document(site_page))
+                    doc_batch.append(
+                        _convert_sitepage_to_document(
+                            site_page, site_descriptor.drive_name
+                        )
+                    )
 
                     if len(doc_batch) >= self.batch_size:
                         yield doc_batch

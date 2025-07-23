@@ -225,3 +225,59 @@ def test_sharepoint_connector_poll(
     verify_document_content(
         doc, [d for d in EXPECTED_DOCUMENTS if d.semantic_identifier == "test1.docx"][0]
     )
+
+
+def test_sharepoint_connector_pages(
+    mock_get_unstructured_api_key: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    # Initialize connector with the base site URL
+    connector = SharepointConnector(
+        sites=["https://danswerai.sharepoint.com/sites/sharepoint-tests-pages"]
+    )
+
+    # Load credentials
+    connector.load_credentials(sharepoint_credentials)
+
+    # Get documents within the time window
+    document_batches = list(connector.load_from_state())
+    found_documents: list[Document] = [
+        doc for batch in document_batches for doc in batch
+    ]
+
+    # Should only find test1.docx
+    assert len(found_documents) == 1, "Should only find one page"
+    doc = found_documents[0]
+    assert doc.semantic_identifier == "CollabHome"
+    verify_document_metadata(doc)
+    assert len(doc.sections) == 1
+    assert (
+        doc.sections[0].text
+        == """
+# Home
+
+Display recent news.
+
+## News
+
+Show recent activities from your site
+
+## Site activity
+
+## Quick links
+
+Learn about a team site
+
+Learn how to add a page
+
+Add links to important documents and pages.
+
+## Quick links
+
+Documents
+
+Add a document library
+
+## Document library
+""".strip()
+    )
