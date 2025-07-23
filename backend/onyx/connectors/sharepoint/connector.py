@@ -1,5 +1,6 @@
 import io
 import os
+import time
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -11,6 +12,7 @@ from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
 from office365.onedrive.sites.site import Site  # type: ignore
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore
+from office365.runtime.client_request import ClientRequestException
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -47,6 +49,43 @@ class SiteDescriptor(BaseModel):
     folder_path: str | None
 
 
+def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> Any:
+    """
+    Execute a SharePoint query with retry logic for rate limiting.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return query_obj.execute_query()
+        except ClientRequestException as e:
+            if (
+                e.response
+                and e.response.status_code in [429, 503]
+                and attempt < max_retries
+            ):
+                logger.warning(
+                    f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
+                )
+                retry_after = e.response.headers.get("Retry-After")
+                if retry_after:
+                    sleep_time = int(retry_after)
+                else:
+                    # Exponential backoff: 2^attempt * 5 seconds
+                    sleep_time = min(30, (2**attempt) * 5)
+
+                logger.info(f"Sleeping for {sleep_time} seconds before retry")
+                time.sleep(sleep_time)
+            else:
+                # Either not a rate limit error, or we've exhausted retries
+                if e.response and e.response.status_code == 429:
+                    logger.error(
+                        f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
+                    )
+                raise e
+
+    # This should never be reached, but included for completeness
+    raise RuntimeError(f"Unexpected end of retry loop for {method_name}")
+
+
 def _convert_driveitem_to_document(
     driveitem: DriveItem,
     drive_name: str,
@@ -72,8 +111,9 @@ def _convert_driveitem_to_document(
         )
 
     # Proceed with download if size is acceptable or not available
+    content = _sleep_and_retry(driveitem.get_content(), "get_content")
     file_text = extract_file_text(
-        file=io.BytesIO(driveitem.get_content().execute_query().value),
+        file=io.BytesIO(content.value),
         file_name=driveitem.name,
         break_on_unprocessable=False,
     )
