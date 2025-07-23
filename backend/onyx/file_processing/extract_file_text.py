@@ -83,6 +83,11 @@ IMAGE_MEDIA_TYPES = [
     "image/webp",
 ]
 
+KNOWN_OPENPYXL_BUGS = [
+    "Value must be either numerical or a string containing a wildcard",
+    "File contains no valid workbook part",
+]
+
 
 class OnyxExtensionType(IntFlag):
     Plain = auto()
@@ -374,7 +379,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.warning(error_str)
         return ""
     except Exception as e:
-        if "File contains no valid workbook part" in str(e):
+        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.error(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
