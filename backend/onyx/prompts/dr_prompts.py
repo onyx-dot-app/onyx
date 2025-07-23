@@ -156,7 +156,7 @@ series of high-level, answerable sub-questions.
 
 Given the user query and the list of available tools, your task is to devise a high-level plan \
 consisting of a list of the iterations, each iteration consisting of the \
-apsects to investigate, so that by the end of the process you have gathered sufficient \
+aspects to investigate, so that by the end of the process you have gathered sufficient \
 information to generate a well-researched and highly relevant answer to the user query.
 
 Note that the plan will only be used as a guideline, and a separate agent will use your plan along \
@@ -257,7 +257,8 @@ In any case, do not confuse the below with the user query. It is only there to p
 
 HINTS:
    - please first consider whether you already can answer the question with the information you already have. \
-Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
+Also consider whether the plan suggests you are already done. If so, you MUST use the "{CLOSER}" tool. \
+Do not generate extra questions just because you can!
    - if you think more information is needed because a sub-question was not sufficiently answered, \
 you can generate a modified version of the previous step, thus effectively modifying the plan.
    - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
@@ -267,18 +268,18 @@ then you should consider sending a new request to the {INTERNET_SEARCH} tool and
    - be careful NOT TO REPEAT NEARLY THE SAME QUESTION IN THE SAME TOOL AGAIN! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
 the other tool seems suitable too!
-   - Again, focus is of generating NEW INFORMATION! Try to generate questions that
+   - Again, focus is on generating NEW INFORMATION! Try to generate questions that
          - address gaps in the information relative to the original question
          - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
 
-Here is roughly how you shouold decide whether you are done to call the {CLOSER} tool:
+Here is roughly how you should decide whether you are done to call the {CLOSER} tool:
 {DONE_STANDARD[DRTimeBudget.FAST]}
 
 YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
 the original question, the tools you have available, and the answers you have so far \
 (either from previous iterations or from the chat history). Make sure that the answer is \
 specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
-new targetted information that gets us to be able to answer the original question. (Note again, that sending \
+new targeted information that gets us to be able to answer the original question. (Note again, that sending \
 the request to the {CLOSER} tool is an option if you think the information is sufficient.)
 
 Please format your answer as a json dictionary in the following format:
@@ -288,8 +289,8 @@ Please format your answer as a json dictionary in the following format:
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
 {INTERNET_SEARCH}, the question should be \
-written as a list of suitable search of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
-is {KNOWLEDGE_GRAPH} return only one question in the list.
+written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
+is {KNOWLEDGE_GRAPH}, return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
 science'. If the tool is {CLOSER}, just return ['Answer the original question with \
@@ -374,15 +375,15 @@ to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all
 knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
    - the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, so DO NOT \
-   try to first find socuments and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
+   try to first find documents and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
    tool directly, like 'summarize the most recent jira created by John'.
-   - if an earliert call was sent to the {SEARCH} tool, and the request was essentially not answered, \
+   - if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
    - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
-the other tool seems suitable too!
+new tool seems suitable for the question!
 
-   - Again, focus is of generating NEW INFORMATION! Try to generate questions that
+   - Again, focus is on generating NEW INFORMATION! Try to generate questions that
          - address gaps in the information relative to the original question
          - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
          - checks of whether the original piece of information is correct, or whether it is missing some details.
@@ -391,10 +392,10 @@ YOUR TASK: you need to construct the next question and the tool to send it to. T
 the original question, the high-level plan, the tools you have available, and the answers you have so far \
 (either from previous iterations or from the chat history). Make sure that the answer is \
 specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
-new targetted information that gets us to be able to answer the original question. (Note again, that sending \
+new targeted information that gets us to be able to answer the original question. (Note again, that sending \
 the request to the CLOSER tool is an option if you think the information is sufficient.)
 
-Here is roughly how you shouold decide whether you are done to call the {CLOSER} tool:
+Here is roughly how you should decide whether you are done to call the {CLOSER} tool:
 {DONE_STANDARD[DRTimeBudget.DEEP]}
 
 Please format your answer as a json dictionary in the following format:
@@ -405,8 +406,8 @@ guided by the question you need to answer, the answers you have so far, and the 
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
 {INTERNET_SEARCH}, the question should be \
-written as a list of suitable search of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
-is {KNOWLEDGE_GRAPH} return only one question in the list.
+written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
+is {KNOWLEDGE_GRAPH}, return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
 science'.
@@ -440,9 +441,9 @@ Notes:
    - only use documents that are relevant to the specific search query AND you KNOW apply \
 to the context of the question! Example: context is about what Nike was doing to drive sales, \
 and the question is about what Puma is doing to drive sales, DO NOT USE ANY INFORMATION \
-from the informations from Nike! In fact, even if the cintext does not discuss driving \
+from the information from Nike! In fact, even if the context does not discuss driving \
 sales for Nike but about driving sales w/o mentioning any company (incl. Puma!), you \
-still cannot use the information! You MUST be sure that the contect is correct. If in \
+still cannot use the information! You MUST be sure that the context is correct. If in \
 doubt, don't use that document!
    - It is critical to avoid hallucinations as well as taking information out of context.
    - clearly indicate any assumptions you make in your answer.
@@ -459,11 +460,11 @@ an example.)
 If the specific term or concept is not present, the answer should explicitly state its absence before \
 providing any related information.
    - Always begin your answer with a direct statement about whether the exact term or phrase, or \
-exact meaning was found in the documents.
+the exact meaning was found in the documents.
    - only provide a SHORT answer that i) provides the requested information if the question was \
 very specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL \
 summary of the information in the cited documents, and cite the documents that are most \
-relevent to the question sent to you.
+relevant to the question sent to you.
 
 Please format your answer as a json dictionary in the following format:
 {{
@@ -479,7 +480,7 @@ mentioned in the \
 documents. (Example: 'I was not able to find information about yellow curry specifically, \
 but I found information about curry..').
 But this should be be precise and concise, and specifically answer the question.>",
-"citations": "<the list of document numbers that are relevevant for the answer. \
+"citations": "<the list of document numbers that are relevvant for the answer. \
 Please list in format [1][4][6], etc.>"
 }}
 """
@@ -512,13 +513,13 @@ focussing on providing the citations and providing some answer facts. But the \
 main content should be in the cited documents for each sub-question.
  - Pay close attention to whether the sub-answers mention whether the topic of interest \
 was explicitly mentioned! If not you cannot reliably use that information to construct your answer, \
-or you MUST then qualify your answer with something like 'xyz was not explcitly \
+or you MUST then qualify your answer with something like 'xyz was not explicitly \
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
-the provided context os based on the less specific conecpt. (Example: 'I was not able to \
-find information about yellow curry specificall, but here is what I found about curry..'
-- make sure that a the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
+the provided context os based on the less specific concept. (Example: 'I was not able to \
+find information about yellow curry specifically, but here is what I found about curry..'
+- make sure that the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
 - do not make anything up! Only use the information provided in the documents, or, \
 if no documents are provided for a sub-answer, in the actual sub-answer.
 - Provide a thoughtful answer that is concise and to the point, but that is detailed.
