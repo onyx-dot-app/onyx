@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AssistantCard from "./AssistantCard";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterIcon, XIcon } from "lucide-react";
 import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
@@ -64,7 +64,7 @@ interface AssistantModalProps {
 }
 
 export function AssistantModal({ hideModal }: AssistantModalProps) {
-  const { assistants, pinnedAssistants } = useAssistants();
+  const { assistants, pinnedAssistants } = useAssistantsContext();
   const { assistantFilters, toggleAssistantFilter } = useAssistantFilter();
   const router = useRouter();
   const { user } = useUser();
