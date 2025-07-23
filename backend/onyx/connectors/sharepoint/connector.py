@@ -494,8 +494,10 @@ class SharepointConnector(LoadConnector, PollConnector):
         site_id = site.id
 
         # Get the token acquisition function from the GraphClient
-        token_data = self.graph_client._get_token()
+        token_data = self._acquire_token()
         access_token = token_data.get("access_token")
+        if not access_token:
+            raise RuntimeError("Failed to acquire access token")
 
         # Construct the SharePoint Pages API endpoint
         # Using API directly, since the Graph Client doesn't support the Pages API
@@ -590,6 +592,18 @@ class SharepointConnector(LoadConnector, PollConnector):
 
         yield doc_batch
 
+    def _acquire_token(self) -> dict[str, Any]:
+        """
+        Acquire token via MSAL
+        """
+        if self.msal_app is None:
+            raise RuntimeError("MSAL app is not initialized")
+
+        token = self.msal_app.acquire_token_for_client(
+            scopes=["https://graph.microsoft.com/.default"]
+        )
+        return token
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         sp_client_id = credentials["sp_client_id"]
         sp_client_secret = credentials["sp_client_secret"]
@@ -601,20 +615,7 @@ class SharepointConnector(LoadConnector, PollConnector):
             client_id=sp_client_id,
             client_credential=sp_client_secret,
         )
-
-        def _acquire_token_func() -> dict[str, Any]:
-            """
-            Acquire token via MSAL
-            """
-            if self.msal_app is None:
-                raise RuntimeError("MSAL app is not initialized")
-
-            token = self.msal_app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
-            )
-            return token
-
-        self._graph_client = GraphClient(_acquire_token_func)
+        self._graph_client = GraphClient(self._acquire_token)
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:
