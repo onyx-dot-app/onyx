@@ -1,3 +1,4 @@
+from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.states import DRPath
 
@@ -41,11 +42,9 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 '...last 2 jiras resolved...') and answering aggregation-type questions (e.g., 'how many...') \
 (unless that info is present in the connected documents). If there are better suited tools \
 for answering those questions, use them instead. \
-The {SEARCH} tool supports parallel calls.
 Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {SEARCH} tool and vice versa!
-
-The {SEARCH} tool DOES support parallel calls of up to 8 queries.
+The {SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 
 TOOL_DESCRIPTION[
@@ -59,8 +58,7 @@ should be used). If in doubt you should consider the data to be private and you 
 {INTERNET_SEARCH} tool.
 Note also that if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
-
-The {INTERNET_SEARCH} tool DOES support parallel calls of up to 8 queries.
+The {INTERNET_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 
 TOOL_DESCRIPTION[
@@ -79,6 +77,7 @@ E.g., if the question is "how many open jiras are there", you should pass that a
 {KNOWLEDGE_GRAPH} tool, instead of splitting it into finding and counting the open jiras.
 Note also that the {KNOWLEDGE_GRAPH} tool is slower than the standard search tools.
 """
+
 TOOL_DESCRIPTION[
     CLOSER
 ] = f"""\
@@ -144,7 +143,8 @@ Please format your answer as a json dictionary in the following format:
                   "questions": "<the list of questions you want to pose to the tool. Note that the \
 questions should be appropriate for the tool.
 If the tool is {SEARCH} or {INTERNET_SEARCH}, the question \
-to the tool should be written as a list of up to 8 search queries that would help to answer the question.
+to the tool should be written as a list of up to {MAX_DR_PARALLEL_SEARCH} search queries that \
+would help to answer the question.
 If the tool is {CLOSER}, just return ['Answer the original question with the information you have.'].
 If the tool is {KNOWLEDGE_GRAPH} return only one question in the list.>"}}
 }}
@@ -288,8 +288,8 @@ Please format your answer as a json dictionary in the following format:
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
 {INTERNET_SEARCH}, the question should be \
-written as a list of suitable search of up to 8 queries. If the tool is {KNOWLEDGE_GRAPH} \
-return only one question in the list.
+written as a list of suitable search of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
+is {KNOWLEDGE_GRAPH} return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
 science'. If the tool is {CLOSER}, just return ['Answer the original question with \
@@ -405,8 +405,8 @@ guided by the question you need to answer, the answers you have so far, and the 
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
 {INTERNET_SEARCH}, the question should be \
-written as a list of suitable search of up to 8 queries. If the tool is {KNOWLEDGE_GRAPH} \
-return only one question in the list.
+written as a list of suitable search of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
+is {KNOWLEDGE_GRAPH} return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
 science'.
