@@ -163,16 +163,64 @@ def _convert_sitepage_to_document(site_page: dict[str, Any]) -> Document:
             for column in columns:
                 webparts = column.get("webparts", [])
                 for webpart in webparts:
+                    # Extract text from different types of webparts
+                    webpart_type = webpart.get("@odata.type", "")
+
                     # Extract text from text webparts
-                    if webpart.get("@odata.type") == "#oneDrive.textWebPart":
+                    if webpart_type == "#microsoft.graph.textWebPart":
                         inner_html = webpart.get("innerHtml", "")
                         if inner_html:
                             # Basic HTML to text conversion
-                            # Remove HTML tags
-                            text_content = re.sub(r"<[^>]+>", "", inner_html)
+                            # Remove HTML tags but preserve some structure
+                            text_content = re.sub(r"<br\s*/?>", "\n", inner_html)
+                            text_content = re.sub(r"<li>", "• ", text_content)
+                            text_content = re.sub(r"</li>", "\n", text_content)
+                            text_content = re.sub(
+                                r"<h[1-6][^>]*>", "\n## ", text_content
+                            )
+                            text_content = re.sub(r"</h[1-6]>", "\n", text_content)
+                            text_content = re.sub(r"<p[^>]*>", "\n", text_content)
+                            text_content = re.sub(r"</p>", "\n", text_content)
+                            text_content = re.sub(r"<[^>]+>", "", text_content)
                             # Decode HTML entities
                             text_content = html.unescape(text_content)
-                            page_text += f"{text_content}\n\n"
+                            # Clean up extra whitespace
+                            text_content = re.sub(
+                                r"\n\s*\n", "\n\n", text_content
+                            ).strip()
+                            if text_content:
+                                page_text += f"{text_content}\n\n"
+
+                    # Extract text from standard webparts
+                    elif webpart_type == "#microsoft.graph.standardWebPart":
+                        data = webpart.get("data", {})
+
+                        # Extract from serverProcessedContent
+                        server_content = data.get("serverProcessedContent", {})
+                        searchable_texts = server_content.get(
+                            "searchablePlainTexts", []
+                        )
+
+                        for text_item in searchable_texts:
+                            if isinstance(text_item, dict):
+                                key = text_item.get("key", "")
+                                value = text_item.get("value", "")
+                                if value:
+                                    # Add context based on key
+                                    if key == "title":
+                                        page_text += f"## {value}\n\n"
+                                    else:
+                                        page_text += f"{value}\n\n"
+
+                        # Extract description if available
+                        description = data.get("description", "")
+                        if description:
+                            page_text += f"{description}\n\n"
+
+                        # Extract title if available
+                        webpart_title = data.get("title", "")
+                        if webpart_title and webpart_title != description:
+                            page_text += f"## {webpart_title}\n\n"
 
     # If no content extracted, use the title as fallback
     if not page_text.strip() and title:
@@ -217,8 +265,6 @@ def _convert_sitepage_to_document(site_page: dict[str, Any]) -> Document:
         primary_owners=primary_owners,
         metadata={
             "type": "site_page",
-            "page_layout": site_page.get("pageLayout", ""),
-            "promotion_kind": site_page.get("promotionKind", ""),
         },
     )
     return doc
@@ -229,6 +275,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         self,
         batch_size: int = INDEX_BATCH_SIZE,
         sites: list[str] = [],
+        include_site_pages: bool = True,
     ) -> None:
         self.batch_size = batch_size
         self._graph_client: GraphClient | None = None
@@ -236,6 +283,7 @@ class SharepointConnector(LoadConnector, PollConnector):
             sites
         )
         self.msal_app: msal.ConfidentialClientApplication | None = None
+        self.include_site_pages = include_site_pages
 
     @property
     def graph_client(self) -> GraphClient:
@@ -423,20 +471,29 @@ class SharepointConnector(LoadConnector, PollConnector):
     ) -> list[dict[str, Any]]:
         """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
         site_pages = []
+
+        # Get the site to extract the site ID
+        site = self.graph_client.sites.get_by_url(site_descriptor.url)
+        site.execute_query()  # Execute the query to actually fetch the data
+        site_id = site.id
+
+        # Get the access token from the MSAL app
+        if not self.msal_app:
+            logger.error("MSAL app not available")
+            return []
+
+        # Try to get token using the graph client's token function first
         try:
-            # Get the site to extract the site ID
-            site = self.graph_client.sites.get_by_url(site_descriptor.url)
-            site.execute_query()  # Execute the query to actually fetch the data
-            site_id = site.id
-
-            # Get the access token from the MSAL app
-            if not self.msal_app:
-                logger.error("MSAL app not available")
-                return []
-
+            # Get the token acquisition function from the GraphClient
+            token_data = self.graph_client._get_token()
+            access_token = token_data.get("access_token")
+        except Exception:
+            # Fallback to direct MSAL token acquisition
             token_response = self.msal_app.acquire_token_for_client(
                 scopes=["https://graph.microsoft.com/.default"]
             )
+
+            logger.debug(f"Token response: {token_response}")
 
             access_token = (
                 token_response.get("access_token") if token_response else None
@@ -444,83 +501,61 @@ class SharepointConnector(LoadConnector, PollConnector):
 
             if not access_token:
                 logger.error(
-                    f"Failed to get access token. Error: {token_response.get('error', 'Unknown')}"
+                    f"Failed to get access token. Error: {token_response.get('error', 'Unknown')}, "
+                    f"Error description: {token_response.get('error_description', 'N/A')}"
                 )
                 return []
 
-            # Construct the SharePoint Pages API endpoint
-            pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
+        # Construct the SharePoint Pages API endpoint
+        pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
 
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            }
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
 
-            # Add expand parameter to get canvas layout content
-            params = {"$expand": "canvasLayout"}
+        # Add expand parameter to get canvas layout content
+        params = {"$expand": "canvasLayout"}
 
-            response = requests.get(pages_endpoint, headers=headers, params=params)
+        response = requests.get(pages_endpoint, headers=headers, params=params)
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Failed to get site pages: {response.status_code} {response.text}"
+            )
 
-            if response.status_code != 200:
-                if response.status_code == 403:
-                    logger.warning(
-                        "Permission denied accessing SharePoint Pages API. App needs "
-                        "'Sites.Read.All' or 'Sites.ReadWrite.All' permissions."
-                    )
-                else:
-                    logger.warning(
-                        f"SharePoint Pages API request failed with status {response.status_code}: {response.text[:200]}..."
-                    )
-                return []
+        pages_data = response.json()
+        all_pages = pages_data.get("value", [])
 
+        # Handle pagination if there are more pages
+        while "@odata.nextLink" in pages_data:
+            next_url = pages_data["@odata.nextLink"]
+            response = requests.get(next_url, headers=headers)
+            response.raise_for_status()
             pages_data = response.json()
-            all_pages = pages_data.get("value", [])
+            all_pages.extend(pages_data.get("value", []))
 
-            # Handle pagination if there are more pages
-            while "@odata.nextLink" in pages_data:
-                next_url = pages_data["@odata.nextLink"]
-                response = requests.get(next_url, headers=headers)
-                response.raise_for_status()
-                pages_data = response.json()
-                all_pages.extend(pages_data.get("value", []))
+        logger.debug(f"Found {len(all_pages)} site pages in {site_descriptor.url}")
 
-            logger.debug(f"Found {len(all_pages)} site pages in {site_descriptor.url}")
+        # Filter pages based on time window if specified
+        if start is not None or end is not None:
+            filtered_pages = []
+            for page in all_pages:
+                page_modified = page.get("lastModifiedDateTime")
+                if page_modified:
+                    if isinstance(page_modified, str):
+                        page_modified = datetime.fromisoformat(
+                            page_modified.replace("Z", "+00:00")
+                        )
 
-            # Filter pages based on time window if specified
-            if start is not None or end is not None:
-                filtered_pages = []
-                for page in all_pages:
-                    page_modified = page.get("lastModifiedDateTime")
-                    if page_modified:
-                        if isinstance(page_modified, str):
-                            page_modified = datetime.fromisoformat(
-                                page_modified.replace("Z", "+00:00")
-                            )
+                    if start is not None and page_modified < start:
+                        continue
+                    if end is not None and page_modified > end:
+                        continue
 
-                        if start is not None and page_modified < start:
-                            continue
-                        if end is not None and page_modified > end:
-                            continue
+                filtered_pages.append(page)
+            all_pages = filtered_pages
 
-                    filtered_pages.append(page)
-                all_pages = filtered_pages
-
-            site_pages.extend(all_pages)
-
-        except requests.exceptions.RequestException as e:
-            if (
-                hasattr(e, "response")
-                and e.response is not None
-                and e.response.status_code == 403
-            ):
-                logger.warning(
-                    "Permission denied accessing SharePoint Pages API. App needs "
-                    "'Sites.Read.All' or 'Sites.ReadWrite.All' permissions."
-                )
-            else:
-                logger.warning(f"HTTP request error when fetching site pages: {e}")
-        except Exception as e:
-            logger.warning(f"Error fetching site pages from {site_descriptor.url}: {e}")
+        site_pages.extend(all_pages)
 
         return site_pages
 
@@ -547,16 +582,19 @@ class SharepointConnector(LoadConnector, PollConnector):
                     doc_batch = []
 
             # Fetch SharePoint site pages (.aspx files)
-            site_pages = self._fetch_site_pages(site_descriptor, start=start, end=end)
-            for site_page in site_pages:
-                logger.debug(
-                    f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+            if self.include_site_pages:
+                site_pages = self._fetch_site_pages(
+                    site_descriptor, start=start, end=end
                 )
-                doc_batch.append(_convert_sitepage_to_document(site_page))
+                for site_page in site_pages:
+                    logger.debug(
+                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                    )
+                    doc_batch.append(_convert_sitepage_to_document(site_page))
 
-                if len(doc_batch) >= self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+                    if len(doc_batch) >= self.batch_size:
+                        yield doc_batch
+                        doc_batch = []
 
         yield doc_batch
 
