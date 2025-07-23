@@ -492,34 +492,9 @@ class SharepointConnector(LoadConnector, PollConnector):
         site.execute_query()  # Execute the query to actually fetch the data
         site_id = site.id
 
-        # Get the access token from the MSAL app
-        if not self.msal_app:
-            logger.error("MSAL app not available")
-            return []
-
-        # Try to get token using the graph client's token function first
-        try:
-            # Get the token acquisition function from the GraphClient
-            token_data = self.graph_client._get_token()
-            access_token = token_data.get("access_token")
-        except Exception:
-            # Fallback to direct MSAL token acquisition
-            token_response = self.msal_app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
-            )
-
-            logger.debug(f"Token response: {token_response}")
-
-            access_token = (
-                token_response.get("access_token") if token_response else None
-            )
-
-            if not access_token:
-                logger.error(
-                    f"Failed to get access token. Error: {token_response.get('error', 'Unknown')}, "
-                    f"Error description: {token_response.get('error_description', 'N/A')}"
-                )
-                return []
+        # Get the token acquisition function from the GraphClient
+        token_data = self.graph_client._get_token()
+        access_token = token_data.get("access_token")
 
         # Construct the SharePoint Pages API endpoint
         pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
@@ -533,11 +508,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         params = {"$expand": "canvasLayout"}
 
         response = requests.get(pages_endpoint, headers=headers, params=params)
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"Failed to get site pages: {response.status_code} {response.text}"
-            )
-
+        response.raise_for_status()
         pages_data = response.json()
         all_pages = pages_data.get("value", [])
 
