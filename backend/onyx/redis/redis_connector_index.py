@@ -79,9 +79,6 @@ class RedisConnectorIndex:
             f"{self.TERMINATE_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
 
-    def lock_key_by_batch(self, batch_n: int) -> str:
-        return f"{self.per_worker_lock_key}/{batch_n}"
-
     def set_generator_complete(self, payload: int | None) -> None:
         if not payload:
             self.redis.delete(self.generator_complete_key)

@@ -258,8 +258,6 @@ class EmbeddingModel:
                     try:
                         result = future.result()
                         batch_results.append(result)
-                        if self.callback:
-                            self.callback.progress("_batch_encode_texts", 1)
                     except Exception as e:
                         logger.exception("Embedding model failed to process batch")
                         raise e
@@ -279,8 +277,6 @@ class EmbeddingModel:
                     request_id=request_id,
                 )
                 embeddings.extend(batch_embeddings)
-                if self.callback:
-                    self.callback.progress("_batch_encode_texts", 1)
 
         return embeddings
 

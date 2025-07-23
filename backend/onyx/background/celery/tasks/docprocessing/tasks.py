@@ -1,4 +1,3 @@
-import os
 import time
 import traceback
 from collections import defaultdict
@@ -7,7 +6,6 @@ from datetime import timedelta
 from datetime import timezone
 from http import HTTPStatus
 from typing import Any
-from typing import cast
 
 from celery import shared_task
 from celery import Task
@@ -29,12 +27,10 @@ from onyx.background.celery.tasks.docprocessing.utils import (
     try_creating_docfetching_task,
 )
 from onyx.background.celery.tasks.models import DocProcessingContext
-from onyx.background.celery.tasks.models import IndexingWatchdogTerminalStatus
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
 from onyx.background.indexing.checkpointing_utils import (
     get_index_attempts_with_old_checkpoints,
 )
-from onyx.background.indexing.job_client import SimpleJobException
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
@@ -1098,41 +1094,9 @@ def _docprocessing_task(
                 timeout=CELERY_INDEXING_LOCK_TIMEOUT,
                 thread_local=False,
             )
-            # set thread_local=False since we don't control what thread the indexing/pruning
-            # might run our callback with
-            per_batch_lock = cast(
-                RedisLock,
-                r.lock(
-                    redis_connector_index.lock_key_by_batch(batch_num),
-                    timeout=CELERY_INDEXING_LOCK_TIMEOUT,
-                    thread_local=False,
-                ),
-            )
-
-            acquired = per_batch_lock.acquire(blocking=False)
-            if not acquired:
-                logger.warning(
-                    f"Indexing batch task already running, exiting...: "
-                    f"index_attempt={index_attempt_id} "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={index_attempt.search_settings.id} "
-                    f"batch_num={batch_num}"
-                )
-
-                raise SimpleJobException(
-                    f"Indexing batch task already running, exiting...: "
-                    f"index_attempt={index_attempt_id} "
-                    f"cc_pair={cc_pair_id} "
-                    f"search_settings={index_attempt.search_settings.id} "
-                    f"batch_num={batch_num}",
-                    code=IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING.code,
-                )
 
             callback = IndexingCallback(
-                os.getppid(),
                 redis_connector,
-                per_batch_lock,
-                r,
             )
             # TODO: right now this is the only thing the callback is used for,
             # probably there is a simpler way to handle pausing
@@ -1170,8 +1134,6 @@ def _docprocessing_task(
                 f"Processing {len(documents)} documents through indexing pipeline"
             )
 
-            per_batch_lock.reacquire()
-
             # real work happens here!
             index_pipeline_result = run_indexing_pipeline(
                 embedder=embedding_model,
@@ -1183,7 +1145,6 @@ def _docprocessing_task(
                 document_batch=documents,
                 index_attempt_metadata=index_attempt_metadata,
             )
-            per_batch_lock.reacquire()
 
         # Update batch completion and document counts atomically using database coordination
 

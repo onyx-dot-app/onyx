@@ -9,7 +9,6 @@ import sentry_sdk
 from celery import Celery
 from celery import shared_task
 from celery import Task
-from redis.lock import Lock as RedisLock
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.memory_monitoring import emit_process_memory
@@ -24,7 +23,6 @@ from onyx.background.indexing.job_client import SimpleJob
 from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.job_client import SimpleJobException
 from onyx.background.indexing.run_docfetching import run_indexing_entrypoint
-from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -37,7 +35,6 @@ from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_DSN
@@ -159,7 +156,7 @@ def _docfetching_task(
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    redis_connector_index = redis_connector.new_index(search_settings_id)
+    redis_connector.new_index(search_settings_id)
 
     # TODO: remove all fences, cause all signals to be set in postgres
     if redis_connector.delete.fenced:
@@ -184,34 +181,6 @@ def _docfetching_task(
     # This replaces the Redis fence payload waiting
     _verify_indexing_attempt(index_attempt_id, cc_pair_id, search_settings_id)
 
-    # We still need a basic Redis lock to prevent duplicate task execution
-    # but this is much simpler than the full fencing mechanism
-    r = get_redis_client()
-    # set thread_local=False since we don't control what thread the indexing/pruning
-    # might run our callback with
-    lock: RedisLock = r.lock(
-        redis_connector_index.generator_lock_key,
-        timeout=CELERY_INDEXING_LOCK_TIMEOUT,
-        thread_local=False,
-    )
-
-    acquired = lock.acquire(blocking=False)
-    if not acquired:
-        logger.warning(
-            f"Docfetching task already running, exiting...: "
-            f"index_attempt={index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}"
-        )
-
-        raise SimpleJobException(
-            f"Docfetching task already running, exiting...: "
-            f"index_attempt={index_attempt_id} "
-            f"cc_pair={cc_pair_id} "
-            f"search_settings={search_settings_id}",
-            code=IndexingWatchdogTerminalStatus.TASK_ALREADY_RUNNING.code,
-        )
-
     try:
         with get_session_with_current_tenant() as db_session:
             attempt = get_index_attempt(db_session, index_attempt_id)
@@ -234,10 +203,7 @@ def _docfetching_task(
 
         # define a callback class
         callback = IndexingCallback(
-            os.getppid(),
             redis_connector,
-            lock,
-            r,
         )
 
         logger.info(
@@ -283,10 +249,6 @@ def _docfetching_task(
             raise sanitized_e
         except Exception:
             raise e
-
-    finally:
-        if lock.owned():
-            lock.release()
 
     logger.info(
         f"Indexing spawned task finished: attempt={index_attempt_id} "

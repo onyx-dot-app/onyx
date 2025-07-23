@@ -110,18 +110,23 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
             raise
 
 
-class IndexingCallback(IndexingCallbackBase):
+# NOTE: we're in the process of removing all fences from indexing; this will
+# eventually no longer be used. For now, it is used only for connector pausing.
+class IndexingCallback(IndexingHeartbeatInterface):
     def __init__(
         self,
-        parent_pid: int,
         redis_connector: RedisConnector,
-        redis_lock: RedisLock,
-        redis_client: Redis,
     ):
-        super().__init__(parent_pid, redis_connector, redis_lock, redis_client)
+        self.redis_connector = redis_connector
 
+    def should_stop(self) -> bool:
+        # Check if the associated indexing attempt has been cancelled
+        # TODO: Pass index_attempt_id to the callback and check cancellation using the db
+        return bool(self.redis_connector.stop.fenced)
+
+    # included to satisfy old interface
     def progress(self, tag: str, amount: int) -> None:
-        super().progress(tag, amount)
+        pass
 
 
 # NOTE: The validate_indexing_fence and validate_indexing_fences functions have been removed
