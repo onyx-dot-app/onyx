@@ -14,6 +14,7 @@ from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: igno
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -49,7 +50,28 @@ class SiteDescriptor(BaseModel):
 def _convert_driveitem_to_document(
     driveitem: DriveItem,
     drive_name: str,
-) -> Document:
+) -> Document | None:
+    # Check file size before downloading
+    try:
+        size_value = getattr(driveitem, "size", None)
+        if size_value is not None:
+            file_size = int(size_value)
+            if file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
+                logger.warning(
+                    f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
+                    f"File size: {file_size} bytes. Skipping."
+                )
+                return None
+        else:
+            logger.warning(
+                f"Could not access file size for '{driveitem.name}' Proceeding with download."
+            )
+    except (ValueError, TypeError, AttributeError) as e:
+        logger.info(
+            f"Could not access file size for '{driveitem.name}': {e}. Proceeding with download."
+        )
+
+    # Proceed with download if size is acceptable or not available
     file_text = extract_file_text(
         file=io.BytesIO(driveitem.get_content().execute_query().value),
         file_name=driveitem.name,
@@ -275,7 +297,11 @@ class SharepointConnector(LoadConnector, PollConnector):
             driveitems = self._fetch_driveitems(site_descriptor, start=start, end=end)
             for driveitem, drive_name in driveitems:
                 logger.debug(f"Processing: {driveitem.web_url}")
-                doc_batch.append(_convert_driveitem_to_document(driveitem, drive_name))
+
+                # Convert driveitem to document with size checking
+                doc = _convert_driveitem_to_document(driveitem, drive_name)
+                if doc is not None:
+                    doc_batch.append(doc)
 
                 if len(doc_batch) >= self.batch_size:
                     yield doc_batch
