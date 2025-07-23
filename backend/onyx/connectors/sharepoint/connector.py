@@ -112,6 +112,10 @@ def _convert_driveitem_to_document(
 
     # Proceed with download if size is acceptable or not available
     content = _sleep_and_retry(driveitem.get_content(), "get_content")
+    if content is None:
+        logger.warning(f"Could not access content for '{driveitem.name}'")
+        return None
+
     file_text = extract_file_text(
         file=io.BytesIO(content.value),
         file_name=driveitem.name,
