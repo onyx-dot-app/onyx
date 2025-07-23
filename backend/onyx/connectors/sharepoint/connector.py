@@ -38,6 +38,7 @@ logger = setup_logger()
 
 
 ASPX_EXTENSION = ".aspx"
+REQUEST_TIMEOUT = 10
 
 
 class SiteDescriptor(BaseModel):
@@ -497,6 +498,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         access_token = token_data.get("access_token")
 
         # Construct the SharePoint Pages API endpoint
+        # Using API directly, since the Graph Client doesn't support the Pages API
         pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
 
         headers = {
@@ -507,7 +509,9 @@ class SharepointConnector(LoadConnector, PollConnector):
         # Add expand parameter to get canvas layout content
         params = {"$expand": "canvasLayout"}
 
-        response = requests.get(pages_endpoint, headers=headers, params=params)
+        response = requests.get(
+            pages_endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+        )
         response.raise_for_status()
         pages_data = response.json()
         all_pages = pages_data.get("value", [])
@@ -515,7 +519,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         # Handle pagination if there are more pages
         while "@odata.nextLink" in pages_data:
             next_url = pages_data["@odata.nextLink"]
-            response = requests.get(next_url, headers=headers)
+            response = requests.get(next_url, headers=headers, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             pages_data = response.json()
             all_pages.extend(pages_data.get("value", []))

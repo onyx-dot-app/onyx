@@ -245,7 +245,7 @@ def test_sharepoint_connector_pages(
         doc for batch in document_batches for doc in batch
     ]
 
-    # Should only find test1.docx
+    # Should only find CollabHome
     assert len(found_documents) == 1, "Should only find one page"
     doc = found_documents[0]
     assert doc.semantic_identifier == "CollabHome"
