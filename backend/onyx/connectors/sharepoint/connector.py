@@ -1,6 +1,8 @@
+import html
 import io
 import os
 import time
+import re
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -8,6 +10,7 @@ from typing import Any
 from urllib.parse import unquote
 
 import msal  # type: ignore
+import requests
 from office365.graph_client import GraphClient  # type: ignore
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore
 from office365.onedrive.sites.site import Site  # type: ignore
@@ -132,6 +135,91 @@ def _convert_driveitem_to_document(
             )
         ],
         metadata={"drive": drive_name},
+    )
+    return doc
+
+
+def _convert_sitepage_to_document(site_page: dict[str, Any]) -> Document:
+    """Convert a SharePoint site page to a Document object."""
+    # Extract text content from the site page
+    page_text = ""
+
+    # Get title and description
+    title = site_page.get("title", "")
+    description = site_page.get("description", "")
+
+    # Build the text content
+    if title:
+        page_text += f"# {title}\n\n"
+    if description:
+        page_text += f"{description}\n\n"
+
+    # Extract content from canvas layout if available
+    canvas_layout = site_page.get("canvasLayout", {})
+    if canvas_layout:
+        horizontal_sections = canvas_layout.get("horizontalSections", [])
+        for section in horizontal_sections:
+            columns = section.get("columns", [])
+            for column in columns:
+                webparts = column.get("webparts", [])
+                for webpart in webparts:
+                    # Extract text from text webparts
+                    if webpart.get("@odata.type") == "#oneDrive.textWebPart":
+                        inner_html = webpart.get("innerHtml", "")
+                        if inner_html:
+                            # Basic HTML to text conversion
+                            # Remove HTML tags
+                            text_content = re.sub(r"<[^>]+>", "", inner_html)
+                            # Decode HTML entities
+                            text_content = html.unescape(text_content)
+                            page_text += f"{text_content}\n\n"
+
+    # If no content extracted, use the title as fallback
+    if not page_text.strip() and title:
+        page_text = title
+
+    # Parse creation and modification info
+    created_datetime = site_page.get("createdDateTime")
+    if created_datetime:
+        if isinstance(created_datetime, str):
+            created_datetime = datetime.fromisoformat(
+                created_datetime.replace("Z", "+00:00")
+            )
+        elif not created_datetime.tzinfo:
+            created_datetime = created_datetime.replace(tzinfo=timezone.utc)
+
+    last_modified_datetime = site_page.get("lastModifiedDateTime")
+    if last_modified_datetime:
+        if isinstance(last_modified_datetime, str):
+            last_modified_datetime = datetime.fromisoformat(
+                last_modified_datetime.replace("Z", "+00:00")
+            )
+        elif not last_modified_datetime.tzinfo:
+            last_modified_datetime = last_modified_datetime.replace(tzinfo=timezone.utc)
+
+    # Extract owner information
+    primary_owners = []
+    created_by = site_page.get("createdBy", {}).get("user", {})
+    if created_by.get("displayName"):
+        primary_owners.append(
+            BasicExpertInfo(
+                display_name=created_by.get("displayName"),
+                email=created_by.get("email", ""),
+            )
+        )
+
+    doc = Document(
+        id=site_page["id"],
+        sections=[TextSection(link=site_page.get("webUrl", ""), text=page_text)],
+        source=DocumentSource.SHAREPOINT,
+        semantic_identifier=site_page.get("name", title),
+        doc_updated_at=last_modified_datetime or created_datetime,
+        primary_owners=primary_owners,
+        metadata={
+            "type": "site_page",
+            "page_layout": site_page.get("pageLayout", ""),
+            "promotion_kind": site_page.get("promotionKind", ""),
+        },
     )
     return doc
 
@@ -284,7 +372,7 @@ class SharepointConnector(LoadConnector, PollConnector):
 
                 except Exception as e:
                     # Some drives might not be accessible
-                    logger.warning(f"Failed to process drive: {str(e)}")
+                    logger.warning(f"Failed to process drive '{drive.name}': {str(e)}")
 
         except Exception as e:
             err_str = str(e)
@@ -327,6 +415,115 @@ class SharepointConnector(LoadConnector, PollConnector):
         ]
         return site_descriptors
 
+    def _fetch_site_pages(
+        self,
+        site_descriptor: SiteDescriptor,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
+        site_pages = []
+        try:
+            # Get the site to extract the site ID
+            site = self.graph_client.sites.get_by_url(site_descriptor.url)
+            site.execute_query()  # Execute the query to actually fetch the data
+            site_id = site.id
+
+            # Get the access token from the MSAL app
+            if not self.msal_app:
+                logger.error("MSAL app not available")
+                return []
+
+            token_response = self.msal_app.acquire_token_for_client(
+                scopes=["https://graph.microsoft.com/.default"]
+            )
+
+            access_token = (
+                token_response.get("access_token") if token_response else None
+            )
+
+            if not access_token:
+                logger.error(
+                    f"Failed to get access token. Error: {token_response.get('error', 'Unknown')}"
+                )
+                return []
+
+            # Construct the SharePoint Pages API endpoint
+            pages_endpoint = f"https://graph.microsoft.com/v1.0/sites/{site_id}/pages/microsoft.graph.sitePage"
+
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+
+            # Add expand parameter to get canvas layout content
+            params = {"$expand": "canvasLayout"}
+
+            response = requests.get(pages_endpoint, headers=headers, params=params)
+
+            if response.status_code != 200:
+                if response.status_code == 403:
+                    logger.warning(
+                        "Permission denied accessing SharePoint Pages API. App needs "
+                        "'Sites.Read.All' or 'Sites.ReadWrite.All' permissions."
+                    )
+                else:
+                    logger.warning(
+                        f"SharePoint Pages API request failed with status {response.status_code}: {response.text[:200]}..."
+                    )
+                return []
+
+            pages_data = response.json()
+            all_pages = pages_data.get("value", [])
+
+            # Handle pagination if there are more pages
+            while "@odata.nextLink" in pages_data:
+                next_url = pages_data["@odata.nextLink"]
+                response = requests.get(next_url, headers=headers)
+                response.raise_for_status()
+                pages_data = response.json()
+                all_pages.extend(pages_data.get("value", []))
+
+            logger.debug(f"Found {len(all_pages)} site pages in {site_descriptor.url}")
+
+            # Filter pages based on time window if specified
+            if start is not None or end is not None:
+                filtered_pages = []
+                for page in all_pages:
+                    page_modified = page.get("lastModifiedDateTime")
+                    if page_modified:
+                        if isinstance(page_modified, str):
+                            page_modified = datetime.fromisoformat(
+                                page_modified.replace("Z", "+00:00")
+                            )
+
+                        if start is not None and page_modified < start:
+                            continue
+                        if end is not None and page_modified > end:
+                            continue
+
+                    filtered_pages.append(page)
+                all_pages = filtered_pages
+
+            site_pages.extend(all_pages)
+
+        except requests.exceptions.RequestException as e:
+            if (
+                hasattr(e, "response")
+                and e.response is not None
+                and e.response.status_code == 403
+            ):
+                logger.warning(
+                    "Permission denied accessing SharePoint Pages API. App needs "
+                    "'Sites.Read.All' or 'Sites.ReadWrite.All' permissions."
+                )
+            else:
+                logger.warning(f"HTTP request error when fetching site pages: {e}")
+        except Exception as e:
+            logger.warning(f"Error fetching site pages from {site_descriptor.url}: {e}")
+
+        return site_pages
+
     def _fetch_from_sharepoint(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
@@ -335,6 +532,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         # goes over all urls, converts them into Document objects and then yields them in batches
         doc_batch: list[Document] = []
         for site_descriptor in site_descriptors:
+            # Fetch regular documents from document libraries
             driveitems = self._fetch_driveitems(site_descriptor, start=start, end=end)
             for driveitem, drive_name in driveitems:
                 logger.debug(f"Processing: {driveitem.web_url}")
@@ -347,6 +545,19 @@ class SharepointConnector(LoadConnector, PollConnector):
                 if len(doc_batch) >= self.batch_size:
                     yield doc_batch
                     doc_batch = []
+
+            # Fetch SharePoint site pages (.aspx files)
+            site_pages = self._fetch_site_pages(site_descriptor, start=start, end=end)
+            for site_page in site_pages:
+                logger.debug(
+                    f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                )
+                doc_batch.append(_convert_sitepage_to_document(site_page))
+
+                if len(doc_batch) >= self.batch_size:
+                    yield doc_batch
+                    doc_batch = []
+
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
