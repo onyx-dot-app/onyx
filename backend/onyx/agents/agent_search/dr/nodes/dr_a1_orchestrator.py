@@ -62,6 +62,8 @@ def orchestrator(
 
     node_start_time = datetime.now()
 
+    current_time_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = state.original_question
     if not question:
@@ -101,6 +103,7 @@ def orchestrator(
                 .replace("---possible_relationships---", all_relationship_types)
                 .replace("---question---", prompt_question)
                 .replace("---chat_history_string---", chat_history_string)
+                .replace("---current_time---", current_time_string)
             )
 
         else:
@@ -111,6 +114,7 @@ def orchestrator(
                 .replace("---question---", prompt_question)
                 .replace("---iteration_nr---", str(iteration_nr))
                 .replace("---chat_history_string---", chat_history_string)
+                .replace("---current_time---", current_time_string)
             )
 
     else:
@@ -129,6 +133,7 @@ def orchestrator(
                 .replace("---possible_relationships---", all_relationship_types)
                 .replace("---question---", prompt_question)
                 .replace("---chat_history_string---", chat_history_string)
+                .replace("---current_time---", current_time_string)
             )
 
             try:
@@ -169,6 +174,7 @@ def orchestrator(
             .replace("---iteration_nr---", str(iteration_nr))
             .replace("---current_plan_of_record_string---", plan_of_record.plan)
             .replace("---chat_history_string---", chat_history_string)
+            .replace("---current_time---", current_time_string)
         )
 
     if remaining_time_budget > 0:

@@ -45,7 +45,7 @@ The {SEARCH} tool supports parallel calls.
 Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {SEARCH} tool and vice versa!
 
-The {SEARCH} tool DOES support parallel calls of up to 4 queries.
+The {SEARCH} tool DOES support parallel calls of up to 8 queries.
 """
 
 TOOL_DESCRIPTION[
@@ -60,7 +60,7 @@ should be used). If in doubt you should consider the data to be private and you 
 Note also that if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
 
-The {INTERNET_SEARCH} tool DOES support parallel calls of up to 4 queries.
+The {INTERNET_SEARCH} tool DOES support parallel calls of up to 8 queries.
 """
 
 TOOL_DESCRIPTION[
@@ -144,7 +144,7 @@ Please format your answer as a json dictionary in the following format:
                   "questions": "<the list of questions you want to pose to the tool. Note that the \
 questions should be appropriate for the tool.
 If the tool is {SEARCH} or {INTERNET_SEARCH}, the question \
-to the tool should be written as a list of up to 4 search queries that would help to answer the question.
+to the tool should be written as a list of up to 8 search queries that would help to answer the question.
 If the tool is {CLOSER}, just return ['Answer the original question with the information you have.'].
 If the tool is {KNOWLEDGE_GRAPH} return only one question in the list.>"}}
 }}
@@ -190,6 +190,7 @@ In any case, do not confuse the below with the user query. It is only there to p
 ---chat_history_string---
 {SEPARATOR_LINE}
 
+Also, the current time is ---current_time---.
 
 HINTS:
    - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
@@ -203,10 +204,11 @@ For example, if the question is 'which jiras address the main problems Nike has?
 
 Please format your answer as a json dictionary in the following format:
 {{
-   "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
-guided by the question you need to answer, the answers you have so far, and the plan of record.>",
+   "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it. \
+Also consider the current time if useful for the problem.>",
    "plan": "<the full plan, formatted as a string. See examples above. \
-(Note that the plan of record must be a string, not a list of strings! Also, again, the steps \
+(Note that the plan of record must be a string, not a list of strings! If the question \
+refers to dates etc. you should also consider the current time. Also, again, the steps \
 should NOT contain the specific tool although it may have been used to construct \
 the question. Just show the question.)>"
 }}
@@ -233,7 +235,8 @@ Here is the overall question that you need to answer:
 ---question---
 {SEPARATOR_LINE}
 
-The current iteration is ---iteration_nr---:
+The current iteration is ---iteration_nr---.
+Also, the current time is ---current_time---.
 
 Finally, here are the past few chat messages for reference (if any). \
 Note that the chat history may already contain the answer to the user question, in which case you can \
@@ -285,7 +288,7 @@ Please format your answer as a json dictionary in the following format:
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
 {INTERNET_SEARCH}, the question should be \
-written as a list of suitable search of up to 4 queries. If the tool is {KNOWLEDGE_GRAPH} \
+written as a list of suitable search of up to 8 queries. If the tool is {KNOWLEDGE_GRAPH} \
 return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
@@ -308,7 +311,7 @@ have a high-level plan given to you.
 Your task is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
 considering the answers you already got, and guided by the initial plan.
 
-(You are planning for iteration ---iteration_nr--- now.).
+(You are planning for iteration ---iteration_nr--- now.). Also, the current time is ---current_time---.
 
 You have four tools available, "{SEARCH}", "{INTERNET_SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
 
@@ -402,7 +405,7 @@ guided by the question you need to answer, the answers you have so far, and the 
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
 {INTERNET_SEARCH}, the question should be \
-written as a list of suitable search of up to 4 queries. If the tool is {KNOWLEDGE_GRAPH} \
+written as a list of suitable search of up to 8 queries. If the tool is {KNOWLEDGE_GRAPH} \
 return only one question in the list.
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
