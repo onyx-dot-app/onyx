@@ -41,7 +41,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
 
 # from onyx.utils.sitemap_eea import list_pages_for_site_eea
-from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea, list_pages_for_protected_site_eea, soer_login
+from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea, list_pages_for_protected_site_eea, soer_login, remove_by_selector
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -589,22 +589,7 @@ class WebConnector(LoadConnector):
             
             soup = BeautifulSoup(content, "html.parser")
             
-            tag = soup.select_one("meta[name='remove_by_selector']")
-            if tag and tag.has_attr("content"):
-                page_remove_by_selector = [tag["content"].strip()]
-            else:
-                page_remove_by_selector = []
-            
-            for selector in (self.remove_by_selector + page_remove_by_selector):
-                selector = selector.strip()
-                if not selector:
-                    continue
-                for s in selector.split(","):
-                    s = s.strip()
-                    if not s:
-                        continue
-                    for tag in soup.select(s):
-                        tag.decompose()
+            remove_by_selector(soup, self.remove_by_selector)
 
             if self.recursive:
                 internal_links = get_internal_links(

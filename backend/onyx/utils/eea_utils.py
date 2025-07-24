@@ -220,3 +220,21 @@ def send_score_to_langfuse(feedback, db_session):
     trace = find_langfuse_trace(pg_logs)
 
     score(trace, feedback)
+
+def remove_by_selector(soup, selector):
+    tag = soup.select_one("meta[name='remove_by_selector']")
+    if tag and tag.has_attr("content"):
+        page_selector = [tag["content"].strip()]
+    else:
+        page_selector = []
+    
+    for sel in (selector + page_selector):
+        sel = sel.strip()
+        if not sel:
+            continue
+        for s in sel.split(","):
+            s = s.strip()
+            if not s:
+                continue
+            for tag in soup.select(s):
+                tag.decompose()
