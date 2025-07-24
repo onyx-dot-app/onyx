@@ -456,13 +456,19 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        remove_by_selector: list = [],
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
+        self.remove_by_selector = remove_by_selector or []
         self.web_connector_type = web_connector_type
+        
+        if not isinstance(self.remove_by_selector, list):
+            self.remove_by_selector = []
+        
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -580,7 +586,23 @@ class WebConnector(LoadConnector):
                     scroll_attempts += 1
 
             content = page.content()
+            
             soup = BeautifulSoup(content, "html.parser")
+            
+            # ==== remove this??
+            tag = soup.select_one("meta[name='remove_by_selector']")
+            if tag and tag.has_attr("content"):
+                content = tag["content"].strip()
+                page_remove_by_selector = [s.strip() for s in content.split(",") if s.strip()]
+            else:
+                page_remove_by_selector = []
+            # ====
+            
+            for selector in (self.remove_by_selector + page_remove_by_selector):
+                if not selector:
+                    continue
+                for tag in soup.select(selector):
+                    tag.decompose()
 
             if self.recursive:
                 internal_links = get_internal_links(
