@@ -11,8 +11,10 @@ from onyx.server.manage.models import VersionResponse
 from onyx.server.models import StatusResponse
 
 from onyx.server.manage.connectors_state import get_connectors_state
-from onyx.db.engine import get_session
-from onyx.db.engine import get_current_tenant_id
+from onyx.db.engine.sql_engine import get_session
+from shared_configs.contextvars import get_current_tenant_id
+
+#from onyx.db.engine import get_current_tenant_id
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import IndexingStatus
 from onyx.db.index_attempt import get_paginated_index_attempts_for_cc_pair_id

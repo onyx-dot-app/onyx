@@ -5,7 +5,7 @@ from slack_sdk.errors import SlackApiError
 
 from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.users import add_slack_user_if_not_exists
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
@@ -170,19 +170,15 @@ def handle_message(
         respond_tag_only = channel_conf.get("respond_tag_only") or False
         respond_member_group_list = channel_conf.get("respond_member_group_list", None)
 
-    # NOTE: always respond in the DMs, as long the default config is not disabled.
-    if respond_tag_only and not bypass_filters and not is_bot_dm:
-        logger.info(
-            "Skipping message since the channel is configured such that "
-            "OnyxBot only responds to tags"
-        )
+    # Only default config can be disabled.
+    # If channel config is disabled, bot should not respond to this message (including DMs)
+    if slack_channel_config.channel_config.get("disabled"):
+        logger.info("Skipping message: OnyxBot is disabled for this channel")
         return False
 
-    if slack_channel_config.channel_config.get("disabled") and not bypass_filters:
-        logger.info(
-            "Skipping message since the channel is configured such that "
-            "OnyxBot is disabled"
-        )
+    # If bot should only respond to tags and is not tagged nor in a DM, skip message
+    if respond_tag_only and not bypass_filters and not is_bot_dm:
+        logger.info("Skipping message: OnyxBot only responds to tags in this channel")
         return False
 
     # List of user id to send message to, if None, send to everyone in channel

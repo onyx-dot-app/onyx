@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id

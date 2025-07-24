@@ -1,4 +1,4 @@
-import { SubLabel } from "@/components/admin/connectors/Field";
+import { SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useEffect, useState } from "react";
 import Dropzone from "react-dropzone";

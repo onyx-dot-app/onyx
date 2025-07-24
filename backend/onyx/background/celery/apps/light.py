@@ -15,7 +15,7 @@ from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -105,6 +105,10 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
 def on_setup_logging(loglevel: Any, logfile: Any, format: Any, colorize: Any, **kwargs: Any) -> None:
     app_base.on_setup_logging(loglevel, logfile, format, colorize, **kwargs)
 
+
+base_bootsteps = app_base.get_bootsteps()
+for bootstep in base_bootsteps:
+    celery_app.steps["worker"].add(bootstep)
 
 celery_app.autodiscover_tasks(
     [

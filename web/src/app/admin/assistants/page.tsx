@@ -4,7 +4,7 @@ import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
 import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { SubLabel } from "@/components/admin/connectors/Field";
+import { SubLabel } from "@/components/Field";
 import CreateButton from "@/components/ui/createButton";
 export default async function Page() {
   return (

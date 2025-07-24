@@ -7,6 +7,7 @@ from google.oauth2.credentials import Credentials as OAuthCredentials  # type: i
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -148,7 +149,9 @@ def message_to_section(message: Dict[str, Any]) -> tuple[TextSection, dict[str, 
     return TextSection(link=link, text=message_body_text + message_data), metadata
 
 
-def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:
+def thread_to_document(
+    full_thread: Dict[str, Any], email_used_to_fetch_thread: str
+) -> Document | None:
     all_messages = full_thread.get("messages", [])
     if not all_messages:
         return None
@@ -192,6 +195,11 @@ def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:
     primary_owners = _get_owners_from_emails(from_emails)
     secondary_owners = _get_owners_from_emails(other_emails)
 
+    # If emails have no subject, match Gmail's default "no subject"
+    # Search will break without a semantic identifier
+    if not semantic_identifier:
+        semantic_identifier = "(no subject)"
+
     return Document(
         id=id,
         semantic_identifier=semantic_identifier,
@@ -203,6 +211,11 @@ def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:
         doc_updated_at=updated_at_datetime,
         # Not adding emails to metadata because it's already in the sections
         metadata={},
+        external_access=ExternalAccess(
+            external_user_emails={email_used_to_fetch_thread},
+            external_user_group_ids=set(),
+            is_public=False,
+        ),
     )
 
 
@@ -313,13 +326,15 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 # full_threads is an iterator containing a single thread
                 # so we need to convert it to a list and grab the first element
                 full_thread = list(full_threads)[0]
-                doc = thread_to_document(full_thread)
+                doc = thread_to_document(full_thread, user_email)
                 if doc is None:
                     continue
+
                 doc_batch.append(doc)
                 if len(doc_batch) > self.batch_size:
                     yield doc_batch
                     doc_batch = []
+
         if doc_batch:
             yield doc_batch
 
@@ -345,7 +360,11 @@ class GmailConnector(LoadConnector, PollConnector, SlimConnector):
                 doc_batch.append(
                     SlimDocument(
                         id=thread["id"],
-                        perm_sync_data={"user_email": user_email},
+                        external_access=ExternalAccess(
+                            external_user_emails={user_email},
+                            external_user_group_ids=set(),
+                            is_public=False,
+                        ),
                     )
                 )
                 if len(doc_batch) > SLIM_BATCH_SIZE:

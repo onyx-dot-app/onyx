@@ -30,6 +30,7 @@ const ALLOWED_FILE_TYPES = [
   ".pdf",
   ".doc",
   ".docx",
+  ".epub",
   ".txt",
   ".rtf",
   ".odt",

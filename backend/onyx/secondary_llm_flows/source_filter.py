@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.chat_configs import ENABLE_CONNECTOR_CLASSIFIER
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_unique_document_sources
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import dict_based_prompt_to_langchain_prompt
 from onyx.llm.utils import message_to_string

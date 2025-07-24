@@ -13,7 +13,7 @@ services:
       - index
       - cache
       - inference_model_server
-    restart: always
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
@@ -58,6 +58,11 @@ services:
       - VESPA_HOST=index
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose
+      # MinIO configuration
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
       # Don't change the NLP model configs unless you know what you're doing
       - EMBEDDING_BATCH_SIZE=${EMBEDDING_BATCH_SIZE:-}
       - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
@@ -92,6 +97,10 @@ services:
       # Chat Configs
       - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
 
+      # Vespa Language Forcing
+      # See: https://docs.vespa.ai/en/linguistics.html 
+      - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
+
       # Enterprise Edition only
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
@@ -122,7 +131,7 @@ services:
       - cache
       - inference_model_server
       - indexing_model_server
-    restart: always
+    restart: unless-stopped
     environment:
       - ENCRYPTION_KEY_SECRET=${ENCRYPTION_KEY_SECRET:-}
       # Gen AI Settings (Needed by OnyxBot)
@@ -148,10 +157,17 @@ services:
       - POSTGRES_HOST=relational_db
       - POSTGRES_USER=${POSTGRES_USER:-}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - DB_READONLY_USER=${DB_READONLY_USER:-}
+      - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
       - POSTGRES_DB=${POSTGRES_DB:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose for OAuth2 connectors
+      # MinIO configuration
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - S3_FILE_STORE_BUCKET_NAME=${S3_FILE_STORE_BUCKET_NAME:-}
       # Don't change the NLP model configs unless you know what you're doing
       - DOCUMENT_ENCODER_MODEL=${DOCUMENT_ENCODER_MODEL:-}
       - DOC_EMBEDDING_DIM=${DOC_EMBEDDING_DIM:-}
@@ -235,7 +251,7 @@ services:
         - NEXT_PUBLIC_THEME=${NEXT_PUBLIC_THEME:-}
     depends_on:
       - api_server
-    restart: always
+    restart: unless-stopped
     environment:
       - INTERNAL_URL=http://api_server:8080
       - WEB_DOMAIN=${WEB_DOMAIN:-}
@@ -324,11 +340,14 @@ services:
 
   relational_db:
     image: postgres:15.2-alpine
+    shm_size: 1g
     command: -c 'max_connections=250'
-    restart: always
+    restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - DB_READONLY_USER=${DB_READONLY_USER:-}
+      - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
     ports:
       - "5432:5432"
     volumes:
@@ -336,8 +355,10 @@ services:
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
-    image: vespaengine/vespa:8.277.17
-    restart: always
+    image: vespaengine/vespa:8.526.15
+    restart: unless-stopped
+    environment:
+      - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
       - "19071:19071"
       - "8081:8081"
@@ -351,7 +372,7 @@ services:
 
   nginx:
     image: nginx:1.23.4-alpine
-    restart: always
+    restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
     depends_on:
@@ -378,9 +399,28 @@ services:
       /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
 
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    ports:
+      - "9004:9000"
+      - "9005:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_DEFAULT_BUCKETS: ${S3_FILE_STORE_BUCKET_NAME:-onyx-file-store-bucket}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
   cache:
     image: redis:7.4-alpine
-    restart: always
+    restart: unless-stopped
     ports:
       - "6379:6379"
     # docker silently mounts /data even without an explicit volume mount, which enables
@@ -390,6 +430,7 @@ services:
 volumes:
   db_volume:
   vespa_volume:
+  minio_data:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:

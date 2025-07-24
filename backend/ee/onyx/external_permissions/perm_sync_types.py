@@ -4,6 +4,8 @@ from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
 
+from onyx.context.search.models import InferenceChunk
+
 # Avoid circular imports
 if TYPE_CHECKING:
     from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
@@ -37,8 +39,11 @@ DocSyncFuncType = Callable[
 
 GroupSyncFuncType = Callable[
     [
-        str,
-        "ConnectorCredentialPair",
+        str,  # tenant_id
+        "ConnectorCredentialPair",  # cc_pair
     ],
-    list["ExternalUserGroup"],
+    Generator["ExternalUserGroup", None, None],
 ]
+
+# list of chunks to be censored and the user email. returns censored chunks
+CensoringFuncType = Callable[[list[InferenceChunk], str], list[InferenceChunk]]

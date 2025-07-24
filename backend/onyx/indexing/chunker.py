@@ -1,3 +1,7 @@
+from typing import cast
+
+from chonkie import SentenceChunker
+
 from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
@@ -78,7 +82,7 @@ def _combine_chunks(chunks: list[DocAwareChunk], large_chunk_id: int) -> DocAwar
         blurb=chunks[0].blurb,
         content=chunks[0].content,
         source_links=chunks[0].source_links or {},
-        image_file_name=None,
+        image_file_id=None,
         section_continuation=(chunks[0].chunk_id > 0),
         title_prefix=chunks[0].title_prefix,
         metadata_suffix_semantic=chunks[0].metadata_suffix_semantic,
@@ -135,9 +139,6 @@ class Chunker:
         mini_chunk_size: int = MINI_CHUNK_SIZE,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> None:
-        # importing llama_index uses a lot of RAM, so we only import it when needed.
-        from llama_index.core.node_parser import SentenceSplitter
-
         self.include_metadata = include_metadata
         self.chunk_token_limit = chunk_token_limit
         self.enable_multipass = enable_multipass
@@ -156,23 +157,30 @@ class Chunker:
         self.max_context = 0
         self.prompt_tokens = 0
 
-        self.blurb_splitter = SentenceSplitter(
-            tokenizer=tokenizer.tokenize,
+        # Create a token counter function that returns the count instead of the tokens
+        def token_counter(text: str) -> int:
+            return len(tokenizer.encode(text))
+
+        self.blurb_splitter = SentenceChunker(
+            tokenizer_or_token_counter=token_counter,
             chunk_size=blurb_size,
             chunk_overlap=0,
+            return_type="texts",
         )
 
-        self.chunk_splitter = SentenceSplitter(
-            tokenizer=tokenizer.tokenize,
+        self.chunk_splitter = SentenceChunker(
+            tokenizer_or_token_counter=token_counter,
             chunk_size=chunk_token_limit,
             chunk_overlap=chunk_overlap,
+            return_type="texts",
         )
 
         self.mini_chunk_splitter = (
-            SentenceSplitter(
-                tokenizer=tokenizer.tokenize,
+            SentenceChunker(
+                tokenizer_or_token_counter=token_counter,
                 chunk_size=mini_chunk_size,
                 chunk_overlap=0,
+                return_type="texts",
             )
             if enable_multipass
             else None
@@ -199,7 +207,8 @@ class Chunker:
         """
         Extract a short blurb from the text (first chunk of size `blurb_size`).
         """
-        texts = self.blurb_splitter.split_text(text)
+        # chunker is in `text` mode
+        texts = cast(list[str], self.blurb_splitter.chunk(text))
         if not texts:
             return ""
         return texts[0]
@@ -209,7 +218,8 @@ class Chunker:
         For "multipass" mode: additional sub-chunks (mini-chunks) for use in certain embeddings.
         """
         if self.mini_chunk_splitter and chunk_text.strip():
-            return self.mini_chunk_splitter.split_text(chunk_text)
+            # chunker is in `text` mode
+            return cast(list[str], self.mini_chunk_splitter.chunk(chunk_text))
         return None
 
     # ADDED: extra param image_url to store in the chunk
@@ -223,7 +233,7 @@ class Chunker:
         title_prefix: str = "",
         metadata_suffix_semantic: str = "",
         metadata_suffix_keyword: str = "",
-        image_file_name: str | None = None,
+        image_file_id: str | None = None,
     ) -> None:
         """
         Helper to create a new DocAwareChunk, append it to chunks_list.
@@ -234,7 +244,7 @@ class Chunker:
             blurb=self._extract_blurb(text),
             content=text,
             source_links=links or {0: ""},
-            image_file_name=image_file_name,
+            image_file_id=image_file_id,
             section_continuation=is_continuation,
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,
@@ -268,7 +278,7 @@ class Chunker:
             # Get section text and other attributes
             section_text = clean_text(str(section.text or ""))
             section_link_text = section.link or ""
-            image_url = section.image_file_name
+            image_url = section.image_file_id
 
             # If there is no useful content, skip
             if not section_text and (not document.title or section_idx > 0):
@@ -302,7 +312,7 @@ class Chunker:
                     chunks,
                     section_text,
                     links={0: section_link_text} if section_link_text else {},
-                    image_file_name=image_url,
+                    image_file_id=image_url,
                     title_prefix=title_prefix,
                     metadata_suffix_semantic=metadata_suffix_semantic,
                     metadata_suffix_keyword=metadata_suffix_keyword,
@@ -329,7 +339,8 @@ class Chunker:
                     chunk_text = ""
                     link_offsets = {}
 
-                split_texts = self.chunk_splitter.split_text(section_text)
+                # chunker is in `text` mode
+                split_texts = cast(list[str], self.chunk_splitter.chunk(section_text))
                 for i, split_text in enumerate(split_texts):
                     # If even the split_text is bigger than strict limit, further split
                     if (

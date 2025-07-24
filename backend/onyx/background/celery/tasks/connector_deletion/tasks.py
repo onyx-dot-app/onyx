@@ -38,7 +38,7 @@ from onyx.db.document import (
 )
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType

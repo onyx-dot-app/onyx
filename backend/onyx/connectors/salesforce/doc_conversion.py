@@ -1,4 +1,5 @@
 import re
+from typing import Any
 from typing import cast
 
 from onyx.configs.constants import DocumentSource
@@ -7,6 +8,7 @@ from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
+from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.utils.logger import setup_logger
@@ -57,7 +59,8 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
                 elif value is not None:
                     filtered_dict[key] = value
         return filtered_dict
-    elif isinstance(data, list):
+
+    if isinstance(data, list):
         filtered_list = []
         for item in data:
             filtered_item: dict | list
@@ -67,10 +70,10 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
                 if filtered_item:
                     filtered_list.append(filtered_item)
             elif item is not None:
-                filtered_list.append(filtered_item)
+                filtered_list.append(item)
         return filtered_list
-    else:
-        return data
+
+    return data
 
 
 def _json_to_natural_language(data: dict | list, indent: int = 0) -> str:
@@ -105,27 +108,25 @@ def _json_to_natural_language(data: dict | list, indent: int = 0) -> str:
     return "\n".join(result)
 
 
-def _extract_dict_text(raw_dict: dict) -> str:
-    """Extract text from a Salesforce API response dictionary by:
-    1. Cleaning the dictionary
-    2. Converting the cleaned dictionary to natural language
-    """
-    processed_dict = _clean_salesforce_dict(raw_dict)
+def _extract_section(salesforce_object_data: dict[str, Any], link: str) -> TextSection:
+    """Converts a dict to a TextSection"""
+
+    # Extract text from a Salesforce API response dictionary by:
+    # 1. Cleaning the dictionary
+    # 2. Converting the cleaned dictionary to natural language
+    processed_dict = _clean_salesforce_dict(salesforce_object_data)
     natural_language_for_dict = _json_to_natural_language(processed_dict)
-    return natural_language_for_dict
 
-
-def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> TextSection:
     return TextSection(
-        text=_extract_dict_text(salesforce_object.data),
-        link=f"{base_url}/{salesforce_object.id}",
+        text=natural_language_for_dict,
+        link=link,
     )
 
 
-def _extract_primary_owners(
+def _extract_primary_owner(
     sf_db: OnyxSalesforceSQLite,
     sf_object: SalesforceObject,
-) -> list[BasicExpertInfo] | None:
+) -> BasicExpertInfo | None:
     object_dict = sf_object.data
     if not (last_modified_by_id := object_dict.get("LastModifiedById")):
         logger.warning(f"No LastModifiedById found for {sf_object.id}")
@@ -143,19 +144,55 @@ def _extract_primary_owners(
     )
 
     # Check if all fields are None
-    if all(
-        value is None
-        for value in [
-            expert_info.first_name,
-            expert_info.last_name,
-            expert_info.email,
-            expert_info.display_name,
-        ]
+    if (
+        expert_info.first_name is None
+        and expert_info.last_name is None
+        and expert_info.email is None
+        and expert_info.display_name is None
     ):
         logger.warning(f"No identifying information found for user {user_data}")
         return None
 
-    return [expert_info]
+    return expert_info
+
+
+def convert_sf_query_result_to_doc(
+    record_id: str,
+    record: dict[str, Any],
+    child_records: dict[str, dict[str, Any]],
+    primary_owner_list: list[BasicExpertInfo] | None,
+    sf_client: OnyxSalesforce,
+) -> Document:
+    """Generates a yieldable Document from query results"""
+
+    base_url = f"https://{sf_client.sf_instance}"
+    extracted_doc_updated_at = time_str_to_utc(record["LastModifiedDate"])
+    extracted_semantic_identifier = record.get("Name", "Unknown Object")
+
+    sections = [_extract_section(record, f"{base_url}/{record_id}")]
+    for child_record_key, child_record in child_records.items():
+        if not child_record:
+            continue
+
+        key_fields = child_record_key.split(":")
+        child_record_id = key_fields[1]
+
+        child_text_section = _extract_section(
+            child_record,
+            f"{base_url}/{child_record_id}",
+        )
+        sections.append(child_text_section)
+
+    doc = Document(
+        id=f"{ID_PREFIX}{record_id}",
+        sections=cast(list[TextSection | ImageSection], sections),
+        source=DocumentSource.SALESFORCE,
+        semantic_identifier=extracted_semantic_identifier,
+        doc_updated_at=extracted_doc_updated_at,
+        primary_owners=primary_owner_list,
+        metadata={},
+    )
+    return doc
 
 
 def convert_sf_object_to_doc(
@@ -163,6 +200,7 @@ def convert_sf_object_to_doc(
     sf_object: SalesforceObject,
     sf_instance: str,
 ) -> Document:
+    """Would be nice if this function was documented"""
     object_dict = sf_object.data
     salesforce_id = object_dict["Id"]
     onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
@@ -170,11 +208,21 @@ def convert_sf_object_to_doc(
     extracted_doc_updated_at = time_str_to_utc(object_dict["LastModifiedDate"])
     extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
 
-    sections = [_extract_section(sf_object, base_url)]
+    sections = [_extract_section(sf_object.data, f"{base_url}/{sf_object.id}")]
     for id in sf_db.get_child_ids(sf_object.id):
-        if not (child_object := sf_db.get_record(id)):
+        if not (child_object := sf_db.get_record(id, isChild=True)):
             continue
-        sections.append(_extract_section(child_object, base_url))
+        sections.append(
+            _extract_section(child_object.data, f"{base_url}/{child_object.id}")
+        )
+
+    # NOTE(rkuo): does using the parent last modified make sense if the update
+    # is being triggered because a child object changed?
+    primary_owner_list: list[BasicExpertInfo] | None = None
+
+    primary_owner = sf_db.make_basic_expert_info_from_record(sf_object)
+    if primary_owner:
+        primary_owner_list = [primary_owner]
 
     doc = Document(
         id=onyx_salesforce_id,
@@ -182,7 +230,7 @@ def convert_sf_object_to_doc(
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,
-        primary_owners=_extract_primary_owners(sf_db, sf_object),
+        primary_owners=primary_owner_list,
         metadata={},
     )
     return doc

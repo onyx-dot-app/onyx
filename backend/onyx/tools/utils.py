@@ -8,6 +8,7 @@ from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
 from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.llm_provider_options import BEDROCK_PROVIDER_NAME
 from onyx.llm.utils import find_model_obj
 from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -35,6 +36,10 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
         model_supports
         and model_provider != ANTHROPIC_PROVIDER_NAME
         and model_name not in litellm.anthropic_models
+        and (
+            model_provider != BEDROCK_PROVIDER_NAME
+            or not any(name in model_name for name in litellm.anthropic_models)
+        )
     )
 
 

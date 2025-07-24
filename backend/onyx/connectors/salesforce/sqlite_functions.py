@@ -5,7 +5,9 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.connectors.salesforce.utils import validate_salesforce_id
 from onyx.utils.logger import setup_logger
@@ -29,10 +31,25 @@ class OnyxSalesforceSQLite:
         self.filename = filename
         self.isolation_level = isolation_level
         self._conn: sqlite3.Connection | None = None
+
+        # this is only set on connection. This variable does not change
+        # when a new db is initialized with this class.
         self._existing_db = True
 
     def __del__(self) -> None:
         self.close()
+
+    @property
+    def file_size(self) -> int:
+        """Returns -1 if the file does not exist."""
+        if not self.filename:
+            return -1
+
+        if not os.path.exists(self.filename):
+            return -1
+
+        file_path = Path(self.filename)
+        return file_path.stat().st_size
 
     def connect(self) -> None:
         if self._conn is not None:
@@ -62,6 +79,16 @@ class OnyxSalesforceSQLite:
             raise RuntimeError("Database connection is closed")
 
         return self._conn.cursor()
+
+    def flush(self) -> None:
+        """We're using SQLite in WAL mode sometimes. To flush to the DB we have to
+        call this."""
+        if self._conn is None:
+            raise RuntimeError("Database connection is closed")
+
+        with self._conn:
+            cursor = self._conn.cursor()
+            cursor.execute("PRAGMA wal_checkpoint(FULL)")
 
     def apply_schema(self) -> None:
         """Initialize the SQLite database with required tables if they don't exist.
@@ -261,26 +288,39 @@ class OnyxSalesforceSQLite:
                 f"cache_bytes={cache_bytes}"
             )
 
-    def get_affected_parent_ids_by_type(
+    # get_changed_parent_ids_by_type_2 replaces this
+    def get_changed_parent_ids_by_type(
         self,
-        updated_ids: list[str],
-        parent_types: list[str],
+        changed_ids: list[str],
+        parent_types: set[str],
         batch_size: int = 500,
-    ) -> Iterator[tuple[str, set[str]]]:
+    ) -> Iterator[tuple[str, str, int]]:
         """Get IDs of objects that are of the specified parent types and are either in the
-        updated_ids or have children in the updated_ids. Yields tuples of (parent_type, affected_ids).
+        updated_ids or have children in the updated_ids. Yields tuples of (parent_type, affected_ids, num_examined).
+
+        NOTE(rkuo): This function used to have some interesting behavior ... it created batches of id's
+        and yielded back a list once for each parent type within that batch.
+
+        There's no need to expose the details of the internal batching to the caller, so
+        we're now yielding once per changed parent.
         """
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
 
+        updated_parent_ids: set[str] = (
+            set()
+        )  # dedupes parent id's that have already been yielded
+
         # SQLite typically has a limit of 999 variables
-        updated_ids_batches = batch_list(updated_ids, batch_size)
-        updated_parent_ids: set[str] = set()
+        num_examined = 0
+        updated_ids_batches = batch_list(changed_ids, batch_size)
 
         with self._conn:
             cursor = self._conn.cursor()
 
             for batch_ids in updated_ids_batches:
+                num_examined += len(batch_ids)
+
                 batch_ids = list(set(batch_ids) - updated_parent_ids)
                 if not batch_ids:
                     continue
@@ -314,14 +354,97 @@ class OnyxSalesforceSQLite:
                     affected_ids.update(row[0] for row in cursor.fetchall())
 
                     # Remove any parent IDs that have already been processed
-                    new_affected_ids = affected_ids - updated_parent_ids
+                    newly_affected_ids = affected_ids - updated_parent_ids
                     # Add the new affected IDs to the set of updated parent IDs
-                    updated_parent_ids.update(new_affected_ids)
+                    if newly_affected_ids:
+                        # Yield each newly affected ID individually
+                        for parent_id in newly_affected_ids:
+                            yield parent_type, parent_id, num_examined
 
-                    if new_affected_ids:
-                        yield parent_type, new_affected_ids
+                        updated_parent_ids.update(newly_affected_ids)
 
-    def has_at_least_one_object_of_type(self, object_type: str) -> bool:
+    def get_changed_parent_ids_by_type_2(
+        self,
+        changed_ids: dict[str, str],
+        parent_types: set[str],
+        parent_relationship_fields_by_type: dict[str, dict[str, list[str]]],
+        prefix_to_type: dict[str, str],
+    ) -> Iterator[tuple[str, str, int]]:
+        """
+        This function yields back any changed parent id's based on
+        a relationship lookup.
+
+        Yields tuples of (changed_id, parent_type, num_examined)
+        changed_id is the id of the changed parent record
+        parent_type is the object table/type of the id (based on a prefix lookup)
+        num_examined is an integer which signifies our progress through the changed_id's dict
+
+        changed_ids is a list of all id's that changed, both parent and children.
+        parent
+
+        This is much simpler than get_changed_parent_ids_by_type.
+
+        TODO(rkuo): for common entities, the first 3 chars identify the object type
+        see https://help.salesforce.com/s/articleView?id=000385203&type=1
+        """
+        changed_parent_ids: set[str] = (
+            set()
+        )  # dedupes parent id's that have already been yielded
+
+        # SQLite typically has a limit of 999 variables
+        num_examined = 0
+
+        for changed_id, changed_type in changed_ids.items():
+            num_examined += 1
+
+            # if we yielded this id already, continue
+            if changed_id in changed_parent_ids:
+                continue
+
+            # if this id is a parent type, yield it directly
+            if changed_type in parent_types:
+                yield changed_id, changed_type, num_examined
+                changed_parent_ids.update(changed_id)
+                continue
+
+            # if this id is a child type, then check the columns
+            # that relate it to the parent id and yield those ids
+            # NOTE: Although unlikely, id's yielded in this way may not be of the
+            # type we're interested in, so the caller must be prepared
+            # for the id to not be present
+
+            # get the child id record
+            sf_object = self.get_record(changed_id, changed_type)
+            if not sf_object:
+                continue
+
+            # get the fields that contain parent id's
+            parent_relationship_fields = parent_relationship_fields_by_type[
+                changed_type
+            ]
+            for field_name, _ in parent_relationship_fields.items():
+                if field_name not in sf_object.data:
+                    logger.warning(f"{field_name=} not in data for {changed_type=}!")
+                    continue
+
+                parent_id = sf_object.data[field_name]
+                parent_id_prefix = parent_id[:3]
+
+                if parent_id_prefix not in prefix_to_type:
+                    logger.warning(
+                        f"Could not lookup type for prefix: {parent_id_prefix=}"
+                    )
+                    continue
+
+                parent_type = prefix_to_type[parent_id_prefix]
+                if parent_type not in parent_types:
+                    continue
+
+                yield parent_id, parent_type, num_examined
+                changed_parent_ids.update(parent_id)
+                break
+
+    def object_type_count(self, object_type: str) -> int:
         """Check if there is at least one object of the specified type in the database.
 
         Args:
@@ -340,12 +463,57 @@ class OnyxSalesforceSQLite:
                 (object_type,),
             )
             count = cursor.fetchone()[0]
-            return count > 0
+            return count
+
+    @staticmethod
+    def normalize_record(
+        original_record: dict[str, Any],
+        remove_ids: bool = True,
+    ) -> tuple[dict[str, Any], set[str]]:
+        """Takes a dict of field names to values and removes fields
+        we don't want.
+
+        This means most parent id field's and any fields with null values.
+
+        Return a json string and a list of parent_id's in the record.
+        """
+        parent_ids: set[str] = set()
+        fields_to_remove: set[str] = set()
+
+        record = original_record.copy()
+
+        for field, value in record.items():
+            # remove empty fields
+            if not value:
+                fields_to_remove.add(field)
+                continue
+
+            if field == "attributes":
+                fields_to_remove.add(field)
+                continue
+
+            # remove salesforce id's (and add to parent id set)
+            if (
+                field != "Id"
+                and isinstance(value, str)
+                and validate_salesforce_id(value)
+            ):
+                parent_ids.add(value)
+                if remove_ids:
+                    fields_to_remove.add(field)
+                continue
+
+            # this field is real data, leave it alone
+
+        # Remove unwanted fields
+        for field in fields_to_remove:
+            if field != "LastModifiedById":
+                del record[field]
+
+        return record, parent_ids
 
     def update_from_csv(
-        self,
-        object_type: str,
-        csv_download_path: str,
+        self, object_type: str, csv_download_path: str, remove_ids: bool = True
     ) -> list[str]:
         """Update the SF DB with a CSV file using SQLite storage."""
         if self._conn is None:
@@ -363,53 +531,34 @@ class OnyxSalesforceSQLite:
                 reader = csv.DictReader(f)
                 uncommitted_rows = 0
                 for row in reader:
-                    parent_ids = set()
-                    field_to_remove: set[str] = set()
-
                     if "Id" not in row:
                         logger.warning(
                             f"Row {row} does not have an Id field in {csv_download_path}"
                         )
                         continue
 
-                    id = row["Id"]
+                    row_id = row["Id"]
 
-                    # Process relationships and clean data
-                    # NOTE(rkuo): it looks like we just assume any field that
-                    # is a valid salesforce id references a parent
-                    for field, value in row.items():
-                        # remove empty fields
-                        if not value:
-                            field_to_remove.add(field)
-                            continue
-
-                        # remove salesforce id's (and add to parent id set)
-                        if validate_salesforce_id(value) and field != "Id":
-                            parent_ids.add(value)
-                            field_to_remove.add(field)
-                            continue
-
-                        # this field is real data, leave it alone
-
-                    # Remove unwanted fields
-                    for field in field_to_remove:
-                        if field != "LastModifiedById":
-                            del row[field]
+                    normalized_record, parent_ids = (
+                        OnyxSalesforceSQLite.normalize_record(row, remove_ids)
+                    )
+                    normalized_record_json_str = json.dumps(normalized_record)
 
                     # Update main object data
+                    # NOTE(rkuo): looks like we take a list and dump it as json into the db
                     cursor.execute(
                         """
                         INSERT OR REPLACE INTO salesforce_objects (id, object_type, data)
                         VALUES (?, ?, ?)
                         """,
-                        (id, object_type, json.dumps(row)),
+                        (row_id, object_type, normalized_record_json_str),
                     )
 
                     # Update relationships using the same connection
                     OnyxSalesforceSQLite._update_relationship_tables(
-                        cursor, id, parent_ids
+                        cursor, row_id, parent_ids
                     )
-                    updated_ids.append(id)
+                    updated_ids.append(row_id)
 
                     # periodically commit or else memory will balloon
                     uncommitted_rows += 1
@@ -456,7 +605,7 @@ class OnyxSalesforceSQLite:
             return result[0]
 
     def get_record(
-        self, object_id: str, object_type: str | None = None
+        self, object_id: str, object_type: str | None = None, isChild: bool = False
     ) -> SalesforceObject | None:
         """Retrieve the record and return it as a SalesforceObject."""
         if self._conn is None:
@@ -469,15 +618,44 @@ class OnyxSalesforceSQLite:
 
         with self._conn:
             cursor = self._conn.cursor()
-            cursor.execute(
-                "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
-            )
-            result = cursor.fetchone()
+            # Get the object data and account data
+            if object_type == "Account" or isChild:
+                cursor.execute(
+                    "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
+                )
+            else:
+                cursor.execute(
+                    "SELECT pso.data, r.parent_id as parent_id, sso.object_type FROM salesforce_objects pso \
+                        LEFT JOIN relationships r on r.child_id = pso.id \
+                        LEFT JOIN salesforce_objects sso on r.parent_id = sso.id \
+                        WHERE pso.id = ? ",
+                    (object_id,),
+                )
+            result = cursor.fetchall()
             if not result:
                 logger.warning(f"Object ID {object_id} not found")
                 return None
 
-            data = json.loads(result[0])
+            data = json.loads(result[0][0])
+
+            if object_type != "Account":
+
+                # convert any account ids of the relationships back into data fields, with name
+                for row in result:
+
+                    # the following skips Account objects.
+                    if len(row) < 3:
+                        continue
+
+                    if row[1] and row[2] and row[2] == "Account":
+                        data["AccountId"] = row[1]
+                        cursor.execute(
+                            "SELECT data FROM salesforce_objects WHERE id = ?",
+                            (row[1],),
+                        )
+                        account_data = json.loads(cursor.fetchone()[0])
+                        data["Account"] = account_data.get("Name", "")
+
             return SalesforceObject(id=object_id, type=object_type, data=data)
 
     def find_ids_by_type(self, object_type: str) -> list[str]:
@@ -575,3 +753,24 @@ class OnyxSalesforceSQLite:
             AND json_extract(data, '$.Email') IS NOT NULL
             """
         )
+
+    def make_basic_expert_info_from_record(
+        self,
+        sf_object: SalesforceObject,
+    ) -> BasicExpertInfo | None:
+        """Parses record for LastModifiedById and returns BasicExpertInfo
+        of the user if possible."""
+        object_dict: dict[str, Any] = sf_object.data
+        if not (last_modified_by_id := object_dict.get("LastModifiedById")):
+            logger.warning(f"No LastModifiedById found for {sf_object.id}")
+            return None
+        if not (last_modified_by := self.get_record(last_modified_by_id)):
+            logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
+            return None
+
+        try:
+            expert_info = BasicExpertInfo.from_dict(last_modified_by.data)
+        except Exception:
+            return None
+
+        return expert_info

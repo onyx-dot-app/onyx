@@ -14,7 +14,7 @@ import Title from "@/components/ui/title";
 import { FiCpu } from "react-icons/fi";
 import useSWR from "swr";
 import { Form, Formik, Field } from "formik";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
 const GET_EEA_CONFIG_URL = "/api/eea_config/get_eea_config";

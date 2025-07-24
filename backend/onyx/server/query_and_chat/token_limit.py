@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
@@ -52,7 +52,7 @@ Global rate limits
 
 
 def _user_is_rate_limited_by_global() -> None:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         global_rate_limits = fetch_all_global_token_rate_limits(
             db_session=db_session, enabled_only=True, ordered=False
         )
@@ -124,7 +124,7 @@ def any_rate_limit_exists() -> bool:
     """Checks if any rate limit exists in the database. Is cached, so that if no rate limits
     are setup, we don't have any effect on average query latency."""
     logger.debug("Checking for any rate limits...")
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         return (
             db_session.scalar(
                 select(TokenRateLimit.id).where(

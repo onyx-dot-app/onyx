@@ -37,8 +37,8 @@ spec:
         - name: celery-worker-indexing
           securityContext:
             {{- toYaml .Values.celery_worker_indexing.securityContext | nindent 12 }}
-          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
             [
               "celery",
@@ -59,3 +59,25 @@ spec:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.celery_worker_indexing.enableMiniChunk }}"
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
+          startupProbe:
+            {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
+          readinessProbe:
+            {{ .Values.celery_shared.readinessProbe | toYaml | nindent 12}}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - >
+                    python onyx/background/celery/celery_k8s_probe.py
+                    --probe readiness
+                    --filename /tmp/onyx_k8s_indexing_readiness.txt
+          livenessProbe:
+            {{ .Values.celery_shared.livenessProbe | toYaml | nindent 12}}
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - >
+                    python onyx/background/celery/celery_k8s_probe.py
+                    --probe liveness
+                    --filename /tmp/onyx_k8s_indexing_liveness.txt

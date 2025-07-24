@@ -1,4 +1,4 @@
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { ValidAutoSyncSource } from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";

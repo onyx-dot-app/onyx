@@ -1,4 +1,3 @@
-import io
 import math
 import time
 from collections.abc import Callable
@@ -18,30 +17,23 @@ from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import is_accepted_file_ext
+from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.file_validation import is_valid_image_type
+from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import PGFileStore
-from onyx.db.pg_file_store import create_populate_lobj
-from onyx.db.pg_file_store import save_bytes_to_pgfilestore
-from onyx.db.pg_file_store import upsert_pgfilestore
-from onyx.file_processing.extract_file_text import (
-    OnyxExtensionType,
-    extract_file_text,
-    is_accepted_file_ext,
-)
-from onyx.file_processing.file_validation import is_valid_image_type
-from onyx.file_processing.image_utils import store_image_and_create_section
-from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
@@ -80,7 +72,7 @@ class AttachmentProcessingResult(BaseModel):
     """
     A container for results after processing a Confluence attachment.
     'text' is the textual content of the attachment.
-    'file_name' is the final file name used in PGFileStore to store the content.
+    'file_name' is the final file name used in FileStore to store the content.
     'error' holds an exception or string if something failed.
     """
 
@@ -236,7 +228,7 @@ def _process_image_attachment(
             section, file_name = store_image_and_create_section(
                 db_session=db_session,
                 image_data=raw_bytes,
-                file_name=Path(attachment["id"]).name,
+                file_id=Path(attachment["id"]).name,
                 display_name=attachment["title"],
                 media_type=media_type,
                 file_origin=FileOrigin.CONNECTOR,
@@ -249,59 +241,6 @@ def _process_image_attachment(
         msg = f"Image storage failed for {attachment['title']}: {e}"
         logger.error(msg, exc_info=e)
         return AttachmentProcessingResult(text=None, file_name=None, error=msg)
-
-
-def _process_text_attachment(
-    attachment: dict[str, Any],
-    raw_bytes: bytes,
-    media_type: str,
-) -> AttachmentProcessingResult:
-    """Process a text-based attachment by extracting its content."""
-    try:
-        extracted_text = extract_file_text(
-            io.BytesIO(raw_bytes),
-            file_name=attachment["title"],
-            break_on_unprocessable=False,
-        )
-    except Exception as e:
-        msg = f"Failed to extract text for '{attachment['title']}': {e}"
-        logger.error(msg, exc_info=e)
-        return AttachmentProcessingResult(text=None, file_name=None, error=msg)
-
-    # Check length constraints
-    if extracted_text is None or len(extracted_text) == 0:
-        msg = f"No text extracted for {attachment['title']}"
-        logger.warning(msg)
-        return AttachmentProcessingResult(text=None, file_name=None, error=msg)
-
-    if len(extracted_text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
-        msg = (
-            f"Skipping attachment {attachment['title']} due to char count "
-            f"({len(extracted_text)} > {CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD})"
-        )
-        logger.warning(msg)
-        return AttachmentProcessingResult(text=None, file_name=None, error=msg)
-
-    # Save the attachment
-    try:
-        with get_session_with_current_tenant() as db_session:
-            saved_record = save_bytes_to_pgfilestore(
-                db_session=db_session,
-                raw_bytes=raw_bytes,
-                media_type=media_type,
-                identifier=attachment["id"],
-                display_name=attachment["title"],
-            )
-    except Exception as e:
-        msg = f"Failed to save attachment '{attachment['title']}' to PG: {e}"
-        logger.error(msg, exc_info=e)
-        return AttachmentProcessingResult(
-            text=extracted_text, file_name=None, error=msg
-        )
-
-    return AttachmentProcessingResult(
-        text=extracted_text, file_name=saved_record.file_name, error=None
-    )
 
 
 def convert_attachment_to_content(
@@ -540,41 +479,3 @@ def update_param_in_path(path: str, param: str, value: str) -> str:
         + "?"
         + "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
     )
-
-
-def attachment_to_file_record(
-    confluence_client: "OnyxConfluence",
-    attachment: dict[str, Any],
-    db_session: Session,
-) -> tuple[PGFileStore, bytes]:
-    """Save an attachment to the file store and return the file record."""
-    download_link = _attachment_to_download_link(confluence_client, attachment)
-    image_data = confluence_client.get(
-        download_link, absolute=True, not_json_response=True
-    )
-
-    file_type = attachment.get("metadata", {}).get(
-        "mediaType", "application/octet-stream"
-    )
-
-    # Save image to file store
-    file_name = f"confluence_attachment_{attachment['id']}"
-    lobj_oid = create_populate_lobj(BytesIO(image_data), db_session)
-    pgfilestore = upsert_pgfilestore(
-        file_name=file_name,
-        display_name=attachment["title"],
-        file_origin=FileOrigin.OTHER,
-        file_type=file_type,
-        lobj_oid=lobj_oid,
-        db_session=db_session,
-        commit=True,
-    )
-
-    return pgfilestore, image_data
-
-
-def _attachment_to_download_link(
-    confluence_client: "OnyxConfluence", attachment: dict[str, Any]
-) -> str:
-    """Extracts the download link to images."""
-    return confluence_client.url + attachment["_links"]["download"]

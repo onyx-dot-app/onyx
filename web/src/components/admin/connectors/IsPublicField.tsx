@@ -1,4 +1,4 @@
-import { BooleanFormField } from "./Field";
+import { BooleanFormField } from "@/components/Field";
 
 export default function IsPublicField({
   name = "is_public",

@@ -136,6 +136,7 @@ import {
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -182,6 +183,7 @@ export function ChatPage({
     addSelectedFile,
     addSelectedFolder,
     clearSelectedItems,
+    setSelectedFiles,
     folders: userFolders,
     files: allUserFiles,
     uploadFile,
@@ -1110,6 +1112,14 @@ export function ChatPage({
   const resetInputBar = () => {
     setMessage("");
     setCurrentMessageFiles([]);
+
+    // Reset selectedFiles if they're under the context limit, but preserve selectedFolders.
+    // If under the context limit, the files will be included in the chat history
+    // so we don't need to keep them around.
+    if (selectedDocumentTokens < maxTokens) {
+      setSelectedFiles([]);
+    }
+
     if (endPaddingRef.current) {
       endPaddingRef.current.style.height = `95px`;
     }
@@ -1442,9 +1452,7 @@ export function ChatPage({
           filterManager.selectedSources,
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
-          filterManager.selectedTags,
-          selectedFiles.map((file) => file.id)
-          // selectedFolders.map((folder) => folder.id)
+          filterManager.selectedTags
         ),
         selectedDocumentIds: selectedDocuments
           .filter(
@@ -1956,10 +1964,7 @@ export function ChatPage({
     }
   };
 
-  const handleImageUpload = async (
-    acceptedFiles: File[],
-    intent: UploadIntent
-  ) => {
+  const handleMessageSpecificFileUpload = async (acceptedFiles: File[]) => {
     const [_, llmModel] = getFinalLLM(
       llmProviders,
       liveAssistant ?? null,
@@ -1982,8 +1987,6 @@ export function ChatPage({
 
     updateChatState("uploading", currentSessionId());
 
-    const newlyUploadedFileDescriptors: FileDescriptor[] = [];
-
     for (let file of acceptedFiles) {
       const formData = new FormData();
       formData.append("files", file);
@@ -1992,24 +1995,20 @@ export function ChatPage({
       if (response.length > 0 && response[0] !== undefined) {
         const uploadedFile = response[0];
 
-        if (intent == UploadIntent.ADD_TO_DOCUMENTS) {
-          addSelectedFile(uploadedFile);
-        } else {
-          const newFileDescriptor: FileDescriptor = {
-            // Use file_id (storage ID) if available, otherwise fallback to DB id
-            // Ensure it's a string as FileDescriptor expects
-            id: uploadedFile.file_id
-              ? String(uploadedFile.file_id)
-              : String(uploadedFile.id),
-            type: uploadedFile.chat_file_type
-              ? uploadedFile.chat_file_type
-              : ChatFileType.PLAIN_TEXT,
-            name: uploadedFile.name,
-            isUploading: false, // Mark as successfully uploaded
-          };
+        const newFileDescriptor: FileDescriptor = {
+          // Use file_id (storage ID) if available, otherwise fallback to DB id
+          // Ensure it's a string as FileDescriptor expects
+          id: uploadedFile.file_id
+            ? String(uploadedFile.file_id)
+            : String(uploadedFile.id),
+          type: uploadedFile.chat_file_type
+            ? uploadedFile.chat_file_type
+            : ChatFileType.PLAIN_TEXT,
+          name: uploadedFile.name,
+          isUploading: false, // Mark as successfully uploaded
+        };
 
-          setCurrentMessageFiles((prev) => [...prev, newFileDescriptor]);
-        }
+        setCurrentMessageFiles((prev) => [...prev, newFileDescriptor]);
       } else {
         setPopup({
           type: "error",
@@ -2329,6 +2328,8 @@ export function ChatPage({
         />
       )}
 
+      {shouldShowWelcomeModal && <WelcomeModal user={user} />}
+
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
       {popup}
@@ -2615,10 +2616,7 @@ export function ChatPage({
                 <Dropzone
                   key={currentSessionId()}
                   onDrop={(acceptedFiles) =>
-                    handleImageUpload(
-                      acceptedFiles,
-                      UploadIntent.ATTACH_TO_MESSAGE
-                    )
+                    handleMessageSpecificFileUpload(acceptedFiles)
                   }
                   noClick
                 >
@@ -2883,10 +2881,6 @@ export function ChatPage({
                                             selectedMessageForDocDisplay ==
                                               secondLevelMessage?.messageId)
                                         }
-                                        isImprovement={
-                                          message.isImprovement ||
-                                          nextMessage?.isImprovement
-                                        }
                                         secondLevelGenerating={
                                           (message.second_level_generating &&
                                             currentSessionChatState !==
@@ -2914,21 +2908,6 @@ export function ChatPage({
                                         agenticDocs={
                                           message.agentic_docs || agenticDocs
                                         }
-                                        toggleDocDisplay={(
-                                          agentic: boolean
-                                        ) => {
-                                          if (agentic) {
-                                            setSelectedMessageForDocDisplay(
-                                              message.messageId
-                                            );
-                                          } else {
-                                            setSelectedMessageForDocDisplay(
-                                              secondLevelMessage
-                                                ? secondLevelMessage.messageId
-                                                : null
-                                            );
-                                          }
-                                        }}
                                         docs={
                                           message?.documents &&
                                           message?.documents.length > 0
@@ -2979,7 +2958,6 @@ export function ChatPage({
                                           messageHistory.length - 1 == i ||
                                           messageHistory.length - 2 == i
                                         }
-                                        selectedDocuments={selectedDocuments}
                                         toggleDocumentSelection={(
                                           second: boolean
                                         ) => {
@@ -3353,7 +3331,7 @@ export function ChatPage({
                               }
                               setAlternativeAssistant={setAlternativeAssistant}
                               setFiles={setCurrentMessageFiles}
-                              handleFileUpload={handleImageUpload}
+                              handleFileUpload={handleMessageSpecificFileUpload}
                               textAreaRef={textAreaRef}
                             />
                             {enterpriseSettings &&

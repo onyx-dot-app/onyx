@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 import requests
 
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexModelStatus
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
@@ -37,7 +37,7 @@ class IndexAttemptManager:
             base_time = datetime.now()
 
         attempts = []
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             # Get the current search settings
             search_settings = get_current_search_settings(db_session)
             if (

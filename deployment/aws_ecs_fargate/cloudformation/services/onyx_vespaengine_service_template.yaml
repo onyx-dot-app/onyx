@@ -131,7 +131,7 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: vespaengine
-          Image: vespaengine/vespa:8.277.17
+          Image: vespaengine/vespa:8.526.15
           Cpu: 0
           Essential: true
           PortMappings:
@@ -162,7 +162,9 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
           User: "1000"
-          Environment: []
+          Environment:
+            - Name: VESPA_SKIP_UPGRADE_CHECK
+              Value: "true"
           VolumesFrom: []
           SystemControls: []
       Volumes:

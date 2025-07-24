@@ -17,7 +17,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client

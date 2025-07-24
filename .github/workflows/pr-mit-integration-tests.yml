@@ -16,11 +16,20 @@ env:
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
+  JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+  JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+  JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
   PLATFORM_PAIR: linux-amd64
 jobs:
   integration-tests-mit:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    runs-on:
+      [
+        runs-on,
+        runner=32cpu-linux-x64,
+        disk=large,
+        "run-id=${{ github.run_id }}",
+      ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -183,6 +192,8 @@ jobs:
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=postgres \
+            -e DB_READONLY_USER=db_readonly_user \
+            -e DB_READONLY_PASSWORD=password \
             -e POSTGRES_POOL_PRE_PING=true \
             -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \
@@ -193,6 +204,9 @@ jobs:
             -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
             -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
             -e CONFLUENCE_ACCESS_TOKEN=${CONFLUENCE_ACCESS_TOKEN} \
+            -e JIRA_BASE_URL=${JIRA_BASE_URL} \
+            -e JIRA_USER_EMAIL=${JIRA_USER_EMAIL} \
+            -e JIRA_API_TOKEN=${JIRA_API_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
             -e MOCK_CONNECTOR_SERVER_HOST=mock_connector_server \
             -e MOCK_CONNECTOR_SERVER_PORT=8001 \

@@ -8,7 +8,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import OnyxCeleryTask
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 

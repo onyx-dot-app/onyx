@@ -25,7 +25,7 @@ import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 
 import { Form, Formik, Field } from "formik";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 
 const GET_EEA_CONFIG_URL = "/api/eea_config/get_eea_config";
 const SET_EEA_CONFIG_URL = "/api/eea_config/set_eea_config";

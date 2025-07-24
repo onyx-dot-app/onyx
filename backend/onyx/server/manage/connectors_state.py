@@ -1,8 +1,8 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
-from onyx.db.engine import get_session
-from onyx.db.engine import get_current_tenant_id
+from onyx.db.engine.sql_engine import get_session
+from shared_configs.contextvars import get_current_tenant_id
 
 from onyx.server.documents.models import ConnectorIndexingStatus
 from onyx.redis.redis_pool import get_redis_client

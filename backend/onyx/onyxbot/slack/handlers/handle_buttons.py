@@ -18,7 +18,7 @@ from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.users import get_user_by_email
@@ -137,7 +137,10 @@ def handle_generate_answer_button(
         raise ValueError("Missing thread_ts in the payload")
 
     thread_messages = read_slack_thread(
-        channel=channel_id, thread=thread_ts, client=client.web_client
+        tenant_id=client._tenant_id,
+        channel=channel_id,
+        thread=thread_ts,
+        client=client.web_client,
     )
     # remove all assistant messages till we get to the last user message
     # we want the new answer to be generated off of the last "question" in

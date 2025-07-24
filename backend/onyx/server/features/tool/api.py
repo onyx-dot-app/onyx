@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.tools import create_tool
 from onyx.db.tools import delete_tool

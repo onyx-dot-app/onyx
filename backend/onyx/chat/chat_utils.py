@@ -7,6 +7,12 @@ from fastapi.datastructures import Headers
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import is_user_admin
+from onyx.background.celery.tasks.kg_processing.kg_indexing import (
+    try_creating_kg_processing_task,
+)
+from onyx.background.celery.tasks.kg_processing.kg_indexing import (
+    try_creating_kg_source_reset_task,
+)
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import PersonaOverrideConfig
@@ -18,6 +24,8 @@ from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import get_chat_messages_by_session
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import is_kg_config_settings_enabled_valid
 from onyx.db.llm import fetch_existing_doc_sets
 from onyx.db.llm import fetch_existing_tools
 from onyx.db.models import ChatMessage
@@ -26,6 +34,11 @@ from onyx.db.models import Prompt
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.prompts import get_prompts_by_ids
+from onyx.db.search_settings import get_current_search_settings
+from onyx.kg.models import KGException
+from onyx.kg.setup.kg_default_entity_definitions import (
+    populate_missing_default_entity_types__commit,
+)
 from onyx.llm.models import PreviousMessage
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
@@ -381,3 +394,52 @@ def create_temporary_persona(
     persona.document_sets = fetched_docs
 
     return persona
+
+
+def process_kg_commands(
+    message: str, persona_name: str, tenant_id: str, db_session: Session
+) -> None:
+    # Temporarily, until we have a draft UI for the KG Operations/Management
+    # TODO: move to api endpoint once we get frontend
+    if not persona_name.startswith("KG Beta"):
+        return
+
+    kg_config_settings = get_kg_config_settings()
+    if not is_kg_config_settings_enabled_valid(kg_config_settings):
+        return
+
+    # get Vespa index
+    search_settings = get_current_search_settings(db_session)
+    index_str = search_settings.index_name
+
+    if message == "kg_p":
+        success = try_creating_kg_processing_task(tenant_id)
+        if success:
+            raise KGException("KG processing scheduled")
+        else:
+            raise KGException(
+                "Cannot schedule another KG processing if one is already running "
+                "or there are no documents to process"
+            )
+
+    elif message.startswith("kg_rs_source"):
+        msg_split = [x for x in message.split(":")]
+        if len(msg_split) > 2:
+            raise KGException("Invalid format for a source reset command")
+        elif len(msg_split) == 2:
+            source_name = msg_split[1].strip()
+        elif len(msg_split) == 1:
+            source_name = None
+        else:
+            raise KGException("Invalid format for a source reset command")
+
+        success = try_creating_kg_source_reset_task(tenant_id, source_name, index_str)
+        if success:
+            source_name = source_name or "all"
+            raise KGException(f"KG index reset for source '{source_name}' scheduled")
+        else:
+            raise KGException("Cannot reset index while KG processing is running")
+
+    elif message == "kg_setup":
+        populate_missing_default_entity_types__commit(db_session=db_session)
+        raise KGException("KG setup done")

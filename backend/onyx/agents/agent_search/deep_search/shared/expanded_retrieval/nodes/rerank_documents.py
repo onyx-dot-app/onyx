@@ -24,7 +24,7 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.postprocessing.postprocessing import rerank_sections
 from onyx.context.search.postprocessing.postprocessing import should_rerank
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
 from onyx.utils.timing import log_function_time
 
@@ -60,7 +60,7 @@ def rerank_documents(
     allow_agent_reranking = graph_config.behavior.allow_agent_reranking
 
     if rerank_settings is None:
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             search_settings = get_current_search_settings(db_session)
             if not search_settings.disable_rerank_for_streaming:
                 rerank_settings = RerankingDetails.from_db_model(search_settings)

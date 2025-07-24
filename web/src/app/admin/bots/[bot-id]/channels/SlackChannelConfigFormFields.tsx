@@ -9,7 +9,7 @@ import {
   SubLabel,
   TextArrayField,
   TextFormField,
-} from "@/components/admin/connectors/Field";
+} from "@/components/Field";
 import { Button } from "@/components/ui/button";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
@@ -221,21 +221,20 @@ export function SlackChannelConfigFormFields({
             <Badge variant="agent" className="bg-blue-100 text-blue-800">
               Default Configuration
             </Badge>
-            <p className="mt-2 text-sm text-neutral-600">
-              This default configuration will apply across all Slack channels
-              the bot is added to in the Slack workspace, as well as direct
-              messages (DMs), unless disabled.
+            <p className="mt-2 text-sm">
+              This default configuration will apply to all channels and direct
+              messages (DMs) in your Slack workspace.
             </p>
-            <div className="mt-4 p-4 bg-neutral-100 rounded-md border border-neutral-300">
+            <div className="mt-4 p-4 bg-background rounded-md border border-neutral-300">
               <CheckFormField
                 name="disabled"
                 label="Disable Default Configuration"
-                labelClassName="text-neutral-900"
+                labelClassName="text-text"
               />
-              <p className="mt-2 text-sm text-neutral-600 italic">
-                Warning: Disabling the default configuration means the bot
-                won&apos;t respond in Slack channels or DMs unless explicitly
-                configured for them.
+              <p className="mt-2 text-sm italic">
+                Warning: Disabling the default configuration means OnyxBot
+                won&apos;t respond in Slack channels unless they are explicitly
+                configured. Additionally, OnyxBot will not respond to DMs.
               </p>
             </div>
           </>
@@ -529,7 +528,7 @@ export function SlackChannelConfigFormFields({
         )}
       </div>
       <Separator className="my-4" />
-      <Accordion type="multiple" className=" gap-y-2 w-full">
+      <Accordion type="multiple" className="gap-y-2 w-full">
         {values.knowledge_source !== "non_search_assistant" && (
           <AccordionItem value="search-options">
             <AccordionTrigger className="text-text">

@@ -63,30 +63,11 @@ Additional steps for user auth and https if you do want to use Docker Compose fo
 ## Kubernetes:
 
 Depending on your deployment needs Kubernetes may be more suitable. The yamls provided will work out of the box but the
-intent is for you to customize the deployment to fit your own needs. There is no data replication or auto-scaling built
-in for the provided example.
+intent is for you to customize the deployment to fit your own needs. 
 
-Requirements: a Kubernetes cluster and kubectl
+Requirements: a Kubernetes cluster, kubectl, and helm.
+
+Guide: https://docs.onyx.app/production/aws/eks#installing-the-services
 
 **NOTE: This setup does not explicitly enable https, the assumption is you would have this already set up for your
-prod cluster**
-
-1. To run Onyx, navigate to `kubernetes` directory and run the following:
-
-   - `kubectl apply -f .`
-
-2. To remove Onyx, run:
-   - **WARNING, this will also erase your indexed data and users**
-   - `kubectl delete -f .`
-   - To not delete the persistent volumes (Document indexes and Users), specify the specific `.yaml` files instead of
-     `.` without specifying delete on persistent-volumes.yaml.
-
-### Using Helm to deploy to an existing cluster
-
-Onyx has a helm chart that is convenient to install all services to an existing Kubernetes cluster. To install:
-
-* Currently the helm chart is not published so to install, clone the repo.
-* Configure access to the cluster via kubectl. Ensure the kubectl context is set to the cluster that you want to use
-* The default secrets, environment variables and other service level configuration are stored in `deployment/helm/charts/onyx/values.yml`. You may create another `override.yml`
-* `cd deployment/helm/charts/onyx` and run `helm install onyx -n onyx -f override.yaml .`. This will install onyx on the cluster under the `onyx` namespace.
-* Check the status of the deploy using `kubectl get pods -n onyx`
+prod cluster.**

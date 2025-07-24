@@ -3,6 +3,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from typing import Any
 from typing import TypeVar
 
 from dateutil.parser import parse
@@ -10,6 +11,7 @@ from dateutil.parser import parse
 from onyx.configs.app_configs import CONNECTOR_LOCALHOST_OVERRIDE
 from onyx.configs.constants import IGNORE_FOR_QA
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import OnyxMetadata
 from onyx.utils.text_processing import is_valid_email
 
 
@@ -79,6 +81,62 @@ def process_in_batches(
 
 def get_metadata_keys_to_ignore() -> list[str]:
     return [IGNORE_FOR_QA]
+
+
+def process_onyx_metadata(
+    metadata: dict[str, Any],
+) -> tuple[OnyxMetadata, dict[str, Any]]:
+    """
+    Users may set Onyx metadata and custom tags in text files. https://docs.onyx.app/connectors/file
+    Any unrecognized fields are treated as custom tags.
+    """
+    p_owner_names = metadata.get("primary_owners")
+    p_owners = (
+        [BasicExpertInfo(display_name=name) for name in p_owner_names]
+        if p_owner_names
+        else None
+    )
+
+    s_owner_names = metadata.get("secondary_owners")
+    s_owners = (
+        [BasicExpertInfo(display_name=name) for name in s_owner_names]
+        if s_owner_names
+        else None
+    )
+
+    dt_str = metadata.get("doc_updated_at")
+    doc_updated_at = time_str_to_utc(dt_str) if dt_str else None
+
+    return (
+        OnyxMetadata(
+            source_type=metadata.get("connector_type"),
+            link=metadata.get("link"),
+            file_display_name=metadata.get("file_display_name"),
+            title=metadata.get("title"),
+            primary_owners=p_owners,
+            secondary_owners=s_owners,
+            doc_updated_at=doc_updated_at,
+        ),
+        {
+            k: v
+            for k, v in metadata.items()
+            if k
+            not in [
+                "document_id",
+                "time_updated",
+                "doc_updated_at",
+                "link",
+                "primary_owners",
+                "secondary_owners",
+                "filename",
+                "file_display_name",
+                "title",
+                "connector_type",
+                "pdf_password",
+                "mime_type",
+            ]
+        },
+    )
 
 
 def get_oauth_callback_uri(base_domain: str, connector_id: str) -> str:

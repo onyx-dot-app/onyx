@@ -238,7 +238,7 @@ def agent_search_graph_builder() -> StateGraph:
 if __name__ == "__main__":
     pass
 
-    from onyx.db.engine import get_session_context_manager
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.llm.factory import get_default_llms
     from onyx.context.search.models import SearchRequest
 
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     compiled_graph = graph.compile()
     primary_llm, fast_llm = get_default_llms()
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         search_request = SearchRequest(query="Who created Excel?")
         graph_config = get_test_config(
             db_session, primary_llm, fast_llm, search_request

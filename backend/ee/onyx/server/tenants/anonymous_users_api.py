@@ -18,7 +18,7 @@ from onyx.auth.users import optional_user
 from onyx.auth.users import User
 from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.db.engine import get_session_with_shared_schema
+from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 

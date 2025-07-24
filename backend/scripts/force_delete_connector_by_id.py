@@ -38,7 +38,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id,
     get_connector_credential_pair,
 )
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.file_store import get_default_file_store
 
@@ -228,5 +228,5 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         _delete_connector(args.connector_id, db_session)

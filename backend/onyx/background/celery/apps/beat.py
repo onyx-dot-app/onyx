@@ -8,10 +8,11 @@ from celery.signals import beat_init
 from celery.utils.log import get_task_logger
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.celery_utils import make_probe_path
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.configs.constants import POSTGRES_CELERY_BEAT_APP_NAME
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import SqlEngine
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST
@@ -45,6 +46,8 @@ class DynamicTenantScheduler(PersistentScheduler):
             f"DynamicTenantScheduler initialized: reload_interval={self._reload_interval}"
         )
 
+        self._liveness_probe_path = make_probe_path("liveness", "beat@hostname")
+
         # do not set the initial schedule here because we don't have db access yet.
         # do it in beat_init after the db engine is initialized
 
@@ -62,6 +65,8 @@ class DynamicTenantScheduler(PersistentScheduler):
             or (now - self._last_reload) > self._reload_interval
         ):
             task_logger.debug("Reload interval reached, initiating task update")
+            self._liveness_probe_path.touch()
+
             try:
                 self._try_updating_schedule()
             except (AttributeError, KeyError):
@@ -241,6 +246,9 @@ def on_beat_init(sender: Any, **kwargs: Any) -> None:
     SqlEngine.init_engine(pool_size=2, max_overflow=0)
 
     app_base.wait_for_redis(sender, **kwargs)
+    path = make_probe_path("readiness", "beat@hostname")
+    path.touch()
+    task_logger.info(f"Readiness signal touched at {path}.")
 
     # first time init of the scheduler after db has been init'ed
     scheduler: DynamicTenantScheduler = sender.scheduler

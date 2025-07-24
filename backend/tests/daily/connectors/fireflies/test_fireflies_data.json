@@ -3,6 +3,11 @@
   "semantic_identifier": "Lead Generation Efforts",
   "primary_owners": "admin@onyx-test.com",
   "secondary_owners": [],
+  "doc_updated_at": "2025-01-10 19:10:00+00:00",
+  "metadata": {
+    "meeting_date": "2025-01-10 19:10:00+00:00",
+    "duration_min": "10"
+  },
   "sections": [
     {
       "link": "https://app.fireflies.ai/view/VcBdZpuV82rImQCA?t=153.1",

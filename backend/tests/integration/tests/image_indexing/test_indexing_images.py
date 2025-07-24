@@ -5,7 +5,7 @@ from datetime import timezone
 import pytest
 
 from onyx.connectors.models import InputType
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -15,7 +15,6 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
@@ -26,13 +25,9 @@ FILE_PATH = "tests/integration/common_utils/test_files"
 
 def test_image_indexing(
     reset: None,
+    admin_user: DATestUser,
     vespa_client: vespa_fixture,
 ) -> None:
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
-    )
-
     os.makedirs(FILE_PATH, exist_ok=True)
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
 
@@ -54,7 +49,7 @@ def test_image_indexing(
         user_performing_action=admin_user,
     )
 
-    file_paths = upload_response.get("file_paths", [])
+    file_paths = upload_response.file_paths
 
     if not file_paths:
         pytest.fail("File upload failed - no file paths returned")
@@ -95,23 +90,23 @@ def test_image_indexing(
     CCPairManager.wait_for_indexing_completion(
         cc_pair=cc_pair,
         after=datetime.now(timezone.utc),
+        timeout=180,
         user_performing_action=admin_user,
     )
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
+        # really gets the chunks from Vespa, which is why there are two;
+        # one for the raw text and one for the summarized image.
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
         )
 
-        # Ensure we indexed an image from the sample.pdf file
-        has_sample_pdf_image = False
-        for doc in documents:
-            if doc.image_file_name and FILE_NAME in doc.image_file_name:
-                has_sample_pdf_image = True
-
-        # Assert that at least one document has an image file name containing "sample.pdf"
-        assert (
-            has_sample_pdf_image
-        ), "No document found with an image file name containing 'sample.pdf'"
+        assert len(documents) == 2
+        for document in documents:
+            if "These  are  Johns  dogs" in document.content:
+                assert document.image_file_id is None
+            else:
+                assert document.image_file_id is not None
+                assert file_paths[0] in document.image_file_id

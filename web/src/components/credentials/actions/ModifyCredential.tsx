@@ -3,7 +3,7 @@ import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
 import { Badge } from "@/components/ui/badge";
-import { ValidSources } from "@/lib/types";
+import { AccessType } from "@/lib/types";
 import {
   EditIcon,
   NewChatIcon,
@@ -157,6 +157,7 @@ export default function ModifyCredential({
   credentials,
   editableCredentials,
   defaultedCredential,
+  accessType,
   onSwap,
   onSwitch,
   onEditCredential,
@@ -166,15 +167,19 @@ export default function ModifyCredential({
   close?: () => void;
   showIfEmpty?: boolean;
   attachedConnector?: Connector<any>;
-  defaultedCredential?: Credential<any>;
   credentials: Credential<any>[];
   editableCredentials: Credential<any>[];
-  source: ValidSources;
+  defaultedCredential?: Credential<any>;
+  accessType: AccessType;
+  onSwap?: (
+    newCredential: Credential<any>,
+    connectorId: number,
+    accessType: AccessType
+  ) => void;
   onSwitch?: (newCredential: Credential<any>) => void;
-  onSwap?: (newCredential: Credential<any>, connectorId: number) => void;
-  onCreateNew?: () => void;
-  onDeleteCredential: (credential: Credential<any | null>) => void;
   onEditCredential?: (credential: Credential<ConfluenceCredentialJson>) => void;
+  onDeleteCredential: (credential: Credential<any | null>) => void;
+  onCreateNew?: () => void;
 }) {
   const [selectedCredential, setSelectedCredential] =
     useState<Credential<any> | null>(null);
@@ -271,7 +276,7 @@ export default function ModifyCredential({
               disabled={selectedCredential == null}
               onClick={() => {
                 if (onSwap && attachedConnector) {
-                  onSwap(selectedCredential!, attachedConnector.id);
+                  onSwap(selectedCredential!, attachedConnector.id, accessType);
                   if (close) {
                     close();
                   }

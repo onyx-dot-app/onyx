@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.notification import dismiss_notification
 from onyx.db.notification import get_notification_by_id

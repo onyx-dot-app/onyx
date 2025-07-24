@@ -1,11 +1,11 @@
 import os
 from datetime import datetime
 from datetime import timezone
-from typing import Any
 
 import pytest
 
 from onyx.connectors.models import InputType
+from onyx.connectors.slack.models import ChannelType
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -28,7 +28,7 @@ from tests.integration.connector_job_tests.slack.slack_api_utils import SlackMan
 def test_slack_prune(
     reset: None,
     vespa_client: vespa_fixture,
-    slack_test_setup: tuple[dict[str, Any], dict[str, Any]],
+    slack_test_setup: tuple[ChannelType, ChannelType],
 ) -> None:
     public_channel, private_channel = slack_test_setup
 

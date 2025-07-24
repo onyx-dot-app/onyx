@@ -11,6 +11,7 @@ import httpx
 from retry import retry
 
 from onyx.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
+from onyx.configs.app_configs import VESPA_LANGUAGE_OVERRIDE
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.document_index.interfaces import VespaChunkRequest
@@ -47,10 +48,12 @@ from onyx.document_index.vespa_constants import SECTION_CONTINUATION
 from onyx.document_index.vespa_constants import SEMANTIC_IDENTIFIER
 from onyx.document_index.vespa_constants import SOURCE_LINKS
 from onyx.document_index.vespa_constants import SOURCE_TYPE
+from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -134,7 +137,8 @@ def _vespa_hit_to_inference_chunk(
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
         source_type=fields[SOURCE_TYPE],
-        image_file_name=fields.get(IMAGE_FILE_NAME),
+        # still called `image_file_name` in Vespa for backwards compatibility
+        image_file_id=fields.get(IMAGE_FILE_NAME),
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),
@@ -153,7 +157,7 @@ def _vespa_hit_to_inference_chunk(
     )
 
 
-def _get_chunks_via_visit_api(
+def get_chunks_via_visit_api(
     chunk_request: VespaChunkRequest,
     index_name: str,
     filters: IndexFilters,
@@ -166,18 +170,25 @@ def _get_chunks_via_visit_api(
 
     # build the list of fields to retrieve
     field_set_list = (
-        None
-        if not field_names
-        else [f"{index_name}:{field_name}" for field_name in field_names]
+        [f"{field_name}" for field_name in field_names] if field_names else []
     )
-    acl_fieldset_entry = f"{index_name}:{ACCESS_CONTROL_LIST}"
+    acl_fieldset_entry = f"{ACCESS_CONTROL_LIST}"
     if (
         field_set_list
         and filters.access_control_list
         and acl_fieldset_entry not in field_set_list
     ):
         field_set_list.append(acl_fieldset_entry)
-    field_set = ",".join(field_set_list) if field_set_list else None
+
+    if MULTI_TENANT:
+        tenant_id_fieldset_entry = f"{TENANT_ID}"
+        if tenant_id_fieldset_entry not in field_set_list:
+            field_set_list.append(tenant_id_fieldset_entry)
+
+    if field_set_list:
+        field_set = f"{index_name}:" + ",".join(field_set_list)
+    else:
+        field_set = None
 
     # build filters
     selection = f"{index_name}.document_id=='{chunk_request.document_id}'"
@@ -187,6 +198,13 @@ def _get_chunks_via_visit_api(
         selection += f" and {index_name}.chunk_id<={chunk_request.max_chunk_ind}"
     if not get_large_chunks:
         selection += f" and {index_name}.large_chunk_reference_ids == null"
+
+    # enforcing tenant_id through a == condition
+    if MULTI_TENANT:
+        if filters.tenant_id:
+            selection += f" and {index_name}.tenant_id=='{filters.tenant_id}'"
+        else:
+            raise ValueError("Tenant ID is required for multi-tenant")
 
     # Setting up the selection criteria in the query parameters
     params = {
@@ -228,6 +246,19 @@ def _get_chunks_via_visit_api(
                         for user_acl_entry in filters.access_control_list
                     ):
                         continue
+
+                if MULTI_TENANT:
+                    if not filters.tenant_id:
+                        raise ValueError("Tenant ID is required for multi-tenant")
+                    document_tenant_id = document["fields"].get(TENANT_ID)
+                    if document_tenant_id != filters.tenant_id:
+                        logger.error(
+                            f"Skipping document {document['document_id']} because "
+                            f"it does not belong to tenant {filters.tenant_id}. "
+                            "This should never happen."
+                        )
+                        continue
+
                 document_chunks.append(document)
 
         # Check for continuation token to handle pagination
@@ -247,7 +278,7 @@ def _get_chunks_via_visit_api(
 #     filters: IndexFilters | None = None,
 #     get_large_chunks: bool = False,
 # ) -> list[str]:
-#     document_chunks = _get_chunks_via_visit_api(
+#     document_chunks = get_chunks_via_visit_api(
 #         chunk_request=VespaChunkRequest(document_id=document_id),
 #         index_name=index_name,
 #         filters=filters or IndexFilters(access_control_list=None),
@@ -265,7 +296,7 @@ def parallel_visit_api_retrieval(
 ) -> list[InferenceChunkUncleaned]:
     functions_with_args: list[tuple[Callable, tuple]] = [
         (
-            _get_chunks_via_visit_api,
+            get_chunks_via_visit_api,
             (chunk_request, index_name, filters, get_large_chunks),
         )
         for chunk_request in chunk_requests
@@ -307,6 +338,9 @@ def query_vespa(
             else {}
         ),
     )
+
+    if VESPA_LANGUAGE_OVERRIDE:
+        params["language"] = VESPA_LANGUAGE_OVERRIDE
 
     try:
         with get_vespa_http_client() as http_client:

@@ -10,7 +10,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
 import { submitGoogleSite } from "./pages/utils/google_site";
@@ -51,7 +51,6 @@ import {
   NEXT_PUBLIC_CLOUD_ENABLED,
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
-import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
 import {
   getConnectorOauthRedirectUrl,
   useOAuthDetails,
@@ -59,6 +58,8 @@ import {
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
+import { deleteConnector } from "@/lib/connector";
+
 export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
@@ -66,6 +67,7 @@ export interface AdvancedConfig {
 }
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
+const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
 export async function submitConnector<T>(
   connector: ConnectorBase<T>,
@@ -175,6 +177,19 @@ export default function AddConnector({
   const { setFormStep, setAllowCreate, formStep } = useFormContext();
   const { popup, setPopup } = usePopup();
   const [uploading, setUploading] = useState(false);
+  const [creatingConnector, setCreatingConnector] = useState(false);
+
+  // Connector creation timeout management
+  const timeoutErrorHappenedRef = useRef<boolean>(false);
+  const connectorIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup refs when component unmounts
+      timeoutErrorHappenedRef.current = false;
+      connectorIdRef.current = null;
+    };
+  }, []);
 
   // Hooks for Google Drive and Gmail credentials
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
@@ -277,7 +292,7 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={{
-        ...createConnectorInitialValues(connector, currentCredential),
+        ...createConnectorInitialValues(connector),
         ...Object.fromEntries(
           connectorConfigs[connector].advanced_values.map((field) => [
             field.name,
@@ -381,57 +396,106 @@ export default function AddConnector({
           return;
         }
 
-        const { message, isSuccess, response } = await submitConnector<any>(
-          {
-            connector_specific_config: transformedConnectorSpecificConfig,
-            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-            name: name,
-            source: connector,
-            access_type: access_type,
-            refresh_freq: advancedConfiguration.refreshFreq || null,
-            prune_freq: advancedConfiguration.pruneFreq || null,
-            indexing_start: advancedConfiguration.indexingStart || null,
-            groups: groups,
-          },
-          undefined,
-          credentialActivated ? false : true
-        );
-        // If no credential
-        if (!credentialActivated) {
-          if (isSuccess) {
-            onSuccess();
-          } else {
-            setPopup({ message: message, type: "error" });
-          }
-        }
-
-        // Without credential
-        if (credentialActivated && isSuccess && response) {
-          const credential =
-            currentCredential || liveGDriveCredential || liveGmailCredential;
-          const linkCredentialResponse = await linkCredential(
-            response.id,
-            credential?.id!,
-            name,
-            access_type,
-            groups,
-            auto_sync_options
+        setCreatingConnector(true);
+        try {
+          const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
+            setTimeout(
+              () => resolve({ isTimeout: true }),
+              CONNECTOR_CREATION_TIMEOUT_MS
+            )
           );
-          if (linkCredentialResponse.ok) {
-            onSuccess();
-          } else {
-            const errorData = await linkCredentialResponse.json();
+
+          const connectorCreationPromise = (async () => {
+            const { message, isSuccess, response } = await submitConnector<any>(
+              {
+                connector_specific_config: transformedConnectorSpecificConfig,
+                input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+                name: name,
+                source: connector,
+                access_type: access_type,
+                refresh_freq: advancedConfiguration.refreshFreq || null,
+                prune_freq: advancedConfiguration.pruneFreq || null,
+                indexing_start: advancedConfiguration.indexingStart || null,
+                groups: groups,
+              },
+              undefined,
+              credentialActivated ? false : true
+            );
+
+            // Store the connector id immediately for potential timeout
+            if (response?.id) {
+              connectorIdRef.current = response.id;
+            }
+
+            // If no credential
+            if (!credentialActivated) {
+              if (isSuccess) {
+                onSuccess();
+              } else {
+                setPopup({ message: message, type: "error" });
+              }
+            }
+
+            // With credential
+            if (credentialActivated && isSuccess && response) {
+              const credential =
+                currentCredential ||
+                liveGDriveCredential ||
+                liveGmailCredential;
+              const linkCredentialResponse = await linkCredential(
+                response.id,
+                credential?.id!,
+                name,
+                access_type,
+                groups,
+                auto_sync_options
+              );
+              if (linkCredentialResponse.ok) {
+                onSuccess();
+              } else {
+                const errorData = await linkCredentialResponse.json();
+
+                if (!timeoutErrorHappenedRef.current) {
+                  // Only show error if timeout didn't happen
+                  setPopup({
+                    message: errorData.message || errorData.detail,
+                    type: "error",
+                  });
+                }
+              }
+            } else if (isSuccess) {
+              onSuccess();
+            } else {
+              setPopup({ message: message, type: "error" });
+            }
+
+            timeoutErrorHappenedRef.current = false;
+            return;
+          })();
+
+          const result = (await Promise.race([
+            connectorCreationPromise,
+            timeoutPromise,
+          ])) as {
+            isTimeout?: true;
+          };
+
+          if (result.isTimeout) {
+            timeoutErrorHappenedRef.current = true;
             setPopup({
-              message: errorData.message || errorData.detail,
+              message: `Operation timed out after ${CONNECTOR_CREATION_TIMEOUT_MS / 1000} seconds. Check your configuration for errors?`,
               type: "error",
             });
+
+            if (connectorIdRef.current) {
+              await deleteConnector(connectorIdRef.current);
+              connectorIdRef.current = null;
+            }
           }
-        } else if (isSuccess) {
-          onSuccess();
-        } else {
-          setPopup({ message: message, type: "error" });
+          return;
+        } finally {
+          setCreatingConnector(false);
         }
-        return;
       }}
     >
       {(formikProps) => {
@@ -439,9 +503,9 @@ export default function AddConnector({
           <div className="mx-auto w-full">
             {popup}
 
-            {uploading && (
-              <TemporaryLoadingModal content="Uploading files..." />
-            )}
+            {uploading && <Spinner />}
+
+            {creatingConnector && <Spinner />}
 
             <AdminPageTitle
               includeDivider={false}
@@ -459,7 +523,7 @@ export default function AddConnector({
                   <>
                     <ModifyCredential
                       showIfEmpty
-                      source={connector}
+                      accessType={formikProps.values.access_type}
                       defaultedCredential={currentCredential!}
                       credentials={credentials}
                       editableCredentials={editableCredentials}
@@ -550,6 +614,7 @@ export default function AddConnector({
                                 close
                                 refresh={refresh}
                                 sourceType={connector}
+                                accessType={formikProps.values.access_type}
                                 setPopup={setPopup}
                                 onSwitch={onSwap}
                                 onClose={() =>

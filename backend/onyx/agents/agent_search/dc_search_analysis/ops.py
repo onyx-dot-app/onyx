@@ -4,7 +4,7 @@ from typing import cast
 from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceSection
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,

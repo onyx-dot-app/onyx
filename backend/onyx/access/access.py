@@ -1,11 +1,16 @@
+from collections.abc import Callable
+from typing import cast
+
 from sqlalchemy.orm import Session
 
 from onyx.access.models import DocumentAccess
 from onyx.access.utils import prefix_user_email
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.db.document import get_access_info_for_document
 from onyx.db.document import get_access_info_for_documents
 from onyx.db.models import User
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 
@@ -107,3 +112,15 @@ def get_acl_for_user(user: User | None, db_session: Session | None = None) -> se
         "onyx.access.access", "_get_acl_for_user"
     )
     return versioned_acl_for_user_fn(user, db_session)  # type: ignore
+
+
+def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:
+    _source_should_fetch_permissions_during_indexing_func = cast(
+        Callable[[DocumentSource], bool],
+        fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_should_fetch_permissions_during_indexing",
+            False,
+        ),
+    )
+    return _source_should_fetch_permissions_during_indexing_func(source)

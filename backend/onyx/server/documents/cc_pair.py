@@ -31,7 +31,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_documents_for_cc_pair
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
@@ -403,7 +403,7 @@ def get_docs_sync_status(
 def get_cc_pair_indexing_errors(
     cc_pair_id: int,
     include_resolved: bool = Query(False),
-    page: int = Query(0, ge=0),
+    page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
     _: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -413,7 +413,7 @@ def get_cc_pair_indexing_errors(
     Args:
         cc_pair_id: ID of the connector-credential pair to get errors for
         include_resolved: Whether to include resolved errors in the results
-        page: Page number for pagination, starting at 0
+        page_num: Page number for pagination, starting at 0
         page_size: Number of errors to return per page
         _: Current user, must be curator or admin
         db_session: Database session
@@ -431,7 +431,7 @@ def get_cc_pair_indexing_errors(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         unresolved_only=not include_resolved,
-        page=page,
+        page=page_num,
         page_size=page_size,
     )
     return PaginatedReturn(
@@ -466,7 +466,9 @@ def associate_credential_to_connector(
     )
 
     try:
-        validate_ccpair_for_user(connector_id, credential_id, db_session)
+        validate_ccpair_for_user(
+            connector_id, credential_id, metadata.access_type, db_session
+        )
 
         response = add_credential_to_connector(
             db_session=db_session,

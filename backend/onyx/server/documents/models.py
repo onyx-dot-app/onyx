@@ -106,6 +106,7 @@ class ConnectorSnapshot(ConnectorBase):
 class CredentialSwapRequest(BaseModel):
     new_credential_id: int
     connector_id: int
+    access_type: AccessType
 
 
 class CredentialDataUpdateRequest(BaseModel):

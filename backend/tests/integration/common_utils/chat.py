@@ -1,12 +1,12 @@
 import requests
 
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 
 
 def test_create_chat_session_and_send_messages() -> None:
     # Create a test user
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         test_user = User(email="test@example.com", hashed_password="dummy_hash")
         db_session.add(test_user)
         db_session.commit()

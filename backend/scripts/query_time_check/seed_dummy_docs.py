@@ -15,7 +15,7 @@ from datetime import datetime
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import VespaIndex
@@ -75,7 +75,7 @@ def generate_dummy_chunk(
         title_embedding=generate_random_embedding(embedding_dim),
         large_chunk_id=None,
         large_chunk_reference_ids=[],
-        image_file_name=None,
+        image_file_id=None,
     )
 
     document_set_names = []
@@ -140,7 +140,7 @@ def seed_dummy_docs(
     chunks_per_doc: int = 5,
     batch_size: int = 100,
 ) -> None:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         search_settings = get_current_search_settings(db_session)
         multipass_config = get_multipass_config(search_settings)
         index_name = search_settings.index_name

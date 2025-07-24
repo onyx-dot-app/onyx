@@ -35,6 +35,7 @@ _FIREFLIES_API_QUERY = """
             organizer_email
             participants
             date
+            duration
             transcript_url
             sentences {
                 text
@@ -101,7 +102,14 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
         sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.FIREFLIES,
         semantic_identifier=meeting_title,
-        metadata={},
+        metadata={
+            k: str(v)
+            for k, v in {
+                "meeting_date": meeting_date,
+                "duration_min": transcript.get("duration"),
+            }.items()
+            if v is not None
+        },
         doc_updated_at=meeting_date,
         primary_owners=organizer_email_user_info,
         secondary_owners=meeting_participants_email_list,

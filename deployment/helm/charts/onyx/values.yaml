@@ -2,11 +2,20 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+global:
+  # Global version for all Onyx components (overrides .Chart.AppVersion)
+  version: "latest"
+  # Global pull policy for all Onyx component images
+  pullPolicy: "IfNotPresent"
+
 postgresql:
   primary:
     persistence:
       storageClass: ""
-      size: 5Gi
+      size: 10Gi
+    shmVolume:
+      enabled: true
+      sizeLimit: 2Gi
   enabled: true
   auth:
     existingSecret: onyx-secrets
@@ -26,14 +35,13 @@ vespa:
           - ReadWriteOnce
         resources:
           requests:
-            storage: 1Gi
+            storage: 30Gi
         storageClassName: ""
   enabled: true
   replicaCount: 1
   image:
     repository: vespa
-    pullPolicy: IfNotPresent
-    tag: "8.277.17"
+    tag: "8.526.15"
   podAnnotations: {}
   podLabels:
     app: vespa
@@ -44,13 +52,14 @@ vespa:
     runAsUser: 0
   resources:
     # The Vespa Helm chart specifies default resources, which are quite modest. We override
-    # them here to increase chances of the chart running successfully.
+    # them here to increase chances of the chart running successfully. If you plan to index at
+    # scale, you will likely need to increase these limits further.
     requests:
-      cpu: 1500m
-      memory: 4000Mi
+      cpu: 4000m
+      memory: 8000Mi
     limits:
-      cpu: 1500m
-      memory: 4000Mi
+      cpu: 8000m
+      memory: 32000Mi
 
 persistent:
   storageClassName: ""
@@ -65,11 +74,6 @@ inferenceCapability:
     type: ClusterIP
     servicePort: 9000
     targetPort: 9000
-  pvc:
-    name: inference-model-pvc
-    accessModes:
-      - ReadWriteOnce
-    storage: 3Gi
   name: inference-model-server
   replicaCount: 1
   labels:
@@ -79,16 +83,8 @@ inferenceCapability:
     repository: onyxdotapp/onyx-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
-    pullPolicy: IfNotPresent
   containerPorts:
     server: 9000
-  volumeMounts:
-    - name: inference-model-storage
-      mountPath: /root/.cache
-  volumes:
-    - name: inference-model-storage
-      persistentVolumeClaim:
-        claimName: inference-model-pvc
   podLabels:
     - key: app
       value: inference-model-server
@@ -109,22 +105,10 @@ indexCapability:
   podAnnotations: {}
   containerPorts:
     server: 9000
-  volumeMounts:
-    - name: indexing-model-storage
-      mountPath: /root/.cache
-  volumes:
-    - name: indexing-model-storage
-      persistentVolumeClaim:
-        claimName: indexing-model-storage
-  indexingModelPVC:
-    name: indexing-model-storage
-    accessMode: "ReadWriteOnce"
-    storage: "3Gi"
   image:
     repository: onyxdotapp/onyx-model-server
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
-    pullPolicy: IfNotPresent
   limitConcurrency: 10
 config:
   envConfigMapName: env-configmap
@@ -141,12 +125,14 @@ serviceAccount:
   name: ""
 
 nginx:
+  enabled: true
   containerPorts:
     http: 1024
   extraEnvVars:
     - name: DOMAIN
       value: localhost
   service:
+    type: LoadBalancer
     ports:
       http: 80
       onyx: 3000
@@ -160,7 +146,6 @@ webserver:
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-web-server
-    pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   deploymentLabels:
@@ -229,7 +214,6 @@ api:
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
-    pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   deploymentLabels:
@@ -357,8 +341,27 @@ api:
 celery_shared:
   image:
     repository: onyxdotapp/onyx-backend
-    pullPolicy: IfNotPresent
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  startupProbe:
+    # startupProbe fails after 2m
+    exec:
+      command: ["test", "-f", "/app/onyx/main.py"]
+    failureThreshold: 24
+    periodSeconds: 5
+    timeoutSeconds: 3
+  readinessProbe:
+    # readinessProbe fails after 15s + 2m of inactivity
+    # it's ok to see the readinessProbe fail transiently while the container starts
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    failureThreshold: 24
+    timeoutSeconds: 3
+  livenessProbe:
+    # livenessProbe fails after 5m of inactivity
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    failureThreshold: 5
+    timeoutSeconds: 3
 
 celery_beat:
   replicaCount: 1
@@ -512,6 +515,30 @@ celery_worker_user_files_indexing:
   tolerations: []
   affinity: {}
 
+slackbot:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: onyxdotapp/onyx-backend
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend
+    app: slack-bot
+  deploymentLabels:
+    app: slack-bot
+  podSecurityContext:
+    {}
+  securityContext:
+    {}
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "500Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2000Mi"
+
 redis:
   enabled: true
   architecture: standalone
@@ -535,6 +562,26 @@ redis:
   auth:
     existingSecret: onyx-secrets
     existingSecretPasswordKey: redis_password
+
+minio:
+  enabled: true
+  auth:
+    existingSecret: onyx-secrets
+    rootUserSecretKey: s3_aws_access_key_id
+    rootPasswordSecretKey: s3_aws_secret_access_key
+  defaultBuckets: "onyx-file-store-bucket"
+  persistence:
+    enabled: true
+    size: 30Gi
+  service:
+    type: ClusterIP
+    ports:
+      api: 9000
+      console: 9001
+  consoleService:
+    type: ClusterIP
+    ports:
+      http: 9001
 
 ingress:
   enabled: false
@@ -562,6 +609,8 @@ auth:
     oauth_client_secret: ""
     oauth_cookie_secret: ""
     redis_password: "redis_password"
+    s3_aws_access_key_id: "s3_aws_access_key_id"
+    s3_aws_secret_access_key: "s3_aws_secret_access_key"
   # will be overridden by the existingSecret if set
   secretName: "onyx-secrets"
   # set values as strings, they will be base64 encoded
@@ -573,6 +622,8 @@ auth:
     oauth_client_secret: ""
     oauth_cookie_secret: ""
     redis_password: "password"
+    s3_aws_access_key_id: "minioadmin"
+    s3_aws_secret_access_key: "minioadmin"
 
 configMap:
   # Change this for production uses unless Onyx is only accessible behind VPN
@@ -591,6 +642,9 @@ configMap:
   # SMTP_PASS: ""
   # 'your-email@company.com' SMTP_USER missing used instead
   EMAIL_FROM: ""
+  # MinIO/S3 Configuration override
+  S3_ENDPOINT_URL: ""  # only used if minio is not enabled
+  S3_FILE_STORE_BUCKET_NAME: ""
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   QA_TIMEOUT: "60"

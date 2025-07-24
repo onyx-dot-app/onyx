@@ -4,7 +4,7 @@ import { Callout } from "@/components/ui/callout";
 import Text from "@/components/ui/text";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/admin/connectors/Field";
+import { Label } from "@/components/Field";
 import { CloudEmbeddingProvider } from "../../../../components/embedding/interfaces";
 import {
   EMBEDDING_PROVIDERS_ADMIN_URL,

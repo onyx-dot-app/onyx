@@ -26,8 +26,8 @@ from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import SqlEngine
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.redis.redis_connector_credential_pair import (
@@ -285,6 +285,10 @@ class HubPeriodicTask(bootsteps.StartStopStep):
 
 celery_app.steps["worker"].add(HubPeriodicTask)
 
+base_bootsteps = app_base.get_bootsteps()
+for bootstep in base_bootsteps:
+    celery_app.steps["worker"].add(bootstep)
+
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.connector_deletion",
@@ -295,5 +299,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.vespa",
         "onyx.background.celery.tasks.llm_model_update",
         "onyx.background.celery.tasks.user_file_folder_sync",
+        "onyx.background.celery.tasks.kg_processing",
     ]
 )

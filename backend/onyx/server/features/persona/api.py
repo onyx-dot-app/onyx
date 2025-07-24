@@ -1,4 +1,3 @@
-import uuid
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -18,7 +17,7 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
 from onyx.db.notification import create_notification
@@ -182,9 +181,7 @@ def upload_file(
 ) -> dict[str, str]:
     file_store = get_default_file_store(db_session)
     file_type = ChatFileType.IMAGE
-    file_id = str(uuid.uuid4())
-    file_store.save_file(
-        file_name=file_id,
+    file_id = file_store.save_file(
         content=file.file,
         display_name=file.filename,
         file_origin=FileOrigin.CHAT_UPLOAD,
@@ -403,6 +400,7 @@ def list_personas(
         db_session=db_session,
         get_editable=False,
         joinedload_all=True,
+        include_prompt=False,
     )
 
     if persona_ids:

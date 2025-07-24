@@ -74,3 +74,13 @@ services:
   #         reservations:
   #           cpus: ${POSTGRES_CPU_RESERVATION}
   #           memory: ${POSTGRES_MEM_RESERVATION}
+
+  # minio:
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: ${MINIO_CPU_LIMIT:-1}
+  #         memory: ${MINIO_MEM_LIMIT:-1g}
+  #       reservations:
+  #         cpus: ${MINIO_CPU_RESERVATION}
+  #         memory: ${MINIO_MEM_RESERVATION}

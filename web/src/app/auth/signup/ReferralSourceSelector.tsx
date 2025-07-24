@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/admin/connectors/Field";
+import { Label } from "@/components/Field";
 
 interface ReferralSourceSelectorProps {
   defaultValue?: string;

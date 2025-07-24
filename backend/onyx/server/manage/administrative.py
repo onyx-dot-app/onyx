@@ -20,7 +20,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_for_
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
 from onyx.db.feedback import update_document_boost_for_user

@@ -13,7 +13,7 @@ from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine import get_all_tenant_ids
+from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import redis_lock_dump
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST

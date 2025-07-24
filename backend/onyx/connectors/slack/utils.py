@@ -11,6 +11,7 @@ from slack_sdk.errors import SlackApiError
 from slack_sdk.web import SlackResponse
 
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.slack.models import MessageType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -21,6 +22,11 @@ basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 
+# used to serialize access to the retry TTL
+ONYX_SLACK_LOCK_TTL = 1800  # how long the lock is allowed to idle before it expires
+ONYX_SLACK_LOCK_BLOCKING_TIMEOUT = 60  # how long to wait for the lock per wait attempt
+ONYX_SLACK_LOCK_TOTAL_BLOCKING_TIMEOUT = 3600  # how long to wait for the lock in total
+
 
 @lru_cache()
 def get_base_url(token: str) -> str:
@@ -29,10 +35,7 @@ def get_base_url(token: str) -> str:
     return client.auth_test()["url"]
 
 
-def get_message_link(
-    event: dict[str, Any], client: WebClient, channel_id: str | None = None
-) -> str:
-    channel_id = channel_id or event["channel"]
+def get_message_link(event: MessageType, client: WebClient, channel_id: str) -> str:
     message_ts = event["ts"]
     message_ts_without_dot = message_ts.replace(".", "")
     thread_ts = event.get("thread_ts")
@@ -42,6 +45,18 @@ def get_message_link(
         f"?thread_ts={thread_ts}" if thread_ts else ""
     )
     return link
+
+
+def make_slack_api_call(
+    call: Callable[..., SlackResponse], **kwargs: Any
+) -> SlackResponse:
+    return call(**kwargs)
+
+
+def make_paginated_slack_api_call(
+    call: Callable[..., SlackResponse], **kwargs: Any
+) -> Generator[dict[str, Any], None, None]:
+    return _make_slack_api_call_paginated(call)(**kwargs)
 
 
 def _make_slack_api_call_paginated(
@@ -119,17 +134,18 @@ def _make_slack_api_call_paginated(
 
 #     return rate_limited_call
 
+# temporarily disabling due to using a different retry approach
+# might be permanent if everything works out
+# def make_slack_api_call_w_retries(
+#     call: Callable[..., SlackResponse], **kwargs: Any
+# ) -> SlackResponse:
+#     return basic_retry_wrapper(call)(**kwargs)
 
-def make_slack_api_call_w_retries(
-    call: Callable[..., SlackResponse], **kwargs: Any
-) -> SlackResponse:
-    return basic_retry_wrapper(call)(**kwargs)
 
-
-def make_paginated_slack_api_call_w_retries(
-    call: Callable[..., SlackResponse], **kwargs: Any
-) -> Generator[dict[str, Any], None, None]:
-    return _make_slack_api_call_paginated(basic_retry_wrapper(call))(**kwargs)
+# def make_paginated_slack_api_call_w_retries(
+#     call: Callable[..., SlackResponse], **kwargs: Any
+# ) -> Generator[dict[str, Any], None, None]:
+#     return _make_slack_api_call_paginated(basic_retry_wrapper(call))(**kwargs)
 
 
 def expert_info_from_slack_id(
