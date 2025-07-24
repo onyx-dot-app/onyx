@@ -87,8 +87,15 @@ export default function FiltersDisplay({
                     className="flex items-center bg-background-150 rounded-full px-3 py-1 text-sm"
                   >
                     <span>
-                      {filter.from.toLocaleDateString()} -{" "}
-                      {filter.to.toLocaleDateString()}
+                      {
+                        // @ts-ignore
+                        filter.from.toLocaleDateString()
+                      }{" "}
+                      -{" "}
+                      {
+                        // @ts-ignore
+                        filter.to.toLocaleDateString()
+                      }
                     </span>
                     <XIcon
                       onClick={() => filterManager.setTimeRange(null)}
