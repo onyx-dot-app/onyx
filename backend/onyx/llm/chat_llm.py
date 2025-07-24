@@ -398,7 +398,7 @@ class DefaultMultiLLM(LLM):
                 stream=stream,
                 # model params
                 temperature=self._temperature,
-                timeout=timeout_override or self._timeout,
+                timeout=120, #timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
