@@ -34,7 +34,7 @@ import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Settings } from "../admin/settings/interfaces";
 import { INTERNET_SEARCH_TOOL_ID } from "./tools/constants";
 import { SEARCH_TOOL_ID } from "./tools/constants";
-import { IIMAGE_GENERATION_TOOL_ID } from "./tools/constants";
+import { IMAGE_GENERATION_TOOL_ID } from "./tools/constants";
 
 interface ChatRetentionInfo {
   chatRetentionDays: number;
@@ -666,7 +666,7 @@ export function personaIncludesRetrieval(
 export function personaIncludesImage(selectedPersona: MinimalPersonaSnapshot) {
   return selectedPersona.tools.some(
     (tool) =>
-      tool.in_code_tool_id && tool.in_code_tool_id == IIMAGE_GENERATION_TOOL_ID
+      tool.in_code_tool_id && tool.in_code_tool_id == IMAGE_GENERATION_TOOL_ID
   );
 }
 
