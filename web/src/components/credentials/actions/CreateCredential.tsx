@@ -23,6 +23,7 @@ import {
 import { useUser } from "@/components/user/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "./CredentialFieldsRenderer";
+import { TypedFile } from "@/lib/connectors/fileTypes";
 
 const CreateButton = ({
   onClick,
@@ -114,10 +115,15 @@ export default function CreateCredential({
 
     const { name, is_public, groups, ...credentialValues } = values;
 
+    let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
-      Object.entries(credentialValues).filter(
-        ([_, value]) => value !== null && value !== ""
-      )
+      Object.entries(credentialValues).filter(([key, value]) => {
+        if (value instanceof TypedFile) {
+          privateKey = value;
+          return false;
+        }
+        return value !== null && value !== "";
+      })
     );
 
     try {
@@ -128,6 +134,7 @@ export default function CreateCredential({
         groups: groups,
         name: name,
         source: sourceType,
+        private_key: privateKey || undefined,
       });
 
       const { message, isSuccess, credential } = response;
