@@ -38,7 +38,7 @@ export function EditableValue({
               onSubmit(initialValue);
             }
           }}
-          className="border bg-background-200 border-background-300 rounded py-1 px-1 w-12 h-4 my-auto"
+          className="mt-1 p-2 border rounded w-full max-w-xs"
         />
 
         <div

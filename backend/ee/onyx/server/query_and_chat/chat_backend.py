@@ -14,7 +14,7 @@ from ee.onyx.server.query_and_chat.models import (
     BasicCreateChatMessageWithHistoryRequest,
 )
 from ee.onyx.server.query_and_chat.models import ChatBasicResponse
-from onyx.auth.users import current_user
+from onyx.auth.users import current_user, api_key_dep
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.models import AgentAnswerPiece
@@ -229,7 +229,7 @@ def remove_answer_citations(answer: str) -> str:
 @router.post("/send-message-simple-api")
 def handle_simplified_chat_message(
     chat_message_req: BasicCreateChatMessageRequest,
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
 ) -> ChatBasicResponse:
     """This is a Non-Streaming version that only gives back a minimal set of information"""
@@ -290,7 +290,7 @@ def handle_simplified_chat_message(
 @router.post("/send-message-simple-with-history")
 def handle_send_message_simple_with_history(
     req: BasicCreateChatMessageWithHistoryRequest,
-    user: User | None = Depends(current_user),
+    user: User | None = Depends(api_key_dep),
     db_session: Session = Depends(get_session),
 ) -> ChatBasicResponse:
     """This is a Non-Streaming version that only gives back a minimal set of information.

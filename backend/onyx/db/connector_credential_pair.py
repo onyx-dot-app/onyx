@@ -399,6 +399,29 @@ def delete_connector_credential_pair__no_commit(
     connector_id: int,
     credential_id: int,
 ) -> None:
+    # First check if there are dependent user_file records
+
+    # Find the connector_credential_pair ID
+    cc_pair = db_session.execute(
+        select(ConnectorCredentialPair.id)
+        .where(ConnectorCredentialPair.connector_id == connector_id)
+        .where(ConnectorCredentialPair.credential_id == credential_id)
+    ).scalar_one_or_none()
+
+    if not cc_pair:
+        return
+
+    # Check for dependent user_file records
+    user_files_exist = db_session.execute(
+        select(exists().where(UserFile.cc_pair_id == cc_pair))
+    ).scalar()
+
+    if user_files_exist:
+        db_session.execute(
+            delete(UserFile).where(UserFile.cc_pair_id == cc_pair)
+        )
+
+
     stmt = delete(ConnectorCredentialPair).where(
         ConnectorCredentialPair.connector_id == connector_id,
         ConnectorCredentialPair.credential_id == credential_id,

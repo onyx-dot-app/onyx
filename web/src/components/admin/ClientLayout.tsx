@@ -67,6 +67,11 @@ export function ClientLayout({
   const isLangfuseEditorEnable =
     process.env.NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR === "true";
 
+  console.log(
+    "ENV",
+    process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR,
+    process.env.NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR
+  );
   if (
     (pathname && pathname.startsWith("/admin/connectors")) ||
     (pathname && pathname.startsWith("/admin/embeddings"))
@@ -531,45 +536,29 @@ export function ClientLayout({
                           : []),
                       ],
                     },
-                    ...(isLangflowEditorEnable || isLangfuseEditorEnable
-                      ? [
-                          {
-                            name: "Инструменты пользователя",
-                            items: [
-                              ...(isLangflowEditorEnable
-                                ? [
-                                    {
-                                      name: (
-                                        <div className="flex">
-                                          <FiSettings size={18} />
-                                          <div className="ml-1">
-                                            Редактор Langflow
-                                          </div>
-                                        </div>
-                                      ),
-                                      link: "/admin/usertools/langflow",
-                                    },
-                                  ]
-                                : []),
-                              ...(isLangfuseEditorEnable
-                                ? [
-                                    {
-                                      name: (
-                                        <div className="flex">
-                                          <FiSettings size={18} />
-                                          <div className="ml-1">
-                                            Мониторинг Langfuse
-                                          </div>
-                                        </div>
-                                      ),
-                                      link: "/admin/usertools/langfuse",
-                                    },
-                                  ]
-                                : []),
-                            ],
-                          },
-                        ]
-                      : []),
+                    {
+                      name: "Инструменты пользователя",
+                      items: [
+                        {
+                          name: (
+                            <div className="flex">
+                              <FiSettings size={18} />
+                              <div className="ml-1">Редактор Langflow</div>
+                            </div>
+                          ),
+                          link: "/admin/usertools/langflow",
+                        },
+                        {
+                          name: (
+                            <div className="flex">
+                              <FiSettings size={18} />
+                              <div className="ml-1">Мониторинг Langfuse</div>
+                            </div>
+                          ),
+                          link: "/admin/usertools/langfuse",
+                        },
+                      ],
+                    },
                   ]
                 : []),
             ]}
