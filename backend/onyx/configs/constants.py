@@ -69,6 +69,7 @@ POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 # Postgres connection constants for application_name
 
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
+POSTGRES_CELERY_WORKER_KG_PROCESSING_APP_NAME = "celery_worker_kg_processing"
 POSTGRES_PERMISSIONS_APP_NAME = "permissions"
 POSTGRES_UNKNOWN_APP_NAME = "unknown"
 
@@ -97,6 +98,7 @@ KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
+KV_KG_CONFIG_KEY = "kg_config"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation
@@ -150,8 +152,8 @@ class DocumentSource(str, Enum):
     GURU = "guru"
     BOOKSTACK = "bookstack"
     CONFLUENCE = "confluence"
-    SLAB = "slab"
     JIRA = "jira"
+    SLAB = "slab"
     PRODUCTBOARD = "productboard"
     FILE = "file"
     NOTION = "notion"
@@ -327,6 +329,9 @@ class OnyxCeleryQueues:
     # Monitoring queue
     MONITORING = "monitoring"
 
+    # KG processing queue
+    KG_PROCESSING = "kg_processing"
+
 
 class OnyxRedisLocks:
     PRIMARY_WORKER = "da_lock:primary_worker"
@@ -354,6 +359,9 @@ class OnyxRedisLocks:
     CLOUD_BEAT_TASK_GENERATOR_LOCK = "da_lock:cloud_beat_task_generator"
     CLOUD_CHECK_ALEMBIC_BEAT_LOCK = "da_lock:cloud_check_alembic"
 
+    # KG processing
+    KG_PROCESSING_LOCK = "da_lock:kg_processing"
+
 
 class OnyxRedisSignals:
     BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
@@ -363,6 +371,9 @@ class OnyxRedisSignals:
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
     BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = "signal:block_validate_connector_deletion_fences"
+
+    # KG processing
+    CHECK_KG_PROCESSING_BEAT_LOCK = "da_lock:check_kg_processing_beat"
 
 
 class OnyxRedisConstants:
@@ -435,6 +446,13 @@ class OnyxCeleryTask:
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
     EXPORT_QUERY_HISTORY_CLEANUP_TASK = "export_query_history_cleanup_task"
 
+    # KG processing
+    CHECK_KG_PROCESSING = "check_kg_processing"
+    KG_PROCESSING = "kg_processing"
+    KG_CLUSTERING_ONLY = "kg_clustering_only"
+    CHECK_KG_PROCESSING_CLUSTERING_ONLY = "check_kg_processing_clustering_only"
+    KG_RESET_SOURCE_INDEX = "kg_reset_source_index"
+
 
 # this needs to correspond to the matching entry in supervisord
 ONYX_CELERY_BEAT_HEARTBEAT_KEY = "onyx:celery:beat:heartbeat"
@@ -447,3 +465,8 @@ if platform.system() == "Darwin":
     REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore
 else:
     REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore
+
+
+class OnyxCallTypes(str, Enum):
+    FIREFLIES = "FIREFLIES"
+    GONG = "GONG"

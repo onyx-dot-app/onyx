@@ -4,7 +4,6 @@ from datetime import timezone
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
-from onyx.access.models import ExternalAccess
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.db.models import ConnectorCredentialPair
@@ -59,17 +58,11 @@ def gmail_doc_sync(
 
                 callback.progress("gmail_doc_sync", 1)
 
-            if slim_doc.perm_sync_data is None:
+            if slim_doc.external_access is None:
                 logger.warning(f"No permissions found for document {slim_doc.id}")
                 continue
 
-            if user_email := slim_doc.perm_sync_data.get("user_email"):
-                ext_access = ExternalAccess(
-                    external_user_emails=set([user_email]),
-                    external_user_group_ids=set(),
-                    is_public=False,
-                )
-                yield DocExternalAccess(
-                    doc_id=slim_doc.id,
-                    external_access=ext_access,
-                )
+            yield DocExternalAccess(
+                doc_id=slim_doc.id,
+                external_access=slim_doc.external_access,
+            )

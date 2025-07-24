@@ -41,14 +41,17 @@ from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW
+from onyx.configs.app_configs import POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE
 from onyx.configs.app_configs import SYSTEM_RECURSION_LIMIT
 from onyx.configs.app_configs import USER_AUTH_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import SqlEngine
-from onyx.db.engine import warm_up_connections
+from onyx.db.engine.connection_warmup import warm_up_connections
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import SqlEngine
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.api import router as api_key_router
 from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
@@ -71,6 +74,7 @@ from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.gpts.api import router as gpts_router
+from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.long_term_logs.long_term_logs_api import (
     router as long_term_logs_router,
 )
@@ -225,6 +229,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     SqlEngine.get_engine()
 
+    SqlEngine.init_readonly_engine(
+        pool_size=POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW,
+    )
+
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
     )
@@ -247,8 +256,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         get_or_generate_uuid()
 
         # If we are multi-tenant, we need to only set up initial public tables
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
+            # set up the file store (e.g. create bucket if needed). On multi-tenant,
+            # this is done via IaC
+            get_default_file_store(db_session).initialize()
     else:
         setup_multitenant_onyx()
 
@@ -347,6 +359,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, settings_router)
     include_router_with_global_prefix_prepended(application, settings_admin_router)
     include_router_with_global_prefix_prepended(application, llm_admin_router)
+    include_router_with_global_prefix_prepended(application, kg_admin_router)
     include_router_with_global_prefix_prepended(application, llm_router)
     include_router_with_global_prefix_prepended(application, embedding_admin_router)
     include_router_with_global_prefix_prepended(application, embedding_router)

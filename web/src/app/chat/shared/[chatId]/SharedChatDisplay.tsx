@@ -285,7 +285,6 @@ export function SharedChatDisplay({
                               isGenerating={false}
                               shared
                               key={message.messageId}
-                              isImprovement={message.isImprovement}
                               secondLevelGenerating={false}
                               secondLevelSubquestions={message.sub_questions?.filter(
                                 (subQuestion) => subQuestion.level === 1
@@ -302,19 +301,6 @@ export function SharedChatDisplay({
                                 ) || []
                               }
                               agenticDocs={message.agentic_docs || agenticDocs}
-                              toggleDocDisplay={(agentic: boolean) => {
-                                if (agentic) {
-                                  setSelectedMessageForDocDisplay(
-                                    message.messageId
-                                  );
-                                } else {
-                                  setSelectedMessageForDocDisplay(
-                                    secondLevelMessage
-                                      ? secondLevelMessage.messageId
-                                      : null
-                                  );
-                                }
-                              }}
                               docs={message?.documents}
                               setPresentingDocument={setPresentingDocument}
                               overriddenModel={message.overridden_model}
@@ -328,7 +314,6 @@ export function SharedChatDisplay({
                               )}
                               toolCall={message.toolCall}
                               isComplete={true}
-                              selectedDocuments={[]}
                               toggleDocumentSelection={() => {
                                 if (
                                   !documentSidebarVisible ||

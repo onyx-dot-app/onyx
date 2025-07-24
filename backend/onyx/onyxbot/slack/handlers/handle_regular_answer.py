@@ -23,7 +23,7 @@ from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -418,6 +418,11 @@ def handle_regular_answer(
         offer_ephemeral_publication=offer_ephemeral_publication,
         skip_ai_feedback=skip_ai_feedback,
     )
+
+    # NOTE(rkuo): Slack has a maximum block list size of 50.
+    # we should modify build_slack_response_blocks to respect the max
+    # but enforcing the hard limit here is the last resort.
+    all_blocks = all_blocks[:50]
 
     try:
         respond_in_thread_or_channel(

@@ -1,7 +1,6 @@
 import json
 import mimetypes
 import os
-import uuid
 import zipfile
 from io import BytesIO
 from typing import Any
@@ -88,8 +87,7 @@ from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_cc_pairs_parallel
-from onyx.db.engine import get_current_tenant_id
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import IndexingMode
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
@@ -130,6 +128,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -449,40 +448,36 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
                             continue
 
                         sub_file_bytes = zf.read(file_info)
-                        sub_file_name = os.path.join(str(uuid.uuid4()), file_info)
-                        deduped_file_paths.append(sub_file_name)
 
                         mime_type, __ = mimetypes.guess_type(file_info)
                         if mime_type is None:
                             mime_type = "application/octet-stream"
 
-                        file_store.save_file(
-                            file_name=sub_file_name,
+                        file_id = file_store.save_file(
                             content=BytesIO(sub_file_bytes),
                             display_name=os.path.basename(file_info),
                             file_origin=FileOrigin.CONNECTOR,
                             file_type=mime_type,
                         )
+                        deduped_file_paths.append(file_id)
                 continue
 
             # Special handling for docx files - only store the plaintext version
             if file.content_type and file.content_type.startswith(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             ):
-                file_path = convert_docx_to_txt(file, file_store)
-                deduped_file_paths.append(file_path)
+                docx_file_id = convert_docx_to_txt(file, file_store)
+                deduped_file_paths.append(docx_file_id)
                 continue
 
             # Default handling for all other file types
-            file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))
-            deduped_file_paths.append(file_path)
-            file_store.save_file(
-                file_name=file_path,
+            file_id = file_store.save_file(
                 content=file.file,
                 display_name=file.filename,
                 file_origin=FileOrigin.CONNECTOR,
                 file_type=file.content_type or "text/plain",
             )
+            deduped_file_paths.append(file_id)
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -624,11 +619,14 @@ def get_connector_status(
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorStatus]:
+    # This method is only used document set and group creation/editing
+    # Therefore, it is okay to get non-editable, but public cc_pairs
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
         eager_load_connector=True,
         eager_load_credential=True,
+        get_editable=False,
     )
 
     group_cc_pair_relationships = get_cc_pair_groups_for_ids(
@@ -955,6 +953,7 @@ def create_connector_with_mock_credential(
         validate_ccpair_for_user(
             connector_id=connector_id,
             credential_id=credential_id,
+            access_type=connector_data.access_type,
             db_session=db_session,
         )
         response = add_credential_to_connector(

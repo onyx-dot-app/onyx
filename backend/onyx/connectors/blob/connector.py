@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from datetime import timezone
 from io import BytesIO
@@ -7,15 +8,20 @@ from typing import Optional
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
+from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import ClientError
 from botocore.exceptions import NoCredentialsError
 from botocore.exceptions import PartialCredentialsError
+from botocore.session import get_session
 from mypy_boto3_s3 import S3Client  # type: ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
+    process_onyx_metadata,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -26,9 +32,10 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import OnyxExtensionType
@@ -61,7 +68,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
         (1) R2: Access Key ID, Secret Access Key, Account ID
-        (2) S3: AWS Access Key ID, AWS Secret Access Key
+        (2) S3: AWS Access Key ID, AWS Secret Access Key or IAM role or Assume Role
         (3) GOOGLE_CLOUD_STORAGE: Access Key ID, Secret Access Key, Project ID
         (4) OCI_STORAGE: Namespace, Region, Access Key ID, Secret Access Key
 
@@ -95,17 +102,65 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             )
 
         elif self.bucket_type == BlobType.S3:
-            if not all(
-                credentials.get(key)
-                for key in ["aws_access_key_id", "aws_secret_access_key"]
-            ):
-                raise ConnectorMissingCredentialError("Amazon S3")
-
-            session = boto3.Session(
-                aws_access_key_id=credentials["aws_access_key_id"],
-                aws_secret_access_key=credentials["aws_secret_access_key"],
+            # For S3, we can use either access keys or IAM roles.
+            authentication_method = credentials.get(
+                "authentication_method", "access_key"
             )
-            self.s3_client = session.client("s3")
+            logger.debug(
+                f"Using authentication method: {authentication_method} for S3 bucket."
+            )
+            if authentication_method == "access_key":
+                logger.debug("Using access key authentication for S3 bucket.")
+                if not all(
+                    credentials.get(key)
+                    for key in ["aws_access_key_id", "aws_secret_access_key"]
+                ):
+                    raise ConnectorMissingCredentialError("Amazon S3")
+
+                session = boto3.Session(
+                    aws_access_key_id=credentials["aws_access_key_id"],
+                    aws_secret_access_key=credentials["aws_secret_access_key"],
+                )
+                self.s3_client = session.client("s3")
+            elif authentication_method == "iam_role":
+                # If using IAM roles, we assume the role and let boto3 handle the credentials.
+                role_arn = credentials.get("aws_role_arn")
+                # create session name using timestamp
+                if not role_arn:
+                    raise ConnectorMissingCredentialError(
+                        "Amazon S3 IAM role ARN is required for assuming role."
+                    )
+
+                def _refresh_credentials() -> dict[str, str]:
+                    """Refreshes the credentials for the assumed role."""
+                    sts_client = boto3.client("sts")
+                    assumed_role_object = sts_client.assume_role(
+                        RoleArn=role_arn,
+                        RoleSessionName=f"onyx_blob_storage_{int(time.time())}",
+                    )
+                    creds = assumed_role_object["Credentials"]
+                    return {
+                        "access_key": creds["AccessKeyId"],
+                        "secret_key": creds["SecretAccessKey"],
+                        "token": creds["SessionToken"],
+                        "expiry_time": creds["Expiration"].isoformat(),
+                    }
+
+                refreshable = RefreshableCredentials.create_from_metadata(
+                    metadata=_refresh_credentials(),
+                    refresh_using=_refresh_credentials,
+                    method="sts-assume-role",
+                )
+                botocore_session = get_session()
+                botocore_session._credentials = refreshable  # type: ignore[attr-defined]
+                session = boto3.Session(botocore_session=botocore_session)
+                self.s3_client = session.client("s3")
+            elif authentication_method == "assume_role":
+                # We will assume the instance role to access S3.
+                logger.debug("Using instance role authentication for S3 bucket.")
+                self.s3_client = boto3.client("s3")
+            else:
+                raise ConnectorValidationError("Invalid authentication method for S3. ")
 
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
             if not all(
@@ -230,7 +285,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             image_section, _ = store_image_and_create_section(
                                 db_session=db_session,
                                 image_data=downloaded_file,
-                                file_name=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
+                                file_id=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
                                 display_name=file_name,
                                 link=link,
                                 file_origin=FileOrigin.CONNECTOR,
@@ -257,19 +312,45 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 # Handle text and document files
                 try:
                     downloaded_file = self._download_object(key)
-                    text = extract_file_text(
-                        BytesIO(downloaded_file),
-                        file_name=file_name,
-                        break_on_unprocessable=False,
+                    extraction_result = extract_text_and_images(
+                        BytesIO(downloaded_file), file_name=file_name
                     )
+
+                    onyx_metadata, custom_tags = process_onyx_metadata(
+                        extraction_result.metadata
+                    )
+                    file_display_name = onyx_metadata.file_display_name or file_name
+                    time_updated = onyx_metadata.doc_updated_at or last_modified
+                    link = onyx_metadata.link or link
+                    primary_owners = onyx_metadata.primary_owners
+                    secondary_owners = onyx_metadata.secondary_owners
+
+                    sections: list[TextSection | ImageSection] = []
+                    if extraction_result.text_content.strip():
+                        logger.debug(
+                            f"Creating TextSection for {file_name} with link: {link}"
+                        )
+                        sections.append(
+                            TextSection(
+                                link=link,
+                                text=extraction_result.text_content.strip(),
+                            )
+                        )
+
                     batch.append(
                         Document(
                             id=f"{self.bucket_type}:{self.bucket_name}:{key}",
-                            sections=[TextSection(link=link, text=text)],
+                            sections=(
+                                sections
+                                if sections
+                                else [TextSection(link=link, text="")]
+                            ),
                             source=DocumentSource(self.bucket_type.value),
-                            semantic_identifier=file_name,
-                            doc_updated_at=last_modified,
-                            metadata={},
+                            semantic_identifier=file_display_name,
+                            doc_updated_at=time_updated,
+                            metadata=custom_tags,
+                            primary_owners=primary_owners,
+                            secondary_owners=secondary_owners,
                         )
                     )
                     if len(batch) == self.batch_size:
@@ -398,10 +479,8 @@ if __name__ == "__main__":
                     print(f"  - Link: {section.link}")
                     if isinstance(section, TextSection) and section.text is not None:
                         print(f"  - Text: {section.text[:100]}...")
-                    elif (
-                        hasattr(section, "image_file_name") and section.image_file_name
-                    ):
-                        print(f"  - Image: {section.image_file_name}")
+                    elif hasattr(section, "image_file_id") and section.image_file_id:
+                        print(f"  - Image: {section.image_file_id}")
                     else:
                         print("Error: Unknown section type")
                 print("---")

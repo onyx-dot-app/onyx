@@ -129,7 +129,14 @@ class MediaWikiConnector(LoadConnector, PollConnector):
         self.family = family_class_dispatch(hostname, "WikipediaConnector")()
         self.site = pywikibot.Site(fam=self.family, code=language_code)
         self.categories = [
-            pywikibot.Category(self.site, f"Category:{category.replace(' ', '_')}")
+            pywikibot.Category(
+                self.site,
+                (
+                    f"{category.replace(' ', '_')}"
+                    if category.startswith("Category:")
+                    else f"Category:{category.replace(' ', '_')}"
+                ),
+            )
             for category in categories
         ]
 

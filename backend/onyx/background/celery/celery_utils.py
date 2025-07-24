@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from pathlib import Path
 from typing import Any
 from typing import cast
 
@@ -121,3 +122,20 @@ def httpx_init_vespa_pool(
         http2=False,
         limits=httpx.Limits(max_keepalive_connections=max_keepalive_connections),
     )
+
+
+def make_probe_path(probe: str, hostname: str) -> Path:
+    """templates the path for a k8s probe file.
+
+    e.g. /tmp/onyx_k8s_indexing_readiness.txt
+    """
+    hostname_parts = hostname.split("@")
+    if len(hostname_parts) != 2:
+        raise ValueError(f"hostname could not be split! {hostname=}")
+
+    name = hostname_parts[0]
+    if not name:
+        raise ValueError(f"name cannot be empty! {name=}")
+
+    safe_name = "".join(c for c in name if c.isalnum()).rstrip()
+    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")

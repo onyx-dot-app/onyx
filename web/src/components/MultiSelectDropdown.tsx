@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Label, ManualErrorMessage } from "./admin/connectors/Field";
+import { Label, ManualErrorMessage } from "@/components/Field";
 import CreatableSelect from "react-select/creatable";
 import Select from "react-select";
 import { ErrorMessage } from "formik";

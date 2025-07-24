@@ -4,7 +4,6 @@ import io
 import json
 import os
 import time
-import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
@@ -30,6 +29,7 @@ from onyx.chat.prompt_builder.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
@@ -54,8 +54,8 @@ from onyx.db.chat_search import search_chat_sessions
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
-from onyx.db.engine import get_session
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
@@ -204,6 +204,7 @@ def update_chat_session_model(
 def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
+    include_deleted: bool = False,
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionDetailResponse:
@@ -214,6 +215,7 @@ def get_chat_session(
             user_id=user_id,
             db_session=db_session,
             is_shared=is_shared,
+            include_deleted=include_deleted,
         )
     except ValueError:
         raise ValueError("Chat session does not exist or has been deleted")
@@ -254,6 +256,7 @@ def get_chat_session(
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
+        deleted=chat_session.deleted,
     )
 
 
@@ -358,12 +361,19 @@ def delete_all_chat_sessions(
 @router.delete("/delete-chat-session/{session_id}")
 def delete_chat_session_by_id(
     session_id: UUID,
+    hard_delete: bool | None = None,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_id = user.id if user is not None else None
     try:
-        delete_chat_session(user_id, session_id, db_session)
+        # Use the provided hard_delete parameter if specified, otherwise use the default config
+        actual_hard_delete = (
+            hard_delete if hard_delete is not None else HARD_DELETE_CHATS
+        )
+        delete_chat_session(
+            user_id, session_id, db_session, hard_delete=actual_hard_delete
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -730,9 +740,7 @@ def upload_files_for_chat(
         new_content_type = file.content_type
 
         # Store the file normally
-        file_id = str(uuid.uuid4())
-        file_store.save_file(
-            file_name=file_id,
+        file_id = file_store.save_file(
             content=file_content_io,
             display_name=file.filename,
             file_origin=FileOrigin.CHAT_UPLOAD,
@@ -747,10 +755,8 @@ def upload_files_for_chat(
                 file=extracted_text_io,  # use the bytes we already read
                 file_name=file.filename or "",
             )
-            text_file_id = str(uuid.uuid4())
 
-            file_store.save_file(
-                file_name=text_file_id,
+            text_file_id = file_store.save_file(
                 content=io.BytesIO(extracted_text.encode()),
                 display_name=file.filename,
                 file_origin=FileOrigin.CHAT_UPLOAD,

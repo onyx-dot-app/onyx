@@ -1,6 +1,7 @@
 import json
 import os
-import time
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import cast
@@ -23,7 +24,7 @@ def extract_key_value_pairs_to_set(
     return set_of_key_value_pairs
 
 
-def load_test_data(
+def _load_reference_data(
     file_name: str = "test_salesforce_data.json",
 ) -> dict[str, str | list[str] | dict[str, Any] | list[dict[str, Any]]]:
     current_dir = Path(__file__).parent
@@ -52,11 +53,17 @@ def salesforce_connector() -> SalesforceConnector:
 
 
 # TODO: make the credentials not expire
+@pytest.mark.skip(
+    reason=(
+        "Credentials change over time, so this test will fail if run when "
+        "the credentials expire."
+    )
+)
 def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -> None:
-    test_data = load_test_data()
+    test_data = _load_reference_data()
     target_test_doc: Document | None = None
     all_docs: list[Document] = []
-    for doc_batch in salesforce_connector.poll_source(0, time.time()):
+    for doc_batch in salesforce_connector.load_from_state():
         for doc in doc_batch:
             all_docs.append(doc)
             if doc.id == test_data["id"]:
@@ -118,6 +125,47 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     )
     assert secondary_owners == test_data["secondary_owners"]
     assert target_test_doc.title == test_data["title"]
+
+
+def test_salesforce_connector_poll_source(
+    salesforce_connector: SalesforceConnector,
+) -> None:
+
+    intermediate_time = datetime(
+        2024, 6, 3, 0, 0, 0, tzinfo=timezone.utc
+    )  # roughly 92 docs
+
+    # intermediate_time = datetime(2024, 7, 1, 0, 0, 0, tzinfo=timezone.utc)  # roughly 1100 to 1200 docs
+
+    all_docs_1: list[Document] = []
+    for doc_batch in salesforce_connector.poll_source(0, intermediate_time.timestamp()):
+        for doc in doc_batch:
+            all_docs_1.append(doc)
+
+    len_1 = len(all_docs_1)
+
+    # NOTE: this is the correct document count.
+    # If you were to inspect the underlying db, however, the partial download results in
+    #  an incomplete set of object relationships. This is expected.
+
+    assert len_1 > 85 and len_1 < 100
+    print(f"all_docs_1 length: {len(all_docs_1)}")
+
+    # assert len_1 > 1100 and len_1 < 1200
+    # print(f"all_docs_1 length: {len(all_docs_1)}")
+
+    # leave this out for the moment because it's slow to process 30k docs
+    # all_docs_2: list[Document] = []
+    # for doc_batch in salesforce_connector.poll_source(
+    #     intermediate_time.timestamp(), time.time()
+    # ):
+    #     for doc in doc_batch:
+    #         all_docs_2.append(doc)
+
+    # len_2 = len(all_docs_2)
+    # assert len_2 > 31000
+
+    # print(f"all_docs_2 length: {len(all_docs_2)}")
 
 
 # TODO: make the credentials not expire

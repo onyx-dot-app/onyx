@@ -26,8 +26,8 @@ spec:
     spec:
       containers:
       - name: {{ .Values.indexCapability.name }}
-        image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Chart.AppVersion }}"           
-        imagePullPolicy: {{ .Values.indexCapability.image.pullPolicy }}
+        image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Values.global.version }}"
+        imagePullPolicy: {{ .Values.global.pullPolicy }}
         command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.indexCapability.containerPorts.server }}", "--limit-concurrency", "{{ .Values.indexCapability.limitConcurrency }}" ]
         ports:
         - name: model-server
@@ -40,14 +40,3 @@ spec:
           - name: INDEXING_ONLY
             value: "{{ default "True" .Values.indexCapability.indexingOnly }}"
           {{- include "onyx-stack.envSecrets" . | nindent 10}}
-        volumeMounts:
-        {{- range .Values.indexCapability.volumeMounts }}
-        - name: {{ .name }}
-          mountPath: {{ .mountPath }}
-        {{- end }}
-      volumes:
-      {{- range .Values.indexCapability.volumes }}
-      - name: {{ .name }}
-        persistentVolumeClaim:
-          claimName: {{ .persistentVolumeClaim.claimName }}
-      {{- end }}

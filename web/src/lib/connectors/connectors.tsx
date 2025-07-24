@@ -51,6 +51,12 @@ export interface SelectOption extends Option {
   default?: string;
 }
 
+export interface MultiSelectOption extends Option {
+  type: "multiselect";
+  options?: StringWithDescription[];
+  default?: string[];
+}
+
 export interface ListOption extends Option {
   type: "list";
   default?: string[];
@@ -96,6 +102,7 @@ export interface TabOption extends Option {
       | TextOption
       | NumberOption
       | SelectOption
+      | MultiSelectOption
       | FileOption
       | StringTabOption
     )[];
@@ -113,6 +120,7 @@ export interface ConnectionConfiguration {
     | TextOption
     | NumberOption
     | SelectOption
+    | MultiSelectOption
     | FileOption
     | TabOption
   )[];
@@ -122,6 +130,7 @@ export interface ConnectionConfiguration {
     | TextOption
     | NumberOption
     | SelectOption
+    | MultiSelectOption
     | FileOption
     | TabOption
   )[];
@@ -801,7 +810,24 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
   },
   hubspot: {
     description: "Configure HubSpot connector",
-    values: [],
+    values: [
+      {
+        type: "multiselect",
+        query: "Select which HubSpot objects to index:",
+        label: "Object Types",
+        name: "object_types",
+        options: [
+          { name: "Tickets", value: "tickets" },
+          { name: "Companies", value: "companies" },
+          { name: "Deals", value: "deals" },
+          { name: "Contacts", value: "contacts" },
+        ],
+        default: ["tickets", "companies", "deals", "contacts"],
+        description:
+          "Choose which HubSpot object types to index. All types are selected by default.",
+        optional: false,
+      },
+    ],
     advanced_values: [],
   },
   document360: {
@@ -1309,8 +1335,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
   },
 };
 export function createConnectorInitialValues(
-  connector: ConfigurableSources,
-  currentCredential: Credential<any> | null = null
+  connector: ConfigurableSources
 ): Record<string, any> & AccessTypeGroupSelectorFormType {
   const configuration = connectorConfigs[connector];
 
@@ -1324,17 +1349,10 @@ export function createConnectorInitialValues(
           acc[field.name] = null;
         } else if (field.type === "list") {
           acc[field.name] = field.default || [];
+        } else if (field.type === "multiselect") {
+          acc[field.name] = field.default || [];
         } else if (field.type === "checkbox") {
-          // Special case for include_files_shared_with_me when using service account
-          if (
-            field.name === "include_files_shared_with_me" &&
-            currentCredential &&
-            !currentCredential.credential_json?.google_tokens
-          ) {
-            acc[field.name] = true;
-          } else {
-            acc[field.name] = field.default || false;
-          }
+          acc[field.name] = field.default || false;
         } else if (field.default !== undefined) {
           acc[field.name] = field.default;
         }
@@ -1360,11 +1378,13 @@ export function createConnectorValidationSchema(
             ? Yup.string()
             : field.type === "list"
               ? Yup.array().of(Yup.string())
-              : field.type === "checkbox"
-                ? Yup.boolean()
-                : field.type === "file"
-                  ? Yup.mixed()
-                  : Yup.string();
+              : field.type === "multiselect"
+                ? Yup.array().of(Yup.string())
+                : field.type === "checkbox"
+                  ? Yup.boolean()
+                  : field.type === "file"
+                    ? Yup.mixed()
+                    : Yup.string();
 
         if (!field.optional) {
           schema = schema.required(`${field.label} is required`);
@@ -1530,7 +1550,9 @@ export interface NotionConfig {
   root_page_id?: string;
 }
 
-export interface HubSpotConfig {}
+export interface HubSpotConfig {
+  object_types?: string[];
+}
 
 export interface Document360Config {
   workspace: string;

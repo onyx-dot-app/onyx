@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import DocumentFailure
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import create_index_attempt
 from onyx.db.index_attempt import create_index_attempt_error

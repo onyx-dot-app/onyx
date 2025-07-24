@@ -54,6 +54,16 @@ CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
 
 
 #####
+# JIRA
+#####
+
+# In seconds, default is 30 minutes
+JIRA_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("JIRA_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+
+#####
 # Google Drive
 #####
 GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
@@ -69,6 +79,15 @@ SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
 )
 
 NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
+
+
+#####
+# Teams
+#####
+# In seconds, default is 5 minutes
+TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
 
 
 ####

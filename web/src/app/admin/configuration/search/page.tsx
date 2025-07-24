@@ -97,7 +97,7 @@ function Main() {
           <Title className="mb-6 mt-8 !text-2xl">Embedding Model</Title>
 
           {currentEmeddingModel ? (
-            <ModelPreview model={currentEmeddingModel} display />
+            <ModelPreview model={currentEmeddingModel} display showDetails />
           ) : (
             <Title className="mt-8 mb-4">Choose your Embedding Model</Title>
           )}

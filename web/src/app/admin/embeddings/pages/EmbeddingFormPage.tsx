@@ -71,7 +71,7 @@ export default function EmbeddingForm() {
       disable_rerank_for_streaming: false,
       api_url: null,
       num_rerank: 0,
-      embedding_precision: EmbeddingPrecision.FLOAT,
+      embedding_precision: EmbeddingPrecision.BFLOAT16,
       reduced_dimension: null,
     });
 

@@ -1,4 +1,4 @@
-import { Label, SubLabel } from "@/components/admin/connectors/Field";
+import { Label, SubLabel } from "@/components/Field";
 import { ErrorMessage, useField } from "formik";
 
 export default function NumberInput({

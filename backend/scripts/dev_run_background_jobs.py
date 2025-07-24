@@ -98,6 +98,19 @@ def run_jobs() -> None:
         "--queues=monitoring",
     ]
 
+    cmd_worker_kg_processing = [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.kg_processing",
+        "worker",
+        "--pool=threads",
+        "--concurrency=4",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=kg_processing@%n",
+        "--queues=kg_processing",
+    ]
+
     cmd_beat = [
         "celery",
         "-A",
@@ -137,6 +150,13 @@ def run_jobs() -> None:
         text=True,
     )
 
+    worker_kg_processing_process = subprocess.Popen(
+        cmd_worker_kg_processing,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
     beat_process = subprocess.Popen(
         cmd_beat, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
@@ -161,6 +181,9 @@ def run_jobs() -> None:
     worker_monitoring_thread = threading.Thread(
         target=monitor_process, args=("MONITORING", worker_monitoring_process)
     )
+    worker_kg_processing_thread = threading.Thread(
+        target=monitor_process, args=("KG_PROCESSING", worker_kg_processing_process)
+    )
     beat_thread = threading.Thread(target=monitor_process, args=("BEAT", beat_process))
 
     worker_primary_thread.start()
@@ -169,6 +192,7 @@ def run_jobs() -> None:
     worker_indexing_thread.start()
     worker_user_files_indexing_thread.start()
     worker_monitoring_thread.start()
+    worker_kg_processing_thread.start()
     beat_thread.start()
 
     worker_primary_thread.join()
@@ -177,6 +201,7 @@ def run_jobs() -> None:
     worker_indexing_thread.join()
     worker_user_files_indexing_thread.join()
     worker_monitoring_thread.join()
+    worker_kg_processing_thread.join()
     beat_thread.join()
 
 

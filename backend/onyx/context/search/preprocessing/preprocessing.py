@@ -164,14 +164,15 @@ def retrieval_preprocessing(
     user_acl_filters = (
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
-    user_file_ids = preset_filters.user_file_ids or []
-    user_folder_ids = preset_filters.user_folder_ids or []
+    user_file_filters = search_request.user_file_filters
+    user_file_ids = (user_file_filters.user_file_ids or []) if user_file_filters else []
+    user_folder_ids = (
+        (user_file_filters.user_folder_ids or []) if user_file_filters else []
+    )
     if persona and persona.user_files:
-        user_file_ids = user_file_ids + [
-            file.id
-            for file in persona.user_files
-            if file.id not in (preset_filters.user_file_ids or [])
-        ]
+        user_file_ids = list(
+            set(user_file_ids) | set([file.id for file in persona.user_files])
+        )
 
     final_filters = IndexFilters(
         user_file_ids=user_file_ids,
@@ -182,6 +183,11 @@ def retrieval_preprocessing(
         tags=preset_filters.tags,  # Tags are never auto-extracted
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
+        kg_entities=preset_filters.kg_entities,
+        kg_relationships=preset_filters.kg_relationships,
+        kg_terms=preset_filters.kg_terms,
+        kg_sources=preset_filters.kg_sources,
+        kg_chunk_id_zero_only=preset_filters.kg_chunk_id_zero_only,
     )
 
     llm_evaluation_type = LLMEvaluationType.BASIC

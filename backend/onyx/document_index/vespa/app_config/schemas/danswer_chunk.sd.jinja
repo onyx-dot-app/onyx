@@ -1,4 +1,11 @@
 schema {{ schema_name }} {
+    # source, type, target triplets for kg_relationships
+    struct kg_relationship {
+        field source type string {}
+        field rel_type type string {}
+        field target type string {}
+    }
+
     document {{ schema_name }} {
         {% if multi_tenant %}
         field tenant_id type string {
@@ -23,7 +30,7 @@ schema {{ schema_name }} {
         # Must have an additional field for whether to skip title embeddings
         # This information cannot be extracted from either the title field nor title embedding
         field skip_title type bool {
-            indexing: attribute 
+            indexing: attribute
         }
         # May not always match the `semantic_identifier` e.g. for Slack docs the
         # `semantic_identifier` will be the channel name, but the `title` will be empty
@@ -35,8 +42,8 @@ schema {{ schema_name }} {
             indexing: summary | index
             index: enable-bm25
         }
-        # duplication of `content` is far from ideal, but is needed for 
-        # non-gram based highlighting for now. If the capability to re-use a 
+        # duplication of `content` is far from ideal, but is needed for
+        # non-gram based highlighting for now. If the capability to re-use a
         # single field to do both is added, `content_summary` should be removed
         field content_summary type string {
             indexing: summary | index
@@ -89,6 +96,33 @@ schema {{ schema_name }} {
         # Field to indicate whether a short chunk is a low content chunk
         field aggregated_chunk_boost_factor type float {
             indexing: attribute
+        }
+
+        # Separate array fields for knowledge graph data
+        field kg_entities type array<string> {
+            indexing: summary | attribute
+            attribute: fast-search
+        }
+
+        field kg_relationships type array<kg_relationship> {
+            indexing: summary
+            struct-field source {
+                indexing: attribute
+                attribute: fast-search
+            }
+            struct-field rel_type {
+                indexing: attribute
+                attribute: fast-search
+            }
+            struct-field target {
+                indexing: attribute
+                attribute: fast-search
+            }
+        }
+
+        field kg_terms type array<string> {
+            indexing: summary | attribute
+            attribute: fast-search
         }
 
         # Needs to have a separate Attribute list for efficient filtering

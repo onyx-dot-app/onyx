@@ -20,15 +20,17 @@ from ee.onyx.background.celery.tasks.external_group_syncing.group_sync_utils imp
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.connector_credential_pair import get_cc_pairs_by_source
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.db.external_perm import replace_user__ext_group_for_cc_pair
-from ee.onyx.external_permissions.sync_params import EXTERNAL_GROUP_SYNC_PERIODS
-from ee.onyx.external_permissions.sync_params import GROUP_PERMISSIONS_FUNC_MAP
+from ee.onyx.db.external_perm import mark_old_external_groups_as_stale
+from ee.onyx.db.external_perm import remove_stale_external_groups
+from ee.onyx.db.external_perm import upsert_external_groups
 from ee.onyx.external_permissions.sync_params import (
-    GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC,
+    get_all_cc_pair_agnostic_group_sync_sources,
 )
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT
@@ -40,9 +42,8 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
-from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
@@ -57,19 +58,34 @@ from onyx.redis.redis_connector_ext_group_sync import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 
-EXTERNAL_GROUPS_UPDATE_MAX_RETRIES = 3
+_EXTERNAL_GROUP_BATCH_SIZE = 100
 
 
-# 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
-LIGHT_SOFT_TIME_LIMIT = 105
-LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
+def _get_fence_validation_block_expiration() -> int:
+    """
+    Compute the expiration time for the fence validation block signal.
+    Base expiration is 300 seconds, multiplied by the beat multiplier only in MULTI_TENANT mode.
+    """
+    base_expiration = 300  # seconds
+
+    if not MULTI_TENANT:
+        return base_expiration
+
+    try:
+        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+    except Exception:
+        beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
+
+    return int(base_expiration * beat_multiplier)
 
 
 def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
@@ -89,12 +105,20 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
         )
         return False
 
-    # If there is not group sync function for the connector, we don't run the sync
-    # This is fine because all sources dont necessarily have a concept of groups
-    if not GROUP_PERMISSIONS_FUNC_MAP.get(cc_pair.connector.source):
+    sync_config = get_source_perm_sync_config(cc_pair.connector.source)
+    if sync_config is None:
         task_logger.debug(
             f"Skipping group sync for CC Pair {cc_pair.id} - "
-            f"no group sync function for {cc_pair.connector.source}"
+            f"no sync config found for {cc_pair.connector.source}"
+        )
+        return False
+
+    # If there is not group sync function for the connector, we don't run the sync
+    # This is fine because all sources dont necessarily have a concept of groups
+    if sync_config.group_sync_config is None:
+        task_logger.debug(
+            f"Skipping group sync for CC Pair {cc_pair.id} - "
+            f"no group sync config found for {cc_pair.connector.source}"
         )
         return False
 
@@ -103,11 +127,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     if last_ext_group_sync is None:
         return True
 
-    source_sync_period = EXTERNAL_GROUP_SYNC_PERIODS.get(cc_pair.connector.source)
-
-    # If EXTERNAL_GROUP_SYNC_PERIODS is None, we always run the sync.
-    if not source_sync_period:
-        return True
+    source_sync_period = sync_config.group_sync_config.group_sync_frequency
 
     # If the last sync is greater than the full fetch period, we run the sync
     next_sync = last_ext_group_sync + timedelta(seconds=source_sync_period)
@@ -147,9 +167,8 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_all_auto_sync_cc_pairs(db_session)
 
-            # We only want to sync one cc_pair per source type in
-            # GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC
-            for source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC:
+            # For some sources, we only want to sync one cc_pair per source type
+            for source in get_all_cc_pair_agnostic_group_sync_sources():
                 # These are ordered by cc_pair id so the first one is the one we want
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
                     db_session,
@@ -157,8 +176,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                     access_type=AccessType.SYNC,
                     status=ConnectorCredentialPairStatus.ACTIVE,
                 )
-                # We only want to sync one cc_pair per source type
-                # in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC so we dedupe here
+                # dedupe cc_pairs to only keep the first one
                 for cc_pair_to_remove in cc_pairs_to_dedupe[1:]:
                     cc_pairs = [
                         cc_pair
@@ -197,7 +215,11 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                     "Exception while validating external group sync fences"
                 )
 
-            r.set(OnyxRedisSignals.BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES, 1, ex=300)
+            r.set(
+                OnyxRedisSignals.BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES,
+                1,
+                ex=_get_fence_validation_block_expiration(),
+            )
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
@@ -376,55 +398,12 @@ def connector_external_group_sync_generator_task(
         payload.started = datetime.now(timezone.utc)
         redis_connector.external_group_sync.set_fence(payload)
 
+        _perform_external_group_sync(
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+        )
+
         with get_session_with_current_tenant() as db_session:
-            cc_pair = get_connector_credential_pair_from_id(
-                db_session=db_session,
-                cc_pair_id=cc_pair_id,
-                eager_load_credential=True,
-            )
-            if cc_pair is None:
-                raise ValueError(
-                    f"No connector credential pair found for id: {cc_pair_id}"
-                )
-
-            source_type = cc_pair.connector.source
-
-            ext_group_sync_func = GROUP_PERMISSIONS_FUNC_MAP.get(source_type)
-            if ext_group_sync_func is None:
-                msg = f"No external group sync func found for {source_type} for cc_pair: {cc_pair_id}"
-                emit_background_error(msg, cc_pair_id=cc_pair_id)
-                raise ValueError(msg)
-
-            logger.info(
-                f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
-            )
-            external_user_groups: list[ExternalUserGroup] = []
-            try:
-                external_user_groups = ext_group_sync_func(tenant_id, cc_pair)
-            except ConnectorValidationError as e:
-                # TODO: add some notification to the admins here
-                logger.exception(
-                    f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
-                )
-                raise e
-
-            logger.info(
-                f"Syncing {len(external_user_groups)} external user groups for {source_type}"
-            )
-            logger.debug(f"New external user groups: {external_user_groups}")
-
-            replace_user__ext_group_for_cc_pair(
-                db_session=db_session,
-                cc_pair_id=cc_pair.id,
-                group_defs=external_user_groups,
-                source=cc_pair.connector.source,
-            )
-            logger.info(
-                f"Synced {len(external_user_groups)} external user groups for {source_type}"
-            )
-
-            mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
-
             update_sync_record_status(
                 db_session=db_session,
                 entity_id=cc_pair_id,
@@ -464,6 +443,81 @@ def connector_external_group_sync_generator_task(
     task_logger.info(
         f"External group sync finished: cc_pair={cc_pair_id} payload_id={payload.id}"
     )
+
+
+def _perform_external_group_sync(
+    cc_pair_id: int,
+    tenant_id: str,
+) -> None:
+    with get_session_with_current_tenant() as db_session:
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+            eager_load_credential=True,
+        )
+        if cc_pair is None:
+            raise ValueError(f"No connector credential pair found for id: {cc_pair_id}")
+
+        source_type = cc_pair.connector.source
+        sync_config = get_source_perm_sync_config(source_type)
+        if sync_config is None:
+            msg = f"No sync config found for {source_type} for cc_pair: {cc_pair_id}"
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            raise ValueError(msg)
+
+        if sync_config.group_sync_config is None:
+            msg = f"No group sync config found for {source_type} for cc_pair: {cc_pair_id}"
+            emit_background_error(msg, cc_pair_id=cc_pair_id)
+            raise ValueError(msg)
+
+        ext_group_sync_func = sync_config.group_sync_config.group_sync_func
+
+        logger.info(
+            f"Marking old external groups as stale for {source_type} for cc_pair: {cc_pair_id}"
+        )
+        mark_old_external_groups_as_stale(db_session, cc_pair_id)
+
+        logger.info(
+            f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
+        )
+        external_user_group_batch: list[ExternalUserGroup] = []
+        try:
+            external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
+            for external_user_group in external_user_group_generator:
+                external_user_group_batch.append(external_user_group)
+                if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
+                    logger.debug(
+                        f"New external user groups: {external_user_group_batch}"
+                    )
+                    upsert_external_groups(
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
+                        external_groups=external_user_group_batch,
+                        source=cc_pair.connector.source,
+                    )
+                    external_user_group_batch = []
+
+            if external_user_group_batch:
+                logger.debug(f"New external user groups: {external_user_group_batch}")
+                upsert_external_groups(
+                    db_session=db_session,
+                    cc_pair_id=cc_pair_id,
+                    external_groups=external_user_group_batch,
+                    source=cc_pair.connector.source,
+                )
+        except Exception as e:
+            # TODO: add some notification to the admins here
+            logger.exception(
+                f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
+            )
+            raise e
+
+        logger.info(
+            f"Removing stale external groups for {source_type} for cc_pair: {cc_pair_id}"
+        )
+        remove_stale_external_groups(db_session, cc_pair_id)
+
+        mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
 
 
 def validate_external_group_sync_fences(

@@ -75,11 +75,14 @@ class SearchToolOverrideKwargs(BaseModel):
     precomputed_keywords: list[str] | None = None
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
-    # Flag for fast path when search is only needed for ordering
-    ordering_only: bool | None = None
     document_sources: list[DocumentSource] | None = None
     time_cutoff: datetime | None = None
     expanded_queries: QueryExpansions | None = None
+    kg_entities: list[str] | None = None
+    kg_relationships: list[str] | None = None
+    kg_terms: list[str] | None = None
+    kg_sources: list[str] | None = None
+    kg_chunk_id_zero_only: bool | None = False
 
     class Config:
         arbitrary_types_allowed = True

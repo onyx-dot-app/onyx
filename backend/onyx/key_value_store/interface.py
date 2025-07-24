@@ -15,7 +15,7 @@ class KeyValueStore:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def load(self, key: str) -> JSON_ro:
+    def load(self, key: str, refresh_cache: bool = False) -> JSON_ro:
         raise NotImplementedError
 
     @abc.abstractmethod

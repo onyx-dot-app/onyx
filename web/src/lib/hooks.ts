@@ -13,11 +13,7 @@ import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
-import {
-  parseLlmDescriptor,
-  findProviderForModel,
-  structureValue,
-} from "./llm/utils";
+import { parseLlmDescriptor } from "./llm/utils";
 import { ChatSession } from "@/app/chat/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
@@ -503,7 +499,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.name };
+        return { ...model, provider: provider.provider };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -517,14 +513,7 @@ export function useLlmManager(
 
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
-    const provider =
-      newLlm.provider || findProviderForModel(llmProviders, newLlm.modelName);
-    const structuredValue = structureValue(
-      newLlm.name,
-      provider,
-      newLlm.modelName
-    );
-    setCurrentLlm(getValidLlmDescriptor(structuredValue));
+    setCurrentLlm(newLlm);
     setUserHasManuallyOverriddenLLM(true);
   };
 
@@ -736,7 +725,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   // Google Models
 
   // 2.5 pro models
-  "gemini-2.5-pro-exp-03-25": "Gemini 2.5 Pro (Experimental March 25th)",
+  "gemini-2.5-pro-preview-05-06": "Gemini 2.5 Pro (Preview May 6th)",
 
   // 2.0 flash lite models
   "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
@@ -748,6 +737,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-2.0-flash": "Gemini 2.0 Flash",
   "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
   "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+  "gemini-2.5-flash-preview-05-20": "Gemini 2.5 Flash (Preview May 20th)",
   // "gemini-2.0-flash-thinking-exp-01-02":
   //   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
   // "gemini-2.0-flash-thinking-exp-01-21":

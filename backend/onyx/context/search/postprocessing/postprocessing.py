@@ -25,7 +25,7 @@ from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RerankMetricsContainer
 from onyx.context.search.models import SearchQuery
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )
@@ -56,7 +56,7 @@ def update_image_sections_with_query(
     chunks_with_images = []
     for section in sections:
         for chunk in section.chunks:
-            if chunk.image_file_name:
+            if chunk.image_file_id:
                 chunks_with_images.append(chunk)
 
     if not chunks_with_images:
@@ -68,19 +68,19 @@ def update_image_sections_with_query(
     def process_image_chunk(chunk: InferenceChunk) -> tuple[str, str]:
         try:
             logger.debug(
-                f"Processing image chunk with ID: {chunk.unique_id}, image: {chunk.image_file_name}"
+                f"Processing image chunk with ID: {chunk.unique_id}, image: {chunk.image_file_id}"
             )
             with get_session_with_current_tenant() as db_session:
                 file_record = get_default_file_store(db_session).read_file(
-                    cast(str, chunk.image_file_name), mode="b"
+                    cast(str, chunk.image_file_id), mode="b"
                 )
                 if not file_record:
-                    logger.error(f"Image file not found: {chunk.image_file_name}")
+                    logger.error(f"Image file not found: {chunk.image_file_id}")
                     raise Exception("File not found")
                 file_content = file_record.read()
                 image_base64 = base64.b64encode(file_content).decode()
                 logger.debug(
-                    f"Successfully loaded image data for {chunk.image_file_name}"
+                    f"Successfully loaded image data for {chunk.image_file_id}"
                 )
 
             messages: list[BaseMessage] = [
@@ -114,7 +114,7 @@ def update_image_sections_with_query(
 
         except Exception:
             logger.exception(
-                f"Error updating image section with query source image url: {chunk.image_file_name}"
+                f"Error updating image section with query source image url: {chunk.image_file_id}"
             )
             return chunk.unique_id, "Error analyzing image."
 
@@ -372,7 +372,6 @@ def filter_sections(
     # Log evaluation type to help with debugging
     logger.info(f"filter_sections called with evaluation_type={query.evaluation_type}")
 
-    # Fast path: immediately return empty list for SKIP evaluation type (ordering-only mode)
     if query.evaluation_type == LLMEvaluationType.SKIP:
         return []
 
@@ -408,16 +407,6 @@ def search_postprocessing(
     llm: LLM,
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> Iterator[list[InferenceSection] | list[SectionRelevancePiece]]:
-    # Fast path for ordering-only: detect it by checking if evaluation_type is SKIP
-    if search_query.evaluation_type == LLMEvaluationType.SKIP:
-        logger.info(
-            "Fast path: Detected ordering-only mode, bypassing all post-processing"
-        )
-        # Immediately yield the sections without any processing and an empty relevance list
-        yield retrieved_sections
-        yield cast(list[SectionRelevancePiece], [])
-        return
-
     post_processing_tasks: list[FunctionCall] = []
 
     if not retrieved_sections:

@@ -21,6 +21,7 @@ from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
+from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.indexing.utils import IndexingCallbackBase
 from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING
 from onyx.configs.app_configs import JOB_TIMEOUT
@@ -41,7 +42,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_documents_for_connector_credential_pair
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
@@ -55,13 +56,51 @@ from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils import make_short_id
 from onyx.utils.logger import format_error_for_logging
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import pruning_ctx
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+def _get_pruning_block_expiration() -> int:
+    """
+    Compute the expiration time for the pruning block signal.
+    Base expiration is 3600 seconds (1 hour), multiplied by the beat multiplier only in MULTI_TENANT mode.
+    """
+    base_expiration = 3600  # seconds
+
+    if not MULTI_TENANT:
+        return base_expiration
+
+    try:
+        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+    except Exception:
+        beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
+
+    return int(base_expiration * beat_multiplier)
+
+
+def _get_fence_validation_block_expiration() -> int:
+    """
+    Compute the expiration time for the fence validation block signal.
+    Base expiration is 300 seconds, multiplied by the beat multiplier only in MULTI_TENANT mode.
+    """
+    base_expiration = 300  # seconds
+
+    if not MULTI_TENANT:
+        return base_expiration
+
+    try:
+        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+    except Exception:
+        beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
+
+    return int(base_expiration * beat_multiplier)
 
 
 class PruneCallback(IndexingCallbackBase):
@@ -162,7 +201,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
                     task_logger.info(
                         f"Pruning queued: cc_pair={cc_pair.id} id={payload_id}"
                     )
-            r.set(OnyxRedisSignals.BLOCK_PRUNING, 1, ex=3600)
+            r.set(OnyxRedisSignals.BLOCK_PRUNING, 1, ex=_get_pruning_block_expiration())
 
         # we want to run this less frequently than the overall task
         lock_beat.reacquire()
@@ -175,7 +214,11 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
             except Exception:
                 task_logger.exception("Exception while validating pruning fences")
 
-            r.set(OnyxRedisSignals.BLOCK_VALIDATE_PRUNING_FENCES, 1, ex=300)
+            r.set(
+                OnyxRedisSignals.BLOCK_VALIDATE_PRUNING_FENCES,
+                1,
+                ex=_get_fence_validation_block_expiration(),
+            )
 
         # use a lookup table to find active fences. We still have to verify the fence
         # exists since it is an optimization and not the source of truth.

@@ -19,7 +19,7 @@ from ee.onyx.server.enterprise_settings.store import (
 )
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
@@ -235,7 +235,7 @@ def seed_db() -> None:
         logger.debug("No seeding configuration file passed")
         return
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         if seed_config.llms is not None:
             _seed_llms(db_session, seed_config.llms)
         if seed_config.personas is not None:

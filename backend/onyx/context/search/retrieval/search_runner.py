@@ -62,7 +62,7 @@ def download_nltk_data() -> None:
     resources = {
         "stopwords": "corpora/stopwords",
         # "wordnet": "corpora/wordnet",  # Not in use
-        "punkt": "tokenizers/punkt",
+        "punkt_tab": "tokenizers/punkt_tab",
     }
 
     for resource_name, resource_path in resources.items():

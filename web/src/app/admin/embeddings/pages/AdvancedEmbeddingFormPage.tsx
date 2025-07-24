@@ -13,7 +13,7 @@ import {
   Label,
   SubLabel,
   SelectorFormField,
-} from "@/components/admin/connectors/Field";
+} from "@/components/Field";
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 import { StringOrNumberOption } from "@/components/Dropdown";
 import useSWR from "swr";

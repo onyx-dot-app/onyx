@@ -21,22 +21,14 @@ depends_on = None
 # an outage by creating an index without using CONCURRENTLY. This migration:
 #
 # 1. Creates more efficient full-text search capabilities using tsvector columns and GIN indexes
-# 2. Uses CONCURRENTLY for all index creation to prevent table locking
-# 3. Explicitly manages transactions with COMMIT statements to allow CONCURRENTLY to work
-# (see: https://www.postgresql.org/docs/9.4/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)
-# (see: https://github.com/sqlalchemy/alembic/issues/277)
-# 4. Adds indexes to both chat_message and chat_session tables for comprehensive search
+# 2. Adds indexes to both chat_message and chat_session tables for comprehensive search
+# 3. Note: CONCURRENTLY was removed due to operational issues
 
 
 def upgrade() -> None:
     # First, drop any existing indexes to avoid conflicts
-    op.execute("COMMIT")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_chat_message_tsv;")
-
-    op.execute("COMMIT")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_chat_session_desc_tsv;")
-
-    op.execute("COMMIT")
+    op.execute("DROP INDEX IF EXISTS idx_chat_message_tsv;")
+    op.execute("DROP INDEX IF EXISTS idx_chat_session_desc_tsv;")
     op.execute("DROP INDEX IF EXISTS idx_chat_message_message_lower;")
 
     # Drop existing columns if they exist
@@ -52,12 +44,9 @@ def upgrade() -> None:
         """
     )
 
-    # Commit the current transaction before creating concurrent indexes
-    op.execute("COMMIT")
-
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chat_message_tsv
+        CREATE INDEX IF NOT EXISTS idx_chat_message_tsv
         ON chat_message
         USING GIN (message_tsv)
         """
@@ -72,12 +61,9 @@ def upgrade() -> None:
         """
     )
 
-    # Commit again before creating the second concurrent index
-    op.execute("COMMIT")
-
     op.execute(
         """
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_chat_session_desc_tsv
+        CREATE INDEX IF NOT EXISTS idx_chat_session_desc_tsv
         ON chat_session
         USING GIN (description_tsv)
         """
@@ -85,12 +71,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop the indexes first (use CONCURRENTLY for dropping too)
-    op.execute("COMMIT")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_chat_message_tsv;")
-
-    op.execute("COMMIT")
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_chat_session_desc_tsv;")
+    # Drop the indexes first
+    op.execute("DROP INDEX IF EXISTS idx_chat_message_tsv;")
+    op.execute("DROP INDEX IF EXISTS idx_chat_session_desc_tsv;")
 
     # Then drop the columns
     op.execute("ALTER TABLE chat_message DROP COLUMN IF EXISTS message_tsv;")

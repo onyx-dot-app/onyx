@@ -21,20 +21,16 @@ from tenacity import retry_if_exception
 from tenacity import stop_after_delay
 from tenacity import wait_random_exponential
 
-from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.document import upsert_document_external_perms
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSION_SYNC_PERIODS
-from ee.onyx.external_permissions.sync_params import DOC_PERMISSIONS_FUNC_MAP
-from ee.onyx.external_permissions.sync_params import (
-    DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
-)
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
@@ -52,8 +48,8 @@ from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
@@ -78,6 +74,7 @@ from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -90,6 +87,24 @@ DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
 # 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
+
+
+def _get_fence_validation_block_expiration() -> int:
+    """
+    Compute the expiration time for the fence validation block signal.
+    Base expiration is 300 seconds, multiplied by the beat multiplier only in MULTI_TENANT mode.
+    """
+    base_expiration = 300  # seconds
+
+    if not MULTI_TENANT:
+        return base_expiration
+
+    try:
+        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+    except Exception:
+        beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
+
+    return int(base_expiration * beat_multiplier)
 
 
 """Jobs / utils for kicking off doc permissions sync tasks."""
@@ -105,16 +120,29 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
+    sync_config = get_source_perm_sync_config(cc_pair.connector.source)
+    if sync_config is None:
+        logger.error(f"No sync config found for {cc_pair.connector.source}")
+        return False
+
+    if sync_config.doc_sync_config is None:
+        logger.error(f"No doc sync config found for {cc_pair.connector.source}")
+        return False
+
+    # if indexing also does perm sync, don't start running doc_sync until at
+    # least one indexing is done
+    if (
+        sync_config.doc_sync_config.initial_index_should_sync
+        and cc_pair.last_successful_index_time is None
+    ):
+        return False
+
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:
         return True
 
-    source_sync_period = DOC_PERMISSION_SYNC_PERIODS.get(cc_pair.connector.source)
-
-    if not source_sync_period:
-        source_sync_period = DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
-
+    source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
     source_sync_period *= int(OnyxRuntime.get_doc_permission_sync_multiplier())
 
     # If the last sync is greater than the full fetch period, we run the sync
@@ -186,7 +214,11 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     "Exception while validating permission sync fences"
                 )
 
-            r.set(OnyxRedisSignals.BLOCK_VALIDATE_PERMISSION_SYNC_FENCES, 1, ex=300)
+            r.set(
+                OnyxRedisSignals.BLOCK_VALIDATE_PERMISSION_SYNC_FENCES,
+                1,
+                ex=_get_fence_validation_block_expiration(),
+            )
 
         # use a lookup table to find active fences. We still have to verify the fence
         # exists since it is an optimization and not the source of truth.
@@ -417,6 +449,7 @@ def connector_permission_sync_generator_task(
                 created = validate_ccpair_for_user(
                     cc_pair.connector.id,
                     cc_pair.credential.id,
+                    cc_pair.access_type,
                     db_session,
                     enforce_creation=False,
                 )
@@ -432,11 +465,15 @@ def connector_permission_sync_generator_task(
                 raise
 
             source_type = cc_pair.connector.source
+            sync_config = get_source_perm_sync_config(source_type)
+            if sync_config is None:
+                logger.error(f"No sync config found for {source_type}")
+                return None
 
-            doc_sync_func = DOC_PERMISSIONS_FUNC_MAP.get(source_type)
-            if doc_sync_func is None:
-                if source_type in DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION:
+            if sync_config.doc_sync_config is None:
+                if sync_config.censoring_config:
                     return None
+
                 raise ValueError(
                     f"No doc sync func found for {source_type} with cc_pair={cc_pair_id}"
                 )
@@ -468,6 +505,7 @@ def connector_permission_sync_generator_task(
                     credential_id=cc_pair.credential.id,
                 )
 
+            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
             document_external_accesses = doc_sync_func(
                 cc_pair, fetch_all_existing_docs_fn, callback
             )
@@ -582,91 +620,6 @@ def document_update_permissions(
         )
 
     return True
-
-
-# NOTE(rkuo): Deprecating this due to degenerate behavior in Redis from sending
-# large permissions through celery (over 1MB in size)
-# @shared_task(
-#     name=OnyxCeleryTask.UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK,
-#     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
-#     time_limit=LIGHT_TIME_LIMIT,
-#     max_retries=DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES,
-#     bind=True,
-# )
-# def update_external_document_permissions_task(
-#     self: Task,
-#     tenant_id: str,
-#     serialized_doc_external_access: dict,
-#     source_string: str,
-#     connector_id: int,
-#     credential_id: int,
-# ) -> bool:
-#     start = time.monotonic()
-
-#     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
-
-#     document_external_access = DocExternalAccess.from_dict(
-#         serialized_doc_external_access
-#     )
-#     doc_id = document_external_access.doc_id
-#     external_access = document_external_access.external_access
-
-#     try:
-#         with get_session_with_current_tenant() as db_session:
-#             # Add the users to the DB if they don't exist
-#             batch_add_ext_perm_user_if_not_exists(
-#                 db_session=db_session,
-#                 emails=list(external_access.external_user_emails),
-#                 continue_on_error=True,
-#             )
-#             # Then upsert the document's external permissions
-#             created_new_doc = upsert_document_external_perms(
-#                 db_session=db_session,
-#                 doc_id=doc_id,
-#                 external_access=external_access,
-#                 source_type=DocumentSource(source_string),
-#             )
-
-#             if created_new_doc:
-#                 # If a new document was created, we associate it with the cc_pair
-#                 upsert_document_by_connector_credential_pair(
-#                     db_session=db_session,
-#                     connector_id=connector_id,
-#                     credential_id=credential_id,
-#                     document_ids=[doc_id],
-#                 )
-
-#             elapsed = time.monotonic() - start
-#             task_logger.info(
-#                 f"connector_id={connector_id} "
-#                 f"doc={doc_id} "
-#                 f"action=update_permissions "
-#                 f"elapsed={elapsed:.2f}"
-#             )
-
-#         completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
-#     except Exception as e:
-#         error_msg = format_error_for_logging(e)
-#         task_logger.warning(
-#             f"Exception in update_external_document_permissions_task: connector_id={connector_id} doc_id={doc_id} {error_msg}"
-#         )
-#         task_logger.exception(
-#             f"update_external_document_permissions_task exceptioned: "
-#             f"connector_id={connector_id} doc_id={doc_id}"
-#         )
-#         completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
-#     finally:
-#         task_logger.info(
-#             f"update_external_document_permissions_task completed: status={completion_status.value} doc={doc_id}"
-#         )
-
-#     if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
-#         return False
-
-#     task_logger.info(
-#         f"update_external_document_permissions_task finished: connector_id={connector_id} doc_id={doc_id}"
-#     )
-#     return True
 
 
 def validate_permission_sync_fences(

@@ -1,7 +1,15 @@
+from collections.abc import Callable
+from typing import Any
+
+from google.auth.exceptions import RefreshError  # type: ignore
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 from googleapiclient.discovery import build  # type: ignore
 from googleapiclient.discovery import Resource  # type: ignore
+
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 class GoogleDriveService(Resource):
@@ -18,6 +26,56 @@ class AdminService(Resource):
 
 class GmailService(Resource):
     pass
+
+
+class RefreshableDriveObject:
+    """
+    Running Google drive service retrieval functions
+    involves accessing methods of the service object (ie. files().list())
+    which can raise a RefreshError if the access token is expired.
+    This class is a wrapper that propagates the ability to refresh the access token
+    and retry the final retrieval function until execute() is called.
+    """
+
+    def __init__(
+        self,
+        call_stack: Callable[[ServiceAccountCredentials | OAuthCredentials], Any],
+        creds: ServiceAccountCredentials | OAuthCredentials,
+        creds_getter: Callable[..., ServiceAccountCredentials | OAuthCredentials],
+    ):
+        self.call_stack = call_stack
+        self.creds = creds
+        self.creds_getter = creds_getter
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "execute":
+            return self.make_refreshable_execute()
+        return RefreshableDriveObject(
+            lambda creds: getattr(self.call_stack(creds), name),
+            self.creds,
+            self.creds_getter,
+        )
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return RefreshableDriveObject(
+            lambda creds: self.call_stack(creds)(*args, **kwargs),
+            self.creds,
+            self.creds_getter,
+        )
+
+    def make_refreshable_execute(self) -> Callable:
+        def execute(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return self.call_stack(self.creds).execute(*args, **kwargs)
+            except RefreshError as e:
+                logger.warning(
+                    f"RefreshError, going to attempt a creds refresh and retry: {e}"
+                )
+                # Refresh the access token
+                self.creds = self.creds_getter()
+                return self.call_stack(self.creds).execute(*args, **kwargs)
+
+        return execute
 
 
 def _get_google_service(

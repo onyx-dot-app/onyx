@@ -47,7 +47,7 @@ from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.persona import get_best_persona_id_for_user
-from onyx.db.pg_file_store import delete_lobj_by_name
+from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import LLMOverride
@@ -228,12 +228,15 @@ def delete_messages_and_files_from_chat_session(
     for id, files in messages_with_files:
         delete_tool_call_for_message_id(message_id=id, db_session=db_session)
         delete_search_doc_message_relationship(message_id=id, db_session=db_session)
-        for file_info in files or {}:
-            lobj_name = file_info.get("id")
-            if lobj_name:
-                logger.info(f"Deleting file with name: {lobj_name}")
-                delete_lobj_by_name(lobj_name, db_session)
 
+        file_store = get_default_file_store(db_session)
+        for file_info in files or []:
+            file_store.delete_file(file_id=file_info.get("id"))
+
+    # Delete ChatMessage records - CASCADE constraints will automatically handle:
+    # - AgentSubQuery records (via AgentSubQuestion)
+    # - AgentSubQuestion records
+    # - ChatMessage__StandardAnswer relationship records
     db_session.execute(
         delete(ChatMessage).where(ChatMessage.chat_session_id == chat_session_id)
     )

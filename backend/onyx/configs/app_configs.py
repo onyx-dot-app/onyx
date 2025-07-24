@@ -59,6 +59,21 @@ WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
 AUTH_TYPE = AuthType((os.environ.get("AUTH_TYPE") or AuthType.DISABLED.value).lower())
 DISABLE_AUTH = AUTH_TYPE == AuthType.DISABLED
 
+PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", 12))
+PASSWORD_MAX_LENGTH = int(os.getenv("PASSWORD_MAX_LENGTH", 64))
+PASSWORD_REQUIRE_UPPERCASE = (
+    os.environ.get("PASSWORD_REQUIRE_UPPERCASE", "true").lower() == "true"
+)
+PASSWORD_REQUIRE_LOWERCASE = (
+    os.environ.get("PASSWORD_REQUIRE_LOWERCASE", "true").lower() == "true"
+)
+PASSWORD_REQUIRE_DIGIT = (
+    os.environ.get("PASSWORD_REQUIRE_DIGIT", "true").lower() == "true"
+)
+PASSWORD_REQUIRE_SPECIAL_CHAR = (
+    os.environ.get("PASSWORD_REQUIRE_SPECIAL_CHAR", "true").lower() == "true"
+)
+
 # Encryption key secret is used to encrypt connector credentials, api keys, and other sensitive
 # information. This provides an extra layer of security on top of Postgres access controls
 # and is available in Onyx EE
@@ -184,6 +199,13 @@ POSTGRES_API_SERVER_POOL_OVERFLOW = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
 )
 
+POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 10
+)
+POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 5
+)
+
 # defaults to False
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"
@@ -199,17 +221,6 @@ try:
     )
 except ValueError:
     POSTGRES_POOL_RECYCLE = POSTGRES_POOL_RECYCLE_DEFAULT
-
-# Experimental setting to control idle transactions
-POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT = 0  # milliseconds
-try:
-    POSTGRES_IDLE_SESSIONS_TIMEOUT = int(
-        os.environ.get(
-            "POSTGRES_IDLE_SESSIONS_TIMEOUT", POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT
-        )
-    )
-except ValueError:
-    POSTGRES_IDLE_SESSIONS_TIMEOUT = POSTGRES_IDLE_SESSIONS_TIMEOUT_DEFAULT
 
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
 
@@ -308,6 +319,11 @@ try:
     CELERY_WORKER_INDEXING_CONCURRENCY = int(env_value)
 except ValueError:
     CELERY_WORKER_INDEXING_CONCURRENCY = CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT
+
+
+CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
+    os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
+)
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
 VESPA_SYNC_MAX_TASKS = 1024
@@ -547,7 +563,7 @@ INDEXING_TRACER_INTERVAL = int(os.environ.get("INDEXING_TRACER_INTERVAL") or 0)
 # Enable multi-threaded embedding model calls for parallel processing
 # Note: only applies for API-based embedding models
 INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
-    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 1
+    os.environ.get("INDEXING_EMBEDDING_MODEL_NUM_THREADS") or 8
 )
 
 # During an indexing attempt, specifies the number of batches which are allowed to
@@ -655,6 +671,8 @@ AZURE_DALLE_API_KEY = os.environ.get("AZURE_DALLE_API_KEY")
 AZURE_DALLE_API_BASE = os.environ.get("AZURE_DALLE_API_BASE")
 AZURE_DALLE_DEPLOYMENT_NAME = os.environ.get("AZURE_DALLE_DEPLOYMENT_NAME")
 
+# configurable image model
+IMAGE_MODEL_NAME = os.environ.get("IMAGE_MODEL_NAME", "gpt-image-1")
 
 # Use managed Vespa (Vespa Cloud). If set, must also set VESPA_CLOUD_URL, VESPA_CLOUD_CERT_PATH and VESPA_CLOUD_KEY_PATH
 MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
@@ -746,3 +764,26 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
+
+# Knowledge Graph Read Only User Configuration
+DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
+DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
+    os.environ.get("DB_READONLY_PASSWORD") or "password"
+)
+
+# File Store Configuration
+S3_FILE_STORE_BUCKET_NAME = (
+    os.environ.get("S3_FILE_STORE_BUCKET_NAME") or "onyx-file-store-bucket"
+)
+S3_FILE_STORE_PREFIX = os.environ.get("S3_FILE_STORE_PREFIX") or "onyx-files"
+# S3_ENDPOINT_URL is for MinIO and other S3-compatible storage. Leave blank for AWS S3.
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL")
+S3_VERIFY_SSL = os.environ.get("S3_VERIFY_SSL", "").lower() == "true"
+
+# S3/MinIO Access Keys
+S3_AWS_ACCESS_KEY_ID = os.environ.get("S3_AWS_ACCESS_KEY_ID")
+S3_AWS_SECRET_ACCESS_KEY = os.environ.get("S3_AWS_SECRET_ACCESS_KEY")
+
+# Forcing Vespa Language
+# English: en, German:de, etc. See: https://docs.vespa.ai/en/linguistics.html
+VESPA_LANGUAGE_OVERRIDE = os.environ.get("VESPA_LANGUAGE_OVERRIDE")

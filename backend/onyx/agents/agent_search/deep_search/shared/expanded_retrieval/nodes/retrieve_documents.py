@@ -21,7 +21,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.configs.agent_configs import AGENT_MAX_QUERY_RETRIEVAL_RESULTS
 from onyx.configs.agent_configs import AGENT_RETRIEVAL_STATS
 from onyx.context.search.models import InferenceSection
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
@@ -67,7 +67,7 @@ def retrieve_documents(
     callback_container: list[list[InferenceSection]] = []
 
     # new db session to avoid concurrency issues
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         for tool_response in search_tool.run(
             query=query_to_retrieve,
             override_kwargs=SearchToolOverrideKwargs(

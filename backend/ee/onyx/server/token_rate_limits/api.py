@@ -9,7 +9,7 @@ from ee.onyx.db.token_limit import fetch_user_group_token_rate_limits_for_user
 from ee.onyx.db.token_limit import insert_user_group_token_rate_limit
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.db.token_limit import insert_user_token_rate_limit

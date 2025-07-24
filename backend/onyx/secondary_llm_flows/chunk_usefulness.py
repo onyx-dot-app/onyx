@@ -51,7 +51,10 @@ def llm_eval_section(
     messages = _get_usefulness_messages()
     filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
     model_output = message_to_string(llm.invoke(filled_llm_prompt))
-    logger.debug(model_output)
+
+    # NOTE(rkuo): all this does is print "Yes useful" or "Not useful"
+    # disabling becuase it's spammy, restore and give more context if this is needed
+    # logger.debug(model_output)
 
     return _extract_usefulness(model_output)
 
@@ -64,6 +67,8 @@ def llm_batch_eval_sections(
     metadata_list: list[dict[str, str | list[str]]],
     use_threads: bool = True,
 ) -> list[bool]:
+    answer: list[bool]
+
     if DISABLE_LLM_DOC_RELEVANCE:
         raise RuntimeError(
             "LLM Doc Relevance is globally disabled, "
@@ -86,12 +91,13 @@ def llm_batch_eval_sections(
         )
 
         # In case of failure/timeout, don't throw out the section
-        return [True if item is None else item for item in parallel_results]
+        answer = [True if item is None else item for item in parallel_results]
+        return answer
 
-    else:
-        return [
-            llm_eval_section(query, section_content, llm, title, metadata)
-            for section_content, title, metadata in zip(
-                section_contents, titles, metadata_list
-            )
-        ]
+    answer = [
+        llm_eval_section(query, section_content, llm, title, metadata)
+        for section_content, title, metadata in zip(
+            section_contents, titles, metadata_list
+        )
+    ]
+    return answer

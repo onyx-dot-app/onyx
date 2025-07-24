@@ -78,7 +78,7 @@ def should_continue(state: BasicState) -> str:
 
 
 if __name__ == "__main__":
-    from onyx.db.engine import get_session_context_manager
+    from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.context.search.models import SearchRequest
     from onyx.llm.factory import get_default_llms
     from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     compiled_graph = graph.compile()
     input = BasicInput(unused=True)
     primary_llm, fast_llm = get_default_llms()
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         config, _ = get_test_config(
             db_session=db_session,
             primary_llm=primary_llm,

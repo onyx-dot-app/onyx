@@ -19,7 +19,7 @@ from onyx.db.credentials import fetch_credentials_by_source_for_user
 from onyx.db.credentials import fetch_credentials_for_user
 from onyx.db.credentials import swap_credentials_connector
 from onyx.db.credentials import update_credential
-from onyx.db.engine import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import DocumentSource
 from onyx.db.models import User
 from onyx.server.documents.models import CredentialBase
@@ -104,6 +104,7 @@ def swap_credentials_for_connector(
     validate_ccpair_for_user(
         credential_swap_req.connector_id,
         credential_swap_req.new_credential_id,
+        credential_swap_req.access_type,
         db_session,
     )
 

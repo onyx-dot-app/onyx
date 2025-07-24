@@ -4,8 +4,7 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.db.engine import get_session_context_manager
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_providers
@@ -62,7 +61,7 @@ def get_llms_for_persona(
             long_term_logger=long_term_logger,
         )
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         llm_provider = fetch_llm_provider_view(db_session, provider_name)
 
     if not llm_provider:
@@ -210,7 +209,7 @@ def llm_from_provider(
 
 
 def get_llm_for_contextual_rag(model_name: str, model_provider: str) -> LLM:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         llm_provider = fetch_llm_provider_view(db_session, model_provider)
     if not llm_provider:
         raise ValueError("No LLM provider with name {} found".format(model_provider))
@@ -229,7 +228,7 @@ def get_default_llms(
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
 
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         llm_provider = fetch_default_provider(db_session)
 
     if not llm_provider:

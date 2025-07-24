@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx-stack.fullname" . }}-webserver
+  name: {{ include "onyx-stack.fullname" . }}-web-server
   labels:
     {{- include "onyx-stack.labels" . | nindent 4 }}
 spec:
@@ -37,8 +37,8 @@ spec:
         - name: web-server
           securityContext:
             {{- toYaml .Values.webserver.securityContext | nindent 12 }}
-          image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.webserver.image.pullPolicy }}
+          image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Values.global.version }}"
+          imagePullPolicy: {{ .Values.global.pullPolicy }}
           ports:
             - name: http
               containerPort: {{ .Values.webserver.containerPorts.server }}

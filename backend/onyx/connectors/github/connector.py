@@ -14,6 +14,7 @@ from github import RateLimitExceededException
 from github import Repository
 from github.GithubException import GithubException
 from github.Issue import Issue
+from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
 from github.Requester import Requester
@@ -219,6 +220,18 @@ def _get_batch_rate_limited(
         )
 
 
+def _get_userinfo(user: NamedUser) -> dict[str, str]:
+    return {
+        k: v
+        for k, v in {
+            "login": user.login,
+            "name": user.name,
+            "email": user.email,
+        }.items()
+        if v is not None
+    }
+
+
 def _convert_pr_to_document(pull_request: PullRequest) -> Document:
     return Document(
         id=pull_request.html_url,
@@ -226,7 +239,7 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             TextSection(link=pull_request.html_url, text=pull_request.body or "")
         ],
         source=DocumentSource.GITHUB,
-        semantic_identifier=pull_request.title,
+        semantic_identifier=f"{pull_request.number}: {pull_request.title}",
         # updated_at is UTC time but is timezone unaware, explicitly add UTC
         # as there is logic in indexing to prevent wrong timestamped docs
         # due to local time discrepancies with UTC
@@ -236,8 +249,49 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             else None
         ),
         metadata={
-            "merged": str(pull_request.merged),
-            "state": pull_request.state,
+            k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
+            for k, v in {
+                "object_type": "PullRequest",
+                "id": pull_request.number,
+                "merged": pull_request.merged,
+                "state": pull_request.state,
+                "user": _get_userinfo(pull_request.user) if pull_request.user else None,
+                "assignees": [
+                    _get_userinfo(assignee) for assignee in pull_request.assignees
+                ],
+                "repo": (
+                    pull_request.base.repo.full_name if pull_request.base else None
+                ),
+                "num_commits": str(pull_request.commits),
+                "num_files_changed": str(pull_request.changed_files),
+                "labels": [label.name for label in pull_request.labels],
+                "created_at": (
+                    pull_request.created_at.replace(tzinfo=timezone.utc)
+                    if pull_request.created_at
+                    else None
+                ),
+                "updated_at": (
+                    pull_request.updated_at.replace(tzinfo=timezone.utc)
+                    if pull_request.updated_at
+                    else None
+                ),
+                "closed_at": (
+                    pull_request.closed_at.replace(tzinfo=timezone.utc)
+                    if pull_request.closed_at
+                    else None
+                ),
+                "merged_at": (
+                    pull_request.merged_at.replace(tzinfo=timezone.utc)
+                    if pull_request.merged_at
+                    else None
+                ),
+                "merged_by": (
+                    _get_userinfo(pull_request.merged_by)
+                    if pull_request.merged_by
+                    else None
+                ),
+            }.items()
+            if v is not None
         },
     )
 
@@ -252,11 +306,39 @@ def _convert_issue_to_document(issue: Issue) -> Document:
         id=issue.html_url,
         sections=[TextSection(link=issue.html_url, text=issue.body or "")],
         source=DocumentSource.GITHUB,
-        semantic_identifier=issue.title,
+        semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
         metadata={
-            "state": issue.state,
+            k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
+            for k, v in {
+                "object_type": "Issue",
+                "id": issue.number,
+                "state": issue.state,
+                "user": _get_userinfo(issue.user) if issue.user else None,
+                "assignees": [_get_userinfo(assignee) for assignee in issue.assignees],
+                "repo": issue.repository.full_name if issue.repository else None,
+                "labels": [label.name for label in issue.labels],
+                "created_at": (
+                    issue.created_at.replace(tzinfo=timezone.utc)
+                    if issue.created_at
+                    else None
+                ),
+                "updated_at": (
+                    issue.updated_at.replace(tzinfo=timezone.utc)
+                    if issue.updated_at
+                    else None
+                ),
+                "closed_at": (
+                    issue.closed_at.replace(tzinfo=timezone.utc)
+                    if issue.closed_at
+                    else None
+                ),
+                "closed_by": (
+                    _get_userinfo(issue.closed_by) if issue.closed_by else None
+                ),
+            }.items()
+            if v is not None
         },
     )
 
@@ -643,6 +725,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: GithubConnectorCheckpoint,
+        include_permissions: bool = False,
     ) -> CheckpointOutput[GithubConnectorCheckpoint]:
         start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
         # add a day for timezone safety
@@ -817,7 +900,7 @@ if __name__ == "__main__":
 
     # Initialize the runner with a batch size of 10
     runner: ConnectorRunner[GithubConnectorCheckpoint] = ConnectorRunner(
-        connector, batch_size=10, time_range=time_range
+        connector, batch_size=10, include_permissions=False, time_range=time_range
     )
 
     # Get initial checkpoint

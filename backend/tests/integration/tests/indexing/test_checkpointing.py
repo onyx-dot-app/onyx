@@ -10,7 +10,7 @@ from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import InputType
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
@@ -83,14 +83,14 @@ def test_mock_connector_basic_flow(
     assert finished_index_attempt.status == IndexingStatus.SUCCESS
 
     # Verify results
-    with get_session_context_manager() as db_session:
-        documents = DocumentManager.fetch_documents_for_cc_pair(
+    with get_session_with_current_tenant() as db_session:
+        chunks = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
             vespa_client=vespa_client,
         )
-    assert len(documents) == 1
-    assert documents[0].id == test_doc.id
+    assert len(chunks) == 1
+    assert chunks[0].id == test_doc.id
 
     errors = IndexAttemptManager.get_index_attempt_errors_for_cc_pair(
         cc_pair_id=cc_pair.id,
@@ -156,7 +156,7 @@ def test_mock_connector_with_failures(
     assert finished_index_attempt.status == IndexingStatus.COMPLETED_WITH_ERRORS
 
     # Verify results: doc1 should be indexed and doc2 should have an error entry
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
@@ -247,7 +247,7 @@ def test_mock_connector_failure_recovery(
     assert finished_index_attempt.status == IndexingStatus.COMPLETED_WITH_ERRORS
 
     # Verify initial state: doc1 indexed, doc2 failed
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
@@ -311,7 +311,7 @@ def test_mock_connector_failure_recovery(
     assert finished_second_index_attempt.status == IndexingStatus.SUCCESS
 
     # Verify both documents are now indexed
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
@@ -415,7 +415,7 @@ def test_mock_connector_checkpoint_recovery(
     assert finished_index_attempt.status == IndexingStatus.FAILED
 
     # Verify initial state: both docs should be indexed
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
@@ -486,7 +486,7 @@ def test_mock_connector_checkpoint_recovery(
     assert finished_recovery_attempt.status == IndexingStatus.SUCCESS
 
     # Verify results
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,

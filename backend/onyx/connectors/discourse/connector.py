@@ -60,7 +60,7 @@ class DiscourseConnector(PollConnector):
         self.base_url = base_url
 
         self.categories = [c.lower() for c in categories] if categories else []
-        self.category_id_map: dict[int, str] = {}
+        self.category_id_map: dict[int, dict] = {}
 
         self.batch_size = batch_size
         self.permissions: DiscoursePerms | None = None
@@ -83,7 +83,7 @@ class DiscourseConnector(PollConnector):
         )
         categories = response.json()["category_list"]["categories"]
         self.category_id_map = {
-            cat["id"]: cat["name"]
+            cat["id"]: {"name": cat["name"], "slug": cat["slug"]}
             for cat in categories
             if not self.categories or cat["name"].lower() in self.categories
         }
@@ -116,7 +116,7 @@ class DiscourseConnector(PollConnector):
             sections.append(
                 TextSection(link=topic_url, text=parse_html_page_basic(post["cooked"]))
             )
-        category_name = self.category_id_map.get(topic["category_id"])
+        category_name = self.category_id_map.get(topic["category_id"], {}).get("name")
 
         metadata: dict[str, str | list[str]] = (
             {
@@ -158,9 +158,10 @@ class DiscourseConnector(PollConnector):
             topics = []
             empty_categories = []
 
-            for category_id in self.category_id_map.keys():
+            for category_id, category_dict in self.category_id_map.items():
                 category_endpoint = urllib.parse.urljoin(
-                    self.base_url, f"c/{category_id}.json?page={page}&sys=latest"
+                    self.base_url,
+                    f"c/{category_dict['slug']}/{category_id}.json?page={page}&sys=latest",
                 )
                 response = self._make_request(endpoint=category_endpoint)
                 new_topics = response.json()["topic_list"]["topics"]
@@ -182,8 +183,6 @@ class DiscourseConnector(PollConnector):
                 continue
 
             topic_ids.append(topic["id"])
-            if len(topic_ids) >= self.batch_size:
-                break
 
         return topic_ids
 

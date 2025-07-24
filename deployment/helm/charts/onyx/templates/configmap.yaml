@@ -14,3 +14,6 @@ data:
 {{- range $key, $value := .Values.configMap }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
+  {{- if .Values.minio.enabled }}
+  S3_ENDPOINT_URL: "http://{{ .Release.Name }}-minio:{{ .Values.minio.service.ports.api | default 9000 }}"
+  {{- end }}

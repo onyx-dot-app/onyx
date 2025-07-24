@@ -58,3 +58,9 @@ AGENT_RETRIEVAL_STATS=False   # Note: This setting will incur substantial re-ran
 AGENT_RERANKING_STATS=True
 AGENT_MAX_QUERY_RETRIEVAL_RESULTS=20
 AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS=20
+
+# S3 File Store Configuration (MinIO for local development)
+S3_ENDPOINT_URL=http://localhost:9004
+S3_FILE_STORE_BUCKET_NAME=onyx-file-store-bucket
+S3_AWS_ACCESS_KEY_ID=minioadmin
+S3_AWS_SECRET_ACCESS_KEY=minioadmin

@@ -22,7 +22,7 @@ import {
 import { FiCpu, FiEdit } from "react-icons/fi";
 import useSWR from "swr";
 import { Form, Formik, Field } from "formik";
-import { TextFormField } from "@/components/admin/connectors/Field";
+import { TextFormField } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import Link from "next/link";
 import { useState } from "react";

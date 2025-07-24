@@ -92,6 +92,7 @@ def format_embedding_error(
     service_name: str,
     model: str | None,
     provider: EmbeddingProvider,
+    sanitized_api_key: str | None = None,
     status_code: int | None = None,
 ) -> str:
     """
@@ -103,6 +104,7 @@ def format_embedding_error(
         f"{'HTTP error' if status_code else 'Exception'} embedding text with {service_name} - {detail}: "
         f"Model: {model} "
         f"Provider: {provider} "
+        f"API Key: {sanitized_api_key} "
         f"Exception: {error}"
     )
 
@@ -133,6 +135,7 @@ class CloudEmbedding:
         self.timeout = timeout
         self.http_client = httpx.AsyncClient(timeout=timeout)
         self._closed = False
+        self.sanitized_api_key = api_key[:4] + "********" + api_key[-4:]
 
     async def _embed_openai(
         self, texts: list[str], model: str | None, reduced_dimension: int | None
@@ -306,6 +309,7 @@ class CloudEmbedding:
                 str(self.provider),
                 model_name or deployment_name,
                 self.provider,
+                sanitized_api_key=self.sanitized_api_key,
                 status_code=e.response.status_code,
             )
             logger.error(error_string)
@@ -317,7 +321,11 @@ class CloudEmbedding:
                 raise AuthenticationError(provider=str(self.provider))
 
             error_string = format_embedding_error(
-                e, str(self.provider), model_name or deployment_name, self.provider
+                e,
+                str(self.provider),
+                model_name or deployment_name,
+                self.provider,
+                sanitized_api_key=self.sanitized_api_key,
             )
             logger.error(error_string)
             logger.debug(f"Exception texts: {texts}")

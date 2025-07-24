@@ -3,7 +3,7 @@ from typing import cast
 
 from redis.client import Redis
 
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KeyValueStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -39,7 +39,7 @@ class PgRedisKVStore(KeyValueStore):
 
         encrypted_val = val if encrypt else None
         plain_val = val if not encrypt else None
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if obj:
                 obj.value = plain_val
@@ -52,16 +52,22 @@ class PgRedisKVStore(KeyValueStore):
                 db_session.add(obj)
             db_session.commit()
 
-    def load(self, key: str) -> JSON_ro:
-        try:
-            redis_value = self.redis_client.get(REDIS_KEY_PREFIX + key)
-            if redis_value:
-                assert isinstance(redis_value, bytes)
-                return json.loads(redis_value.decode("utf-8"))
-        except Exception as e:
-            logger.error(f"Failed to get value from Redis for key '{key}': {str(e)}")
+    def load(self, key: str, refresh_cache: bool = False) -> JSON_ro:
+        if not refresh_cache:
+            try:
+                redis_value = self.redis_client.get(REDIS_KEY_PREFIX + key)
+                if redis_value:
+                    if not isinstance(redis_value, bytes):
+                        raise ValueError(
+                            f"Redis value for key '{key}' is not a bytes object"
+                        )
+                    return json.loads(redis_value.decode("utf-8"))
+            except Exception as e:
+                logger.error(
+                    f"Failed to get value from Redis for key '{key}': {str(e)}"
+                )
 
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             obj = db_session.query(KVStore).filter_by(key=key).first()
             if not obj:
                 raise KvKeyNotFoundError
@@ -86,7 +92,7 @@ class PgRedisKVStore(KeyValueStore):
         except Exception as e:
             logger.error(f"Failed to delete value from Redis for key '{key}': {str(e)}")
 
-        with get_session_context_manager() as db_session:
+        with get_session_with_current_tenant() as db_session:
             result = db_session.query(KVStore).filter_by(key=key).delete()  # type: ignore
             if result == 0:
                 raise KvKeyNotFoundError

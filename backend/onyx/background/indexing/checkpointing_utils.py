@@ -9,7 +9,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
-from onyx.db.engine import get_db_current_time
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_recent_completed_attempts_for_cc_pair
 from onyx.db.models import IndexAttempt
@@ -35,11 +35,11 @@ def save_checkpoint(
 
     file_store = get_default_file_store(db_session)
     file_store.save_file(
-        file_name=checkpoint_pointer,
         content=BytesIO(checkpoint.model_dump_json().encode()),
         display_name=checkpoint_pointer,
         file_origin=FileOrigin.INDEXING_CHECKPOINT,
         file_type="application/json",
+        file_id=checkpoint_pointer,
     )
 
     index_attempt = get_index_attempt(db_session, index_attempt_id)

@@ -1,13 +1,12 @@
 import os
 import time
-from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.jira.connector import JiraConnector
 from onyx.connectors.models import Document
-from onyx.connectors.onyx_jira.connector import JiraConnector
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
@@ -31,9 +30,7 @@ def jira_connector() -> JiraConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_jira_connector_basic(
-    mock_get_api_key: MagicMock, jira_connector: JiraConnector
-) -> None:
+def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> None:
     docs = load_all_docs_from_checkpoint_connector(
         connector=jira_connector,
         start=0,
@@ -55,24 +52,36 @@ def test_jira_connector_basic(
 
     # Check task
     assert story.id == "https://danswerai.atlassian.net/browse/AS-3"
-    assert story.semantic_identifier == "AS-3: test123small"
+    assert story.semantic_identifier == "AS-3: Magic Answers"
     assert story.source == DocumentSource.JIRA
     assert story.metadata == {
         "priority": "Medium",
-        "status": "Backlog",
+        "status": "Done",
+        "resolution": "Done",
+        "resolution_date": "2025-05-29T15:33:31.031-0700",
         "reporter": "Chris Weaver",
         "assignee": "Chris Weaver",
         "issuetype": "Story",
         "created": "2025-04-16T16:44:06.716-0700",
+        "reporter_email": "chris@onyx.app",
+        "assignee_email": "chris@onyx.app",
+        "project_name": "DailyConnectorTestProject",
+        "project": "AS",
+        "parent": "AS-4",
+        "key": "AS-3",
+        "updated": "2025-06-17T12:13:00.070-0700",
     }
     assert story.secondary_owners is None
-    assert story.title == "AS-3 test123small"
+    assert story.title == "AS-3 Magic Answers"
     assert story.from_ingestion_api is False
     assert story.additional_info is None
 
     assert len(story.sections) == 1
     section = story.sections[0]
-    assert section.text == "example_text\n"
+    assert (
+        section.text
+        == "This is a critical request for super-human answer quality in Onyx! We need magic!\n"
+    )
     assert section.link == "https://danswerai.atlassian.net/browse/AS-3"
 
     # Check epic
@@ -86,6 +95,12 @@ def test_jira_connector_basic(
         "assignee": "Chris Weaver",
         "issuetype": "Epic",
         "created": "2025-04-16T16:55:53.068-0700",
+        "reporter_email": "founders@onyx.app",
+        "assignee_email": "chris@onyx.app",
+        "project_name": "DailyConnectorTestProject",
+        "project": "AS",
+        "key": "AS-4",
+        "updated": "2025-05-29T14:43:05.312-0700",
     }
     assert epic.secondary_owners is None
     assert epic.title == "AS-4 EPIC"

@@ -1,7 +1,6 @@
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
-from typing import Any
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
@@ -12,9 +11,9 @@ from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFuncti
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_utils.resources import get_drive_service
+from onyx.connectors.google_drive.models import GoogleDriveFileType
+from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
-from onyx.connectors.models import SlimDocument
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -41,57 +40,71 @@ def _get_slim_doc_generator(
     )
 
 
-def _fetch_permissions_for_permission_ids(
-    google_drive_connector: GoogleDriveConnector,
-    permission_info: dict[str, Any],
+def _merge_permissions_lists(
+    permission_lists: list[list[GoogleDrivePermission]],
 ) -> list[GoogleDrivePermission]:
-    doc_id = permission_info.get("doc_id")
-    if not permission_info or not doc_id:
-        return []
+    """
+    Merge a list of permission lists into a single list of permissions.
+    """
+    seen_permission_ids: set[str] = set()
+    merged_permissions: list[GoogleDrivePermission] = []
+    for permission_list in permission_lists:
+        for permission in permission_list:
+            if permission.id not in seen_permission_ids:
+                merged_permissions.append(permission)
+                seen_permission_ids.add(permission.id)
 
-    owner_email = permission_info.get("owner_email")
-    permission_ids = permission_info.get("permission_ids", [])
-    if not permission_ids:
-        return []
-
-    drive_service = get_drive_service(
-        creds=google_drive_connector.creds,
-        user_email=(owner_email or google_drive_connector.primary_admin_email),
-    )
-
-    return get_permissions_by_ids(
-        drive_service=drive_service,
-        doc_id=doc_id,
-        permission_ids=permission_ids,
-    )
+    return merged_permissions
 
 
-def _get_permissions_from_slim_doc(
-    google_drive_connector: GoogleDriveConnector,
-    slim_doc: SlimDocument,
+def get_external_access_for_raw_gdrive_file(
+    file: GoogleDriveFileType,
+    company_domain: str,
+    retriever_drive_service: GoogleDriveService | None,
+    admin_drive_service: GoogleDriveService,
 ) -> ExternalAccess:
-    permission_info = slim_doc.perm_sync_data or {}
+    """
+    Get the external access for a raw Google Drive file.
+
+    Assumes the file we retrieved has EITHER `permissions` or `permission_ids`
+    """
+    doc_id = file.get("id")
+    if not doc_id:
+        raise ValueError("No doc_id found in file")
+
+    permissions = file.get("permissions")
+    permission_ids = file.get("permissionIds")
+    drive_id = file.get("driveId")
 
     permissions_list: list[GoogleDrivePermission] = []
-    raw_permissions_list = permission_info.get("permissions", [])
-    if not raw_permissions_list:
-        permissions_list = _fetch_permissions_for_permission_ids(
-            google_drive_connector=google_drive_connector,
-            permission_info=permission_info,
-        )
-        if not permissions_list:
-            logger.warning(f"No permissions found for document {slim_doc.id}")
-            return ExternalAccess(
-                external_user_emails=set(),
-                external_user_group_ids=set(),
-                is_public=False,
-            )
-    else:
+    if permissions:
         permissions_list = [
-            GoogleDrivePermission.from_drive_permission(p) for p in raw_permissions_list
+            GoogleDrivePermission.from_drive_permission(p) for p in permissions
         ]
+    elif permission_ids:
 
-    company_domain = google_drive_connector.google_domain
+        def _get_permissions(
+            drive_service: GoogleDriveService,
+        ) -> list[GoogleDrivePermission]:
+            return get_permissions_by_ids(
+                drive_service=drive_service,
+                doc_id=doc_id,
+                permission_ids=permission_ids,
+            )
+
+        permissions_list = _get_permissions(
+            retriever_drive_service or admin_drive_service
+        )
+        if len(permissions_list) != len(permission_ids) and retriever_drive_service:
+            logger.warning(
+                f"Failed to get all permissions for file {doc_id} with retriever service, "
+                "trying admin service"
+            )
+            backup_permissions_list = _get_permissions(admin_drive_service)
+            permissions_list = _merge_permissions_lists(
+                [permissions_list, backup_permissions_list]
+            )
+
     folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
     group_emails: set[str] = set()
@@ -116,7 +129,7 @@ def _get_permissions_from_slim_doc(
             else:
                 logger.error(
                     "Permission is type `user` but no email address is "
-                    f"provided for document {slim_doc.id}"
+                    f"provided for document {doc_id}"
                     f"\n {permission}"
                 )
         elif permission.type == PermissionType.GROUP:
@@ -126,7 +139,7 @@ def _get_permissions_from_slim_doc(
             else:
                 logger.error(
                     "Permission is type `group` but no email address is "
-                    f"provided for document {slim_doc.id}"
+                    f"provided for document {doc_id}"
                     f"\n {permission}"
                 )
         elif permission.type == PermissionType.DOMAIN and company_domain:
@@ -140,7 +153,6 @@ def _get_permissions_from_slim_doc(
         elif permission.type == PermissionType.ANYONE:
             public = True
 
-    drive_id = permission_info.get("drive_id")
     group_ids = (
         group_emails
         | folder_ids_to_inherit_permissions_from
@@ -172,7 +184,9 @@ def gdrive_doc_sync(
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 
+    total_processed = 0
     for slim_doc_batch in slim_doc_generator:
+        logger.info(f"Drive perm sync: Processing {len(slim_doc_batch)} documents")
         for slim_doc in slim_doc_batch:
             if callback:
                 if callback.should_stop():
@@ -180,11 +194,14 @@ def gdrive_doc_sync(
 
                 callback.progress("gdrive_doc_sync", 1)
 
-            ext_access = _get_permissions_from_slim_doc(
-                google_drive_connector=google_drive_connector,
-                slim_doc=slim_doc,
-            )
+            if slim_doc.external_access is None:
+                raise ValueError(
+                    f"Drive perm sync: No external access for document {slim_doc.id}"
+                )
+
             yield DocExternalAccess(
-                external_access=ext_access,
+                external_access=slim_doc.external_access,
                 doc_id=slim_doc.id,
             )
+        total_processed += len(slim_doc_batch)
+        logger.info(f"Drive perm sync: Processed {total_processed} total documents")

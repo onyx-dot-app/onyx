@@ -676,12 +676,34 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
         return False
 
 
-def model_is_reasoning_model(model_name: str) -> bool:
-    _REASONING_MODEL_NAMES = [
-        "o1",
-        "o1-mini",
-        "o3-mini",
-        "deepseek-reasoner",
-        "deepseek-r1",
-    ]
-    return model_name.lower() in _REASONING_MODEL_NAMES
+def model_is_reasoning_model(model_name: str, model_provider: str) -> bool:
+    model_map = get_model_map()
+    try:
+        model_obj = find_model_obj(
+            model_map,
+            model_provider,
+            model_name,
+        )
+        if model_obj and "supports_reasoning" in model_obj:
+            return model_obj["supports_reasoning"]
+
+        # Fallback: try using litellm.supports_reasoning() for newer models
+        try:
+            logger.debug("Falling back to `litellm.supports_reasoning`")
+            full_model_name = (
+                f"{model_provider}/{model_name}"
+                if model_provider not in model_name
+                else model_name
+            )
+            return litellm.supports_reasoning(model=full_model_name)
+        except Exception:
+            logger.exception(
+                f"Failed to check if {model_provider}/{model_name} supports reasoning"
+            )
+            return False
+
+    except Exception:
+        logger.exception(
+            f"Failed to get model object for {model_provider}/{model_name}"
+        )
+        return False

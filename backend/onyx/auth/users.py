@@ -69,6 +69,12 @@ from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
+from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
+from onyx.configs.app_configs import PASSWORD_MIN_LENGTH
+from onyx.configs.app_configs import PASSWORD_REQUIRE_DIGIT
+from onyx.configs.app_configs import PASSWORD_REQUIRE_LOWERCASE
+from onyx.configs.app_configs import PASSWORD_REQUIRE_SPECIAL_CHAR
+from onyx.configs.app_configs import PASSWORD_REQUIRE_UPPERCASE
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
@@ -91,9 +97,9 @@ from onyx.db.auth import get_default_admin_user_emails
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_context_manager
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine.async_sql_engine import get_async_session
+from onyx.db.engine.async_sql_engine import get_async_session_context_manager
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
@@ -351,28 +357,30 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         return user
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
-        # Validate password according to basic security guidelines
-        if len(password) < 12:
+        # Validate password according to configurable security policy (defined via environment variables)
+        if len(password) < PASSWORD_MIN_LENGTH:
             raise exceptions.InvalidPasswordException(
-                reason="Password must be at least 12 characters long."
+                reason=f"Password must be at least {PASSWORD_MIN_LENGTH} characters long."
             )
-        if len(password) > 64:
+        if len(password) > PASSWORD_MAX_LENGTH:
             raise exceptions.InvalidPasswordException(
-                reason="Password must not exceed 64 characters."
+                reason=f"Password must not exceed {PASSWORD_MAX_LENGTH} characters."
             )
-        if not any(char.isupper() for char in password):
+        if PASSWORD_REQUIRE_UPPERCASE and not any(char.isupper() for char in password):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one uppercase letter."
             )
-        if not any(char.islower() for char in password):
+        if PASSWORD_REQUIRE_LOWERCASE and not any(char.islower() for char in password):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one lowercase letter."
             )
-        if not any(char.isdigit() for char in password):
+        if PASSWORD_REQUIRE_DIGIT and not any(char.isdigit() for char in password):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one number."
             )
-        if not any(char in PASSWORD_SPECIAL_CHARS for char in password):
+        if PASSWORD_REQUIRE_SPECIAL_CHAR and not any(
+            char in PASSWORD_SPECIAL_CHARS for char in password
+        ):
             raise exceptions.InvalidPasswordException(
                 reason="Password must contain at least one special character from the following set: "
                 f"{PASSWORD_SPECIAL_CHARS}."

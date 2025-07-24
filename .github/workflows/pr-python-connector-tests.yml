@@ -22,6 +22,7 @@ env:
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
 
   # Jira
+  JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
   JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
   JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
@@ -48,6 +49,9 @@ env:
   SF_USERNAME: ${{ secrets.SF_USERNAME }}
   SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
   SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
+
+  # Hubspot
+  HUBSPOT_ACCESS_TOKEN: ${{ secrets.HUBSPOT_ACCESS_TOKEN }}
 
   # Airtable
   AIRTABLE_TEST_BASE_ID: ${{ secrets.AIRTABLE_TEST_BASE_ID }}

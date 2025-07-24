@@ -1,0 +1,86 @@
+name: External Dependency Unit Tests
+
+on:
+  merge_group:
+  pull_request:
+    branches: [main]
+
+env:
+  # AWS
+  S3_AWS_ACCESS_KEY_ID: ${{ secrets.S3_AWS_ACCESS_KEY_ID }}
+  S3_AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_AWS_SECRET_ACCESS_KEY }}
+
+  # MinIO
+  S3_ENDPOINT_URL: "http://localhost:9004"
+
+jobs:
+  discover-test-dirs:
+    runs-on: ubuntu-latest
+    outputs:
+      test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Discover test directories
+        id: set-matrix
+        run: |
+          # Find all subdirectories in backend/tests/external_dependency_unit
+          dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
+          echo "test-dirs=$dirs" >> $GITHUB_OUTPUT
+
+  external-dependency-unit-tests:
+    needs: discover-test-dirs
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        test-dir: ${{ fromJson(needs.discover-test-dirs.outputs.test-dirs) }}
+
+    env:
+      PYTHONPATH: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements/default.txt
+            backend/requirements/dev.txt
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
+          pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Set up Standard Dependencies
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.dev.yml -p onyx-stack up -d minio relational_db cache index
+
+      - name: Run migrations
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run Tests for ${{ matrix.test-dir }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/external_dependency_unit/${{ matrix.test-dir }}

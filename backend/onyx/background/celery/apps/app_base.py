@@ -6,6 +6,7 @@ from typing import Any
 from typing import cast
 
 import sentry_sdk
+from celery import bootsteps  # type: ignore
 from celery import Task
 from celery.app import trace
 from celery.exceptions import WorkerShutdown
@@ -22,9 +23,10 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
+from onyx.background.celery.celery_utils import make_probe_path
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
@@ -340,9 +342,22 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
     task_logger.info("worker_ready signal received.")
 
+    # file based way to do readiness/liveness probes
+    # https://medium.com/ambient-innovation/health-checks-for-celery-in-kubernetes-cf3274a3e106
+    # https://github.com/celery/celery/issues/4079#issuecomment-1270085680
+
+    hostname: str = cast(str, sender.hostname)
+    path = make_probe_path("readiness", hostname)
+    path.touch()
+    logger.info(f"Readiness signal touched at {path}.")
+
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     HttpxPool.close_all()
+
+    hostname: str = cast(str, sender.hostname)
+    path = make_probe_path("readiness", hostname)
+    path.unlink(missing_ok=True)
 
     if not celery_is_worker_primary(sender):
         return
@@ -483,3 +498,34 @@ def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:
         msg = "Vespa: Readiness probe did not succeed within the timeout. Exiting..."
         logger.error(msg)
         raise WorkerShutdown(msg)
+
+
+# File for validating worker liveness
+class LivenessProbe(bootsteps.StartStopStep):
+    requires = {"celery.worker.components:Timer"}
+
+    def __init__(self, worker: Any, **kwargs: Any) -> None:
+        super().__init__(worker, **kwargs)
+        self.requests: list[Any] = []
+        self.task_tref = None
+        self.path = make_probe_path("liveness", worker.hostname)
+
+    def start(self, worker: Any) -> None:
+        self.task_tref = worker.timer.call_repeatedly(
+            15.0,
+            self.update_liveness_file,
+            (worker,),
+            priority=10,
+        )
+
+    def stop(self, worker: Any) -> None:
+        self.path.unlink(missing_ok=True)
+        if self.task_tref:
+            self.task_tref.cancel()
+
+    def update_liveness_file(self, worker: Any) -> None:
+        self.path.touch()
+
+
+def get_bootsteps() -> list[type]:
+    return [LivenessProbe]

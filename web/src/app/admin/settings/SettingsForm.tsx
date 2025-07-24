@@ -1,6 +1,6 @@
 "use client";
 
-import { Label, SubLabel } from "@/components/admin/connectors/Field";
+import { Label, SubLabel } from "@/components/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";

@@ -9,11 +9,14 @@ from urllib.parse import quote
 from requests.exceptions import HTTPError
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.confluence.access import get_all_space_permissions
+from onyx.connectors.confluence.access import get_page_restrictions
 from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
@@ -22,6 +25,7 @@ from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import process_attachment
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     is_atlassian_date_error,
 )
@@ -324,7 +328,7 @@ class ConfluenceConnector(
                         # Create an ImageSection for image attachments
                         image_section = ImageSection(
                             link=f"{page_url}#attachment-{attachment['id']}",
-                            image_file_name=result.file_name,
+                            image_file_id=result.file_name,
                         )
                         sections.append(image_section)
                     else:
@@ -439,7 +443,7 @@ class ConfluenceConnector(
                     doc.sections.append(
                         ImageSection(
                             link=object_url,
-                            image_file_name=file_storage_name,
+                            image_file_id=file_storage_name,
                         )
                     )
             except Exception as e:
@@ -569,6 +573,17 @@ class ConfluenceConnector(
         doc_metadata_list: list[SlimDocument] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
+        space_level_access_info = get_all_space_permissions(
+            self.confluence_client, self.is_cloud
+        )
+
+        def get_external_access(
+            doc_id: str, restrictions: dict[str, Any], ancestors: list[dict[str, Any]]
+        ) -> ExternalAccess | None:
+            return get_page_restrictions(
+                self.confluence_client, doc_id, restrictions, ancestors
+            ) or space_level_access_info.get(page_space_key)
+
         # Query pages
         page_query = self.base_cql_page_query + self.cql_label_filter
         for page in self.confluence_client.cql_paginate_all_expansions(
@@ -576,22 +591,20 @@ class ConfluenceConnector(
             expand=restrictions_expand,
             limit=_SLIM_DOC_BATCH_SIZE,
         ):
-            page_restrictions = page.get("restrictions")
+            page_id = page["id"]
+            page_restrictions = page.get("restrictions") or {}
             page_space_key = page.get("space", {}).get("key")
             page_ancestors = page.get("ancestors", [])
 
-            page_perm_sync_data = {
-                "restrictions": page_restrictions or {},
-                "space_key": page_space_key,
-                "ancestors": page_ancestors,
-            }
-
+            page_id = build_confluence_document_id(
+                self.wiki_base, page["_links"]["webui"], self.is_cloud
+            )
             doc_metadata_list.append(
                 SlimDocument(
-                    id=build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                    id=page_id,
+                    external_access=get_external_access(
+                        page_id, page_restrictions, page_ancestors
                     ),
-                    perm_sync_data=page_perm_sync_data,
                 )
             )
 
@@ -617,19 +630,17 @@ class ConfluenceConnector(
                 if not attachment_space_key:
                     attachment_space_key = page_space_key
 
-                attachment_perm_sync_data = {
-                    "restrictions": attachment_restrictions,
-                    "space_key": attachment_space_key,
-                }
-
+                attachment_id = build_confluence_document_id(
+                    self.wiki_base,
+                    attachment["_links"]["webui"],
+                    self.is_cloud,
+                )
                 doc_metadata_list.append(
                     SlimDocument(
-                        id=build_confluence_document_id(
-                            self.wiki_base,
-                            attachment["_links"]["webui"],
-                            self.is_cloud,
+                        id=attachment_id,
+                        external_access=get_external_access(
+                            attachment_id, attachment_restrictions, []
                         ),
-                        perm_sync_data=attachment_perm_sync_data,
                     )
                 )
 
@@ -672,3 +683,56 @@ class ConfluenceConnector(
                 "No Confluence spaces found. Either your credentials lack permissions, or "
                 "there truly are no spaces in this Confluence instance."
             )
+
+
+if __name__ == "__main__":
+    import os
+    from onyx.utils.variable_functionality import global_version
+    from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+
+    # For connector permission testing, set EE to true.
+    global_version.set_ee()
+
+    # base url
+    wiki_base = os.environ["CONFLUENCE_URL"]
+
+    # auth stuff
+    username = os.environ["CONFLUENCE_USERNAME"]
+    access_token = os.environ["CONFLUENCE_ACCESS_TOKEN"]
+    is_cloud = os.environ["CONFLUENCE_IS_CLOUD"].lower() == "true"
+
+    # space + page
+    space = os.environ["CONFLUENCE_SPACE_KEY"]
+    # page_id = os.environ["CONFLUENCE_PAGE_ID"]
+
+    confluence_connector = ConfluenceConnector(
+        wiki_base=wiki_base,
+        space=space,
+        is_cloud=is_cloud,
+        # page_id=page_id,
+    )
+
+    credentials_provider = OnyxStaticCredentialsProvider(
+        None,
+        DocumentSource.CONFLUENCE,
+        {
+            "confluence_username": username,
+            "confluence_access_token": access_token,
+        },
+    )
+    confluence_connector.set_credentials_provider(credentials_provider)
+
+    start = 0.0
+    end = datetime.now().timestamp()
+
+    # Fetch all `SlimDocuments`.
+    for slim_doc in confluence_connector.retrieve_all_slim_documents():
+        print(slim_doc)
+
+    # Fetch all `Documents`.
+    for doc in load_all_docs_from_checkpoint_connector(
+        connector=confluence_connector,
+        start=start,
+        end=end,
+    ):
+        print(doc)
