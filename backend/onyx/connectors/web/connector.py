@@ -589,20 +589,22 @@ class WebConnector(LoadConnector):
             
             soup = BeautifulSoup(content, "html.parser")
             
-            # ==== remove this??
             tag = soup.select_one("meta[name='remove_by_selector']")
             if tag and tag.has_attr("content"):
-                content = tag["content"].strip()
-                page_remove_by_selector = [s.strip() for s in content.split(",") if s.strip()]
+                page_remove_by_selector = [tag["content"].strip()]
             else:
                 page_remove_by_selector = []
-            # ====
             
             for selector in (self.remove_by_selector + page_remove_by_selector):
+                selector = selector.strip()
                 if not selector:
                     continue
-                for tag in soup.select(selector):
-                    tag.decompose()
+                for s in selector.split(","):
+                    s = s.strip()
+                    if not s:
+                        continue
+                    for tag in soup.select(s):
+                        tag.decompose()
 
             if self.recursive:
                 internal_links = get_internal_links(
