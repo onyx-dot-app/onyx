@@ -82,9 +82,6 @@ def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> 
                     )
                 raise e
 
-    # This should never be reached, but included for completeness
-    raise RuntimeError(f"Unexpected end of retry loop for {method_name}")
-
 
 def _convert_driveitem_to_document(
     driveitem: DriveItem,
