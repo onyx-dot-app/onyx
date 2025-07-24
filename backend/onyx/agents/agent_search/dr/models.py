@@ -8,7 +8,6 @@ from onyx.context.search.models import InferenceSection
 class DRPath(str, Enum):
     CLARIFIER = "CLARIFIER"
     ORCHESTRATOR = "ORCHESTRATOR"
-    USER_FEEDBACK = "USER_FEEDBACK"
     SEARCH = "SEARCH"
     KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
     INTERNET_SEARCH = "INTERNET_SEARCH"

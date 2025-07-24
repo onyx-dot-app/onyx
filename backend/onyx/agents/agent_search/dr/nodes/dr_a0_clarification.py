@@ -160,7 +160,7 @@ def clarifier(
                 )
 
         query_path = (
-            DRPath.USER_FEEDBACK
+            DRPath.END
             if feedback_request.feedback_needed
             and not feedback_request.feedback_addressed
             else DRPath.ORCHESTRATOR

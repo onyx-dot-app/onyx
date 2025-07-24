@@ -16,12 +16,14 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
     # go to closer if path is CLOSER or no queries
     next_path = state.query_path[-1]
 
-    if next_path in (DRPath.USER_FEEDBACK, DRPath.END, DRPath.CLARIFIER):
+    if next_path == DRPath.END:
         return END
     elif next_path == DRPath.ORCHESTRATOR:
         return DRPath.ORCHESTRATOR
     elif next_path == DRPath.INTERNET_SEARCH:
         return DRPath.INTERNET_SEARCH
+    elif next_path == DRPath.CLARIFIER:
+        raise ValueError("CLARIFIER is not a valid path during iteration")
     elif (
         next_path == DRPath.CLOSER
         or (len(state.query_list) == 0)

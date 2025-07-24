@@ -15,7 +15,6 @@ AVERAGE_TOOL_COSTS = {
     DRPath.KNOWLEDGE_GRAPH: 2.0,
     DRPath.INTERNET_SEARCH: 1.0,
     DRPath.CLOSER: 0.0,
-    DRPath.USER_FEEDBACK: 0.0,
 }
 AVERAGE_TOOL_COST_STRING = "\n".join(
     [f"{tool}: {cost}" for tool, cost in AVERAGE_TOOL_COSTS.items()]
