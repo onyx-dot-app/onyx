@@ -68,7 +68,7 @@ RUN pip install --no-cache-dir --upgrade \
         -r /tmp/ee-requirements.txt && \
 #### added
         PyMuPDF==1.23.5 \
-        pytesseract==0.3.10
+        pytesseract==0.3.10 \
 #####
     pip uninstall -y py && \
     playwright install chromium && \
