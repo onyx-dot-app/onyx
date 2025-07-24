@@ -42,8 +42,6 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 '...last 2 jiras resolved...') and answering aggregation-type questions (e.g., 'how many...') \
 (unless that info is present in the connected documents). If there are better suited tools \
 for answering those questions, use them instead. \
-Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
-then you should consider sending a new request to the {SEARCH} tool and vice versa!
 The {SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 
@@ -76,6 +74,9 @@ Note that the {KNOWLEDGE_GRAPH} tool can both FIND AND ANALYZE/AGGREGATE/QUERY t
 E.g., if the question is "how many open jiras are there", you should pass that as a single query to the \
 {KNOWLEDGE_GRAPH} tool, instead of splitting it into finding and counting the open jiras.
 Note also that the {KNOWLEDGE_GRAPH} tool is slower than the standard search tools.
+Importantly, the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, so DO NOT \
+try to first find documents and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
+tool directly, like 'summarize the most recent jira created by John'.
 """
 
 TOOL_DESCRIPTION[
@@ -87,6 +88,46 @@ at the very end to consolidate the gathered information, run any comparisons if 
 the most relevant information to answer the question. You can also skip straight to the {CLOSER} \
 if there is sufficient information in the provided history to answer the question.
 """
+
+TOOL_DIFFERENTIATION_HINTS: dict[DRPath, dict[DRPath, str]] = {
+    DRPath.SEARCH: {
+        DRPath.INTERNET_SEARCH: """\
+  - if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
+then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
+Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
+then you can consider sending a new request to the {SEARCH} tool and vice versa (provided the other \
+tool is a good fit for the question)!
+"""
+    },
+    DRPath.KNOWLEDGE_GRAPH: {
+        DRPath.SEARCH: """\
+    - please look at the user query and the entity types and relationship types in the knowledge graph \
+to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
+   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
+'search for this'-type of question, then also use '{SEARCH}'.
+   - also consider whether the user query implies whether a standard {SEARCH} query should be used or a \
+{KNOWLEDGE_GRAPH} query. For example, 'use a simple search to find <xyz>' would refer to a standard {SEARCH} query, \
+whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
+"""
+    },
+}
+
+
+TOOL_QUESTION_HINTS: dict[DRPath, str] = {
+    DRPath.SEARCH: """if the tool is {SEARCH}, the question should be \
+written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries.
+""",
+    DRPath.INTERNET_SEARCH: """if the tool is {INTERNET_SEARCH}, the question should be \
+written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries.
+""",
+    DRPath.KNOWLEDGE_GRAPH: """if the tool is {KNOWLEDGE_GRAPH}, the question should be \
+written as a list of one question.
+""",
+    DRPath.CLOSER: """if the tool is {CLOSER}, the list of questions should simply be \
+['Answer the original question with the information you have.'].
+""",
+}
+
 
 KG_TYPES_DESCRIPTIONS = f"""\
 Here are the entity types that are available in the knowledge graph:
@@ -105,14 +146,12 @@ ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT = f"""
 You need to route a user query request to the appropriate tool, given the following tool \
 descriptions, as well as previous chat context.
 
-You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
+You have these ---num_available_tools--- tools available, \
+---available_tools---.
 
-{TOOL_DESCRIPTION[SEARCH]}
-{TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
-{TOOL_DESCRIPTION[INTERNET_SEARCH]}
-{TOOL_DESCRIPTION[CLOSER]}
+---tool_descriptions---
 
-{KG_TYPES_DESCRIPTIONS}
+---kg_types_descriptions---
 
 Here is the user query that you need to route:
 {SEPARATOR_LINE}
@@ -124,22 +163,17 @@ Finally, here are the past few chat messages for reference (if any). \
 ---chat_history_string---
 {SEPARATOR_LINE}
 
+DIFFERENTIATION/RELATION BETWEEN TOOLS:
+---tool_differentiation_hints---
 
-HINTS:
-   - please look at the user query and the entity types and relationship types in the knowledge graph \
-to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
-   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
-'search for this'-type of question, then also use '{SEARCH}'.
-   - also consider whether the user query implies whether a standard search query should be used or a \
-knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
-whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
+MISCELLANEOUS HINTS:
    - again, use the chat history (if provided) to see whether it helps to provide helpful context.
 
 Please format your answer as a json dictionary in the following format:
 
 {{
    "reasoning": "<your reasoning in 1-3 sentences. Think through it like a person would do it.>",
-   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {CLOSER}>",
+   "next_step": {{"tool": "<---tool_choice_options--->",
                   "questions": "<the list of questions you want to pose to the tool. Note that the \
 questions should be appropriate for the tool.
 If the tool is {SEARCH} or {INTERNET_SEARCH}, the question \
@@ -168,14 +202,12 @@ Assume that all steps will be executed sequentially, so the answers of earlier s
 at later steps. To capture that, you can refer to earlier results in later steps. (Example of a 'later'\
 question: 'find information for each result of step 3.')
 
-You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
+You have these ---num_available_tools--- tools available, \
+---available_tools---.
 
-{TOOL_DESCRIPTION[SEARCH]}
-{TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
-{TOOL_DESCRIPTION[INTERNET_SEARCH]}
-{TOOL_DESCRIPTION[CLOSER]}
+---tool_descriptions---
 
-{KG_TYPES_DESCRIPTIONS}
+---kg_types_descriptions---
 
 Here is the question that you must device a plan for answering:
 {SEPARATOR_LINE}
@@ -190,7 +222,8 @@ In any case, do not confuse the below with the user query. It is only there to p
 ---chat_history_string---
 {SEPARATOR_LINE}
 
-Also, the current time is ---current_time---.
+Also, the current time is ---current_time---. Consider that if the question involves dates or \
+time periods.
 
 HINTS:
    - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
@@ -219,24 +252,25 @@ Overall, you need to answer a user query. To do so, you may have to do various s
 
 You may already have some answers to earlier searches you generated in previous iterations.
 
-Your task is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
+YOUR TASK is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
 considering the answers you already got, and guided by the initial plan.
 
-(You are planning for iteration ---iteration_nr--- now.).
+Note:
+ - you are planning for iteration ---iteration_nr--- now.
+ - the current time is ---current_time---.
 
-You have three tools available, "{SEARCH}", "{INTERNET_SEARCH}", and "{CLOSER}".
+You have these ---num_available_tools--- tools available, \
+---available_tools---.
 
-{TOOL_DESCRIPTION[SEARCH]}
-{TOOL_DESCRIPTION[INTERNET_SEARCH]}
-{TOOL_DESCRIPTION[CLOSER]}
+---tool_descriptions---
+
+---kg_types_descriptions---
 
 Here is the overall question that you need to answer:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
 
-The current iteration is ---iteration_nr---.
-Also, the current time is ---current_time---.
 
 Finally, here are the past few chat messages for reference (if any). \
 Note that the chat history may already contain the answer to the user question, in which case you can \
@@ -255,7 +289,10 @@ In any case, do not confuse the below with the user query. It is only there to p
 {SEPARATOR_LINE}
 
 
-HINTS:
+DIFFERENTIATION/RELATION BETWEEN TOOLS:
+---tool_differentiation_hints---
+
+MISCELLANEOUS HINTS:
    - please first consider whether you already can answer the question with the information you already have. \
 Also consider whether the plan suggests you are already done. If so, you MUST use the "{CLOSER}" tool. \
 Do not generate extra questions just because you can!
@@ -263,14 +300,14 @@ Do not generate extra questions just because you can!
 you can generate a modified version of the previous step, thus effectively modifying the plan.
    - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
 the remaining time budget.
-   -- if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
-then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
    - be careful NOT TO REPEAT NEARLY THE SAME QUESTION IN THE SAME TOOL AGAIN! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
-the other tool seems suitable too!
+other tool seems suitable too!
    - Again, focus is on generating NEW INFORMATION! Try to generate questions that
          - address gaps in the information relative to the original question
-         - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
+         - or are interesting follow-ups to questions answered so far, if you think \
+the user would be interested in it.
+
 
 Here is roughly how you should decide whether you are done to call the {CLOSER} tool:
 {DONE_STANDARD[DRTimeBudget.FAST]}
@@ -285,16 +322,10 @@ the request to the {CLOSER} tool is an option if you think the information is su
 Please format your answer as a json dictionary in the following format:
 {{
    "reasoning": "<your reasoning in 1-3 sentences. Think through it like a person would do it.>",
-   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH} or {CLOSER}>",
+   "next_step": {{"tool": "<---tool_choice_options--->",
                   "questions": "<the question you want to pose to the tool. Note that the \
-question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
-{INTERNET_SEARCH}, the question should be \
-written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
-is {KNOWLEDGE_GRAPH}, return only one question in the list.
-Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
-'show me some other examples', but more like 'some me examples that are not about \
-science'. If the tool is {CLOSER}, just return ['Answer the original question with \
-the information you have.']>"}}
+question should be appropriate for the tool. For example:
+---tool_question_hints---]>"}}
 }}
 
 
@@ -314,14 +345,12 @@ considering the answers you already got, and guided by the initial plan.
 
 (You are planning for iteration ---iteration_nr--- now.). Also, the current time is ---current_time---.
 
-You have four tools available, "{SEARCH}", "{INTERNET_SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
+You have these ---num_available_tools--- tools available, \
+---available_tools---.
 
-{TOOL_DESCRIPTION[SEARCH]}
-{TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
-{TOOL_DESCRIPTION[INTERNET_SEARCH]}
-{TOOL_DESCRIPTION[CLOSER]}
+---tool_descriptions---
 
-{KG_TYPES_DESCRIPTIONS}
+---kg_types_descriptions---
 
 Here is the overall question that you need to answer:
 {SEPARATOR_LINE}
@@ -358,37 +387,28 @@ Here is the remaining time budget you have to answer the question:
 ---remaining_time_budget---
 {SEPARATOR_LINE}
 
+DIFFERENTIATION/RELATION BETWEEN TOOLS:
+---tool_differentiation_hints---
 
-
-HINTS:
+MISCELLANEOUS HINTS:
    - please first consider whether you already can answer the question with the information you already have. \
 Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
    - if you think more information is needed because a sub-question was not sufficiently answered, \
 you can generate a modified version of the previous step, thus effectively modifying the plan.
-- you can only consider a tool that fits the remaining time budget! The tool cost must be below \
+  - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
 the remaining time budget.
-   - please look at the user query and the entity types and relationship types in the knowledge graph \
-to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
-   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
-'search for this'-type of question, then also use '{SEARCH}'.
-   - also consider whether the user query implies whether a standard search query should be used or a \
-knowledge graph query. For example, 'use a simple search to find <xyz>' would refer to a standard search query, \
-whereas 'use the knowledge graph (or KG) to summarize...' should be a knowledge graph query.
-   - the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, so DO NOT \
-   try to first find documents and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
-   tool directly, like 'summarize the most recent jira created by John'.
-   - if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
-then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
-   - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
+  - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
 new tool seems suitable for the question!
 
-   - Again, focus is on generating NEW INFORMATION! Try to generate questions that
-         - address gaps in the information relative to the original question
-         - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
-         - checks of whether the original piece of information is correct, or whether it is missing some details.
+  - Again, focus is on generating NEW INFORMATION! Try to generate questions that
+      - address gaps in the information relative to the original question
+      - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
+      - checks of whether the original piece of information is correct, or whether it is missing some details.
 
-YOUR TASK: you need to construct the next question and the tool to send it to. To do so, please consider \
+
+YOUR TASK:
+you need to construct the next question and the tool to send it to. To do so, please consider \
 the original question, the high-level plan, the tools you have available, and the answers you have so far \
 (either from previous iterations or from the chat history). Make sure that the answer is \
 specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
@@ -402,16 +422,13 @@ Please format your answer as a json dictionary in the following format:
 {{
    "reasoning": "<your reasoning in 2-4 sentences. Think through it like a person would do it, \
 guided by the question you need to answer, the answers you have so far, and the plan of record.>",
-   "next_step": {{"tool": "<{SEARCH} or {KNOWLEDGE_GRAPH} or {INTERNET_SEARCH} or {CLOSER}>",
+   "next_step": {{"tool": "<---tool_choice_options--->",
                   "questions": "<the question you want to pose to the tool. Note that the \
-question should be appropriate for the tool. For example, if the tool is {SEARCH} or \
-{INTERNET_SEARCH}, the question should be \
-written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. If the tool \
-is {KNOWLEDGE_GRAPH}, return only one question in the list.
+question should be appropriate for the tool. For example:
+---tool_question_hints---
 Also, make sure that each question HAS THE FULL CONTEXT, so don't use questions like \
 'show me some other examples', but more like 'some me examples that are not about \
-science'.
-If the tool is {CLOSER}, just return ['Answer the original question with the information you have.']>"}}
+science'.>"}}
 }}
 """
 
@@ -535,14 +552,12 @@ a base question is not as clear as it should. Your task is to ask necessary clar
 questions to the user, before the question is sent to the deep research agent. Your task is \
 NOT to ask follow up questions that are not necessary to answer the user question.
 
-You have three tools available, "{SEARCH}", "{KNOWLEDGE_GRAPH}", and "{CLOSER}".
+You have these ---num_available_tools--- tools available, \
+---available_tools---.
 
-{TOOL_DESCRIPTION[SEARCH]}
-{TOOL_DESCRIPTION[KNOWLEDGE_GRAPH]}
-{TOOL_DESCRIPTION[INTERNET_SEARCH]}
-{TOOL_DESCRIPTION[CLOSER]}
+---tool_descriptions---
 
-{KG_TYPES_DESCRIPTIONS}
+---kg_types_descriptions---
 
 The tools and the entity and relationship types in the knowledge graph are simply provided \
 as context for determining whether the question requires clarification.
@@ -561,7 +576,7 @@ to answer the question:
 NOTES:
   - you have to reason over this purely based on your intrinsic knowledge.
   - if clarifications are required, fill in 'true' for "feedback_needed" field and \
-articulate up to 3 NUMBERED clarification questions that you think are needed to clarify the question.
+articulate UP TO 3 NUMBERED clarification questions that you think are needed to clarify the question.
 Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
 Note that it is fine to ask zero, one, two, or three follow-up questions.
   - if no clarifications are required, fill in 'false' for "feedback_needed" field and \

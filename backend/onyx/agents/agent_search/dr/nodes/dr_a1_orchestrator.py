@@ -7,6 +7,8 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import DR_TIME_BUDGET_BY_TYPE
 from onyx.agents.agent_search.dr.constants import HIGH_LEVEL_PLAN_PREFIX
+from onyx.agents.agent_search.dr.dr_prompt_builder import get_dr_prompt_template
+from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
@@ -26,9 +28,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT
-from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT
-from onyx.prompts.dr_prompts import ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT
 from onyx.prompts.dr_prompts import (
     ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT,
 )
@@ -96,14 +95,25 @@ def orchestrator(
 
         if iteration_nr == 1:
             remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[DRTimeBudget.FAST]
-            decision_prompt = (
-                ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT.replace(
-                    "---possible_entities---", all_entity_types
+
+            base_decision_prompt = get_dr_prompt_template(
+                DRPromptPurpose.NEXT_STEP,
+                DRTimeBudget.FAST,
+                entity_types_string=all_entity_types,
+                relationship_types_string=all_relationship_types,
+            )
+
+            if base_decision_prompt is None:
+                raise ValueError(
+                    "I was not able to generate a decision prompt. (This should not happen.)"
                 )
-                .replace("---possible_relationships---", all_relationship_types)
-                .replace("---question---", prompt_question)
+
+            decision_prompt = (
+                base_decision_prompt.replace("---question---", prompt_question)
                 .replace("---chat_history_string---", chat_history_string)
                 .replace("---current_time---", current_time_string)
+                .replace("---answer_history_string---", answer_history_string)
+                .replace("---iteration_nr---", str(iteration_nr))
             )
 
         else:
@@ -126,12 +136,20 @@ def orchestrator(
 
             remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[DRTimeBudget.DEEP]
 
-            plan_generation_prompt = (
-                ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT.replace(
-                    "---possible_entities---", all_entity_types
+            base_plan_prompt = get_dr_prompt_template(
+                DRPromptPurpose.PLAN,
+                DRTimeBudget.DEEP,
+                entity_types_string=all_entity_types,
+                relationship_types_string=all_relationship_types,
+            )
+
+            if base_plan_prompt is None:
+                raise ValueError(
+                    "I was not able to generate a plan prompt. (This should not happen.)"
                 )
-                .replace("---possible_relationships---", all_relationship_types)
-                .replace("---question---", prompt_question)
+
+            plan_generation_prompt = (
+                base_plan_prompt.replace("---question---", prompt_question)
                 .replace("---chat_history_string---", chat_history_string)
                 .replace("---current_time---", current_time_string)
             )
@@ -164,17 +182,26 @@ def orchestrator(
                 "Plan information is required for iterative decision making"
             )
 
-        decision_prompt = (
-            ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT.replace(
-                "---possible_entities---", all_entity_types
+        base_decision_prompt = get_dr_prompt_template(
+            DRPromptPurpose.NEXT_STEP,
+            DRTimeBudget.DEEP,
+            entity_types_string=all_entity_types,
+            relationship_types_string=all_relationship_types,
+        )
+
+        if base_decision_prompt is None:
+            raise ValueError(
+                "I was not able to generate a decision prompt. (This should not happen.)"
             )
-            .replace("---possible_relationships---", all_relationship_types)
-            .replace("---answer_history_string---", answer_history_string)
+
+        decision_prompt = (
+            base_decision_prompt.replace(
+                "---answer_history_string---", answer_history_string
+            )
             .replace("---question---", prompt_question)
             .replace("---iteration_nr---", str(iteration_nr))
             .replace("---current_plan_of_record_string---", plan_of_record.plan)
             .replace("---chat_history_string---", chat_history_string)
-            .replace("---current_time---", current_time_string)
         )
 
     if remaining_time_budget > 0:

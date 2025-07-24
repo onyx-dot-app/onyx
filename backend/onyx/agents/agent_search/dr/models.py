@@ -63,3 +63,8 @@ class DRTimeBudget(str, Enum):
     FAST = "fast"
     SHALLOW = "shallow"
     DEEP = "deep"
+
+
+class DRPromptPurpose(str, Enum):
+    PLAN = "PLAN"
+    NEXT_STEP = "NEXT_STEP"
