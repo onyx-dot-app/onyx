@@ -17,7 +17,7 @@ class DRPath(str, Enum):
 
 
 class OrchestratorStep(BaseModel):
-    tool: str
+    tool: DRPath
     questions: list[str]
 
 

@@ -16,31 +16,28 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
     # go to closer if path is CLOSER or no queries
     next_path = state.query_path[-1]
 
-    if next_path == DRPath.END.value:
+    if next_path == DRPath.END:
         return END
-    elif next_path == DRPath.ORCHESTRATOR.value:
-        return DRPath.ORCHESTRATOR.value
-    elif next_path == DRPath.INTERNET_SEARCH.value:
-        return DRPath.INTERNET_SEARCH.value
-    elif next_path == DRPath.CLARIFIER.value:
+    elif next_path == DRPath.ORCHESTRATOR:
+        return DRPath.ORCHESTRATOR
+    elif next_path == DRPath.INTERNET_SEARCH:
+        return DRPath.INTERNET_SEARCH
+    elif next_path == DRPath.CLARIFIER:
         raise ValueError("CLARIFIER is not a valid path during iteration")
     elif (
-        next_path == DRPath.CLOSER.value
+        next_path == DRPath.CLOSER
         or (len(state.query_list) == 0)
         and (state.iteration_nr > 0)
     ):
-        return DRPath.CLOSER.value
+        return DRPath.CLOSER
 
     # send search/kg requests (parallel only for search)
     # TODO: MAX_DR_PARALLEL_SEARCH should be tool-dependent
     queries = state.query_list[:MAX_DR_PARALLEL_SEARCH]
-
-    if next_path == DRPath.KNOWLEDGE_GRAPH.value:
+    if next_path == DRPath.KNOWLEDGE_GRAPH:
         queries = queries[:1]
 
-    # Parallelization done here for standar search and kg
-    if next_path in (DRPath.SEARCH.value, DRPath.KNOWLEDGE_GRAPH.value):
-
+    if next_path in (DRPath.SEARCH, DRPath.KNOWLEDGE_GRAPH):
         return [
             Send(
                 next_path,
@@ -54,6 +51,5 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
             for parallelization_nr, query in enumerate(queries)
         ]
     else:
-
         # Custom tools use the gt sub-agent
-        return DRPath.GENERIC_TOOL.value
+        return DRPath.GENERIC_TOOL

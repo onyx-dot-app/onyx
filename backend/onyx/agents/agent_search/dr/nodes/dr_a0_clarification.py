@@ -49,6 +49,7 @@ def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[di
         if tool.name == "run_kg_search" and not kg_enabled:
             continue
 
+        # TODO: use a pydantic model instead of dict?
         tool_dict = {}
         tool_dict["name"] = tool.name
         tool_dict["description"] = tool.description
@@ -63,9 +64,11 @@ def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[di
         elif isinstance(tool, SearchTool):
             tool_dict["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
             tool_dict["path"] = DRPath.SEARCH.value
-        # TODO: add KG search tool
-        # elif isinstance(tool, KGSearchTool):
-        #    tool_dict["summary_signature"] = KG_SEARCH_RESPONSE_SUMMARY_ID
+        # TODO: add proper KG search tool
+        elif tool.name == "run_kg_search":
+            KG_SEARCH_RESPONSE_SUMMARY_ID = CUSTOM_TOOL_RESPONSE_ID  # unused for now
+            tool_dict["summary_signature"] = KG_SEARCH_RESPONSE_SUMMARY_ID
+            tool_dict["path"] = DRPath.KNOWLEDGE_GRAPH.value
 
         available_tools.append(tool_dict)
 

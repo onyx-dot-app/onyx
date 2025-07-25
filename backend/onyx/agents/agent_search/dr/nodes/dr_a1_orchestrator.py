@@ -83,7 +83,7 @@ def orchestrator(
     all_relationship_types = get_relationship_types_str(active=True)
 
     # default to closer
-    query_path = DRPath.CLOSER.value
+    query_path = DRPath.CLOSER
     query_list = ["Answer the question with the information you have."]
     decision_prompt = None
 

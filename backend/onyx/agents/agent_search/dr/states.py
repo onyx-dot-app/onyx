@@ -22,20 +22,20 @@ class LoggerUpdate(BaseModel):
 class OrchestrationUpdate(LoggerUpdate):
     original_question: str | None = None
     chat_history_string: str | None = None
-    query_path: Annotated[list[str], add] = []
+    query_path: Annotated[list[DRPath | str], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
     plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
     remaining_time_budget: float = 2.0  # set by default to about 2 searches
     feedback_structure: OrchestrationFeedbackRequest | None = None
-    available_tools: list[dict[str, str | DRPath]] | None = None
+    available_tools: list[dict[str, str]] | None = None
 
 
 class QuestionUpdate(LoggerUpdate):
     iteration_nr: int = 0
     parallelization_nr: int = 0
     question: str | None = None
-    tool: str | None = None  # needed fort custom tools
+    tool: DRPath | str | None = None  # needed for custom tools
 
 
 class AnswerUpdate(LoggerUpdate):

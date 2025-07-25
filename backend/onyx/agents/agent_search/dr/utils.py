@@ -94,7 +94,7 @@ def get_answers_history_from_iteration_responses(
     return "\n".join(
         (
             f"Iteration: {iteration_response.iteration_nr}\n"
-            f"Tool: {iteration_response.tool.value}\n"
+            f"Tool: {iteration_response.tool}\n"
             f"Iteration Question Number: {iteration_response.parallelization_nr}\n"
             f"Question: {iteration_response.question}\n"
             f"Answer: {iteration_response.answer}"

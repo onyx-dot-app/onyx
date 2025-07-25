@@ -59,9 +59,7 @@ def get_dr_prompt_template(
         "available_tools": ", ".join(
             available_tool_paths
         ),  # The tool paths are the same as the tool names
-        "tool_choice_options": " or ".join(
-            [f"{tool}" for tool in available_tool_paths]
-        ),
+        "tool_choice_options": " or ".join(available_tool_paths),
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kg_types_descriptions": (
             KG_TYPES_DESCRIPTIONS
