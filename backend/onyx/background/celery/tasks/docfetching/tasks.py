@@ -552,15 +552,20 @@ def docfetching_proxy_task(
         # print with exception
         try:
             with get_session_with_current_tenant() as db_session:
-                failure_reason = (
-                    f"Spawned task exceptioned: exit_code={result.exit_code}"
-                )
-                mark_attempt_failed(
-                    ctx.index_attempt_id,
-                    db_session,
-                    failure_reason=failure_reason,
-                    full_exception_trace=result.exception_str,
-                )
+                attempt = get_index_attempt(db_session, ctx.index_attempt_id)
+
+                # only mark failures if not already terminal,
+                # otherwise we're overwriting potential real stack traces
+                if attempt and not attempt.status.is_terminal():
+                    failure_reason = (
+                        f"Spawned task exceptioned: exit_code={result.exit_code}"
+                    )
+                    mark_attempt_failed(
+                        ctx.index_attempt_id,
+                        db_session,
+                        failure_reason=failure_reason,
+                        full_exception_trace=result.exception_str,
+                    )
         except Exception:
             task_logger.exception(
                 log_builder.build(
