@@ -54,6 +54,7 @@ from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
@@ -845,6 +846,18 @@ def stream_chat_message_objects(
             error: str | None,
             tool_call: ToolCall | None,
         ) -> ChatMessage:
+
+            is_kg_beta = parent_message.chat_session.persona.name.startswith(
+                TMP_DRALPHA_PERSONA_NAME
+            )
+            is_basic_search = tool_call and tool_call.tool_name == SearchTool._NAME
+            is_agentic_overwrite = new_msg_req.use_agentic_search and not (
+                is_kg_beta and is_basic_search
+            )
+
+            if is_kg_beta:
+                is_agentic_overwrite = False
+
             return create_new_chat_message(
                 chat_session_id=chat_session_id,
                 parent_message=(
@@ -867,7 +880,7 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 commit=False,
                 reserved_message_id=reserved_message_id,
-                is_agentic=new_msg_req.use_agentic_search,
+                is_agentic=is_agentic_overwrite,
             )
 
         partial_response = create_response
