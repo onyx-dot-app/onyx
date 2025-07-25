@@ -1,8 +1,8 @@
 import html
 import io
 import os
-import time
 import re
+import time
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -572,7 +572,14 @@ class SharepointConnector(LoadConnector, PollConnector):
                     doc_batch = []
 
             # Fetch SharePoint site pages (.aspx files)
-            if self.include_site_pages:
+            # Only fetch site pages if a folder is not specified since this processing
+            # happens at a site-wide level + specifying a folder implies that the
+            # user probably isn't looking for site pages
+            specified_path = (
+                site_descriptor.folder_path is not None
+                or site_descriptor.drive_name is not None
+            )
+            if self.include_site_pages and not specified_path:
                 site_pages = self._fetch_site_pages(
                     site_descriptor, start=start, end=end
                 )

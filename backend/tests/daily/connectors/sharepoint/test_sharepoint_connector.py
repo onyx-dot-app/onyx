@@ -85,12 +85,12 @@ def sharepoint_credentials() -> dict[str, str]:
     }
 
 
-def test_sharepoint_connector_all_sites(
+def test_sharepoint_connector_all_sites__docs_only(
     mock_get_unstructured_api_key: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
     # Initialize connector with no sites
-    connector = SharepointConnector()
+    connector = SharepointConnector(include_site_pages=False)
 
     # Load credentials
     connector.load_credentials(sharepoint_credentials)
@@ -135,12 +135,14 @@ def test_sharepoint_connector_specific_folder(
         verify_document_content(doc, expected)
 
 
-def test_sharepoint_connector_root_folder(
+def test_sharepoint_connector_root_folder__docs_only(
     mock_get_unstructured_api_key: MagicMock,
     sharepoint_credentials: dict[str, str],
 ) -> None:
     # Initialize connector with the base site URL
-    connector = SharepointConnector(sites=[os.environ["SHAREPOINT_SITE"]])
+    connector = SharepointConnector(
+        sites=[os.environ["SHAREPOINT_SITE"]], include_site_pages=False
+    )
 
     # Load credentials
     connector.load_credentials(sharepoint_credentials)
