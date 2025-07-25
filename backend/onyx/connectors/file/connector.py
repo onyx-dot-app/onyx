@@ -260,7 +260,7 @@ class LocalFileConnector(LoadConnector):
                 logger.warning(f"No file record found for '{file_id}' in PG; skipping.")
                 continue
 
-            metadata = self._get_file_metadata(file_id)
+            metadata = self._get_file_metadata(file_record.display_name)
             file_io = file_store.read_file(file_id=file_id, mode="b")
             new_docs = _process_file(
                 file_id=file_id,
