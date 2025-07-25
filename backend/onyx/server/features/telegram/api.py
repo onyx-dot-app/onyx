@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from telebot import TeleBot
 
-from onyx.auth.users import current_user, current_admin_user
+from onyx.auth.users import current_user, current_admin_user, telegram_api_key_dep
 from onyx.chat.chat_utils import extract_headers
 from onyx.chat.process_message import stream_chat_message
 from onyx.configs.constants import MilestoneRecordType, FileOrigin, DocumentSource
@@ -83,14 +83,10 @@ async def get_telegram_bot_token(_: User = Depends(current_admin_user)):
 
 @basic_router.post("/create-chat-session")
 def create_new_chat_session(
-    token: str,
     chat_session_creation_request: ChatSessionCreationRequest,
     db_session: Session = Depends(get_session),
+    user: User = Depends(telegram_api_key_dep)
 ) -> CreateChatSessionID:
-    if not check_api_token(token, db_session):
-        raise HTTPException(401, "Invalid token")
-
-    user = get_user_by_telegram_api_key(token, db_session)
     try:
         new_chat_session = create_chat_session(
             db_session=db_session,
@@ -108,12 +104,11 @@ def create_new_chat_session(
 
 @basic_router.post("/send-message")
 def handle_new_chat_message(
-    token: str,
     chat_message_req: CreateChatMessageRequest,
     request: Request,
     db_session: Session = Depends(get_session),
-    _rate_limit_check: None = Depends(check_token_rate_limits),
     is_connected_func: Callable[[], bool] = Depends(is_connected),
+    user: User = Depends(telegram_api_key_dep)
 ) -> StreamingResponse:
     """
     This endpoint is both used for all the following purposes:
@@ -135,9 +130,6 @@ def handle_new_chat_message(
     Returns:
         StreamingResponse: Streams the response to the new chat message.
     """
-    if not check_api_token(token, db_session):
-        raise HTTPException(401, "Invalid token")
-    user = get_user_by_telegram_api_key(token, db_session)
     tenant_id = get_current_tenant_id()
     logger.debug(f"Received new chat message: {chat_message_req.message}")
 
@@ -184,14 +176,10 @@ def handle_new_chat_message(
 
 @basic_router.post("/file")
 def upload_files_for_chat(
-    token: str,
     files: list[UploadFile],
     db_session: Session = Depends(get_session),
+    user: User = Depends(telegram_api_key_dep)
 ) -> dict[str, list[FileDescriptor]]:
-    if not check_api_token(token, db_session):
-        raise HTTPException(401, "Invalid token")
-
-    user = get_user_by_telegram_api_key(token, db_session)
     image_content_types = {"image/jpeg", "image/png", "image/webp"}
     csv_content_types = {"text/csv"}
     text_content_types = {

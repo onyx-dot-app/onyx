@@ -5,6 +5,9 @@ from telebot import asyncio_filters
 from telebot.async_telebot import AsyncTeleBot
 from telebot.states.asyncio import StateMiddleware
 
+from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_API_SERVER_POOL_OVERFLOW
+from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.db.engine import SqlEngine
 from telegram.filters.auth import AuthFilter
 from telegram.handlers import register_events
 from telegram.utils.check_token import check_token
@@ -14,6 +17,12 @@ from onyx.server.features.telegram.store import load_telegram_settings, store_te
 
 
 def main() -> None:
+    SqlEngine.set_app_name(POSTGRES_WEB_APP_NAME)
+
+    SqlEngine.init_engine(
+        pool_size=POSTGRES_API_SERVER_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
+    )
     tg_settings = load_telegram_settings()
     token = tg_settings.token
     if token is None:

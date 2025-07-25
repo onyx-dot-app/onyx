@@ -55,6 +55,7 @@ from httpx_oauth.oauth2 import BaseOAuth2
 from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import get_hashed_api_key_from_request
@@ -91,12 +92,13 @@ from onyx.db.auth import get_default_admin_user_emails
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine import get_async_session
+from onyx.db.engine import get_async_session, get_session
 from onyx.db.engine import get_async_session_with_tenant
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
+from onyx.db.telegram import get_user_by_telegram_api_key
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client
@@ -1376,6 +1378,26 @@ async def api_key_dep(
 
     if hashed_api_key:
         user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return user
+
+
+async def telegram_api_key_dep(token: str,
+    request: Request, db_session: Session = Depends(get_session),
+) -> User | None:
+    if AUTH_TYPE == AuthType.DISABLED:
+        return None
+
+    user: User | None = None
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
+    if token:
+        user = get_user_by_telegram_api_key(token, db_session)
 
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid API key")

@@ -31,7 +31,7 @@ def get_user_by_telegram_api_key(token: str, db_session: Session) -> User | None
 
 
 def get_user_by_telegram_user_id(user_id: int, db_session: Session) -> User | None:
-    stmt = select(TelegramUserApiKey).where(TelegramUserApiKey.user_id == user_id)
+    stmt = select(TelegramUserApiKey).where(TelegramUserApiKey.telegram_user_id == user_id)
 
     result = db_session.execute(stmt).scalars().first()
 

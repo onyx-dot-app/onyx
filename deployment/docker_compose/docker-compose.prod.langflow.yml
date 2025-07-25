@@ -103,17 +103,23 @@ services:
     command: >
       /bin/sh -c "
       echo \"Starting Telegram Bot\" &&
-      python -m onyx.telegram.__main__"
+      python -m telegram"
     depends_on:
       - relational_db
       - index
       - cache
       - inference_model_server
+      - api_server
     restart: always
     env_file:
       - .env
     environment:
-      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-7649112332:AAG7MG2CdBAqlGXHa89JgY3vC4gMrOcpkQ0}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-8118492433:AAGwULCZzN0_6hSQZ5_HJ7Pf9YUSiJTtqgM}
+      - POSTGRES_HOST=relational_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - REDIS_HOST=cache
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging:
@@ -123,6 +129,7 @@ services:
         max-file: "6"
     volumes:
       - telegram_bot_logs:/var/log
+
 
   web_server:
     image: onyxdotapp/onyx-web-server:${IMAGE_TAG:-latest}

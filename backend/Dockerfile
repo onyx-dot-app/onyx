@@ -97,6 +97,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Set up application files
 COPY ./onyx /app/onyx
+COPY ./telegram /app/telegram
 COPY ./shared_configs /app/shared_configs
 COPY ./alembic /app/alembic
 COPY ./alembic_tenants /app/alembic_tenants

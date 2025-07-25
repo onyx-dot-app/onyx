@@ -10,8 +10,12 @@ class AuthFilter(SimpleCustomFilter):
 
     async def check(self, event: Message | CallbackQuery):
         if type(event) is Message:
-            if event.text.startswith("/start"):
-                return True
+            if event.text:
+                if event.text.startswith("/start"):
+                    return True
+            elif event.caption:
+                if event.caption.startswith("/start"):
+                    return True
         user_id = event.from_user.id
         with get_session() as session:
             auth = get_user_telegram_api_key_by_tg_user_id(user_id, session)
