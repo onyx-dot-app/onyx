@@ -24,9 +24,10 @@ from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_search_settings_status
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.factory import get_default_document_index
-from onyx.file_processing.unstructured import delete_unstructured_api_key
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import update_unstructured_api_key
+from onyx.file_processing.unstructured import delete_api_key
+from onyx.file_processing.unstructured import DocumentProcessor
+from onyx.file_processing.unstructured import get_api_key
+from onyx.file_processing.unstructured import update_api_key
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
@@ -226,9 +227,10 @@ def update_saved_search_settings(
 def unstructured_api_key_set(
     _: User | None = Depends(current_admin_user),
 ) -> bool:
-    api_key = get_unstructured_api_key()
-    print(api_key)
-    return api_key is not None
+    api_key_metadata = get_api_key()
+    if api_key_metadata and api_key_metadata[0] == DocumentProcessor.UNSTRUCTURED:
+        return api_key_metadata[1] is not None
+    return False
 
 
 @router.put("/upsert-unstructured-api-key")
@@ -236,11 +238,46 @@ def upsert_unstructured_api_key(
     unstructured_api_key: str,
     _: User | None = Depends(current_admin_user),
 ) -> None:
-    update_unstructured_api_key(unstructured_api_key)
+    update_api_key(DocumentProcessor.UNSTRUCTURED, unstructured_api_key)
 
 
 @router.delete("/delete-unstructured-api-key")
 def delete_unstructured_api_key_endpoint(
     _: User | None = Depends(current_admin_user),
 ) -> None:
-    delete_unstructured_api_key()
+    delete_api_key(DocumentProcessor.UNSTRUCTURED)
+
+
+@router.get("/reducto-api-key-set")
+def reducto_api_key_set(
+    _: User | None = Depends(current_admin_user),
+) -> bool:
+    api_key_metadata = get_api_key()
+    if api_key_metadata and api_key_metadata[0] == DocumentProcessor.REDUCTO:
+        return api_key_metadata[1] is not None
+    return False
+
+
+@router.put("/upsert-reducto-api-key")
+def upsert_reducto_api_key(
+    reducto_api_key: str,
+    _: User | None = Depends(current_admin_user),
+) -> None:
+    update_api_key(DocumentProcessor.REDUCTO, reducto_api_key)
+
+
+@router.delete("/delete-reducto-api-key")
+def delete_reducto_api_key_endpoint(
+    _: User | None = Depends(current_admin_user),
+) -> None:
+    delete_api_key(DocumentProcessor.REDUCTO)
+
+
+@router.get("/active-document-processor")
+def get_active_document_processor(
+    _: User | None = Depends(current_admin_user),
+) -> str | None:
+    api_key_metadata = get_api_key()
+    if api_key_metadata and api_key_metadata[0]:
+        return api_key_metadata[0]
+    return None

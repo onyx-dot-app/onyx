@@ -82,7 +82,6 @@ UNNAMED_KEY_PLACEHOLDER = "Unnamed"
 # Key-Value store keys
 KV_REINDEX_KEY = "needs_reindexing"
 KV_SEARCH_SETTINGS = "search_settings"
-KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
 KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_NO_AUTH_USER_PREFERENCES_KEY = "no_auth_user_preferences"
@@ -99,6 +98,8 @@ KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 KV_KG_CONFIG_KEY = "kg_config"
+DOC_PROCESSING_TYPE = "docprocessing_type"
+DOC_PROCESSING_API_KEY = "docprocessing_api_key"
 
 # NOTE: we use this timeout / 4 in various places to refresh a lock
 # might be worth separating this timeout into separate timeouts for each situation

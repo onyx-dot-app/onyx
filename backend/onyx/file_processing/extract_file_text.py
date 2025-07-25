@@ -30,7 +30,9 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.file_processing.html_utils import parse_html_page_basic
-from onyx.file_processing.unstructured import get_unstructured_api_key
+from onyx.file_processing.unstructured import DocumentProcessor
+from onyx.file_processing.unstructured import get_api_key
+from onyx.file_processing.unstructured import reducto_to_text
 from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.file_store.file_store import FileStore
 from onyx.utils.logger import setup_logger
@@ -481,12 +483,17 @@ def extract_file_text(
     }
 
     try:
-        if get_unstructured_api_key():
+        api_key_metadata = get_api_key()
+        if api_key_metadata:
+            docprocessing_type, api_key = api_key_metadata
             try:
-                return unstructured_to_text(file, file_name)
-            except Exception as unstructured_error:
+                if docprocessing_type == DocumentProcessor.UNSTRUCTURED:
+                    return unstructured_to_text(file, file_name, api_key)
+                else:
+                    return reducto_to_text(file, file_name, api_key)
+            except Exception as docprocessing_error:
                 logger.error(
-                    f"Failed to process with Unstructured: {str(unstructured_error)}. "
+                    f"Failed to process with {docprocessing_type}: {str(docprocessing_error)}. "
                     "Falling back to normal processing."
                 )
         if extension is None:
@@ -535,14 +542,24 @@ def extract_text_and_images(
 
     try:
         # Attempt unstructured if env var is set
-        if get_unstructured_api_key():
+        api_key_metadata = get_api_key()
+        print(api_key_metadata)
+        print(api_key_metadata[0])
+        logger.info(api_key_metadata)
+        print(api_key_metadata[0] == DocumentProcessor.REDUCTO.value)
+        if api_key_metadata[0] == DocumentProcessor.UNSTRUCTURED.value:
             # If the user doesn't want embedded images, unstructured is fine
             file.seek(0)
-            text_content = unstructured_to_text(file, file_name)
+            text_content = unstructured_to_text(file, file_name, api_key_metadata[1])
             return ExtractionResult(
                 text_content=text_content, embedded_images=[], metadata={}
             )
-
+        if api_key_metadata[0] == DocumentProcessor.REDUCTO.value:
+            file.seek(0)
+            text_content = reducto_to_text(file, file_name, api_key_metadata[1])
+            return ExtractionResult(
+                text_content=text_content, embedded_images=[], metadata={}
+            )
         extension = get_file_ext(file_name)
 
         # docx example for embedded images
