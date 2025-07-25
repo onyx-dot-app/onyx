@@ -29,9 +29,10 @@ def custom_tool_branch(
     node_start_time = datetime.now()
     tool_name = state.query_path[-1]
 
-    if state.available_tools is None:
+    if not state.available_tools:
         raise ValueError("available_tools is not set")
 
+    tool_dict: dict[str, str] = {}
     for available_tool_dict in state.available_tools:
         if available_tool_dict["name"] == tool_name:
             tool_dict = available_tool_dict

@@ -28,7 +28,7 @@ def get_dr_prompt_template(
     entity_types_string: str | None = None,
     relationship_types_string: str | None = None,
     available_tools: list[dict[str, str]] | None = None,
-) -> str | None:
+) -> str:
 
     available_tool_paths = [tool["path"] for tool in available_tools or []]
 
@@ -82,17 +82,18 @@ def get_dr_prompt_template(
     }
 
     if purpose == DRPromptPurpose.PLAN:
-
         if time_budget == DRTimeBudget.FAST:
-            return None
-
+            raise ValueError("FAST time budget is not supported for plan generation")
         base_template = ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT
 
     elif purpose == DRPromptPurpose.NEXT_STEP:
-
         if time_budget == DRTimeBudget.FAST:
             base_template = ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT
         else:
             base_template = ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT
+
+    else:
+        # for mypy, clearly a mypy bug
+        raise ValueError(f"Invalid purpose: {purpose}")
 
     return _replace_signature_strings_in_template(base_template, string_replacements)

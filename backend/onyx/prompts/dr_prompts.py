@@ -141,49 +141,6 @@ Here are the relationship types that are available in the knowledge graph:
 {SEPARATOR_LINE}
 """
 
-
-ORCHESTRATOR_FAST_INITIAL_DECISION_PROMPT = f"""
-You need to route a user query request to the appropriate tool, given the following tool \
-descriptions, as well as previous chat context.
-
-You have these ---num_available_tools--- tools available, \
----available_tools---.
-
----tool_descriptions---
-
----kg_types_descriptions---
-
-Here is the user query that you need to route:
-{SEPARATOR_LINE}
----question---
-{SEPARATOR_LINE}
-
-Finally, here are the past few chat messages for reference (if any). \
-{SEPARATOR_LINE}
----chat_history_string---
-{SEPARATOR_LINE}
-
-DIFFERENTIATION/RELATION BETWEEN TOOLS:
----tool_differentiation_hints---
-
-MISCELLANEOUS HINTS:
-   - again, use the chat history (if provided) to see whether it helps to provide helpful context.
-
-Please format your answer as a json dictionary in the following format:
-
-{{
-   "reasoning": "<your reasoning in 1-3 sentences. Think through it like a person would do it.>",
-   "next_step": {{"tool": "<---tool_choice_options--->",
-                  "questions": "<the list of questions you want to pose to the tool. Note that the \
-questions should be appropriate for the tool.
-If the tool is {SEARCH} or {INTERNET_SEARCH}, the question \
-to the tool should be written as a list of up to {MAX_DR_PARALLEL_SEARCH} search queries that \
-would help to answer the question.
-If the tool is {CLOSER}, just return ['Answer the original question with the information you have.'].
-If the tool is {KNOWLEDGE_GRAPH} return only one question in the list.>"}}
-}}
-"""
-
 ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT = f"""
 You are a great Assistant that is an expert at analyzing a question and breaking it up into a \
 series of high-level, answerable sub-questions.

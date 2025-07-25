@@ -28,9 +28,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import (
-    ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT,
-)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -96,37 +93,20 @@ def orchestrator(
         if iteration_nr == 1:
             remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[DRTimeBudget.FAST]
 
-            base_decision_prompt = get_dr_prompt_template(
-                DRPromptPurpose.NEXT_STEP,
-                DRTimeBudget.FAST,
-                entity_types_string=all_entity_types,
-                relationship_types_string=all_relationship_types,
-                available_tools=state.available_tools,
-            )
-
-            if base_decision_prompt is None:
-                raise ValueError(
-                    "I was not able to generate a decision prompt. (This should not happen.)"
-                )
-
-            decision_prompt = (
-                base_decision_prompt.replace("---question---", prompt_question)
-                .replace("---chat_history_string---", chat_history_string)
-                .replace("---current_time---", current_time_string)
-                .replace("---answer_history_string---", answer_history_string)
-                .replace("---iteration_nr---", str(iteration_nr))
-            )
-
-        else:
-            decision_prompt = (
-                ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT.replace(
-                    "---answer_history_string---", answer_history_string
-                )
-                .replace("---question---", prompt_question)
-                .replace("---iteration_nr---", str(iteration_nr))
-                .replace("---chat_history_string---", chat_history_string)
-                .replace("---current_time---", current_time_string)
-            )
+        base_decision_prompt = get_dr_prompt_template(
+            DRPromptPurpose.NEXT_STEP,
+            DRTimeBudget.FAST,
+            entity_types_string=all_entity_types,
+            relationship_types_string=all_relationship_types,
+            available_tools=state.available_tools,
+        )
+        decision_prompt = (
+            base_decision_prompt.replace("---question---", prompt_question)
+            .replace("---chat_history_string---", chat_history_string)
+            .replace("---current_time---", current_time_string)
+            .replace("---answer_history_string---", answer_history_string)
+            .replace("---iteration_nr---", str(iteration_nr))
+        )
 
     else:
         prompt_question = _get_prompt_question(question, feedback_request)
@@ -144,12 +124,6 @@ def orchestrator(
                 relationship_types_string=all_relationship_types,
                 available_tools=state.available_tools,
             )
-
-            if base_plan_prompt is None:
-                raise ValueError(
-                    "I was not able to generate a plan prompt. (This should not happen.)"
-                )
-
             plan_generation_prompt = (
                 base_plan_prompt.replace("---question---", prompt_question)
                 .replace("---chat_history_string---", chat_history_string)
@@ -191,12 +165,6 @@ def orchestrator(
             relationship_types_string=all_relationship_types,
             available_tools=state.available_tools,
         )
-
-        if base_decision_prompt is None:
-            raise ValueError(
-                "I was not able to generate a decision prompt. (This should not happen.)"
-            )
-
         decision_prompt = (
             base_decision_prompt.replace(
                 "---answer_history_string---", answer_history_string
