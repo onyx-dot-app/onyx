@@ -305,13 +305,32 @@ def read_pdf_file(
     return "", metadata, []
 
 
-def docx_to_text_and_images(
-    file: IO[Any], file_name: str = ""
+def _extract_docx_content(
+    file: IO[Any],
+    file_name: str = "",
+    extract_tables: bool = True,
+    extract_images: bool = True
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx. If embed_images=True, also extract inline images.
     Return (text_content, list_of_images).
     """
+    def is_simple_table(table: docx.table.Table) -> bool:
+        for row in table.rows:
+            # No omitted cells
+            if row.grid_cols_before > 0 or row.grid_cols_after > 0:
+                return False
+
+            # No nested tables
+            if any(cell.tables for cell in row.cells):
+                return False
+
+        return True
+
+    def extract_cell_text(cell: docx.table._Cell) -> str:
+        cell_paragraphs = [para.text.strip() for para in cell.paragraphs]
+        return " ".join(p for p in cell_paragraphs if p) or "N/A"
+
     paragraphs = []
     embedded_images: list[tuple[bytes, str]] = []
 
@@ -330,35 +349,60 @@ def docx_to_text_and_images(
         )
         return text_content_raw or "", []
 
-    # Grab text from paragraphs
-    for paragraph in doc.paragraphs:
-        paragraphs.append(paragraph.text)
+    # Grab text from paragraphs and tables
+    for item in doc.iter_inner_content():
+        if isinstance(item, docx.text.paragraph.Paragraph):
+            paragraphs.append(item.text)
 
-    # Reset position so we can re-load the doc (python-docx has read the stream)
-    # Note: if python-docx has fully consumed the stream, you may need to open it again from memory.
-    # For large docs, a more robust approach is needed.
-    # This is a simplified example.
-
-    for rel_id, rel in doc.part.rels.items():
-        if "image" in rel.reltype:
-            # Skip images that are linked rather than embedded (TargetMode="External")
-            if getattr(rel, "is_external", False):
+        elif extract_tables and isinstance(item, docx.table.Table):
+            if not item.rows or not is_simple_table(item):
                 continue
 
-            try:
-                # image is typically in rel.target_part.blob
-                image_bytes = rel.target_part.blob
-            except ValueError:
-                # Safeguard against relationships that lack an internal target_part
-                # (e.g., external relationships or other anomalies)
-                continue
+            # Every row is a new line, joined with a single newline
+            table_content = "\n".join(
+                [
+                    ",\t".join(extract_cell_text(cell) for cell in row.cells)
+                    for row in item.rows
+                ]
+            )
+            paragraphs.append(table_content)
 
-            image_name = rel.target_part.partname
-            # store
-            embedded_images.append((image_bytes, os.path.basename(str(image_name))))
+    # Extract embedded images if requested
+    if extract_images:
+        # Reset position so we can re-load the doc (python-docx has read the stream)
+        # Note: if python-docx has fully consumed the stream, you may need to open it again from memory.
+        # For large docs, a more robust approach is needed.
+        # This is a simplified example.
+        for rel_id, rel in doc.part.rels.items():
+            if "image" in rel.reltype:
+                # Skip images that are linked rather than embedded (TargetMode="External")
+                if getattr(rel, "is_external", False):
+                    continue
+
+                try:
+                    # image is typically in rel.target_part.blob
+                    image_bytes = rel.target_part.blob
+                except ValueError:
+                    # Safeguard against relationships that lack an internal target_part
+                    # (e.g., external relationships or other anomalies)
+                    continue
+
+                image_name = rel.target_part.partname
+                # store
+                embedded_images.append((image_bytes, os.path.basename(str(image_name))))
 
     text_content = "\n".join(paragraphs)
     return text_content, embedded_images
+
+
+def docx_to_text_and_images(
+    file: IO[Any], file_name: str = ""
+) -> tuple[str, Sequence[tuple[bytes, str]]]:
+    """
+    Extract text from a docx. If embed_images=True, also extract inline images.
+    Return (text_content, list_of_images).
+    """
+    return _extract_docx_content(file, file_name, extract_tables=True, extract_images=True)
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
@@ -633,11 +677,14 @@ def convert_docx_to_txt(file: UploadFile, file_store: FileStore) -> str:
     """
     file.file.seek(0)
     docx_content = file.file.read()
-    doc = DocxDocument(BytesIO(docx_content))
 
-    # Extract text from the document
-    all_paras = [p.text for p in doc.paragraphs]
-    text_content = "\n".join(all_paras)
+    # Use the helper method to extract text only (no tables or images)
+    text_content, _ = _extract_docx_content(
+        BytesIO(docx_content),
+        file_name=file.filename,
+        extract_tables=True,
+        extract_images=False
+    )
 
     file_id = file_store.save_file(
         content=BytesIO(text_content.encode("utf-8")),
