@@ -89,9 +89,9 @@ the most relevant information to answer the question. You can also skip straight
 if there is sufficient information in the provided history to answer the question.
 """
 
-TOOL_DIFFERENTIATION_HINTS: dict[DRPath, dict[DRPath, str]] = {
-    DRPath.SEARCH: {
-        DRPath.INTERNET_SEARCH: """\
+TOOL_DIFFERENTIATION_HINTS: dict[str, dict[str, str]] = {
+    DRPath.SEARCH.value: {
+        DRPath.INTERNET_SEARCH.value: f"""\
   - if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
 then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
 Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
@@ -99,8 +99,8 @@ then you can consider sending a new request to the {SEARCH} tool and vice versa 
 tool is a good fit for the question)!
 """
     },
-    DRPath.KNOWLEDGE_GRAPH: {
-        DRPath.SEARCH: """\
+    DRPath.KNOWLEDGE_GRAPH.value: {
+        DRPath.SEARCH.value: f"""\
     - please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
    - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
@@ -113,17 +113,17 @@ whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE
 }
 
 
-TOOL_QUESTION_HINTS: dict[DRPath, str] = {
-    DRPath.SEARCH: """if the tool is {SEARCH}, the question should be \
+TOOL_QUESTION_HINTS: dict[str, str] = {
+    DRPath.SEARCH.value: f"""if the tool is {SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """,
-    DRPath.INTERNET_SEARCH: """if the tool is {INTERNET_SEARCH}, the question should be \
+    DRPath.INTERNET_SEARCH.value: f"""if the tool is {INTERNET_SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """,
-    DRPath.KNOWLEDGE_GRAPH: """if the tool is {KNOWLEDGE_GRAPH}, the question should be \
+    DRPath.KNOWLEDGE_GRAPH.value: f"""if the tool is {KNOWLEDGE_GRAPH}, the question should be \
 written as a list of one question.
 """,
-    DRPath.CLOSER: """if the tool is {CLOSER}, the list of questions should simply be \
+    DRPath.CLOSER.value: f"""if the tool is {CLOSER}, the list of questions should simply be \
 ['Answer the original question with the information you have.'].
 """,
 }
@@ -456,6 +456,79 @@ And here is the list of documents that you must use to answer the specific searc
 
 Notes:
    - only use documents that are relevant to the specific search query AND you KNOW apply \
+to the context of the question! Example: context is about what Nike was doing to drive sales, \
+and the question is about what Puma is doing to drive sales, DO NOT USE ANY INFORMATION \
+from the information from Nike! In fact, even if the context does not discuss driving \
+sales for Nike but about driving sales w/o mentioning any company (incl. Puma!), you \
+still cannot use the information! You MUST be sure that the context is correct. If in \
+doubt, don't use that document!
+   - It is critical to avoid hallucinations as well as taking information out of context.
+   - clearly indicate any assumptions you make in your answer.
+   - while the base question is important, really focus on answering the specific search query. \
+That is your task.
+   - again, do not use/cite any documents that you are not 100% sure are relevant to the \
+SPECIFIC context \
+of the question! And do NOT GUESS HERE and say 'oh, it is reasonable that this context applies here'. \
+DO NOT DO THAT. If the question is about 'yellow curry' and you only see information about 'curry', \
+say something like 'there is no mention of yellow curry specifically', and IGNORE THAT DOCUMENT. But \
+if you still strongly suspect the document is relevant, you can use it, but you MUST clearly \
+indicate that you are not 100% sure and that the document does not mention 'yellow curry'. (As \
+an example.)
+If the specific term or concept is not present, the answer should explicitly state its absence before \
+providing any related information.
+   - Always begin your answer with a direct statement about whether the exact term or phrase, or \
+the exact meaning was found in the documents.
+   - only provide a SHORT answer that i) provides the requested information if the question was \
+very specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL \
+summary of the information in the cited documents, and cite the documents that are most \
+relevant to the question sent to you.
+
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your reasoning in 3-6 sentences of what guides you to the answer of \
+the specific search query given the documents.
+Start out here with a brief statement whether the SPECIFIC CONTEXT is mentioned in the \
+documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry..'). Any reasoning should be done here. Generate \
+here the information that will be necessary to provide a succinct answer to the specific search query. >",
+   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
+the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
+mentioned in the \
+documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry..').
+But this should be be precise and concise, and specifically answer the question.>",
+"citations": "<the list of document numbers that are relevvant for the answer. \
+Please list in format [1][4][6], etc.>"
+}}
+"""
+
+TOOL_PROCESSING_PROMPT = f"""
+You are a helpful assistant that is great at summarizing and processing the \
+response of a tool as it is relevent to a broader user question. You can use the \
+provided documents, the specific task sent to the tool, \
+and the \
+overall user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \
+answer for a specific task directed to thetool. Although your response should \
+pertain mainly to the specific task \
+query, also keep in mind the base query to provide valuable insights for answering the main too.
+
+Here is the specific task query:
+{SEPARATOR_LINE}
+---query---
+{SEPARATOR_LINE}
+
+Here is the base question that ultimately needs to be answered:
+{SEPARATOR_LINE}
+---base_question---
+{SEPARATOR_LINE}
+
+And here is the list of documents that you must use to answer the specific search query:
+{SEPARATOR_LINE}
+---document_text---
+{SEPARATOR_LINE}
+
+Notes:
+   - only use documents that are relevant to the specific task AND you KNOW apply \
 to the context of the question! Example: context is about what Nike was doing to drive sales, \
 and the question is about what Puma is doing to drive sales, DO NOT USE ANY INFORMATION \
 from the information from Nike! In fact, even if the context does not discuss driving \

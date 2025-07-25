@@ -9,6 +9,7 @@ class DRPath(str, Enum):
     CLARIFIER = "CLARIFIER"
     ORCHESTRATOR = "ORCHESTRATOR"
     SEARCH = "SEARCH"
+    GENERIC_TOOL = "GENERIC_TOOL"
     KNOWLEDGE_GRAPH = "KNOWLEDGE_GRAPH"
     INTERNET_SEARCH = "INTERNET_SEARCH"
     CLOSER = "CLOSER"
@@ -16,7 +17,7 @@ class DRPath(str, Enum):
 
 
 class OrchestratorStep(BaseModel):
-    tool: DRPath
+    tool: str
     questions: list[str]
 
 
@@ -43,6 +44,13 @@ class SearchAnswer(BaseModel):
     citations: str
 
 
+# TODO: revisit this for sample custom tools
+class GenericToolAnswer(BaseModel):
+    reasoning: str
+    answer: str
+    background_info: str
+
+
 class IterationAnswer(BaseModel):
     tool: DRPath
     iteration_nr: int
@@ -50,6 +58,7 @@ class IterationAnswer(BaseModel):
     question: str
     answer: str
     cited_documents: list[InferenceSection]
+    background_info: str | None = None
 
 
 class AggregatedDRContext(BaseModel):

@@ -10,11 +10,11 @@ MAX_DR_PARALLEL_SEARCH = 8
 CLARIFICATION_REQUEST_PREFIX = "PLEASE CLARIFY:"
 HIGH_LEVEL_PLAN_PREFIX = "HIGH_LEVEL PLAN:"
 
-AVERAGE_TOOL_COSTS = {
-    DRPath.SEARCH: 1.0,
-    DRPath.KNOWLEDGE_GRAPH: 2.0,
-    DRPath.INTERNET_SEARCH: 1.0,
-    DRPath.CLOSER: 0.0,
+AVERAGE_TOOL_COSTS: dict[str, float] = {
+    DRPath.SEARCH.value: 1.0,
+    DRPath.KNOWLEDGE_GRAPH.value: 2.0,
+    DRPath.INTERNET_SEARCH.value: 1.0,
+    DRPath.CLOSER.value: 0.0,
 }
 AVERAGE_TOOL_COST_STRING = "\n".join(
     [f"{tool}: {cost}" for tool, cost in AVERAGE_TOOL_COSTS.items()]

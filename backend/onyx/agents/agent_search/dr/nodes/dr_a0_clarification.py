@@ -24,9 +24,52 @@ from onyx.configs.constants import MessageType
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import GET_CLARIFICATION_PROMPT
+from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
+from onyx.tools.tool_implementations.search.search_tool import (
+    SEARCH_RESPONSE_SUMMARY_ID,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[dict]:
+
+    available_tools = []
+    for tool in graph_config.tooling.tools:
+
+        if tool.name == "run_kg_search" and not kg_enabled:
+            continue
+
+        tool_dict = {}
+        tool_dict["name"] = tool.name
+        tool_dict["description"] = tool.description
+        tool_dict["display_name"] = tool.display_name
+
+        if isinstance(tool, CustomTool):
+            tool_dict["summary_signature"] = CUSTOM_TOOL_RESPONSE_ID
+            tool_dict["path"] = tool.name.upper()
+        elif isinstance(tool, InternetSearchTool):
+            tool_dict["summary_signature"] = INTERNET_SEARCH_RESPONSE_SUMMARY_ID
+            tool_dict["path"] = DRPath.INTERNET_SEARCH.value
+        elif isinstance(tool, SearchTool):
+            tool_dict["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
+            tool_dict["path"] = DRPath.SEARCH.value
+        # TODO: add KG search tool
+        # elif isinstance(tool, KGSearchTool):
+        #    tool_dict["summary_signature"] = KG_SEARCH_RESPONSE_SUMMARY_ID
+
+        available_tools.append(tool_dict)
+
+    return available_tools
 
 
 def clarifier(
@@ -47,6 +90,11 @@ def clarifier(
 
     # TODO: I don't think this is used in dr, if so remove
     graph_config.behavior.use_agentic_search = False
+
+    kg_enabled = not config["metadata"]["config"].behavior.kg_config_settings.KG_ENABLED
+
+    # get the connected tools and format for the Deep Research flow
+    available_tools = _get_available_tools(graph_config, kg_enabled)
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
@@ -180,4 +228,5 @@ def clarifier(
             )
         ],
         feedback_structure=feedback_request,
+        available_tools=available_tools,
     )

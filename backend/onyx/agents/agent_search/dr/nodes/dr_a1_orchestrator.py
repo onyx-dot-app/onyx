@@ -86,7 +86,7 @@ def orchestrator(
     all_relationship_types = get_relationship_types_str(active=True)
 
     # default to closer
-    query_path = DRPath.CLOSER
+    query_path = DRPath.CLOSER.value
     query_list = ["Answer the question with the information you have."]
     decision_prompt = None
 
@@ -101,6 +101,7 @@ def orchestrator(
                 DRTimeBudget.FAST,
                 entity_types_string=all_entity_types,
                 relationship_types_string=all_relationship_types,
+                available_tools=state.available_tools,
             )
 
             if base_decision_prompt is None:
@@ -141,6 +142,7 @@ def orchestrator(
                 DRTimeBudget.DEEP,
                 entity_types_string=all_entity_types,
                 relationship_types_string=all_relationship_types,
+                available_tools=state.available_tools,
             )
 
             if base_plan_prompt is None:
@@ -187,6 +189,7 @@ def orchestrator(
             DRTimeBudget.DEEP,
             entity_types_string=all_entity_types,
             relationship_types_string=all_relationship_types,
+            available_tools=state.available_tools,
         )
 
         if base_decision_prompt is None:
@@ -222,7 +225,14 @@ def orchestrator(
             logger.error(f"Error in approach extraction: {e}")
             raise e
 
-        remaining_time_budget = remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
+        if query_path in AVERAGE_TOOL_COSTS:
+            remaining_time_budget = (
+                remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
+            )
+        else:
+            remaining_time_budget = (
+                remaining_time_budget - 1.5
+            )  # estimate for custom tools. TODO: fix!
 
     return OrchestrationUpdate(
         query_path=[query_path],

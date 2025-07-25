@@ -22,13 +22,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationConfig
-from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import PromptConfig
 from onyx.context.search.models import InferenceSection
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPT
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
@@ -36,7 +31,6 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
-from onyx.tools.tool_implementations.internet_search.models import ProviderType
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.utils.logger import setup_logger
 
@@ -82,38 +76,32 @@ def internet_search(
     if graph_config.inputs.persona is None:
         raise ValueError("persona is not set")
 
-    retrieved_docs: list[InferenceSection] = []
+    internet_search_tool: InternetSearchTool | None = None
+    for tool in graph_config.tooling.tools:
+        if tool.name == "run_internet_search":
+            internet_search_tool = cast(InternetSearchTool, tool)
+            break
 
-    # new db session to avoid concurrency issues
-    with get_session_with_current_tenant() as search_db_session:
+    if internet_search_tool is None:
+        raise ValueError("internet_search_tool is not set. This should not happen.")
 
-        internet_search_tool = InternetSearchTool(
-            db_session=search_db_session,
-            persona=graph_config.inputs.persona,
-            prompt_config=PromptConfig(
-                system_prompt="You are a helpful assistant that can search the internet for information.",
-                task_prompt=f"Search the internet for information about the following question: {search_query}",
-                datetime_aware=True,
-                include_citations=True,
-            ),
-            llm=graph_config.tooling.primary_llm,
-            document_pruning_config=DocumentPruningConfig(),
-            answer_style_config=AnswerStyleConfig(
-                citation_config=CitationConfig(), structured_response_format=None
-            ),
-            provider=ProviderType.EXA.value,
-            num_results=10,
-            max_chunks=10,
+    if internet_search_tool.provider is None:
+        raise ValueError(
+            "internet_search_tool.provider is not set. This should not happen."
         )
 
-        for tool_response in internet_search_tool.run(
-            internet_search_query=search_query
-        ):
-            # get retrieved docs to send to the rest of the graph
-            if tool_response.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
-                response = cast(SearchResponseSummary, tool_response.response)
-                retrieved_docs = response.top_sections
-                break
+    # Update search parameters
+    internet_search_tool.max_chunks = 10
+    internet_search_tool.provider.num_results = 10
+
+    retrieved_docs: list[InferenceSection] = []
+
+    for tool_response in internet_search_tool.run(internet_search_query=search_query):
+        # get retrieved docs to send to the rest of the graph
+        if tool_response.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
+            response = cast(SearchResponseSummary, tool_response.response)
+            retrieved_docs = response.top_sections
+            break
 
     # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
 

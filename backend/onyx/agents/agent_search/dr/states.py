@@ -9,9 +9,6 @@ from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
-from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
-from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
-from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
 from onyx.context.search.models import InferenceSection
 
 
@@ -25,18 +22,20 @@ class LoggerUpdate(BaseModel):
 class OrchestrationUpdate(LoggerUpdate):
     original_question: str | None = None
     chat_history_string: str | None = None
-    query_path: Annotated[list[DRPath], add] = []
+    query_path: Annotated[list[str], add] = []
     query_list: list[str] = []
     iteration_nr: int = 0
     plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
     remaining_time_budget: float = 2.0  # set by default to about 2 searches
     feedback_structure: OrchestrationFeedbackRequest | None = None
+    available_tools: list[dict[str, str | DRPath]] | None = None
 
 
 class QuestionUpdate(LoggerUpdate):
     iteration_nr: int = 0
     parallelization_nr: int = 0
     question: str | None = None
+    tool: str | None = None  # needed fort custom tools
 
 
 class AnswerUpdate(LoggerUpdate):
@@ -57,9 +56,6 @@ class MainInput(CoreState):
 class MainState(
     # This includes the core state
     MainInput,
-    ToolChoiceInput,
-    ToolCallUpdate,
-    ToolChoiceUpdate,
     OrchestrationUpdate,
     QuestionUpdate,
     AnswerUpdate,

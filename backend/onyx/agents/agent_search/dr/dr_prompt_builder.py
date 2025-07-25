@@ -12,14 +12,6 @@ from onyx.prompts.dr_prompts import TOOL_DIFFERENTIATION_HINTS
 from onyx.prompts.dr_prompts import TOOL_QUESTION_HINTS
 
 
-AVAILABLE_TOOLS = [
-    DRPath.SEARCH,
-    # DRPath.INTERNET_SEARCH,
-    # DRPath.KNOWLEDGE_GRAPH,
-    DRPath.CLOSER,
-]
-
-
 def _replace_signature_strings_in_template(
     template: str,
     string_replacements: dict[str, str],
@@ -33,14 +25,16 @@ def _replace_signature_strings_in_template(
 def get_dr_prompt_template(
     purpose: DRPromptPurpose,
     time_budget: DRTimeBudget,
-    available_tools: list[DRPath] = AVAILABLE_TOOLS,
     entity_types_string: str | None = None,
     relationship_types_string: str | None = None,
+    available_tools: list[dict[str, str]] | None = None,
 ) -> str | None:
 
+    available_tool_paths = [tool["path"] for tool in available_tools or []]
+
     tool_differentiations = []
-    for tool_1 in available_tools:
-        for tool_2 in available_tools:
+    for tool_1 in available_tool_paths:
+        for tool_2 in available_tool_paths:
             if (
                 tool_1 in TOOL_DIFFERENTIATION_HINTS
                 and tool_2 in TOOL_DIFFERENTIATION_HINTS[tool_1]
@@ -50,8 +44,10 @@ def get_dr_prompt_template(
         "\n  - ".join(tool_differentiations) or "(No differentiating hints available)"
     )
 
+    # TODO: add tool deliniation pairs for custom tools as well
+
     tool_question_hints = []
-    for tool in available_tools:
+    for tool in available_tool_paths:
         if tool in TOOL_QUESTION_HINTS:
             tool_question_hints.append(TOOL_QUESTION_HINTS[tool])
     tool_question_hint_string = (
@@ -59,19 +55,23 @@ def get_dr_prompt_template(
     )
 
     string_replacements = {
-        "num_available_tools": str(len(available_tools)),
-        "available_tools": ", ".join(available_tools),
+        "num_available_tools": str(len(available_tool_paths)),
+        "available_tools": ", ".join(
+            available_tool_paths
+        ),  # The tool paths are the same as the tool names
         "tool_choice_options": " or ".join(
-            [f"{tool.value}" for tool in available_tools]
+            [f"{tool}" for tool in available_tool_paths]
         ),
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kg_types_descriptions": (
             KG_TYPES_DESCRIPTIONS
-            if DRPath.KNOWLEDGE_GRAPH in available_tools
+            if DRPath.KNOWLEDGE_GRAPH in available_tool_paths
             else "(The Knowledge Graph is not used.)"
         ),
         "tool_descriptions": "\n".join(
-            [TOOL_DESCRIPTION[tool] for tool in available_tools]
+            [
+                TOOL_DESCRIPTION[tool] for tool in available_tool_paths
+            ]  # TODO: add custom tool descriptions
         ),
         "tool_differentiation_hints": tool_differentiation_hint_string,
         "tool_question_hints": tool_question_hint_string,
