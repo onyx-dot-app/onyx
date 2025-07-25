@@ -31,7 +31,7 @@ def create_api_key(
     user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
-    return insert_api_key(db_session, api_key_args, user.id if user else None)
+    return insert_api_key(db_session, api_key_args, api_key_args.user_id if api_key_args.user_id else None)
 
 
 @router.post("/{api_key_id}/regenerate")
