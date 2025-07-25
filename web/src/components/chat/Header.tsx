@@ -61,12 +61,7 @@ export default function FunctionalHeader({
 
   const handleNewChat = () => {
     reset();
-    const newChatUrl =
-      `/${page}` +
-      (currentChatSession
-        ? `?assistantId=${currentChatSession.persona_id}`
-        : "");
-    router.push(newChatUrl);
+    router.push("/chat");
   };
   return (
     <div
@@ -76,11 +71,9 @@ export default function FunctionalHeader({
     >
       <div className="items-end flex mt-2 text-text-700 relative flex w-full">
         <LogoWithText
-          assistantId={currentChatSession?.persona_id}
           page={page}
           toggleSidebar={toggleSidebar}
           toggled={false}
-          handleNewChat={handleNewChat}
         />
         <div className="mt-1 items-center flex w-full h-8">
           <div
@@ -138,7 +131,6 @@ export default function FunctionalHeader({
               page={page}
               toggled={sidebarToggled}
               toggleSidebar={toggleSidebar}
-              handleNewChat={handleNewChat}
             />
           </div>
 
@@ -161,12 +153,13 @@ export default function FunctionalHeader({
             </div>
             <Link
               className="desktop:hidden ml-2 my-auto"
-              href={
-                `/${page}` +
-                (currentChatSession
-                  ? `?assistantId=${currentChatSession.persona_id}`
-                  : "")
-              }
+              href="/chat"
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey) {
+                  return;
+                }
+                handleNewChat();
+              }}
             >
               <div className=" cursor-pointer ml-2 mr-4 flex-none text-text-700 hover:text-text-600 transition-colors duration-300">
                 <NewChatIcon size={24} />

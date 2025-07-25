@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AssistantCard from "./AssistantCard";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterIcon, XIcon } from "lucide-react";
 import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
+import ReactDOM from "react-dom";
 
 export const AssistantBadgeSelector = ({
   text,
@@ -63,13 +64,21 @@ interface AssistantModalProps {
   hideModal: () => void;
 }
 
-export function AssistantModal({ hideModal }: AssistantModalProps) {
+export default function AssistantModal({ hideModal }: AssistantModalProps) {
   const { assistants, pinnedAssistants } = useAssistants();
   const { assistantFilters, toggleAssistantFilter } = useAssistantFilter();
   const router = useRouter();
   const { user } = useUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+    };
+  }, []);
 
   const memoizedCurrentlyVisibleAssistants = useMemo(() => {
     return assistants.filter((assistant) => {
@@ -110,7 +119,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
     (assistant) => !assistant.is_default_persona
   );
 
-  return (
+  const modalContent = (
     <div
       onClick={hideModal}
       className="fixed inset-0 bg-neutral-950/80 bg-opacity-50 flex items-center justify-center z-50"
@@ -286,5 +295,6 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
       </div>
     </div>
   );
+
+  return isMounted ? ReactDOM.createPortal(modalContent, document.body) : null;
 }
-export default AssistantModal;
