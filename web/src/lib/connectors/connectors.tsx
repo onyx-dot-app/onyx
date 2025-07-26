@@ -242,6 +242,14 @@ export const connectorConfigs: Record<
         description: "Index issues from repositories",
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include Markdown files?",
+        label: "Include Markdown files?",
+        name: "include_files_md",
+        description: "Index Markdown files from repositories",
+        optional: true,
+      },
     ],
     advanced_values: [],
   },
@@ -1492,6 +1500,7 @@ export interface GithubConfig {
   repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
+  include_files_md?: boolean;
 }
 
 export interface GitlabConfig {
