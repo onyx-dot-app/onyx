@@ -71,9 +71,11 @@ def retrieval_preprocessing(
             document_set.name for document_set in persona.document_sets
         ]
 
-    time_filter = preset_filters.time_cutoff
-    if time_filter is None and persona:
-        time_filter = persona.search_start_date
+    time_filter_start = preset_filters.time_cutoff
+    if time_filter_start is None and persona:
+        time_filter_start = persona.search_start_date
+
+    time_filter_end = preset_filters.time_cutoff_end
 
     source_filter = preset_filters.source_type
 
@@ -91,7 +93,7 @@ def retrieval_preprocessing(
         logger.debug("Auto detect filters enabled")
 
     if (
-        time_filter is not None
+        time_filter_start is not None
         and persona
         and persona.recency_bias != RecencyBiasSetting.AUTO
     ):
@@ -101,6 +103,7 @@ def retrieval_preprocessing(
         logger.debug("Not extract source filter - already provided")
         auto_detect_source_filter = False
 
+    # TODO: Also extract time_cutoff_end from the natural language search query
     # Based on the query figure out if we should apply any hard time filters /
     # if we should bias more recent docs even more strongly
     run_time_filters = (
@@ -179,7 +182,8 @@ def retrieval_preprocessing(
         user_folder_ids=user_folder_ids,
         source_type=preset_filters.source_type or predicted_source_filters,
         document_set=preset_filters.document_set,
-        time_cutoff=time_filter or predicted_time_cutoff,
+        time_cutoff=time_filter_start or predicted_time_cutoff,
+        time_cutoff_end=time_filter_end,
         tags=preset_filters.tags,  # Tags are never auto-extracted
         access_control_list=user_acl_filters,
         tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
