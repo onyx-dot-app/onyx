@@ -147,9 +147,11 @@ function LLMProviderDisplay({
 export function ConfiguredLLMProviderDisplay({
   existingLlmProviders,
   llmProviderDescriptors,
+  allLlmProviderDescriptors,
 }: {
   existingLlmProviders: LLMProviderView[];
   llmProviderDescriptors: WellKnownLLMProviderDescriptor[];
+  allLlmProviderDescriptors: WellKnownLLMProviderDescriptor[];
 }) {
   existingLlmProviders = existingLlmProviders.sort((a, b) => {
     if (a.is_default_provider && !b.is_default_provider) {
@@ -168,6 +170,10 @@ export function ConfiguredLLMProviderDisplay({
           (llmProviderDescriptors) =>
             llmProviderDescriptors.name === provider.provider
         );
+        const allDefaultProviderDescriptor = allLlmProviderDescriptors.find(
+          (allLlmProviderDescriptors) =>
+            allLlmProviderDescriptors.name === provider.provider
+        );
 
         return (
           <LLMProviderDisplay
@@ -177,8 +183,8 @@ export function ConfiguredLLMProviderDisplay({
             // provider descriptor
             llmProviderDescriptor={
               isSubset(
-                defaultProviderDesciptor
-                  ? defaultProviderDesciptor.model_configurations.map(
+                allDefaultProviderDescriptor
+                  ? allDefaultProviderDescriptor.model_configurations.map(
                       (model_configuration) => model_configuration.name
                     )
                   : [],

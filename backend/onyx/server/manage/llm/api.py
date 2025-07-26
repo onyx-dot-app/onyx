@@ -22,6 +22,7 @@ from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.factory import get_max_input_tokens_from_llm_provider
+from onyx.llm.llm_provider_options import fetch_all_model_configurations_for_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
@@ -49,6 +50,39 @@ def fetch_llm_options(
     _: User | None = Depends(current_admin_user),
 ) -> list[WellKnownLLMProviderDescriptor]:
     return fetch_available_well_known_llms()
+
+
+@admin_router.get("/built-in/options-with-all-models")
+def fetch_llm_options_with_all_models(
+    _: User | None = Depends(current_admin_user),
+) -> dict[str, list[WellKnownLLMProviderDescriptor]]:
+    """Fetch both regular model configurations (without deprecated) and all model configurations (including deprecated)."""
+    regular_options = fetch_available_well_known_llms()
+
+    # Create options with all models including deprecated ones
+    all_options = []
+    for option in regular_options:
+        all_model_configurations = fetch_all_model_configurations_for_provider(
+            option.name
+        )
+        all_options.append(
+            WellKnownLLMProviderDescriptor(
+                name=option.name,
+                display_name=option.display_name,
+                api_key_required=option.api_key_required,
+                api_base_required=option.api_base_required,
+                api_version_required=option.api_version_required,
+                custom_config_keys=option.custom_config_keys,
+                model_configurations=all_model_configurations,
+                default_model=option.default_model,
+                default_fast_model=option.default_fast_model,
+                deployment_name_required=option.deployment_name_required,
+                single_model_supported=option.single_model_supported,
+                has_curated_models=option.has_curated_models,
+            )
+        )
+
+    return {"regular": regular_options, "all": all_options}
 
 
 @admin_router.post("/test")
