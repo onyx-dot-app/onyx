@@ -23,7 +23,7 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.github.connector import GithubConnectorStage
-from onyx.connectors.github.connector import SerializedRepository
+from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 from tests.unit.onyx.connectors.utils import (
@@ -97,6 +97,10 @@ def create_mock_pr() -> Callable[..., MagicMock]:
             else f"https://github.com/test-org/test-repo/pull/{number}"
         )
         mock_pr.raw_data = {}
+        mock_pr.base = MagicMock()
+        mock_pr.base.repo = MagicMock()
+        mock_pr.base.repo.full_name = "test-org/test-repo"
+
         return mock_pr
 
     return _create_mock_pr
@@ -121,6 +125,11 @@ def create_mock_issue() -> Callable[..., MagicMock]:
         mock_issue.html_url = f"https://github.com/test-org/test-repo/issues/{number}"
         mock_issue.pull_request = None  # Not a PR
         mock_issue.raw_data = {}
+
+        # Mock the nested base.repo.full_name attribute
+        mock_issue.repository = MagicMock()
+        mock_issue.repository.full_name = "test-org/test-repo"
+
         return mock_issue
 
     return _create_mock_issue
@@ -265,7 +274,7 @@ def test_load_from_checkpoint_with_rate_limit(
         # Call load_from_checkpoint
         end_time = time.time()
         with patch(
-            "onyx.connectors.github.connector._sleep_after_rate_limit_exception"
+            "onyx.connectors.github.connector.sleep_after_rate_limit_exception"
         ) as mock_sleep:
             outputs = load_everything_from_checkpoint_connector(
                 github_connector, 0, end_time
@@ -797,7 +806,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     mock_repo1.get_issues.return_value = mock_empty_issues_list
     mock_repo2.get_issues.return_value = mock_empty_issues_list
     with patch.object(
-        github_connector, "_get_all_repos", return_value=[mock_repo1, mock_repo2]
+        github_connector, "get_all_repos", return_value=[mock_repo1, mock_repo2]
     ), patch.object(
         github_connector,
         "_pull_requests_func",

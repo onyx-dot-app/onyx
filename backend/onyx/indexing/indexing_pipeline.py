@@ -142,6 +142,7 @@ def _upsert_documents_in_db(
             secondary_owners=get_experts_stores_representations(doc.secondary_owners),
             from_ingestion_api=doc.from_ingestion_api,
             external_access=doc.external_access,
+            doc_metadata=doc.doc_metadata,
         )
         document_metadata_list.append(db_doc_metadata)
 

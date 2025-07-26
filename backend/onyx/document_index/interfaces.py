@@ -91,6 +91,7 @@ class DocumentMetadata:
     from_ingestion_api: bool = False
 
     external_access: ExternalAccess | None = None
+    doc_metadata: dict[str, Any] | None = None
 
 
 @dataclass

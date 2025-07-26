@@ -6,6 +6,7 @@ https://confluence.atlassian.com/conf85/check-who-can-view-a-page-1283360557.htm
 from collections.abc import Generator
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from ee.onyx.external_permissions.utils import generic_doc_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -25,6 +26,7 @@ CONFLUENCE_DOC_SYNC_LABEL = "confluence_doc_sync"
 def confluence_doc_sync(
     cc_pair: ConnectorCredentialPair,
     fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
+    fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
@@ -43,7 +45,7 @@ def confluence_doc_sync(
 
     yield from generic_doc_sync(
         cc_pair=cc_pair,
-        fetch_all_existing_docs_fn=fetch_all_existing_docs_fn,
+        fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,
         callback=callback,
         doc_source=DocumentSource.CONFLUENCE,
         slim_connector=confluence_connector,
