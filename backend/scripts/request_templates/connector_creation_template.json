@@ -1,0 +1,45 @@
+[
+    {
+        "name": "Example Web",
+        "source": "web",
+        "input_type": "load_state",
+        "connector_specific_config": {
+            "base_url": "https://example.com",
+            "web_connector_type": "recursive"
+        },
+        "credential_json": {},
+        "is_public": true,
+        "credential_id": null
+    },
+    {
+        "name": "Example GitHub",
+        "source": "github",
+        "input_type": "poll",
+        "connector_specific_config": {
+            "repo_owner": "example-owner",
+            "repositories": "example-repo",
+            "include_prs": true,
+            "include_issues": true
+        },
+        "credential_json": {
+            "github_access_token": "your_github_access_token_here"
+        },
+        "is_public": true,
+        "credential_id": null
+    },
+    {
+        "name": "Example Google Drive",
+        "source": "google_drive",
+        "input_type": "poll",
+        "is_public": true,
+        "connector_specific_config": {
+            "include_shared_drives": true,
+            "include_my_drives": true,
+            "include_files_shared_with_me": true
+        },
+        "credential_json": {
+            "google_primary_admin": "Admin Email"
+        },
+        "credential_id": 1
+    }
+]
