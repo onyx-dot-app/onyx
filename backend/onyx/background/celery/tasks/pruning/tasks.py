@@ -277,6 +277,9 @@ def try_creating_prune_generator_task(
     if not ALLOW_SIMULTANEOUS_PRUNING:
         count = redis_connector.prune.get_active_task_count()
         if count > 0:
+            logger.info(
+                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} no simultaneous pruning allowed"
+            )
             return None
 
     LOCK_TIMEOUT = 30
@@ -288,9 +291,11 @@ def try_creating_prune_generator_task(
         timeout=LOCK_TIMEOUT,
     )
 
-    # TODO: allow multiple prunings to run in parallel
     acquired = lock.acquire(blocking_timeout=LOCK_TIMEOUT / 2)
     if not acquired:
+        logger.info(
+            f"try_creating_prune_generator_task: cc_pair={cc_pair.id} lock not acquired"
+        )
         return None
 
     try:
