@@ -27,7 +27,7 @@ class OrchestrationUpdate(LoggerUpdate):
     iteration_nr: int = 0
     plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
     remaining_time_budget: float = 2.0  # set by default to about 2 searches
-    feedback_structure: OrchestrationFeedbackRequest | None = None
+    clarification: OrchestrationFeedbackRequest | None = None
     available_tools: list[dict[str, str]] | None = None
 
 

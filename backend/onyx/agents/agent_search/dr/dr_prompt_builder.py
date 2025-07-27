@@ -1,8 +1,10 @@
 from datetime import datetime
 
+from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import DRPath
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
+from onyx.prompts.dr_prompts import GET_CLARIFICATION_PROMPT
 from onyx.prompts.dr_prompts import KG_TYPES_DESCRIPTIONS
 from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT
 from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT
@@ -31,6 +33,10 @@ def get_dr_prompt_template(
 ) -> str:
 
     available_tool_paths = [tool["path"] for tool in available_tools or []]
+
+    average_tool_costs = "\n".join(
+        [f"{tool}: {AVERAGE_TOOL_COSTS[tool]}" for tool in available_tool_paths]
+    )
 
     tool_differentiations = []
     for tool_1 in available_tool_paths:
@@ -73,6 +79,7 @@ def get_dr_prompt_template(
         ),
         "tool_differentiation_hints": tool_differentiation_hint_string,
         "tool_question_hints": tool_question_hint_string,
+        "average_tool_costs": average_tool_costs,
         "possible_entities": entity_types_string
         or "(The Knowledge Graph is not used.)",
         "possible_relationships": relationship_types_string
@@ -81,7 +88,7 @@ def get_dr_prompt_template(
 
     if purpose == DRPromptPurpose.PLAN:
         if time_budget == DRTimeBudget.FAST:
-            raise ValueError("FAST time budget is not supported for plan generation")
+            raise ValueError("plan generation is not supported for FAST time budget")
         base_template = ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT
 
     elif purpose == DRPromptPurpose.NEXT_STEP:
@@ -89,6 +96,11 @@ def get_dr_prompt_template(
             base_template = ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT
         else:
             base_template = ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT
+
+    elif purpose == DRPromptPurpose.CLARIFICATION:
+        if time_budget == DRTimeBudget.FAST:
+            raise ValueError("clarification is not supported for FAST time budget")
+        base_template = GET_CLARIFICATION_PROMPT
 
     else:
         # for mypy, clearly a mypy bug

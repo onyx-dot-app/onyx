@@ -7,6 +7,9 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.constants import CLARIFICATION_REQUEST_PREFIX
 from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
+from onyx.agents.agent_search.dr.dr_prompt_builder import get_dr_prompt_template
+from onyx.agents.agent_search.dr.models import ClarificationGenerationResponse
+from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.states import DRPath
@@ -23,7 +26,6 @@ from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import MessageType
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
-from onyx.prompts.dr_prompts import GET_CLARIFICATION_PROMPT
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
@@ -55,24 +57,77 @@ def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[di
         tool_dict["description"] = tool.description
         tool_dict["display_name"] = tool.display_name
 
-        if isinstance(tool, CustomTool):
+        # TODO: add proper KG search tool
+        if tool.name == "run_kg_search":
+            KG_SEARCH_RESPONSE_SUMMARY_ID = CUSTOM_TOOL_RESPONSE_ID  # unused for now
+            tool_dict["summary_signature"] = KG_SEARCH_RESPONSE_SUMMARY_ID
+            tool_dict["path"] = DRPath.KNOWLEDGE_GRAPH.value
+        elif isinstance(tool, CustomTool):
             tool_dict["summary_signature"] = CUSTOM_TOOL_RESPONSE_ID
-            tool_dict["path"] = tool.name.upper()
+            tool_dict["path"] = (
+                tool.name.upper()
+            )  # TODO: average tool cost will have keyerror
         elif isinstance(tool, InternetSearchTool):
             tool_dict["summary_signature"] = INTERNET_SEARCH_RESPONSE_SUMMARY_ID
             tool_dict["path"] = DRPath.INTERNET_SEARCH.value
         elif isinstance(tool, SearchTool):
             tool_dict["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
             tool_dict["path"] = DRPath.SEARCH.value
-        # TODO: add proper KG search tool
-        elif tool.name == "run_kg_search":
-            KG_SEARCH_RESPONSE_SUMMARY_ID = CUSTOM_TOOL_RESPONSE_ID  # unused for now
-            tool_dict["summary_signature"] = KG_SEARCH_RESPONSE_SUMMARY_ID
-            tool_dict["path"] = DRPath.KNOWLEDGE_GRAPH.value
 
         available_tools.append(tool_dict)
 
     return available_tools
+
+
+def _get_existing_clarification_request(
+    graph_config: GraphConfig,
+) -> tuple[OrchestrationFeedbackRequest, str, str] | None:
+    """
+    Returns the clarification info, original question, and updated chat history if
+    a clarification request and response exists, otherwise returns None.
+    """
+    # check for clarification request and response in message history
+    previous_raw_messages = graph_config.inputs.prompt_builder.raw_message_history
+    if (
+        len(previous_raw_messages) < 2
+        or previous_raw_messages[-1].message_type != MessageType.ASSISTANT
+        or CLARIFICATION_REQUEST_PREFIX not in previous_raw_messages[-1].message
+    ):
+        return None
+
+    # get the clarification request and response
+    previous_messages = graph_config.inputs.prompt_builder.message_history
+    last_message = previous_raw_messages[-1].message
+
+    clarification = OrchestrationFeedbackRequest(
+        clarification_question=last_message.split(CLARIFICATION_REQUEST_PREFIX, 1)[
+            1
+        ].strip(),
+        clarification_response=graph_config.inputs.prompt_builder.raw_user_query,
+    )
+    original_question = graph_config.inputs.prompt_builder.raw_user_query
+    chat_history_string = "(No chat history yet available)"
+
+    # get the original user query and chat history string before the original query
+    # e.g., if history = [user query, assistant clarification request, user clarification response],
+    # previous_messages = [user query, assistant clarification request], we want the user query
+    for i, message in enumerate(reversed(previous_messages), 1):
+        if (
+            isinstance(message, HumanMessage)
+            and message.content
+            and isinstance(message.content, str)
+        ):
+            original_question = message.content
+            chat_history_string = (
+                get_chat_history_string(
+                    graph_config.inputs.prompt_builder.message_history[:-i],
+                    MAX_CHAT_HISTORY_MESSAGES,
+                )
+                or "(No chat history yet available)"
+            )
+            break
+
+    return clarification, original_question, chat_history_string
 
 
 def clarifier(
@@ -87,109 +142,73 @@ def clarifier(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     original_question = graph_config.inputs.prompt_builder.raw_user_query
-    user_feedback: str | None = None
-
     time_budget = graph_config.behavior.time_budget
 
-    # TODO: I don't think this is used in dr, if so remove
-    graph_config.behavior.use_agentic_search = False
-
-    kg_enabled = not config["metadata"]["config"].behavior.kg_config_settings.KG_ENABLED
-
     # get the connected tools and format for the Deep Research flow
-    available_tools = _get_available_tools(graph_config, kg_enabled)
+    kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
+    available_tools: list[dict[str, str]] = _get_available_tools(
+        graph_config, kg_enabled
+    )
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
-    # by default, go straight to orchestrator
-    feedback_request = OrchestrationFeedbackRequest(
-        feedback_needed=False
-    )  # remainder is None
     query_path = DRPath.ORCHESTRATOR
 
-    chat_history_string = (
-        get_chat_history_string(
-            graph_config.inputs.prompt_builder.message_history,
-            MAX_CHAT_HISTORY_MESSAGES,
-        )
-        or "(No chat history yet available)"
-    )
-
-    # feedback can only be requested if time budget is not FAST
+    # get clarification (unless time budget is FAST)
+    clarification = None
     if time_budget != DRTimeBudget.FAST:
-        previous_messages = graph_config.inputs.prompt_builder.message_history
-        previous_raw_messages = graph_config.inputs.prompt_builder.raw_message_history
-
-        # check if there is a feedback request in the most recent message history...
-        if (
-            len(previous_raw_messages) >= 2
-            and previous_raw_messages[-1].message_type == MessageType.ASSISTANT
-            and CLARIFICATION_REQUEST_PREFIX in previous_raw_messages[-1].message
-        ):
-
-            last_message = previous_raw_messages[-1]
-            potential_user_feedback_message = (
-                graph_config.inputs.prompt_builder.raw_user_query
-            )
-
-            feedback_questions = last_message.message.split(
-                CLARIFICATION_REQUEST_PREFIX
-            )[1].strip()
-
-            user_feedback = potential_user_feedback_message
-
-            # overwrite the overall question, as it has not changed if the last message is
-            # a user feedback message
-            # ignore here the last two messages and look for the last human message before that
-            for previous_message in reversed(previous_messages):
-                if (
-                    isinstance(previous_message, HumanMessage)
-                    and previous_message.content
-                    and isinstance(previous_message.content, str)
-                ):
-                    original_question = previous_message.content
-                    break
-
-            feedback_request = OrchestrationFeedbackRequest(
-                feedback_needed=True,
-                feedback_request=feedback_questions,
-                feedback_addressed=True,
-                feedback_answer=user_feedback,
-            )
-
+        result = _get_existing_clarification_request(graph_config)
+        if result is not None:
+            clarification, original_question, chat_history_string = result
+        else:
+            # generate clarification questions if needed
             chat_history_string = (
                 get_chat_history_string(
-                    graph_config.inputs.prompt_builder.message_history[:-2],
+                    graph_config.inputs.prompt_builder.message_history,
                     MAX_CHAT_HISTORY_MESSAGES,
                 )
                 or "(No chat history yet available)"
             )
 
-        else:
-            # ... if not, use the raw_user_query as the original question and ask for feedback
-            get_feedback_prompt = (
-                GET_CLARIFICATION_PROMPT.replace("---question---", original_question)
-                .replace("---possible_entities---", all_entity_types)
-                .replace("---possible_relationships---", all_relationship_types)
-                .replace("---chat_history_string---", chat_history_string)
+            base_clarification_prompt = get_dr_prompt_template(
+                DRPromptPurpose.CLARIFICATION,
+                time_budget,
+                entity_types_string=all_entity_types,
+                relationship_types_string=all_relationship_types,
+                available_tools=available_tools,
             )
+            clarification_prompt = base_clarification_prompt.replace(
+                "---question---", original_question
+            ).replace("---chat_history_string---", chat_history_string)
 
             try:
-                feedback_request_response = invoke_llm_json(
+                clarification_response = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
-                    prompt=get_feedback_prompt,
-                    schema=OrchestrationFeedbackRequest,
+                    prompt=clarification_prompt,
+                    schema=ClarificationGenerationResponse,
                     timeout_override=25,
                     max_tokens=1500,
                 )
+            except Exception as e:
+                logger.error(f"Error in clarification generation: {e}")
+                raise e
 
+            if (
+                clarification_response.clarification_needed
+                and clarification_response.clarification_question
+            ):
+                clarification = OrchestrationFeedbackRequest(
+                    clarification_question=clarification_response.clarification_question,
+                    clarification_response=None,
+                )
+                query_path = DRPath.END
                 write_custom_event(
                     "basic_response",
                     AgentAnswerPiece(
                         answer_piece=(
                             f"{CLARIFICATION_REQUEST_PREFIX} "
-                            f"{feedback_request_response.feedback_request}\n\n"
+                            f"{clarification.clarification_question}\n\n"
                         ),
                         level=0,
                         level_question_num=0,
@@ -197,24 +216,13 @@ def clarifier(
                     ),
                     writer,
                 )
-
-            except Exception as e:
-                logger.error(f"Error in feedback request: {e}")
-                raise e
-
-            if feedback_request_response.feedback_needed:
-                feedback_request = OrchestrationFeedbackRequest(
-                    feedback_needed=True,
-                    feedback_request=feedback_request_response.feedback_request,
-                    feedback_addressed=False,
-                    feedback_answer=None,
-                )
-
-        query_path = (
-            DRPath.END
-            if feedback_request.feedback_needed
-            and not feedback_request.feedback_addressed
-            else DRPath.ORCHESTRATOR
+    else:
+        chat_history_string = (
+            get_chat_history_string(
+                graph_config.inputs.prompt_builder.message_history,
+                MAX_CHAT_HISTORY_MESSAGES,
+            )
+            or "(No chat history yet available)"
         )
 
     return OrchestrationUpdate(
@@ -230,6 +238,6 @@ def clarifier(
                 node_start_time=node_start_time,
             )
         ],
-        feedback_structure=feedback_request,
+        clarification=clarification,
         available_tools=available_tools,
     )

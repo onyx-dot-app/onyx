@@ -5,6 +5,7 @@ from langchain.schema.messages import HumanMessage
 
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
 from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
@@ -122,3 +123,18 @@ def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) 
             for msg in past_messages
         )
     )
+
+
+def get_prompt_question(
+    question: str, clarification: OrchestrationFeedbackRequest | None
+) -> str:
+    if clarification:
+        clarification_question = clarification.clarification_question
+        clarification_response = clarification.clarification_response
+        return (
+            f"Initial User Question: {question}\n"
+            f"(Clarification Question: {clarification_question}\n"
+            f"User Response: {clarification_response})"
+        )
+
+    return question

@@ -577,13 +577,18 @@ ANSWER:
 """
 
 GET_CLARIFICATION_PROMPT = f"""
-You are a helpful assistant that is great in asking clarifying questions in case \
-a base question is not as clear as it should. Your task is to ask necessary clarification \
-questions to the user, before the question is sent to the deep research agent. Your task is \
-NOT to ask follow up questions that are not necessary to answer the user question.
+You are a helpful assistant that is great at asking clarifying questions in case \
+a base question is not as clear enough. Your task is to ask necessary clarification \
+questions to the user, before the question is sent to the deep research agent.
 
-You have these ---num_available_tools--- tools available, \
----available_tools---.
+Your task is NOT to answer the question. Instead, you must gather necessary information \
+based on the available tools and their capabilities described below. If a tool does not \
+absolutely require a specific detail, you should not ask for it. It is fine for a question \
+to be vague, as long as the tool can handle it. Also keep in mind that the user may simply \
+enter a keyword without providing context or specific instructions. In those cases \
+assume that the user is conducting a general search on the topic.
+
+You have these ---num_available_tools--- tools available, ---available_tools---.
 
 ---tool_descriptions---
 
@@ -605,22 +610,18 @@ to answer the question:
 
 NOTES:
   - you have to reason over this purely based on your intrinsic knowledge.
-  - if clarifications are required, fill in 'true' for "feedback_needed" field and \
-articulate UP TO 3 NUMBERED clarification questions that you think are needed to clarify the question.
-Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
-Note that it is fine to ask zero, one, two, or three follow-up questions.
-  - if no clarifications are required, fill in 'false' for "feedback_needed" field and \
-"no feedback required" for "feedback_request" field.
-  - only ask clarification questions if that information is vital to answer the user question. \
-Do NOT simply ask followup questions that tries to expand on the user question, or gather more details \
-which may not be absolutely necessary for the deep research agent to answer the user question.
+  - you are not required to ask clarification questions. Only ask if absolutely necessary.
+  - again, if a user simply enters a keyword without providing context or specific instructions. \
+assume that the user is conducting a general search on the topic.
+  - if you do ask for clarifications, keep it clear and concise.
 
 Please respond with a json dictionary in the following format:
 {{
-   "feedback_needed": "<true or false. If true, please provide a feedback request. \
-If false, just say 'no feedback request'.>",
-   "feedback_request": "<the feedback request. If you think the plan is good, \
-just say 'no feedback request'.>"
+   "clarification_needed": <true or false, whether you believe a clarification question is \
+needed based on above guidance>,
+   "clarification_question": "<the clarification questions if clarification_needed is true, \
+otherwise say 'no clarification needed'. Respond as a string, not as a list, even if you \
+think multiple clarification questions are needed.>"
 }}
 
 ANSWER:

@@ -31,11 +31,14 @@ class OrchestrationPlan(BaseModel):
     plan: str
 
 
+class ClarificationGenerationResponse(BaseModel):
+    clarification_needed: bool
+    clarification_question: str
+
+
 class OrchestrationFeedbackRequest(BaseModel):
-    feedback_needed: bool = False
-    feedback_addressed: bool | None = None
-    feedback_request: str | None = None
-    feedback_answer: str | None = None
+    clarification_question: str
+    clarification_response: str | None = None
 
 
 class SearchAnswer(BaseModel):
@@ -77,3 +80,4 @@ class DRTimeBudget(str, Enum):
 class DRPromptPurpose(str, Enum):
     PLAN = "PLAN"
     NEXT_STEP = "NEXT_STEP"
+    CLARIFICATION = "CLARIFICATION"

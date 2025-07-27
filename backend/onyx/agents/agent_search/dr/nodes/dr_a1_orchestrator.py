@@ -10,7 +10,6 @@ from onyx.agents.agent_search.dr.constants import HIGH_LEVEL_PLAN_PREFIX
 from onyx.agents.agent_search.dr.dr_prompt_builder import get_dr_prompt_template
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
-from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.dr.models import OrchestratorDecisonsNoPlan
 from onyx.agents.agent_search.dr.states import DRPath
@@ -19,6 +18,7 @@ from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.dr.utils import (
     get_answers_history_from_iteration_responses,
 )
+from onyx.agents.agent_search.dr.utils import get_prompt_question
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -33,22 +33,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _get_prompt_question(
-    question: str, feedback_structure: OrchestrationFeedbackRequest | None
-) -> str:
-
-    if feedback_structure:
-        feedback_request = feedback_structure.feedback_request
-        user_feedback = feedback_structure.feedback_answer
-
-        return (
-            f"User Question:{question}\n(Feedback Request:\n"
-            f"{feedback_request}\n\nUser Clarification:\n{user_feedback})"
-        )
-
-    return question
-
-
 def orchestrator(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> OrchestrationUpdate:
@@ -58,15 +42,13 @@ def orchestrator(
 
     node_start_time = datetime.now()
 
-    current_time_string = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = state.original_question
     if not question:
         raise ValueError("Question is required for orchestrator")
 
     plan_of_record = state.plan_of_record
-    feedback_request = state.feedback_structure
+    clarification = state.clarification
     iteration_nr = state.iteration_nr + 1
     time_budget = graph_config.behavior.time_budget
     remaining_time_budget = state.remaining_time_budget
@@ -75,9 +57,7 @@ def orchestrator(
         get_answers_history_from_iteration_responses(state.iteration_responses)
         or "(No answer history yet available)"
     )
-
-    # TODO: I don't think this is used in dr, if so remove
-    graph_config.behavior.use_agentic_search = False
+    prompt_question = get_prompt_question(question, clarification)
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
@@ -88,8 +68,6 @@ def orchestrator(
     decision_prompt = None
 
     if time_budget == DRTimeBudget.FAST:
-        prompt_question = _get_prompt_question(question, None)
-
         if iteration_nr == 1:
             remaining_time_budget = DR_TIME_BUDGET_BY_TYPE[DRTimeBudget.FAST]
 
@@ -101,16 +79,14 @@ def orchestrator(
             available_tools=state.available_tools,
         )
         decision_prompt = (
-            base_decision_prompt.replace("---question---", prompt_question)
+            base_decision_prompt.replace("---question---", question)
             .replace("---chat_history_string---", chat_history_string)
-            .replace("---current_time---", current_time_string)
             .replace("---answer_history_string---", answer_history_string)
             .replace("---iteration_nr---", str(iteration_nr))
+            .replace("---remaining_time_budget---", str(remaining_time_budget))
         )
 
     else:
-        prompt_question = _get_prompt_question(question, feedback_request)
-
         if iteration_nr == 1 and not plan_of_record:
             # by default, we start a new iteration, but if there is a feedback request,
             # we start a new iteration 0 again (set a bit later)
@@ -124,11 +100,9 @@ def orchestrator(
                 relationship_types_string=all_relationship_types,
                 available_tools=state.available_tools,
             )
-            plan_generation_prompt = (
-                base_plan_prompt.replace("---question---", prompt_question)
-                .replace("---chat_history_string---", chat_history_string)
-                .replace("---current_time---", current_time_string)
-            )
+            plan_generation_prompt = base_plan_prompt.replace(
+                "---question---", prompt_question
+            ).replace("---chat_history_string---", chat_history_string)
 
             try:
                 plan_of_record = invoke_llm_json(
@@ -173,6 +147,7 @@ def orchestrator(
             .replace("---iteration_nr---", str(iteration_nr))
             .replace("---current_plan_of_record_string---", plan_of_record.plan)
             .replace("---chat_history_string---", chat_history_string)
+            .replace("---remaining_time_budget---", str(remaining_time_budget))
         )
 
     if remaining_time_budget > 0:
@@ -213,7 +188,7 @@ def orchestrator(
                 node_start_time=node_start_time,
             )
         ],
-        feedback_structure=feedback_request,
+        clarification=clarification,
         plan_of_record=plan_of_record,
         remaining_time_budget=remaining_time_budget,
     )

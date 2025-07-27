@@ -9,6 +9,7 @@ from onyx.agents.agent_search.dr.states import FinalUpdate
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
+from onyx.agents.agent_search.dr.utils import get_prompt_question
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -50,6 +51,9 @@ def closer(
     base_question = state.original_question
     if not base_question:
         raise ValueError("Question is required for closer")
+
+    clarification = state.clarification
+    prompt_question = get_prompt_question(base_question, clarification)
 
     chat_history_string = (
         get_chat_history_string(
@@ -95,7 +99,7 @@ def closer(
     )
 
     final_answer_prompt = (
-        FINAL_ANSWER_PROMPT.replace("---base_question---", base_question)
+        FINAL_ANSWER_PROMPT.replace("---base_question---", prompt_question)
         .replace("---iteration_responses_string---", iteration_responses_string)
         .replace("---chat_history_string---", chat_history_string)
     )
