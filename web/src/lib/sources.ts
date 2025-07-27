@@ -205,6 +205,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/bookstack",
   },
+  outline: {
+    icon: FileIcon2,
+    displayName: "Outline",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/outline",
+  },
   google_sites: {
     icon: GoogleSitesIcon,
     displayName: "Google Sites",
