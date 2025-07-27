@@ -18,7 +18,7 @@ export const LogoComponent = memo(function LogoComponent({
   show,
   isAdmin,
 }: {
-  enterpriseSettings: EnterpriseSettings | null;
+  enterpriseSettings?: EnterpriseSettings;
   backgroundToggled?: boolean;
   show?: boolean;
   isAdmin?: boolean;
@@ -28,9 +28,7 @@ export const LogoComponent = memo(function LogoComponent({
   return (
     <div
       onClick={isAdmin ? () => router.push("/chat") : () => {}}
-      className={`max-w-[200px]
-        ${!show && "mobile:hidden"}
-       flex text-text-900 items-center gap-x-1`}
+      className={`max-w-[200px] ${!!show && "mobile:hidden"} flex text-text-900 items-center gap-x-1`}
     >
       {enterpriseSettings && enterpriseSettings.application_name ? (
         <>

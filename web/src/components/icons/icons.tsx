@@ -32,6 +32,7 @@ import {
   FiBarChart2,
   FiMail,
 } from "react-icons/fi";
+import { LuSparkles } from "react-icons/lu";
 import { SiBookstack } from "react-icons/si";
 import { StaticImageData } from "next/image";
 import jiraSVG from "../../../public/Jira.svg";
@@ -664,6 +665,15 @@ export const MagnifyingIcon = ({
         clipRule="evenodd"
       />
     </svg>
+  );
+};
+
+export const SparkleIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <LuSparkles style={{ width: size, height: size }} className={className} />
   );
 };
 
