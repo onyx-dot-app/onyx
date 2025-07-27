@@ -11,7 +11,7 @@ from onyx.agents.agent_search.dr.dr_prompt_builder import get_dr_prompt_template
 from onyx.agents.agent_search.dr.models import ClarificationGenerationResponse
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
-from onyx.agents.agent_search.dr.models import OrchestrationFeedbackRequest
+from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
@@ -81,7 +81,7 @@ def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[di
 
 def _get_existing_clarification_request(
     graph_config: GraphConfig,
-) -> tuple[OrchestrationFeedbackRequest, str, str] | None:
+) -> tuple[OrchestrationClarificationInfo, str, str] | None:
     """
     Returns the clarification info, original question, and updated chat history if
     a clarification request and response exists, otherwise returns None.
@@ -99,7 +99,7 @@ def _get_existing_clarification_request(
     previous_messages = graph_config.inputs.prompt_builder.message_history
     last_message = previous_raw_messages[-1].message
 
-    clarification = OrchestrationFeedbackRequest(
+    clarification = OrchestrationClarificationInfo(
         clarification_question=last_message.split(CLARIFICATION_REQUEST_PREFIX, 1)[
             1
         ].strip(),
@@ -198,7 +198,7 @@ def clarifier(
                 clarification_response.clarification_needed
                 and clarification_response.clarification_question
             ):
-                clarification = OrchestrationFeedbackRequest(
+                clarification = OrchestrationClarificationInfo(
                     clarification_question=clarification_response.clarification_question,
                     clarification_response=None,
                 )

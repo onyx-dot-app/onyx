@@ -35,7 +35,7 @@ def get_dr_prompt_template(
     available_tool_paths = [tool["path"] for tool in available_tools or []]
 
     average_tool_costs = "\n".join(
-        [f"{tool}: {AVERAGE_TOOL_COSTS[tool]}" for tool in available_tool_paths]
+        [f"{tool}: {AVERAGE_TOOL_COSTS[DRPath(tool)]}" for tool in available_tool_paths]
     )
 
     tool_differentiations = []

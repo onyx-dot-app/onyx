@@ -36,7 +36,7 @@ class ClarificationGenerationResponse(BaseModel):
     clarification_question: str
 
 
-class OrchestrationFeedbackRequest(BaseModel):
+class OrchestrationClarificationInfo(BaseModel):
     clarification_question: str
     clarification_response: str | None = None
 
