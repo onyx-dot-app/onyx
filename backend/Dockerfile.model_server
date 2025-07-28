@@ -59,4 +59,14 @@ COPY ./model_server /app/model_server
 
 ENV PYTHONPATH=/app
 
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app && \
+    chmod 775 /var/log && \
+    chown onyx:onyx /var/log
+
+# Switch to non-root user
+USER onyx
+
 CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
