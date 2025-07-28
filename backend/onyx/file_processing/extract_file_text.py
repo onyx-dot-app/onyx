@@ -347,6 +347,7 @@ def docx_to_text_and_images(
         )
         return text_content_raw or "", []
 
+    file.seek(0)
     return doc.markdown, extract_docx_images(to_bytesio(file))
 
 
