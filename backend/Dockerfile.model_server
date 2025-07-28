@@ -40,7 +40,10 @@ SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_rem
 
 # In case the user has volumes mounted to /root/.cache/huggingface that they've downloaded while
 # running Onyx, don't overwrite it with the built in cache folder
-RUN mv /root/.cache/huggingface /root/.cache/temp_huggingface
+# Move cache to location accessible by non-root user
+RUN mkdir -p /home/onyx/.cache && \
+    mv /root/.cache/huggingface /home/onyx/.cache/huggingface && \
+    mv /root/.cache/temp_huggingface /home/onyx/.cache/temp_huggingface
 
 WORKDIR /app
 
@@ -63,7 +66,8 @@ ENV PYTHONPATH=/app
 RUN groupadd -g 1001 onyx && \
     useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
     chown -R onyx:onyx /app && \
-    chmod 775 /var/log && \
+    chown -R onyx:onyx /home/onyx/.cache && \
+    chmod 755 /var/log && \
     chown onyx:onyx /var/log
 
 # Switch to non-root user

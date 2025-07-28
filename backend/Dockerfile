@@ -120,7 +120,7 @@ ENV PYTHONPATH=/app
 RUN groupadd -g 1001 onyx && \
     useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
     chown -R onyx:onyx /app && \
-    chmod 775 /var/log && \
+    chmod 755 /var/log && \
     chown onyx:onyx /var/log
 
 # Switch to non-root user
