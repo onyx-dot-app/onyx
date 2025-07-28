@@ -21,7 +21,7 @@ from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import LlmDoc
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPT
+from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPTS
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
@@ -49,6 +49,7 @@ def search(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
+    time_budget = graph_config.behavior.time_budget
 
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
@@ -110,7 +111,8 @@ def search(
     # Built prompt
 
     search_prompt = (
-        BASIC_SEARCH_PROMPT.replace("---search_query---", search_query)
+        BASIC_SEARCH_PROMPTS[time_budget]
+        .replace("---search_query---", search_query)
         .replace("---base_question---", base_question)
         .replace("---document_text---", document_texts)
     )
@@ -144,11 +146,13 @@ def search(
     # incorrect citations when the documents get reordered by the closer
     citation_string = search_answer_json.citations
     answer_string = search_answer_json.answer
+    claims = search_answer_json.claims or []
 
     (
         citation_numbers,
         answer_string,
-    ) = extract_document_citations(citation_string + answer_string)
+        claims,
+    ) = extract_document_citations(citation_string, answer_string, claims)
     cited_documents = [
         retrieved_docs[citation_number - 1] for citation_number in citation_numbers
     ]

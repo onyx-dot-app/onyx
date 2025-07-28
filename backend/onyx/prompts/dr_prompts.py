@@ -18,6 +18,8 @@ INTERNET_SEARCH = DRPath.INTERNET_SEARCH.value
 
 DONE_STANDARD: dict[str, str] = {}
 
+BASIC_SEARCH_PROMPTS: dict[str, str] = {}
+
 DONE_STANDARD[DRTimeBudget.FAST] = (
     "Try to make sure that you think you have enough information to \
 answer the question in the spirit and the level of detail that is pretty explicit in the question."
@@ -121,10 +123,14 @@ whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE
 
 TOOL_QUESTION_HINTS: dict[str, str] = {
     DRPath.SEARCH.value: f"""if the tool is {SEARCH}, the question should be \
-written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries.
+written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. \
+If searching for multiple \
+aspects is required you should split the question into multiple sub-questions.
 """,
     DRPath.INTERNET_SEARCH.value: f"""if the tool is {INTERNET_SEARCH}, the question should be \
-written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries.
+written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. So the \
+searches should be rather short and focus on one specific aspect. If searching for multiple \
+aspects is required you should split the question into multiple sub-questions.
 """,
     DRPath.KNOWLEDGE_GRAPH.value: f"""if the tool is {KNOWLEDGE_GRAPH}, the question should be \
 written as a list of one question.
@@ -396,7 +402,9 @@ science'.>"}}
 """
 
 
-BASIC_SEARCH_PROMPT = f"""
+BASIC_SEARCH_PROMPTS[
+    DRTimeBudget.FAST
+] = f"""
 You are a helpful assistant that can use the provided documents, the specific search query, and the \
 user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \
 answer to the specific search query. Although your response should pertain mainly to the specific search \
@@ -462,6 +470,83 @@ but I found information about curry..').
 But this should be be precise and concise, and specifically answer the question.>",
 "citations": "<the list of document numbers that are relevvant for the answer. \
 Please list in format [1][4][6], etc.>"
+}}
+"""
+
+BASIC_SEARCH_PROMPTS[
+    DRTimeBudget.DEEP
+] = f"""
+You are a helpful assistant that can use the provided documents, the specific search query, and the \
+user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \
+analysis to the specific search query. Although your response should pertain mainly to the specific search \
+query, also keep in mind the base query to provide valuable insights for answering the base query too.
+
+Here is the specific search query:
+{SEPARATOR_LINE}
+---search_query---
+{SEPARATOR_LINE}
+
+Here is the base question that ultimately needs to be answered:
+{SEPARATOR_LINE}
+---base_question---
+{SEPARATOR_LINE}
+
+And here is the list of documents that you must use to answer the specific search query:
+{SEPARATOR_LINE}
+---document_text---
+{SEPARATOR_LINE}
+
+Notes:
+   - only use documents that are relevant to the specific search query AND you KNOW apply \
+to the context of the question! Example: context is about what Nike was doing to drive sales, \
+and the question is about what Puma is doing to drive sales, DO NOT USE ANY INFORMATION \
+from the information from Nike! In fact, even if the context does not discuss driving \
+sales for Nike but about driving sales w/o mentioning any company (incl. Puma!), you \
+still cannot use the information! You MUST be sure that the context is correct. If in \
+doubt, don't use that document!
+   - It is critical to avoid hallucinations as well as taking information out of context.
+   - clearly indicate any assumptions you make in your answer.
+   - while the base question is important, really focus on answering the specific search query. \
+That is your task.
+   - again, do not use/cite any documents that you are not 100% sure are relevant to the \
+SPECIFIC context \
+of the question! And do NOT GUESS HERE and say 'oh, it is reasonable that this context applies here'. \
+DO NOT DO THAT. If the question is about 'yellow curry' and you only see information about 'curry', \
+say something like 'there is no mention of yellow curry specifically', and IGNORE THAT DOCUMENT. But \
+if you still strongly suspect the document is relevant, you can use it, but you MUST clearly \
+indicate that you are not 100% sure and that the document does not mention 'yellow curry'. (As \
+an example.)
+If the specific term or concept is not present, the answer should explicitly state its absence before \
+providing any related information.
+   - Always begin your answer with a direct statement about whether the exact term or phrase, or \
+the exact meaning was found in the documents.
+   - only provide a SHORT answer that i) provides the requested information if the question was \
+very specific, ii) cites the relevant documents at the end, and iii) provides a BRIEF HIGH-LEVEL \
+summary of the information in the cited documents, and cite the documents that are most \
+relevant to the question sent to you.
+
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your reasoning in 5-8 sentences of what guides you to your conclusions of \
+the specific search query given the documents.
+Start out here with a brief statement whether the SPECIFIC CONTEXT is mentioned in the \
+documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry..'). Any reasoning should be done here. Generate \
+here the information that will be necessary to provide a succinct answer to the specific search query. >",
+   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
+the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
+mentioned in the \
+documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry..').
+But this should be be precise and concise, and specifically answer the question. Please cite \
+the document sources inline in format [1][7], etc.>",
+"claims": "<a list of short claims discussed in the documents as they pertain to the query and/or \
+the original question. These will later be used for follow-up questions and verifications. Note that \
+these may not actually be in the succinct answer above. Also here, please cite the \
+document sources inline in format [1][7], etc.. So this should have format like \
+[<claim 1>, <claim 2>, <claim 3>, ...], each with citations.>",
+"citations": "<the list of document numbers that are relevvant for the answer and appeared as \
+citations earlier. Please list in format [1][4][6], etc.>"
 }}
 """
 
@@ -596,8 +681,7 @@ assume that the user is conducting a general search on the topic.
 
 You have these ---num_available_tools--- tools available, ---available_tools---.
 
----tool_descriptions---
-
+In case the knowledge graph is used, here is the description of the entity and relationship types:
 ---kg_types_descriptions---
 
 The tools and the entity and relationship types in the knowledge graph are simply provided \
@@ -616,10 +700,57 @@ to answer the question:
 
 NOTES:
   - you have to reason over this purely based on your intrinsic knowledge.
-  - you are not required to ask clarification questions. Only ask if absolutely necessary.
-  - again, if a user simply enters a keyword without providing context or specific instructions. \
-assume that the user is conducting a general search on the topic.
-  - if you do ask for clarifications, keep it clear and concise.
+  - if clarifications are required, fill in 'true' for "feedback_needed" field and \
+articulate UP TO 3 NUMBERED clarification questions that you think are needed to clarify the question.
+Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
+Note that it is fine to ask zero, one, two, or three follow-up questions.
+  - if no clarifications are required, fill in 'false' for "feedback_needed" field and \
+"no feedback required" for "feedback_request" field.
+  - only ask clarification questions if that information is VITAL to answer the user question. \
+Do NOT simply ask followup questions that tries to expand on the user question, or gather more details \
+which may not be absolutely necessary for the deep research agent to answer the user question.
+
+EXAMPLES:
+1. User question: "What is the capital of France?"
+   Feedback needed: false
+   Feedback request: 'no feedback request'
+   Reason: The user question is clear and does not require any clarification.
+
+
+2. User question: "How many tickets are there?"
+   Feedback needed: true
+   Feedback request: '1. What do you refer to by "tickets"?'
+   Reason: 'Tickets' could refer to many objects, like service tickets, jira tickets, etc. \
+But besides this, no further information is needed and asking one clarification question is enough.
+
+3. User question: "How many PRs were merged last month?"
+   Feedback needed: true
+   Feedback request: '1. Do you have a specific repo in mind for the Pull Requests?'
+   Reason: 'Merged' strongly suggests that PRs refer to pull requests. So this does \
+not need to be further clarified. However, asking for the repo is quite important as \
+typically there could be many. But besides this, no further information is needed and \
+asking one clarification question is enough.
+
+
+4. User question: "What are the most recent PRs about?"
+   Feedback needed: true
+   Feedback request: '1. What do PRs refer to? Pull Requests or something else?\
+\n2. What does most recent mean? Most recent <x> PRs? Or PRs from this week? \
+Please clarify.\n3. What is the activity for the time measure? Creation? Closing? Updating? etc.'
+   Reason: We need to clarify what PRs refers to. Also 'most recent' is not well defined \
+and needs multiple clarifications.
+
+
+5. User question: "Compare Adidas and Puma"
+   Feedback needed: true
+   Feedback request: '1. Do you have specific areas you want the comparison to be about?\
+\n2. Are you looking at a specific time period?\n3. Do you want the information in a \
+specific format?'
+   Reason: This question is overly broad and it really requires specification in terms of \
+areas and time period (therefore, clarification questions 1 and 2). Also, the user may want to \
+compare in a specific format, like table vs text form, therefore clarification question 3. \
+Certainly, there could be many more questions, but these seem to be themost essential 3.
+
 
 Please respond with a json dictionary in the following format:
 {{

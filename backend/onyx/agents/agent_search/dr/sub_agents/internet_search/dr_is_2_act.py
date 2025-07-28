@@ -24,7 +24,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import LlmDoc
 from onyx.context.search.models import InferenceSection
-from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPT
+from onyx.prompts.dr_prompts import BASIC_SEARCH_PROMPTS
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -68,6 +68,7 @@ def internet_search(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
+    time_budget = graph_config.behavior.time_budget
 
     logger.debug(
         f"Search start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
@@ -122,7 +123,8 @@ def internet_search(
     # Built prompt
 
     search_prompt = (
-        BASIC_SEARCH_PROMPT.replace("---search_query---", search_query)
+        BASIC_SEARCH_PROMPTS[time_budget]
+        .replace("---search_query---", search_query)
         .replace("---base_question---", base_question)
         .replace("---document_text---", document_texts)
     )
@@ -134,7 +136,7 @@ def internet_search(
         prompt=search_prompt,
         schema=SearchAnswer,
         timeout_override=40,
-        max_tokens=1500,
+        max_tokens=3000,
     )
 
     logger.debug(
@@ -156,11 +158,13 @@ def internet_search(
     # incorrect citations when the documents get reordered by the closer
     citation_string = search_answer_json.citations
     answer_string = search_answer_json.answer
+    claims = search_answer_json.claims
 
     (
         citation_numbers,
         answer_string,
-    ) = extract_document_citations(citation_string + answer_string)
+        claims,
+    ) = extract_document_citations(citation_string, answer_string, claims)
     cited_documents = [
         retrieved_docs[citation_number - 1] for citation_number in citation_numbers
     ]

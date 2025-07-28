@@ -181,6 +181,10 @@ def clarifier(
             clarification_prompt = base_clarification_prompt.replace(
                 "---question---", original_question
             ).replace("---chat_history_string---", chat_history_string)
+                .replace("------available_tools------", str(available_tools))
+                .replace("---num_available_tools---", str(len(available_tools)))
+                .replace("---tool_descriptions---", str(available_tools))
+                .replace("---kg_types_descriptions---", str(all_entity_types))
 
             try:
                 clarification_response = invoke_llm_json(
@@ -224,6 +228,8 @@ def clarifier(
             )
             or "(No chat history yet available)"
         )
+
+    # query_path = DRPath.END
 
     return OrchestrationUpdate(
         original_question=original_question,

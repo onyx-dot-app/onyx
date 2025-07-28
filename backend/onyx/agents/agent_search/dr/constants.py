@@ -17,6 +17,10 @@ AVERAGE_TOOL_COSTS: dict[DRPath, float] = {
     DRPath.CLOSER: 0.0,
 }
 
+AVERAGE_TOOL_COST_STRING = "\n".join(
+    [f"{tool}: {cost}" for tool, cost in AVERAGE_TOOL_COSTS.items()]
+)
+
 DR_TIME_BUDGET_BY_TYPE = {
     DRTimeBudget.FAST: 3.0,
     DRTimeBudget.SHALLOW: 6.0,

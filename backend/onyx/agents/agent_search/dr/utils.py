@@ -13,20 +13,67 @@ from onyx.agents.agent_search.shared_graph_utils.operators import (
 from onyx.context.search.models import InferenceSection
 
 
-def extract_document_citations(answer: str) -> tuple[list[int], str]:
+def extract_document_citations(
+    citation_string: str, answer: str, claims: list[str] | None = None
+) -> tuple[list[int], str, list[str]]:
     """
     Get the cited documents and remove the citations from the answer.
     """
-    citations: set[int] = set()
 
-    def replace_and_capture(match: re.Match[str]) -> str:
-        num = int(match.group(1))
-        citations.add(num)
-        return ""
+    def _extract_citation_numbers(text: str) -> set[int]:
+        """
+        Extract all citation numbers from text that contains citations in the format [1] or [1, 2, 3].
+        Returns a set of all observed citation numbers.
+        """
+        citations: set[int] = set()
 
-    cleaned_answer = re.sub(r"\[(\d+)\]", replace_and_capture, answer)
+        # Pattern to match both single citations [1] and multiple citations [1, 2, 3]
+        # This regex matches:
+        # - \[(\d+)\] for single citations like [1]
+        # - \[(\d+(?:,\s*\d+)*)\] for multiple citations like [1, 2, 3]
+        pattern = r"\[(\d+(?:,\s*\d+)*)\]"
 
-    return list(citations), cleaned_answer
+        for match in re.finditer(pattern, text):
+            # Extract the content inside the brackets
+            citation_content = match.group(1)
+
+            # Split by comma and extract individual numbers
+            numbers = [int(num.strip()) for num in citation_content.split(",")]
+            citations.update(numbers)
+
+        return citations
+
+    overall_citation_set = set(
+        list(_extract_citation_numbers(citation_string + answer))
+        + list(_extract_citation_numbers(" ".join(claims or [])))
+    )
+
+    relevant_citation_map = {
+        citation: citation_index
+        for citation, citation_index in enumerate(list(overall_citation_set), 1)
+    }
+
+    # Replace citations in answer with new indices
+    def replace_citation(match: re.Match[str]) -> str:
+        citation_content = match.group(1)
+        numbers = [int(num.strip()) for num in citation_content.split(",")]
+        new_numbers = [
+            str(relevant_citation_map[num])
+            for num in numbers
+            if num in relevant_citation_map
+        ]
+        return f"[{', '.join(new_numbers)}]"
+
+    cleaned_answer = re.sub(r"\[(\d+(?:,\s*\d+)*)\]", replace_citation, answer)
+
+    # Process claims if provided
+    cleaned_claims = []
+    if claims:
+        for claim in claims:
+            cleaned_claim = re.sub(r"\[(\d+(?:,\s*\d+)*)\]", replace_citation, claim)
+            cleaned_claims.append(cleaned_claim)
+
+    return list(overall_citation_set), cleaned_answer, cleaned_claims
 
 
 def aggregate_context(

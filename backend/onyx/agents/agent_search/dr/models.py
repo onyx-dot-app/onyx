@@ -45,6 +45,7 @@ class SearchAnswer(BaseModel):
     reasoning: str
     answer: str
     citations: str
+    claims: list[str] | None = None
 
 
 # TODO: revisit this for sample custom tools
@@ -62,6 +63,7 @@ class IterationAnswer(BaseModel):
     answer: str
     cited_documents: list[InferenceSection]
     background_info: str | None = None
+    claims: list[str] | None = None
 
 
 class AggregatedDRContext(BaseModel):

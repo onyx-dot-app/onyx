@@ -110,7 +110,7 @@ def orchestrator(
                     prompt=plan_generation_prompt,
                     schema=OrchestrationPlan,
                     timeout_override=25,
-                    max_tokens=1500,
+                    max_tokens=3000,
                 )
             except Exception as e:
                 logger.error(f"Error in plan generation: {e}")
@@ -159,7 +159,7 @@ def orchestrator(
                 prompt=decision_prompt,
                 schema=OrchestratorDecisonsNoPlan,
                 timeout_override=15,
-                max_tokens=500,
+                max_tokens=1500,
             )
             next_step = orchestrator_action.next_step
             query_path = next_step.tool
@@ -176,6 +176,8 @@ def orchestrator(
             remaining_time_budget = (
                 remaining_time_budget - 1.5
             )  # estimate for custom tools. TODO: fix!
+
+    # query_path = DRPath.CLOSER
 
     return OrchestrationUpdate(
         query_path=[query_path],
