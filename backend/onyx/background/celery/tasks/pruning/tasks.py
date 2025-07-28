@@ -70,9 +70,9 @@ logger = setup_logger()
 def _get_pruning_block_expiration() -> int:
     """
     Compute the expiration time for the pruning block signal.
-    Base expiration is 3600 seconds (1 hour), multiplied by the beat multiplier only in MULTI_TENANT mode.
+    Base expiration is 60 seconds (1 minute), multiplied by the beat multiplier only in MULTI_TENANT mode.
     """
-    base_expiration = 3600  # seconds
+    base_expiration = 60  # seconds
 
     if not MULTI_TENANT:
         return base_expiration
@@ -145,10 +145,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
         last_pruned = cc_pair.connector.time_created
 
     next_prune = last_pruned + timedelta(seconds=cc_pair.connector.prune_freq)
-    if datetime.now(timezone.utc) < next_prune:
-        return False
-
-    return True
+    return datetime.now(timezone.utc) >= next_prune
 
 
 @shared_task(
@@ -280,6 +277,9 @@ def try_creating_prune_generator_task(
     if not ALLOW_SIMULTANEOUS_PRUNING:
         count = redis_connector.prune.get_active_task_count()
         if count > 0:
+            logger.info(
+                f"try_creating_prune_generator_task: cc_pair={cc_pair.id} no simultaneous pruning allowed"
+            )
             return None
 
     LOCK_TIMEOUT = 30
@@ -293,6 +293,9 @@ def try_creating_prune_generator_task(
 
     acquired = lock.acquire(blocking_timeout=LOCK_TIMEOUT / 2)
     if not acquired:
+        logger.info(
+            f"try_creating_prune_generator_task: cc_pair={cc_pair.id} lock not acquired"
+        )
         return None
 
     try:
