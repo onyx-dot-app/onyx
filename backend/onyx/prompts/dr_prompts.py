@@ -41,7 +41,9 @@ present in the connected documents.
 Note that the search tool is not well suited for time-ordered questions (e.g., '...latest email...', \
 '...last 2 jiras resolved...') and answering aggregation-type questions (e.g., 'how many...') \
 (unless that info is present in the connected documents). If there are better suited tools \
-for answering those questions, use them instead. \
+for answering those questions, use them instead.
+You generally should not need to ask clarification questions about the topics being searched for \
+by the {SEARCH} tool, as the retrieved documents will likely provide you with more context.
 The {SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 
@@ -77,6 +79,11 @@ Note also that the {KNOWLEDGE_GRAPH} tool is slower than the standard search too
 Importantly, the {KNOWLEDGE_GRAPH} tool can also analyze the relevant documents/entities, so DO NOT \
 try to first find documents and then analyze them in a future iteration. Query the {KNOWLEDGE_GRAPH} \
 tool directly, like 'summarize the most recent jira created by John'.
+Lastly, to use the {KNOWLEDGE_GRAPH} tool, it is important that you know the specific entity/relation type being \
+referred to in the question. If it cannot reasonably be inferred, consider asking a clarification question.
+On the other hand, the {KNOWLEDGE_GRAPH} tool does NOT require attributes to be specified. I.e., it is possible \
+to search for entities without narrowing down specific attributes. Thus, if the question asks for an entity or \
+an entity type in general, you should not ask clarification questions to specify the attributes.
 """
 
 TOOL_DESCRIPTION[
@@ -92,11 +99,10 @@ if there is sufficient information in the provided history to answer the questio
 TOOL_DIFFERENTIATION_HINTS: dict[str, dict[str, str]] = {
     DRPath.SEARCH.value: {
         DRPath.INTERNET_SEARCH.value: f"""\
-  - if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
-then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
-Note also that if an earlier call was sent to the {INTERNET_SEARCH} tool, and the request was essentially not answered, \
-then you can consider sending a new request to the {SEARCH} tool and vice versa (provided the other \
-tool is a good fit for the question)!
+  - in general, you should use the {SEARCH} tool first, and only use the {INTERNET_SEARCH} tool if the \
+{SEARCH} tool result did not contain the information you need, or the user specifically asks or implies \
+the use of the {INTERNET_SEARCH} tool. Moreover, if the {INTERNET_SEARCH} tool result did not contain the \
+information you need, you can switch to the {SEARCH} tool the following iteration.
 """
     },
     DRPath.KNOWLEDGE_GRAPH.value: {
