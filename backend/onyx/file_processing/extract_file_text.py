@@ -312,10 +312,17 @@ def _extract_docx_content(
     extract_images: bool = True
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
-    Extract text from a docx. If embed_images=True, also extract inline images.
+    Extract text from a docx. If extract_images=True, also extract inline images.
     Return (text_content, list_of_images).
     """
     def is_simple_table(table: docx.table.Table) -> bool:
+        """
+        Checks if a table is "simple" - has no omitted cells or nested tables.
+        Args:
+            table: docx.table.Table object to check
+        Returns:
+            bool: True if table is simple, False otherwise
+        """
         for row in table.rows:
             # No omitted cells
             if row.grid_cols_before > 0 or row.grid_cols_after > 0:
@@ -328,6 +335,13 @@ def _extract_docx_content(
         return True
 
     def extract_cell_text(cell: docx.table._Cell) -> str:
+        """
+        Extracts text content from a table cell, joining multiple paragraphs with spaces.
+        Args:
+            cell: Table cell object from docx document
+        Returns:
+            str: Combined text from cell, or "N/A" if empty
+        """
         cell_paragraphs = [para.text.strip() for para in cell.paragraphs]
         return " ".join(p for p in cell_paragraphs if p) or "N/A"
 
@@ -382,7 +396,12 @@ def _extract_docx_content(
                 try:
                     # image is typically in rel.target_part.blob
                     image_bytes = rel.target_part.blob
-                except ValueError:
+                except ValueError as e:
+                    logger.warning(
+                        f"Failed to extract image from document {file_name or 'docx file'}, "
+                        f"relationship {rel.target_part.partname}: {str(e)}. "
+                        f"This image will be skipped."
+                    )
                     # Safeguard against relationships that lack an internal target_part
                     # (e.g., external relationships or other anomalies)
                     continue
