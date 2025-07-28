@@ -116,6 +116,16 @@ COPY ./assets /app/assets
 
 ENV PYTHONPATH=/app
 
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app && \
+    chmod 775 /var/log && \
+    chown onyx:onyx /var/log
+
+# Switch to non-root user
+USER onyx
+
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD
 CMD ["tail", "-f", "/dev/null"]
