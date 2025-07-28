@@ -1,8 +1,8 @@
-"""add_doc_metadata_field_to_document_table
+"""add_doc_metadata_field_in_document_model
 
-Revision ID: 8255a64bd8f3
-Revises: 0816326d83aa
-Create Date: 2025-07-16 10:40:58.591430
+Revision ID: 3fc5d75723b3
+Revises: 2f95e36923e6
+Create Date: 2025-07-28 18:45:37.985406
 
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = "8255a64bd8f3"
-down_revision = "0816326d83aa"
+revision = "3fc5d75723b3"
+down_revision = "2f95e36923e6"
 branch_labels = None
 depends_on = None
 
