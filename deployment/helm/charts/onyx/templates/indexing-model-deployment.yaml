@@ -24,8 +24,12 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      securityContext:
+        {{- toYaml .Values.indexCapability.podSecurityContext | nindent 8 }}
       containers:
       - name: {{ .Values.indexCapability.name }}
+        securityContext:
+          {{- toYaml .Values.indexCapability.securityContext | nindent 10 }}
         image: "{{ .Values.indexCapability.image.repository }}:{{ .Values.indexCapability.image.tag | default .Values.global.version }}"
         imagePullPolicy: {{ .Values.global.pullPolicy }}
         command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.indexCapability.containerPorts.server }}", "--limit-concurrency", "{{ .Values.indexCapability.limitConcurrency }}" ]

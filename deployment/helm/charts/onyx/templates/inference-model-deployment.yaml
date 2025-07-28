@@ -20,8 +20,12 @@ spec:
         {{ .key }}: {{ .value }}
         {{- end }}
     spec:
+      securityContext:
+        {{- toYaml .Values.inferenceCapability.podSecurityContext | nindent 8 }}
       containers:
       - name: model-server-inference
+        securityContext:
+          {{- toYaml .Values.inferenceCapability.securityContext | nindent 10 }}
         image: "{{ .Values.inferenceCapability.image.repository }}:{{ .Values.inferenceCapability.image.tag | default .Values.global.version }}"
         imagePullPolicy: {{ .Values.global.pullPolicy }}
         command: [ "uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.inferenceCapability.containerPorts.server }}" ]

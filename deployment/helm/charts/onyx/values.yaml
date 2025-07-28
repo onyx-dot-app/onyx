@@ -89,6 +89,11 @@ inferenceCapability:
   podLabels:
     - key: app
       value: inference-model-server
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: false
+    runAsUser: 1001
   resources:
     requests:
       cpu: 2000m
@@ -118,6 +123,11 @@ indexCapability:
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
   limitConcurrency: 10
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: false
+    runAsUser: 1001
   resources:
     requests:
       cpu: 2000m
@@ -173,13 +183,13 @@ webserver:
     # fsGroup: 2000
 
   securityContext:
-    {}
+    privileged: false
+    runAsUser: 1001
     # capabilities:
     #   drop:
     #   - ALL
     # readOnlyRootFilesystem: true
     # runAsNonRoot: true
-    # runAsUser: 1000
 
   containerPorts:
     server: 3000
