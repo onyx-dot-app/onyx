@@ -318,6 +318,11 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: false
+    runAsUser: 1001
 
 celery_beat:
   replicaCount: 1
@@ -327,11 +332,6 @@ celery_beat:
     app: celery-beat
   deploymentLabels:
     app: celery-beat
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -355,11 +355,6 @@ celery_worker_heavy:
     app: celery-worker-heavy
   deploymentLabels:
     app: celery-worker-heavy
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -383,11 +378,6 @@ celery_worker_docprocessing:
     app: celery-worker-docprocessing
   deploymentLabels:
     app: celery-worker-docprocessing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -411,11 +401,6 @@ celery_worker_light:
     app: celery-worker-light
   deploymentLabels:
     app: celery-worker-light
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -439,11 +424,6 @@ celery_worker_monitoring:
     app: celery-worker-monitoring
   deploymentLabels:
     app: celery-worker-monitoring
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
@@ -467,11 +447,6 @@ celery_worker_primary:
     app: celery-worker-primary
   deploymentLabels:
     app: celery-worker-primary
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 1000m
@@ -495,11 +470,6 @@ celery_worker_user_files_indexing:
     app: celery-worker-user-files-indexing
   deploymentLabels:
     app: celery-worker-user-files-indexing
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 2000m
@@ -546,11 +516,6 @@ celery_worker_docfetching:
     app: celery-worker-docfetching
   deploymentLabels:
     app: celery-worker-docfetching
-  podSecurityContext:
-    {}
-  securityContext:
-    privileged: true
-    runAsUser: 0
   resources:
     requests:
       cpu: 500m
