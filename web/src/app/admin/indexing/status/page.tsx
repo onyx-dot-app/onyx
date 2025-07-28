@@ -2,96 +2,209 @@
 
 import { LoadingAnimation } from "@/components/Loading";
 import { NotebookIcon } from "@/components/icons/icons";
-import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
+import { CCPairIndexingStatusTableLite } from "./CCPairIndexingStatusTableLite";
+import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Link from "next/link";
 import Text from "@/components/ui/text";
 import {
-  useConnectorCredentialIndexingStatus,
+  useConnectorIndexingStatusWithPagination,
   useFederatedConnectors,
 } from "@/lib/hooks";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 import { Button } from "@/components/ui/button";
+import { useState, useRef, useMemo } from "react";
+import { FilterOptions } from "./FilterComponent";
+import { ValidSources } from "@/lib/types";
+import Cookies from "js-cookie";
+import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
+import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
+
+interface IndexingStatusRequest {
+  secondary_index?: boolean;
+  access_type_filters?: string[];
+  last_status_filters?: string[];
+  docs_count_operator?: ">" | "<" | "=" | null;
+  docs_count_value?: number | null;
+  source_to_page?: Record<ValidSources, number>;
+}
 
 function Main() {
+  // State for filter management
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
+    accessType: null,
+    docsCountFilter: {
+      operator: null,
+      value: null,
+    },
+    lastStatus: null,
+  });
+
+  // State for search
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // State for collapse/expand functionality
+  const [connectorsToggled, setConnectorsToggled] = useState<
+    Record<ValidSources, boolean>
+  >(() => {
+    const savedState = Cookies.get(TOGGLED_CONNECTORS_COOKIE_NAME);
+    return savedState ? JSON.parse(savedState) : {};
+  });
+
+  // Reference to the FilterComponent for resetting its state
+  const filterComponentRef = useRef<{
+    resetFilters: () => void;
+  }>(null);
+
+  // Convert filter options to API request format
+  const request: IndexingStatusRequest = useMemo(() => {
+    return {
+      secondary_index: false,
+      access_type_filters: filterOptions.accessType || [],
+      last_status_filters: filterOptions.lastStatus || [],
+      docs_count_operator: filterOptions.docsCountFilter.operator,
+      docs_count_value: filterOptions.docsCountFilter.value,
+    };
+  }, [filterOptions]);
+
+  // Use the paginated hook with filter request and 30-second refresh
   const {
-    data: indexAttemptData,
-    isLoading: indexAttemptIsLoading,
-    error: indexAttemptError,
-  } = useConnectorCredentialIndexingStatus();
+    data: ccPairsIndexingStatuses,
+    isLoading: isLoadingCcPairsIndexingStatuses,
+    error: ccPairsIndexingStatusesError,
+    handlePageChange,
+    sourcePages,
+    sourceLoadingStates,
+    resetPagination,
+  } = useConnectorIndexingStatusWithPagination(request, 30000);
 
-  const {
-    data: editableIndexAttemptData,
-    isLoading: editableIndexAttemptIsLoading,
-    error: editableIndexAttemptError,
-  } = useConnectorCredentialIndexingStatus(undefined, true);
+  // Check if filters are active
+  const hasActiveFilters = useMemo(() => {
+    return (
+      (filterOptions.accessType && filterOptions.accessType.length > 0) ||
+      (filterOptions.lastStatus && filterOptions.lastStatus.length > 0) ||
+      filterOptions.docsCountFilter.operator !== null
+    );
+  }, [filterOptions]);
 
-  const {
-    data: federatedConnectorsData,
-    isLoading: federatedConnectorsIsLoading,
-    error: federatedConnectorsError,
-  } = useFederatedConnectors();
+  // Handle filter changes
+  const handleFilterChange = (newFilterOptions: FilterOptions) => {
+    setFilterOptions(newFilterOptions);
+    // Reset pagination when filters change
+    resetPagination();
+    // The hook will automatically refetch data when the request changes
+  };
 
-  // Debug logging
-  console.log("Federated connectors data:", federatedConnectorsData);
-  console.log("Federated connectors error:", federatedConnectorsError);
-  console.log("Federated connectors loading:", federatedConnectorsIsLoading);
+  // Toggle source expand/collapse functions
+  const toggleSource = (
+    source: ValidSources,
+    toggled: boolean | null = null
+  ) => {
+    const newConnectorsToggled = {
+      ...connectorsToggled,
+      [source]: toggled == null ? !connectorsToggled[source] : toggled,
+    };
+    setConnectorsToggled(newConnectorsToggled);
+    Cookies.set(
+      TOGGLED_CONNECTORS_COOKIE_NAME,
+      JSON.stringify(newConnectorsToggled)
+    );
+  };
 
-  if (
-    indexAttemptIsLoading ||
-    editableIndexAttemptIsLoading ||
-    federatedConnectorsIsLoading
-  ) {
-    return <LoadingAnimation text="" />;
-  }
+  const expandAll = () => {
+    if (!ccPairsIndexingStatuses) return;
+    const newConnectorsToggled = { ...connectorsToggled };
+    ccPairsIndexingStatuses.forEach((ccPairStatus) => {
+      newConnectorsToggled[ccPairStatus.source] = true;
+    });
+    setConnectorsToggled(newConnectorsToggled);
+    Cookies.set(
+      TOGGLED_CONNECTORS_COOKIE_NAME,
+      JSON.stringify(newConnectorsToggled)
+    );
+  };
 
-  if (
-    indexAttemptError ||
-    !indexAttemptData ||
-    editableIndexAttemptError ||
-    !editableIndexAttemptData
-  ) {
+  const collapseAll = () => {
+    if (!ccPairsIndexingStatuses) return;
+    const newConnectorsToggled = { ...connectorsToggled };
+    ccPairsIndexingStatuses.forEach((ccPairStatus) => {
+      newConnectorsToggled[ccPairStatus.source] = false;
+    });
+    setConnectorsToggled(newConnectorsToggled);
+    Cookies.set(
+      TOGGLED_CONNECTORS_COOKIE_NAME,
+      JSON.stringify(newConnectorsToggled)
+    );
+  };
+
+  // Check if any sources are expanded
+  const hasExpandedSources =
+    ccPairsIndexingStatuses?.some(
+      (ccPairStatus) => connectorsToggled[ccPairStatus.source]
+    ) || false;
+
+  // Handler functions for the search and filter controls
+  const handleClearFilters = () => {
+    if (filterComponentRef.current) {
+      filterComponentRef.current.resetFilters();
+      setFilterOptions({
+        accessType: null,
+        docsCountFilter: {
+          operator: null,
+          value: null,
+        },
+        lastStatus: null,
+      });
+    }
+  };
+
+  if (ccPairsIndexingStatusesError) {
     return (
       <div className="text-error">
-        {indexAttemptError?.info?.detail ||
-          editableIndexAttemptError?.info?.detail ||
-          "Error loading indexing history."}
+        {ccPairsIndexingStatusesError?.info?.detail ||
+          "Error loading indexing status."}
       </div>
     );
   }
 
-  if (
-    indexAttemptData.length === 0 &&
-    (!federatedConnectorsData || federatedConnectorsData.length === 0)
-  ) {
-    return (
-      <Text>
-        It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
-        <Link className="text-link" href="/admin/add-connector">
-          Add Connector
-        </Link>{" "}
-        page to get started!
-      </Text>
-    );
-  }
-
-  // sort by source name
-  indexAttemptData.sort((a, b) => {
-    if (a.connector.source < b.connector.source) {
-      return -1;
-    } else if (a.connector.source > b.connector.source) {
-      return 1;
-    } else {
-      return 0;
-    }
-  });
-
   return (
-    <CCPairIndexingStatusTable
-      ccPairsIndexingStatuses={indexAttemptData}
-      editableCcPairsIndexingStatuses={editableIndexAttemptData}
-      federatedConnectors={federatedConnectorsData || []}
-    />
+    <div>
+      {/* Search bar and controls */}
+      <SearchAndFilterControls
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        hasExpandedSources={hasExpandedSources}
+        onExpandAll={expandAll}
+        onCollapseAll={collapseAll}
+        filterOptions={filterOptions}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        hasActiveFilters={hasActiveFilters}
+        filterComponentRef={filterComponentRef}
+      />
+
+      {/* Table component */}
+      {isLoadingCcPairsIndexingStatuses ? (
+        <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
+      ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
+        <Text>
+          It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
+          <Link className="text-link" href="/admin/add-connector">
+            Add Connector
+          </Link>{" "}
+          page to get started!
+        </Text>
+      ) : (
+        <CCPairIndexingStatusTableLite
+          ccPairsIndexingStatuses={ccPairsIndexingStatuses}
+          connectorsToggled={connectorsToggled}
+          toggleSource={toggleSource}
+          onPageChange={handlePageChange}
+          searchQuery={searchQuery}
+          sourceLoadingStates={sourceLoadingStates}
+        />
+      )}
+    </div>
   );
 }
 

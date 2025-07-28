@@ -175,6 +175,36 @@ export interface ConnectorIndexingStatus<
   docs_indexed: number;
 }
 
+export interface ConnectorIndexingStatusLite {
+  cc_pair_id: number;
+  name: string | null;
+  source: ValidSources;
+  access_type: AccessType;
+  in_progress: boolean;
+  cc_pair_status: ConnectorCredentialPairStatus;
+  last_finished_status: ValidStatuses | null;
+  last_status: ValidStatuses | null;
+  last_success: string | null;
+  is_editable: boolean;
+  docs_indexed: number;
+  in_repeated_error_state: boolean;
+}
+
+export interface SourceSummary {
+  total_connectors: number;
+  active_connectors: number;
+  public_connectors: number;
+  total_docs_indexed: number;
+}
+
+export interface ConnectorIndexingStatusLiteResponse {
+  source: ValidSources;
+  summary: SourceSummary;
+  current_page: number;
+  total_pages: number;
+  indexing_statuses: ConnectorIndexingStatusLite[];
+}
+
 export interface FederatedConnectorDetail {
   id: number;
   source: ValidSources.FederatedSlack;
