@@ -226,8 +226,12 @@ def _check_connector_and_attempt_status(
         raise ConnectorStopSignal(f"Index attempt {index_attempt_id} was canceled")
 
     if index_attempt_loop.status != IndexingStatus.IN_PROGRESS:
+        error_str = ""
+        if index_attempt_loop.error_msg:
+            error_str = f" Original error: {index_attempt_loop.error_msg}"
+
         raise RuntimeError(
-            f"Index Attempt is not running, status is {index_attempt_loop.status}"
+            f"Index Attempt is not running, status is {index_attempt_loop.status}.{error_str}"
         )
 
     if index_attempt_loop.celery_task_id is None:

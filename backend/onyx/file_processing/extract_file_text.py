@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -17,11 +18,11 @@ from typing import NamedTuple
 from zipfile import BadZipFile
 
 import chardet
-import docx  # type: ignore
-import openpyxl  # type: ignore
-import pptx  # type: ignore
 from docx import Document as DocxDocument
 from fastapi import UploadFile
+from markitdown import FileConversionException
+from markitdown import MarkItDown
+from markitdown import UnsupportedFormatException
 from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
@@ -83,11 +84,6 @@ IMAGE_MEDIA_TYPES = [
     "image/webp",
 ]
 
-KNOWN_OPENPYXL_BUGS = [
-    "Value must be either numerical or a string containing a wildcard",
-    "File contains no valid workbook part",
-]
-
 
 class OnyxExtensionType(IntFlag):
     Plain = auto()
@@ -147,6 +143,13 @@ def is_macos_resource_fork_file(file_name: str) -> bool:
     return os.path.basename(file_name).startswith("._") and file_name.startswith(
         "__MACOSX"
     )
+
+
+def to_bytesio(stream: IO[bytes]) -> BytesIO:
+    if isinstance(stream, BytesIO):
+        return stream
+    data = stream.read()  # consumes the stream!
+    return BytesIO(data)
 
 
 def load_files_from_zip(
@@ -305,6 +308,19 @@ def read_pdf_file(
     return "", metadata, []
 
 
+def extract_docx_images(markdown: str) -> list[tuple[bytes, str]]:
+    """
+    Extract images from a markdown string.
+    """
+    pattern = re.compile(r"!\[[^\]]*\]\((data:image/[^;]+;base64,([^)]*))\)")
+    images = []
+    for i, m in enumerate(pattern.finditer(markdown)):
+        full_uri, b64 = m.groups()
+        img_bytes = base64.b64decode(b64)
+        images.append((img_bytes, f"image_{i}.{full_uri.split(';')[0][5:]}"))
+    return images
+
+
 def docx_to_text_and_images(
     file: IO[Any], file_name: str = ""
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
@@ -312,12 +328,15 @@ def docx_to_text_and_images(
     Extract text from a docx. If embed_images=True, also extract inline images.
     Return (text_content, list_of_images).
     """
-    paragraphs = []
-    embedded_images: list[tuple[bytes, str]] = []
-
+    md = MarkItDown(enable_plugins=False)
     try:
-        doc = docx.Document(file)
-    except (BadZipFile, ValueError) as e:
+        doc = md.convert(to_bytesio(file))
+    except (
+        BadZipFile,
+        ValueError,
+        FileConversionException,
+        UnsupportedFormatException,
+    ) as e:
         logger.warning(
             f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
         )
@@ -330,96 +349,43 @@ def docx_to_text_and_images(
         )
         return text_content_raw or "", []
 
-    # Grab text from paragraphs
-    for paragraph in doc.paragraphs:
-        paragraphs.append(paragraph.text)
-
-    # Reset position so we can re-load the doc (python-docx has read the stream)
-    # Note: if python-docx has fully consumed the stream, you may need to open it again from memory.
-    # For large docs, a more robust approach is needed.
-    # This is a simplified example.
-
-    for rel_id, rel in doc.part.rels.items():
-        if "image" in rel.reltype:
-            # Skip images that are linked rather than embedded (TargetMode="External")
-            if getattr(rel, "is_external", False):
-                continue
-
-            try:
-                # image is typically in rel.target_part.blob
-                image_bytes = rel.target_part.blob
-            except ValueError:
-                # Safeguard against relationships that lack an internal target_part
-                # (e.g., external relationships or other anomalies)
-                continue
-
-            image_name = rel.target_part.partname
-            # store
-            embedded_images.append((image_bytes, os.path.basename(str(image_name))))
-
-    text_content = "\n".join(paragraphs)
-    return text_content, embedded_images
+    return doc.markdown, extract_docx_images(doc.markdown)
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
+    md = MarkItDown(enable_plugins=False)
     try:
-        presentation = pptx.Presentation(file)
-    except BadZipFile as e:
+        presentation = md.convert(to_bytesio(file))
+    except (
+        BadZipFile,
+        ValueError,
+        FileConversionException,
+        UnsupportedFormatException,
+    ) as e:
         error_str = f"Failed to extract text from {file_name or 'pptx file'}: {e}"
         logger.warning(error_str)
         return ""
-    text_content = []
-    for slide_number, slide in enumerate(presentation.slides, start=1):
-        slide_text = f"\nSlide {slide_number}:\n"
-        for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                slide_text += shape.text + "\n"
-        text_content.append(slide_text)
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+    return presentation.markdown
 
 
 def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
+    md = MarkItDown(enable_plugins=False)
     try:
-        workbook = openpyxl.load_workbook(file, read_only=True)
-    except BadZipFile as e:
+        workbook = md.convert(to_bytesio(file))
+    except (
+        BadZipFile,
+        ValueError,
+        FileConversionException,
+        UnsupportedFormatException,
+    ) as e:
         error_str = f"Failed to extract text from {file_name or 'xlsx file'}: {e}"
         if file_name.startswith("~"):
             logger.debug(error_str + " (this is expected for files with ~)")
         else:
             logger.warning(error_str)
         return ""
-    except Exception as e:
-        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
-            logger.error(
-                f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
-            )
-            return ""
-        raise e
 
-    text_content = []
-    for sheet in workbook.worksheets:
-        rows = []
-        num_empty_consecutive_rows = 0
-        for row in sheet.iter_rows(min_row=1, values_only=True):
-            row_str = ",".join(str(cell or "") for cell in row)
-
-            # Only add the row if there are any values in the cells
-            if len(row_str) >= len(row):
-                rows.append(row_str)
-                num_empty_consecutive_rows = 0
-            else:
-                num_empty_consecutive_rows += 1
-
-            if num_empty_consecutive_rows > 100:
-                # handle massive excel sheets with mostly empty cells
-                logger.warning(
-                    f"Found {num_empty_consecutive_rows} empty rows in {file_name},"
-                    " skipping rest of file"
-                )
-                break
-        sheet_str = "\n".join(rows)
-        text_content.append(sheet_str)
-    return TEXT_SECTION_SEPARATOR.join(text_content)
+    return workbook.markdown
 
 
 def eml_to_text(file: IO[Any]) -> str:
@@ -472,9 +438,9 @@ def extract_file_text(
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
-        ".docx": lambda f: docx_to_text_and_images(f)[0],  # no images
-        ".pptx": pptx_to_text,
-        ".xlsx": xlsx_to_text,
+        ".docx": lambda f: docx_to_text_and_images(f, file_name)[0],  # no images
+        ".pptx": lambda f: pptx_to_text(f, file_name),
+        ".xlsx": lambda f: xlsx_to_text(f, file_name),
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
@@ -553,7 +519,7 @@ def extract_text_and_images(
 
         # docx example for embedded images
         if extension == ".docx":
-            text_content, images = docx_to_text_and_images(file)
+            text_content, images = docx_to_text_and_images(file, file_name)
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
             )
