@@ -1,4 +1,3 @@
-import base64
 import io
 import json
 import os
@@ -308,17 +307,16 @@ def read_pdf_file(
     return "", metadata, []
 
 
-def extract_docx_images(markdown: str) -> list[tuple[bytes, str]]:
-    """
-    Extract images from a markdown string.
-    """
-    pattern = re.compile(r"!\[[^\]]*\]\((data:image/[^;]+;base64,([^)]*))\)")
-    images = []
-    for i, m in enumerate(pattern.finditer(markdown)):
-        full_uri, b64 = m.groups()
-        img_bytes = base64.b64decode(b64)
-        images.append((img_bytes, f"image_{i}.{full_uri.split(';')[0][5:]}"))
-    return images
+def extract_docx_images(docx_bytes: IO[Any]) -> list[tuple[bytes, str]]:
+    out = []
+    try:
+        with zipfile.ZipFile(docx_bytes) as z:
+            for name in z.namelist():
+                if name.startswith("word/media/"):
+                    out.append((z.read(name), name.split("/")[-1]))
+    except Exception:
+        logger.exception("Failed to extract all docx images")
+    return out
 
 
 def docx_to_text_and_images(
@@ -349,7 +347,7 @@ def docx_to_text_and_images(
         )
         return text_content_raw or "", []
 
-    return doc.markdown, extract_docx_images(doc.markdown)
+    return doc.markdown, extract_docx_images(to_bytesio(file))
 
 
 def pptx_to_text(file: IO[Any], file_name: str = "") -> str:
