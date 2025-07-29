@@ -247,7 +247,7 @@ def get_answers_history_from_iteration_responses(
             f"Tool: {iteration_response.tool}\n"
             f"Iteration Question Number: {iteration_response.parallelization_nr}\n"
             f"Question: {iteration_response.question}\n"
-            f"Answer: {iteration_response.answer}"
+            f"Answer: {iteration_response.answer}\n"
             f"Claims: {iteration_response.claims if iteration_response.claims else 'No claims provided'}"
         )
         for iteration_response in sorted(
@@ -290,7 +290,8 @@ def get_prompt_question(
     return question
 
 
-def test_citation_replacement():
+# TODO: remove or write an actual test case
+def test_citation_replacement() -> None:
     """
     Test function to verify citation replacement works correctly.
     """

@@ -33,10 +33,10 @@ asking follow-up questions as necessary."
 )
 
 
-# TODO: restructure this so each tool is a class with a description, and agents can select which tools to use
-TOOL_DESCRIPTION: dict[str, str] = {}
+# TODO: see TODO in OrchestratorTool, move to tool implementation class for v2
+TOOL_DESCRIPTION: dict[DRPath, str] = {}
 TOOL_DESCRIPTION[
-    SEARCH
+    DRPath.SEARCH
 ] = f"""\
 - The "{SEARCH}" tool is used to answer questions that can be answered using the information \
 present in the connected documents that will largely be private to the organization/user.
@@ -50,7 +50,7 @@ The {SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} 
 """
 
 TOOL_DESCRIPTION[
-    INTERNET_SEARCH
+    DRPath.INTERNET_SEARCH
 ] = f"""\
 - The "{INTERNET_SEARCH}" tool is used to answer questions that can be answered using the information \
 that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
@@ -58,7 +58,7 @@ that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel
 """
 
 TOOL_DESCRIPTION[
-    KNOWLEDGE_GRAPH
+    DRPath.KNOWLEDGE_GRAPH
 ] = f"""\
 - The "{KNOWLEDGE_GRAPH}" tool is similar to a search tool but it answers questions based on \
 entities and relationships extracted from the source documents. \
@@ -83,7 +83,7 @@ an entity type in general, you should not ask clarification questions to specify
 """
 
 TOOL_DESCRIPTION[
-    CLOSER
+    DRPath.CLOSER
 ] = f"""\
 - The "{CLOSER}" tool does not directly have access to the documents, but will use the results from \
 previous tool calls to generate a comprehensive final answer. It should always be called exactly once \
@@ -92,58 +92,69 @@ the most relevant information to answer the question. You can also skip straight
 if there is sufficient information in the provided history to answer the question.
 """
 
-TOOL_DIFFERENTIATION_HINTS: dict[str, dict[str, str]] = {
-    DRPath.SEARCH.value: {
-        DRPath.INTERNET_SEARCH.value: f"""\
-  - in general, you should use the {SEARCH} tool first, and only use the {INTERNET_SEARCH} tool if the \
+
+TOOL_DIFFERENTIATION_HINTS: dict[tuple[DRPath, DRPath], str] = {}
+TOOL_DIFFERENTIATION_HINTS[
+    (
+        DRPath.SEARCH,
+        DRPath.INTERNET_SEARCH,
+    )
+] = f"""\
+- in general, you should use the {SEARCH} tool first, and only use the {INTERNET_SEARCH} tool if the \
 {SEARCH} tool result did not contain the information you need, or the user specifically asks or implies \
 the use of the {INTERNET_SEARCH} tool. Moreover, if the {INTERNET_SEARCH} tool result did not contain the \
 information you need, you can switch to the {SEARCH} tool the following iteration.
 """
-    },
-    DRPath.KNOWLEDGE_GRAPH.value: {
-        DRPath.SEARCH.value: f"""\
-    - please look at the user query and the entity types and relationship types in the knowledge graph \
+
+TOOL_DIFFERENTIATION_HINTS[
+    (
+        DRPath.KNOWLEDGE_GRAPH,
+        DRPath.SEARCH,
+    )
+] = f"""\
+- please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, the '{SEARCH}' \
 tool may be the best alternative.
-   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
+- if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
 'search for this'-type of question, then also use '{SEARCH}'.
-   - also consider whether the user query implies whether a standard {SEARCH} query should be used or a \
+- also consider whether the user query implies whether a standard {SEARCH} query should be used or a \
 {KNOWLEDGE_GRAPH} query. For example, 'use a simple search to find <xyz>' would refer to a standard {SEARCH} query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
 """
-    },
-    DRPath.KNOWLEDGE_GRAPH.value: {
-        DRPath.INTERNET_SEARCH.value: f"""\
-    - please look at the user query and the entity types and relationship types in the knowledge graph \
+
+TOOL_DIFFERENTIATION_HINTS[
+    (
+        DRPath.KNOWLEDGE_GRAPH,
+        DRPath.INTERNET_SEARCH,
+    )
+] = f"""\
+- please look at the user query and the entity types and relationship types in the knowledge graph \
 to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, the '{INTERNET_SEARCH}' \
 MAY be an alternative, but only if the question pertains to public data. You may first want to consider \
 other tools that can query internet data, if available
-   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
-   - also consider whether the user query implies whether a standard {INTERNET_SEARCH} query should be used or a \
+- if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
+- also consider whether the user query implies whether a standard {INTERNET_SEARCH} query should be used or a \
 {KNOWLEDGE_GRAPH} query (assuming the data may be available both publically and internally). \
 For example, 'use a simple internet search to find <xyz>' would refer to a standard {INTERNET_SEARCH} query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
 """
-    },
-}
 
 
-TOOL_QUESTION_HINTS: dict[str, str] = {
-    DRPath.SEARCH.value: f"""if the tool is {SEARCH}, the question should be \
+TOOL_QUESTION_HINTS: dict[DRPath, str] = {
+    DRPath.SEARCH: f"""if the tool is {SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. \
 If searching for multiple \
 aspects is required you should split the question into multiple sub-questions.
 """,
-    DRPath.INTERNET_SEARCH.value: f"""if the tool is {INTERNET_SEARCH}, the question should be \
+    DRPath.INTERNET_SEARCH: f"""if the tool is {INTERNET_SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. So the \
 searches should be rather short and focus on one specific aspect. If searching for multiple \
 aspects is required you should split the question into multiple sub-questions.
 """,
-    DRPath.KNOWLEDGE_GRAPH.value: f"""if the tool is {KNOWLEDGE_GRAPH}, the question should be \
+    DRPath.KNOWLEDGE_GRAPH: f"""if the tool is {KNOWLEDGE_GRAPH}, the question should be \
 written as a list of one question.
 """,
-    DRPath.CLOSER.value: f"""if the tool is {CLOSER}, the list of questions should simply be \
+    DRPath.CLOSER: f"""if the tool is {CLOSER}, the list of questions should simply be \
 ['Answer the original question with the information you have.'].
 """,
 }
@@ -304,10 +315,6 @@ Please format your answer as a json dictionary in the following format:
 question should be appropriate for the tool. For example:
 ---tool_question_hints---]>"}}
 }}
-
-
-
-
 """
 
 ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT = f"""

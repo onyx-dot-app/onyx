@@ -181,17 +181,7 @@ def orchestrator(
             logger.error(f"Error in approach extraction: {e}")
             raise e
 
-        if query_path in AVERAGE_TOOL_COSTS:
-            remaining_time_budget = (
-                remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
-            )
-        else:
-            remaining_time_budget = (
-                remaining_time_budget - 1.5
-            )  # estimate for custom tools. TODO: fix!
-
-    # if iteration_nr > 3:
-    #     query_path = DRPath.CLOSER
+        remaining_time_budget = remaining_time_budget - AVERAGE_TOOL_COSTS[query_path]
 
     return OrchestrationUpdate(
         query_path=[query_path],

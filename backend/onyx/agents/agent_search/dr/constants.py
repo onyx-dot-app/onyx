@@ -6,7 +6,6 @@ MAX_CHAT_HISTORY_MESSAGES = (
     3  # note: actual count is x2 to account for user and assistant messages
 )
 
-# MAX_DR_PARALLEL_SEARCH = 8
 MAX_DR_PARALLEL_SEARCH = 4
 
 CLARIFICATION_REQUEST_PREFIX = "PLEASE CLARIFY:"
@@ -16,12 +15,9 @@ AVERAGE_TOOL_COSTS: dict[DRPath, float] = {
     DRPath.SEARCH: 1.0,
     DRPath.KNOWLEDGE_GRAPH: 2.0,
     DRPath.INTERNET_SEARCH: 1.5,
+    DRPath.GENERIC_TOOL: 1.5,  # TODO: see todo in OrchestratorTool
     DRPath.CLOSER: 0.0,
 }
-
-AVERAGE_TOOL_COST_STRING = "\n".join(
-    [f"{tool}: {cost}" for tool, cost in AVERAGE_TOOL_COSTS.items()]
-)
 
 DR_TIME_BUDGET_BY_TYPE = {
     DRTimeBudget.FAST: 3.0,

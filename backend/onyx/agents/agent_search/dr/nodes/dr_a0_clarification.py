@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import CLARIFICATION_REQUEST_PREFIX
 from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
 from onyx.agents.agent_search.dr.dr_prompt_builder import get_dr_prompt_template
@@ -12,6 +13,7 @@ from onyx.agents.agent_search.dr.models import ClarificationGenerationResponse
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
+from onyx.agents.agent_search.dr.models import OrchestratorTool
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
@@ -44,43 +46,46 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[dict]:
+def _get_available_tools(
+    graph_config: GraphConfig, kg_enabled: bool
+) -> list[OrchestratorTool]:
 
-    available_tools = []
+    available_tools: list[OrchestratorTool] = []
     for tool in graph_config.tooling.tools:
-
-        if tool.name == "run_kg_search" and not kg_enabled:
-            continue
-
-        # TODO: use a pydantic model instead of dict?
-        tool_dict = {}
-        tool_dict["name"] = tool.name
-        tool_dict["display_name"] = tool.display_name
+        tool_info = OrchestratorTool(
+            name=tool.name,
+            display_name=tool.display_name,
+            description=tool.description,
+            path=DRPath.GENERIC_TOOL,
+            metadata={},
+            cost=1.0,
+        )
 
         # TODO: add proper KG search tool
         if tool.name == "run_kg_search":
-            KG_SEARCH_RESPONSE_SUMMARY_ID = CUSTOM_TOOL_RESPONSE_ID  # unused for now
-            tool_dict["summary_signature"] = KG_SEARCH_RESPONSE_SUMMARY_ID
-            tool_dict["path"] = DRPath.KNOWLEDGE_GRAPH.value
+            if not kg_enabled:
+                logger.warning("KG must be enabled to use KG search tool")
+                continue
+            tool_info.path = DRPath.KNOWLEDGE_GRAPH
         elif isinstance(tool, CustomTool):
-            tool_dict["summary_signature"] = CUSTOM_TOOL_RESPONSE_ID
-            tool_dict["path"] = (
-                tool.name.upper()
-            )  # TODO: average tool cost will have keyerror
+            tool_info.metadata["summary_signature"] = CUSTOM_TOOL_RESPONSE_ID
+            tool_info.path = DRPath.GENERIC_TOOL
         elif isinstance(tool, InternetSearchTool):
-            tool_dict["summary_signature"] = INTERNET_SEARCH_RESPONSE_SUMMARY_ID
-            tool_dict["path"] = DRPath.INTERNET_SEARCH.value
+            tool_info.metadata["summary_signature"] = (
+                INTERNET_SEARCH_RESPONSE_SUMMARY_ID
+            )
+            tool_info.path = DRPath.INTERNET_SEARCH
         elif isinstance(tool, SearchTool):
-            tool_dict["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
-            tool_dict["path"] = DRPath.SEARCH.value
+            tool_info.metadata["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
+            tool_info.path = DRPath.SEARCH
+        else:
+            logger.warning(f"Tool {tool.name} ({type(tool)}) is not supported")
+            continue
 
-        tool_dict["description"] = (
-            tool.description
-            if tool_dict["path"] not in TOOL_DESCRIPTION
-            else TOOL_DESCRIPTION[tool_dict["path"]]
-        )
+        tool_info.description = TOOL_DESCRIPTION.get(tool_info.path, tool.description)
+        tool_info.cost = AVERAGE_TOOL_COSTS[tool_info.path]
 
-        available_tools.append(tool_dict)
+        available_tools.append(tool_info)
 
     return available_tools
 
@@ -152,22 +157,10 @@ def clarifier(
 
     # get the connected tools and format for the Deep Research flow
     kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
-    available_tools: list[dict[str, str]] = _get_available_tools(
-        graph_config, kg_enabled
-    )
-
-    tool_descriptions = "\n".join(
-        [
-            f"{tool.get('path')}: {tool.get('description')}"
-            for tool in available_tools
-            if tool.get("path") and tool.get("description")
-        ]  # TODO: add custom tool descriptions
-    )
+    available_tools = _get_available_tools(graph_config, kg_enabled)
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
-
-    query_path = DRPath.ORCHESTRATOR
 
     # get clarification (unless time budget is FAST)
     clarification = None
@@ -192,14 +185,9 @@ def clarifier(
                 relationship_types_string=all_relationship_types,
                 available_tools=available_tools,
             )
-            clarification_prompt = (
-                base_clarification_prompt.replace("---question---", original_question)
-                .replace("---chat_history_string---", chat_history_string)
-                .replace("------available_tools------", str(available_tools))
-                .replace("---num_available_tools---", str(len(available_tools)))
-                .replace("---tool_descriptions---", tool_descriptions)
-                .replace("---kg_types_descriptions---", str(all_entity_types))
-            )
+            clarification_prompt = base_clarification_prompt.replace(
+                "---question---", original_question
+            ).replace("---chat_history_string---", chat_history_string)
 
             try:
                 clarification_response = invoke_llm_json(
@@ -221,7 +209,6 @@ def clarifier(
                     clarification_question=clarification_response.clarification_question,
                     clarification_response=None,
                 )
-                query_path = DRPath.END
                 write_custom_event(
                     "basic_response",
                     AgentAnswerPiece(

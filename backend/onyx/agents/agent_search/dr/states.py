@@ -9,6 +9,7 @@ from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
+from onyx.agents.agent_search.dr.models import OrchestratorTool
 from onyx.context.search.models import InferenceSection
 
 
@@ -28,7 +29,7 @@ class OrchestrationUpdate(LoggerUpdate):
     plan_of_record: OrchestrationPlan | None = None  # None for FAST TimeBudget
     remaining_time_budget: float = 2.0  # set by default to about 2 searches
     clarification: OrchestrationClarificationInfo | None = None
-    available_tools: list[dict[str, str]] | None = None
+    available_tools: list[OrchestratorTool] | None = None
 
 
 class QuestionUpdate(LoggerUpdate):

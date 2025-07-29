@@ -1,15 +1,14 @@
 from datetime import datetime
 
-from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import DRPath
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import DRTimeBudget
+from onyx.agents.agent_search.dr.models import OrchestratorTool
 from onyx.prompts.dr_prompts import GET_CLARIFICATION_PROMPT
 from onyx.prompts.dr_prompts import KG_TYPES_DESCRIPTIONS
 from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT
 from onyx.prompts.dr_prompts import ORCHESTRATOR_DEEP_ITERATIVE_DECISION_PROMPT
 from onyx.prompts.dr_prompts import ORCHESTRATOR_FAST_ITERATIVE_DECISION_PROMPT
-from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.prompts.dr_prompts import TOOL_DIFFERENTIATION_HINTS
 from onyx.prompts.dr_prompts import TOOL_QUESTION_HINTS
 
@@ -29,43 +28,40 @@ def get_dr_prompt_template(
     time_budget: DRTimeBudget,
     entity_types_string: str | None = None,
     relationship_types_string: str | None = None,
-    available_tools: list[dict[str, str]] | None = None,
+    available_tools: list[OrchestratorTool] | None = None,
 ) -> str:
-
-    available_tool_paths = [tool["path"] for tool in available_tools or []]
-
-    average_tool_costs = "\n".join(
-        [f"{tool}: {AVERAGE_TOOL_COSTS[DRPath(tool)]}" for tool in available_tool_paths]
+    # TODO: maybe make path always=TOOL, and use name to differentiate between tools
+    available_tool_names = [tool.path.value for tool in available_tools or []]
+    available_tool_paths = [tool.path for tool in available_tools or []]
+    available_tool_cost_strings = "\n".join(
+        f"{tool.path}: {tool.cost}" for tool in available_tools or []
     )
 
-    tool_differentiations = []
+    tool_differentiations: list[str] = []
     for tool_1 in available_tool_paths:
         for tool_2 in available_tool_paths:
-            if (
-                tool_1 in TOOL_DIFFERENTIATION_HINTS
-                and tool_2 in TOOL_DIFFERENTIATION_HINTS[tool_1]
-            ):
-                tool_differentiations.append(TOOL_DIFFERENTIATION_HINTS[tool_1][tool_2])
+            if (tool_1, tool_2) in TOOL_DIFFERENTIATION_HINTS:
+                tool_differentiations.append(
+                    "- " + TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
+                )
     tool_differentiation_hint_string = (
-        "\n  - ".join(tool_differentiations) or "(No differentiating hints available)"
+        "\n".join(tool_differentiations) or "(No differentiating hints available)"
     )
-
     # TODO: add tool deliniation pairs for custom tools as well
 
-    tool_question_hints = []
-    for tool in available_tool_paths:
-        if tool in TOOL_QUESTION_HINTS:
-            tool_question_hints.append(TOOL_QUESTION_HINTS[tool])
     tool_question_hint_string = (
-        "\n  - ".join(tool_question_hints) or "(No examples available)"
+        "\n".join(
+            "- " + TOOL_QUESTION_HINTS[tool]
+            for tool in available_tool_paths
+            if tool in TOOL_QUESTION_HINTS
+        )
+        or "(No examples available)"
     )
 
     string_replacements = {
-        "num_available_tools": str(len(available_tool_paths)),
-        "available_tools": ", ".join(
-            available_tool_paths
-        ),  # The tool paths are the same as the tool names
-        "tool_choice_options": " or ".join(available_tool_paths),
+        "num_available_tools": str(len(available_tool_names)),
+        "available_tools": ", ".join(available_tool_names),
+        "tool_choice_options": " or ".join(available_tool_names),
         "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "kg_types_descriptions": (
             KG_TYPES_DESCRIPTIONS
@@ -73,13 +69,11 @@ def get_dr_prompt_template(
             else "(The Knowledge Graph is not used.)"
         ),
         "tool_descriptions": "\n".join(
-            [
-                TOOL_DESCRIPTION[tool] for tool in available_tool_paths
-            ]  # TODO: add custom tool descriptions
+            tool.description for tool in available_tools or []
         ),
         "tool_differentiation_hints": tool_differentiation_hint_string,
         "tool_question_hints": tool_question_hint_string,
-        "average_tool_costs": average_tool_costs,
+        "average_tool_costs": available_tool_cost_strings,
         "possible_entities": entity_types_string
         or "(The Knowledge Graph is not used.)",
         "possible_relationships": relationship_types_string

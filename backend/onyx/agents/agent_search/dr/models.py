@@ -48,7 +48,18 @@ class SearchAnswer(BaseModel):
     claims: list[str] | None = None
 
 
-# TODO: revisit this for sample custom tools
+# TODO: revisit with custom tools implementation in v2
+# each tool should be a class with the attributes below, plus the actual tool implementation
+# this will also allow custom tools to have their own cost
+class OrchestratorTool(BaseModel):
+    name: str
+    display_name: str
+    description: str
+    path: DRPath
+    metadata: dict[str, str]
+    cost: float
+
+
 class GenericToolAnswer(BaseModel):
     reasoning: str
     answer: str
