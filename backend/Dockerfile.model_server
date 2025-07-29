@@ -9,8 +9,8 @@ visit https://github.com/onyx-dot-app/onyx."
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION} \
-    DANSWER_RUNNING_IN_DOCKER="true"
-
+    DANSWER_RUNNING_IN_DOCKER="true" \
+    HF_HOME=/app/cache/huggingface
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
@@ -39,8 +39,16 @@ from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 
 # In case the user has volumes mounted to /root/.cache/huggingface that they've downloaded while
-# running Onyx, don't overwrite it with the built in cache folder
-RUN mv /root/.cache/huggingface /root/.cache/temp_huggingface
+# running Onyx, don't overwrite it with the built-in cache folder (ensure it's readable by the non-root user)
+RUN mkdir -p $HF_HOME && \
+    mv /root/.cache/huggingface/* $HF_HOME
+
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app && \
+    chmod 775 /var/log && \
+    chown onyx:onyx /var/log
 
 WORKDIR /app
 
