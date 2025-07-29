@@ -26,6 +26,7 @@ from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import MessageType
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
+from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
@@ -54,7 +55,6 @@ def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[di
         # TODO: use a pydantic model instead of dict?
         tool_dict = {}
         tool_dict["name"] = tool.name
-        tool_dict["description"] = tool.description
         tool_dict["display_name"] = tool.display_name
 
         # TODO: add proper KG search tool
@@ -73,6 +73,12 @@ def _get_available_tools(graph_config: GraphConfig, kg_enabled: bool) -> list[di
         elif isinstance(tool, SearchTool):
             tool_dict["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
             tool_dict["path"] = DRPath.SEARCH.value
+
+        tool_dict["description"] = (
+            tool.description
+            if tool_dict["path"] not in TOOL_DESCRIPTION
+            else TOOL_DESCRIPTION[tool_dict["path"]]
+        )
 
         available_tools.append(tool_dict)
 
@@ -150,6 +156,14 @@ def clarifier(
         graph_config, kg_enabled
     )
 
+    tool_descriptions = "\n".join(
+        [
+            f"{tool.get('path')}: {tool.get('description')}"
+            for tool in available_tools
+            if tool.get("path") and tool.get("description")
+        ]  # TODO: add custom tool descriptions
+    )
+
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
@@ -178,13 +192,14 @@ def clarifier(
                 relationship_types_string=all_relationship_types,
                 available_tools=available_tools,
             )
-            clarification_prompt = base_clarification_prompt.replace(
-                "---question---", original_question
-            ).replace("---chat_history_string---", chat_history_string)
+            clarification_prompt = (
+                base_clarification_prompt.replace("---question---", original_question)
+                .replace("---chat_history_string---", chat_history_string)
                 .replace("------available_tools------", str(available_tools))
                 .replace("---num_available_tools---", str(len(available_tools)))
-                .replace("---tool_descriptions---", str(available_tools))
+                .replace("---tool_descriptions---", tool_descriptions)
                 .replace("---kg_types_descriptions---", str(all_entity_types))
+            )
 
             try:
                 clarification_response = invoke_llm_json(
@@ -229,7 +244,14 @@ def clarifier(
             or "(No chat history yet available)"
         )
 
-    # query_path = DRPath.END
+    if (
+        clarification
+        and clarification.clarification_question
+        and clarification.clarification_response is None
+    ):
+        query_path = DRPath.END
+    else:
+        query_path = DRPath.ORCHESTRATOR
 
     return OrchestrationUpdate(
         original_question=original_question,

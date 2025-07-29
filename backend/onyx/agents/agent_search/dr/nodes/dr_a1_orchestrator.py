@@ -54,9 +54,21 @@ def orchestrator(
     remaining_time_budget = state.remaining_time_budget
     chat_history_string = state.chat_history_string or "(No chat history yet available)"
     answer_history_string = (
-        get_answers_history_from_iteration_responses(state.iteration_responses)
+        get_answers_history_from_iteration_responses(
+            iteration_responses=state.iteration_responses, time_budget=time_budget
+        )
         or "(No answer history yet available)"
     )
+    questions = [
+        f"{iteration_response.tool}: {iteration_response.question}"
+        for iteration_response in state.iteration_responses
+        if len(iteration_response.question) > 0
+    ]
+
+    question_history_string = (
+        "\n  - ".join(questions) if questions else "(No question history yet available)"
+    )
+
     prompt_question = get_prompt_question(question, clarification)
 
     all_entity_types = get_entity_types_str(active=True)
@@ -143,6 +155,7 @@ def orchestrator(
             base_decision_prompt.replace(
                 "---answer_history_string---", answer_history_string
             )
+            .replace("---question_history_string---", question_history_string)
             .replace("---question---", prompt_question)
             .replace("---iteration_nr---", str(iteration_nr))
             .replace("---current_plan_of_record_string---", plan_of_record.plan)
@@ -177,7 +190,8 @@ def orchestrator(
                 remaining_time_budget - 1.5
             )  # estimate for custom tools. TODO: fix!
 
-    # query_path = DRPath.CLOSER
+    # if iteration_nr > 3:
+    #     query_path = DRPath.CLOSER
 
     return OrchestrationUpdate(
         query_path=[query_path],

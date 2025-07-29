@@ -178,6 +178,7 @@ def internet_search(
                 question=search_query,
                 answer=answer_string,
                 cited_documents=cited_documents,
+                claims=claims,
             )
         ],
         log_messages=[

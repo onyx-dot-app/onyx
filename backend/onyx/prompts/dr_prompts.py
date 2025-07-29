@@ -39,7 +39,7 @@ TOOL_DESCRIPTION[
     SEARCH
 ] = f"""\
 - The "{SEARCH}" tool is used to answer questions that can be answered using the information \
-present in the connected documents.
+present in the connected documents that will largely be private to the organization/user.
 Note that the search tool is not well suited for time-ordered questions (e.g., '...latest email...', \
 '...last 2 jiras resolved...') and answering aggregation-type questions (e.g., 'how many...') \
 (unless that info is present in the connected documents). If there are better suited tools \
@@ -53,14 +53,8 @@ TOOL_DESCRIPTION[
     INTERNET_SEARCH
 ] = f"""\
 - The "{INTERNET_SEARCH}" tool is used to answer questions that can be answered using the information \
-that is public on the internet. In case the {SEARCH} and/or {KNOWLEDGE_GRAPH} tools are also available \
-you should think about whether the data is likely private data (in which case the {SEARCH} and/or \
-{KNOWLEDGE_GRAPH} tools should be used), or likely public data (in which case the {INTERNET_SEARCH} tool \
-should be used). If in doubt you should consider the data to be private and you should not user the \
-{INTERNET_SEARCH} tool.
-Note also that if an earlier call was sent to the {SEARCH} tool, and the request was essentially not answered, \
-then you should consider sending a new request to the {INTERNET_SEARCH} tool and vice versa!
-The {INTERNET_SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
+that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
+{MAX_DR_PARALLEL_SEARCH} queries.
 """
 
 TOOL_DESCRIPTION[
@@ -110,11 +104,25 @@ information you need, you can switch to the {SEARCH} tool the following iteratio
     DRPath.KNOWLEDGE_GRAPH.value: {
         DRPath.SEARCH.value: f"""\
     - please look at the user query and the entity types and relationship types in the knowledge graph \
-to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, use '{SEARCH}'.
+to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, the '{SEARCH}' \
+tool may be the best alternative.
    - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
 'search for this'-type of question, then also use '{SEARCH}'.
    - also consider whether the user query implies whether a standard {SEARCH} query should be used or a \
 {KNOWLEDGE_GRAPH} query. For example, 'use a simple search to find <xyz>' would refer to a standard {SEARCH} query, \
+whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
+"""
+    },
+    DRPath.KNOWLEDGE_GRAPH.value: {
+        DRPath.INTERNET_SEARCH.value: f"""\
+    - please look at the user query and the entity types and relationship types in the knowledge graph \
+to see whether the question can be answered by the {KNOWLEDGE_GRAPH} tool at all. If not, the '{INTERNET_SEARCH}' \
+MAY be an alternative, but only if the question pertains to public data. You may first want to consider \
+other tools that can query internet data, if available
+   - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
+   - also consider whether the user query implies whether a standard {INTERNET_SEARCH} query should be used or a \
+{KNOWLEDGE_GRAPH} query (assuming the data may be available both publically and internally). \
+For example, 'use a simple internet search to find <xyz>' would refer to a standard {INTERNET_SEARCH} query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
 """
     },
@@ -310,7 +318,7 @@ You may already have some answers to earlier questions calls you generated in pr
 have a high-level plan given to you.
 
 Your task is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
-considering the answers you already got, and guided by the initial plan.
+considering the answers you already got and claims that were stated, and guided by the initial plan.
 
 (You are planning for iteration ---iteration_nr--- now.). Also, the current time is ---current_time---.
 
@@ -337,6 +345,14 @@ Here is the answer history so far (if any):
 {SEPARATOR_LINE}
 ---answer_history_string---
 {SEPARATOR_LINE}
+
+Again, to avoid duplication here is the list of previous questions and the tools that were used to answer them:
+{SEPARATOR_LINE}
+---question_history_string---
+{SEPARATOR_LINE}
+
+When coming up with new questions, please consider the list of questions - and answers that you can find \
+further above - to AVOID REPEATING THE SAME QUESTIONS (for the same tool)!
 
 Finally, here are the past few chat messages for reference (if any). \
 Note that the chat history may already contain the answer to the user question, in which case you can \
@@ -366,14 +382,24 @@ Also consider whether the plan suggests you are already done. If so, you can use
 you can generate a modified version of the previous step, thus effectively modifying the plan.
   - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
 the remaining time budget.
+  - if some earlier claims seem to be contradictory or require verification, you can do verification \
+questions assuming it fits the tool in question.
   - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
-new tool seems suitable for the question!
+new tool seems suitable for the question! If a very similar question for a tool earlier gave something like \
+"The documents do not explicitly mention ...." then  it should be clear that that tool has been exhausted \
+for that query!
 
   - Again, focus is on generating NEW INFORMATION! Try to generate questions that
       - address gaps in the information relative to the original question
       - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
       - checks of whether the original piece of information is correct, or whether it is missing some details.
+
+  - Again, DO NOT repeat essentially the same question usiong the same tool!! WE DO ONLY WANT GENUNINELY \
+NEW INFORMATION!!! So if dor example an earlier question to the SEARCH tool was "What is the main problem \
+that Nike has?" and the answer was "The documents do not explicitly discuss a specific problem...", DO NOT \
+ask to the SEARCH tool on the next opportunity something like "Is there a problem that was mentioned \
+by Nike?", as this would be essentially the same question as the one answered by the SEARCH tool earlier.
 
 
 YOUR TASK:
@@ -542,7 +568,9 @@ But this should be be precise and concise, and specifically answer the question.
 the document sources inline in format [1][7], etc.>",
 "claims": "<a list of short claims discussed in the documents as they pertain to the query and/or \
 the original question. These will later be used for follow-up questions and verifications. Note that \
-these may not actually be in the succinct answer above. Also here, please cite the \
+these may not actually be in the succinct answer above. Note also that each claim \
+should include ONE fact that contains enough context to be verified/questioned by a different system \
+without the need for going back to these documents for additional context. Also here, please cite the \
 document sources inline in format [1][7], etc.. So this should have format like \
 [<claim 1>, <claim 2>, <claim 3>, ...], each with citations.>",
 "citations": "<the list of document numbers that are relevvant for the answer and appeared as \
@@ -681,6 +709,9 @@ assume that the user is conducting a general search on the topic.
 
 You have these ---num_available_tools--- tools available, ---available_tools---.
 
+Here are the descriptions of the tools:
+---tool_descriptions---
+
 In case the knowledge graph is used, here is the description of the entity and relationship types:
 ---kg_types_descriptions---
 
@@ -706,24 +737,28 @@ Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
 Note that it is fine to ask zero, one, two, or three follow-up questions.
   - if no clarifications are required, fill in 'false' for "feedback_needed" field and \
 "no feedback required" for "feedback_request" field.
-  - only ask clarification questions if that information is VITAL to answer the user question. \
+  - only ask clarification questions if that information is very important to properly answering the user question. \
 Do NOT simply ask followup questions that tries to expand on the user question, or gather more details \
-which may not be absolutely necessary for the deep research agent to answer the user question.
+which may not be quite necessary for the deep research agent to answer the user question.
 
 EXAMPLES:
-1. User question: "What is the capital of France?"
+--
+I. User question: "What is the capital of France?"
    Feedback needed: false
    Feedback request: 'no feedback request'
    Reason: The user question is clear and does not require any clarification.
 
+--
 
-2. User question: "How many tickets are there?"
+II. User question: "How many tickets are there?"
    Feedback needed: true
    Feedback request: '1. What do you refer to by "tickets"?'
    Reason: 'Tickets' could refer to many objects, like service tickets, jira tickets, etc. \
 But besides this, no further information is needed and asking one clarification question is enough.
 
-3. User question: "How many PRs were merged last month?"
+--
+
+III. User question: "How many PRs were merged last month?"
    Feedback needed: true
    Feedback request: '1. Do you have a specific repo in mind for the Pull Requests?'
    Reason: 'Merged' strongly suggests that PRs refer to pull requests. So this does \
@@ -731,8 +766,9 @@ not need to be further clarified. However, asking for the repo is quite importan
 typically there could be many. But besides this, no further information is needed and \
 asking one clarification question is enough.
 
+--
 
-4. User question: "What are the most recent PRs about?"
+IV. User question: "What are the most recent PRs about?"
    Feedback needed: true
    Feedback request: '1. What do PRs refer to? Pull Requests or something else?\
 \n2. What does most recent mean? Most recent <x> PRs? Or PRs from this week? \
@@ -740,8 +776,9 @@ Please clarify.\n3. What is the activity for the time measure? Creation? Closing
    Reason: We need to clarify what PRs refers to. Also 'most recent' is not well defined \
 and needs multiple clarifications.
 
+--
 
-5. User question: "Compare Adidas and Puma"
+V. User question: "Compare Adidas and Puma"
    Feedback needed: true
    Feedback request: '1. Do you have specific areas you want the comparison to be about?\
 \n2. Are you looking at a specific time period?\n3. Do you want the information in a \
@@ -751,6 +788,7 @@ areas and time period (therefore, clarification questions 1 and 2). Also, the us
 compare in a specific format, like table vs text form, therefore clarification question 3. \
 Certainly, there could be many more questions, but these seem to be themost essential 3.
 
+---
 
 Please respond with a json dictionary in the following format:
 {{
