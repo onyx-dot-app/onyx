@@ -5,6 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
@@ -15,6 +16,7 @@ def github_connector() -> GithubConnector:
         repositories="documentation",
         include_prs=True,
         include_issues=True,
+        include_files_md=True,
     )
     connector.load_credentials(
         {
@@ -32,9 +34,16 @@ def test_github_connector_basic(github_connector: GithubConnector) -> None:
     )
     assert len(docs) > 1  # We expect at least one PR and one Issue to exist
 
+    def get_issue_doc(docs: list[Document]) -> Document | None:
+        for doc in docs:
+            if doc.metadata.get("object_type") == "Issue":
+                return doc
+        return None
+
     # Test the first document's structure
     pr_doc = docs[0]
-    issue_doc = docs[-1]
+    issue_doc = get_issue_doc(docs)
+    file_doc = docs[-1]
 
     # Verify basic document properties
     assert pr_doc.source == DocumentSource.GITHUB
@@ -60,6 +69,7 @@ def test_github_connector_basic(github_connector: GithubConnector) -> None:
     assert "created_at" in pr_doc.metadata
 
     # Verify Issue-specific properties
+    assert issue_doc is not None, "Issue document not found"
     assert issue_doc.metadata is not None
     assert issue_doc.metadata.get("object_type") == "Issue"
     assert "id" in issue_doc.metadata
@@ -69,6 +79,12 @@ def test_github_connector_basic(github_connector: GithubConnector) -> None:
     assert issue_doc.metadata.get("repo") == "onyx-dot-app/documentation"
     assert "labels" in issue_doc.metadata
     assert "created_at" in issue_doc.metadata
+
+    # Verify File-specific properties
+    assert file_doc.metadata is not None
+    assert file_doc.metadata.get("object_type") == "File"
+    assert "repo" in file_doc.metadata
+    assert "path" in file_doc.metadata
 
     # Verify sections
     assert len(pr_doc.sections) == 1

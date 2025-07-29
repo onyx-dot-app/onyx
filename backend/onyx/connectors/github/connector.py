@@ -12,6 +12,7 @@ from typing import cast
 from github import Github
 from github import RateLimitExceededException
 from github import Repository
+from github.ContentFile import ContentFile
 from github.GithubException import GithubException
 from github.Issue import Issue
 from github.NamedUser import NamedUser
@@ -343,6 +344,20 @@ def _convert_issue_to_document(issue: Issue) -> Document:
     )
 
 
+def _convert_file_to_document(file: ContentFile) -> Document:
+    return Document(
+        id=file.html_url,
+        sections=[TextSection(link=file.html_url, text=file.content or "")],
+        source=DocumentSource.GITHUB,
+        semantic_identifier=f"{file.repository.full_name}/{file.path}",
+        metadata={
+            "object_type": "File",
+            "repo": file.repository.full_name if file.repository else "",
+            "path": file.path,
+        },
+    )
+
+
 class SerializedRepository(BaseModel):
     # id is part of the raw_data as well, just pulled out for convenience
     id: int
@@ -359,6 +374,7 @@ class GithubConnectorStage(Enum):
     START = "start"
     PRS = "prs"
     ISSUES = "issues"
+    FILES_MD = "files_md"
 
 
 class GithubConnectorCheckpoint(ConnectorCheckpoint):
@@ -402,12 +418,14 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         state_filter: str = "all",
         include_prs: bool = True,
         include_issues: bool = False,
+        include_files_md: bool = False,
     ) -> None:
         self.repo_owner = repo_owner
         self.repositories = repositories
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
+        self.include_files_md = include_files_md
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -504,6 +522,61 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             state=self.state_filter, sort="updated", direction="desc"
         )
 
+    def _files_md_func(self, repo: Repository.Repository) -> list[ContentFile]:
+        github_client = cast(Github, self.github_client)
+
+        def _get_contents_rate_limited(
+            github_client: Github, path: str, attempt_num: int = 0
+        ) -> list[ContentFile]:
+            if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+                raise RuntimeError(
+                    "Re-tried fetching contents too many times. Something is going wrong with fetching objects from Github"
+                )
+            try:
+                contents = repo.get_contents(path)
+                if isinstance(contents, ContentFile):
+                    contents = [cast(ContentFile, contents)]
+                else:
+                    contents = cast(list[ContentFile], contents)
+                return contents
+            except RateLimitExceededException:
+                _sleep_after_rate_limit_exception(github_client)
+                return _get_contents_rate_limited(github_client, path, attempt_num + 1)
+            except GithubException as e:
+                logger.error(f"Error accessing directory {path}: {e}")
+                return []
+
+        md_files = []
+        contents = _get_contents_rate_limited(github_client, "")
+
+        if isinstance(contents, ContentFile):
+            # if the contents is a single file or directory, we need to wrap it in a list
+            contents = [cast(ContentFile, contents)]
+        else:
+            contents = cast(list[ContentFile], contents)
+
+        while contents:
+            file = contents.pop(0)
+            if file.type == "dir":
+                try:
+                    # if the file is a directory, we need to get the contents of the directory
+                    # and add the contents to the contents list
+                    new_contents = _get_contents_rate_limited(github_client, file.path)
+                    if isinstance(new_contents, ContentFile):
+                        new_contents = [cast(ContentFile, new_contents)]
+                    else:
+                        new_contents = cast(list[ContentFile], new_contents)
+
+                    contents.extend(new_contents)
+                except RateLimitExceededException:
+                    _sleep_after_rate_limit_exception(github_client)
+                    contents.append(file)
+                    continue
+            elif file.type == "file" and file.name.endswith(".md"):
+                md_files.append(file)
+
+        return md_files
+
     def _fetch_from_github(
         self,
         checkpoint: GithubConnectorCheckpoint,
@@ -587,6 +660,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             for pr in pr_batch:
                 num_prs += 1
 
+                pr = cast(PullRequest, pr)
+
                 # we iterate backwards in time, so at this point we stop processing prs
                 if (
                     start is not None
@@ -603,7 +678,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 ):
                     continue
                 try:
-                    yield _convert_pr_to_document(cast(PullRequest, pr))
+                    yield _convert_pr_to_document(pr)
                 except Exception as e:
                     error_msg = f"Error converting PR to document: {e}"
                     logger.exception(error_msg)
@@ -659,14 +734,14 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             for issue in issue_batch:
                 num_issues += 1
                 issue = cast(Issue, issue)
-                # we iterate backwards in time, so at this point we stop processing prs
+                # we iterate backwards in time, so at this point we stop processing Issues
                 if (
                     start is not None
                     and issue.updated_at.replace(tzinfo=timezone.utc) < start
                 ):
                     done_with_issues = True
                     break
-                # Skip PRs updated after the end date
+                # Skip Issues updated after the end date
                 if (
                     end is not None
                     and issue.updated_at.replace(tzinfo=timezone.utc) > end
@@ -700,8 +775,43 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
             # if we went past the start date during the loop or there are no more
             # issues to get, we move on to the next repo
+            checkpoint.stage = GithubConnectorStage.FILES_MD
+            checkpoint.reset()
+
+        checkpoint.stage = GithubConnectorStage.FILES_MD
+
+        if self.include_files_md and checkpoint.stage == GithubConnectorStage.FILES_MD:
+            logger.info(f"Fetching Markdown files for repo: {repo.name}")
+
+            md_files = self._files_md_func(repo)
+
+            checkpoint.curr_page += 1
+            num_files_md = 0
+            for file in md_files:
+                num_files_md += 1
+                file = cast(ContentFile, file)
+                try:
+                    yield _convert_file_to_document(file)
+                except Exception as e:
+                    error_msg = f"Error converting Markdown file to document: {e}"
+                    logger.exception(error_msg)
+                    yield ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=str(file.html_url),
+                            document_link=file.html_url,
+                        ),
+                        failure_message=error_msg,
+                        exception=e,
+                    )
+
+                    continue
+
+            logger.info(f"Fetched {num_files_md} Markdown files for repo: {repo.name}")
+            logger.info(f"Fetched {num_files_md} Markdown files for repo: {repo.name}")
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
+
+        checkpoint.has_more = len(checkpoint.cached_repo_ids) > 0
 
         checkpoint.has_more = len(checkpoint.cached_repo_ids) > 0
         if checkpoint.cached_repo_ids:

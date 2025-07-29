@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 from github import Github
 from github import RateLimitExceededException
+from github.ContentFile import ContentFile
 from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
@@ -65,6 +66,7 @@ def build_github_connector(
             repositories=repositories,
             include_prs=True,
             include_issues=True,
+            include_files_md=True,
         )
         connector.github_client = mock_github_client
         return connector
@@ -127,6 +129,26 @@ def create_mock_issue() -> Callable[..., MagicMock]:
 
 
 @pytest.fixture
+def create_mock_file() -> Callable[..., MagicMock]:
+    def _create_mock_file(
+        name: str = "README.md",
+        html_url: str = "https://github.com/onyx-dot-app/onyx/blob/main/README.md",
+        content: str = "# README",
+        path: str = "README.md",
+        type: str = "file",
+    ) -> MagicMock:
+        mock_file = MagicMock(spec=ContentFile)
+        mock_file.name = name
+        mock_file.html_url = html_url
+        mock_file.content = content
+        mock_file.path = path
+        mock_file.type = type
+        return mock_file
+
+    return _create_mock_file
+
+
+@pytest.fixture
 def create_mock_repo() -> Callable[..., MagicMock]:
     def _create_mock_repo(
         name: str = "test-repo",
@@ -162,6 +184,7 @@ def test_load_from_checkpoint_happy_path(
     create_mock_repo: Callable[..., MagicMock],
     create_mock_pr: Callable[..., MagicMock],
     create_mock_issue: Callable[..., MagicMock],
+    create_mock_file: Callable[..., MagicMock],
 ) -> None:
     """Test loading from checkpoint - happy path"""
     # Set up mocked repo
@@ -170,11 +193,25 @@ def test_load_from_checkpoint_happy_path(
     github_connector.github_client = mock_github_client
     mock_github_client.get_repo.return_value = mock_repo
 
-    # Set up mocked PRs and issues
+    # Set up mocked PRs, issues, and markdown files
     mock_pr1 = create_mock_pr(number=1, title="PR 1")
     mock_pr2 = create_mock_pr(number=2, title="PR 2")
     mock_issue1 = create_mock_issue(number=1, title="Issue 1")
     mock_issue2 = create_mock_issue(number=2, title="Issue 2")
+    mock_file1 = create_mock_file(
+        name="README.md",
+        html_url="https://github.com/test-org/test-repo/blob/main/README.md",
+        content="# README",
+        path="README.md",
+        type="file",
+    )
+    mock_file2 = create_mock_file(
+        name="CONTRIBUTING.md",
+        html_url="https://github.com/test-org/test-repo/blob/main/CONTRIBUTING.md",
+        content="# CONTRIBUTING.md",
+        path="CONTRIBUTING.md",
+        type="file",
+    )
 
     # Mock get_pulls and get_issues methods
     mock_repo.get_pulls.return_value = MagicMock()
@@ -187,6 +224,7 @@ def test_load_from_checkpoint_happy_path(
         [mock_issue1, mock_issue2],
         [],
     ]
+    mock_repo.get_contents.return_value = [mock_file1, mock_file2]
 
     # Mock SerializedRepository.to_Repository to return our mock repo
     with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
@@ -225,10 +263,23 @@ def test_load_from_checkpoint_happy_path(
         )
         assert second_batch.next_checkpoint.has_more
 
-        # Check third batch (finished checkpoint)
+        # Check third batch (Markdown files)
         third_batch = outputs[3]
-        assert len(third_batch.items) == 0
-        assert third_batch.next_checkpoint.has_more is False
+        assert len(third_batch.items) == 2
+        assert isinstance(third_batch.items[0], Document)
+        assert (
+            third_batch.items[0].id
+            == "https://github.com/test-org/test-repo/blob/main/README.md"
+        )
+        assert isinstance(third_batch.items[1], Document)
+        assert (
+            third_batch.items[1].id
+            == "https://github.com/test-org/test-repo/blob/main/CONTRIBUTING.md"
+        )
+
+        # Check final batch (finished checkpoint)
+        final_batch = outputs[-1]
+        assert final_batch.next_checkpoint.has_more is False
 
 
 def test_load_from_checkpoint_with_rate_limit(
@@ -294,11 +345,12 @@ def test_load_from_checkpoint_with_empty_repo(
     github_connector.github_client = mock_github_client
     mock_github_client.get_repo.return_value = mock_repo
 
-    # Mock get_pulls and get_issues to return empty lists
+    # Mock get_pulls, get_issues, and get_contents to return empty lists
     mock_repo.get_pulls.return_value = MagicMock()
     mock_repo.get_pulls.return_value.get_page.return_value = []
     mock_repo.get_issues.return_value = MagicMock()
     mock_repo.get_issues.return_value.get_page.return_value = []
+    mock_repo.get_contents.return_value = []
 
     # Mock SerializedRepository.to_Repository to return our mock repo
     with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
@@ -309,8 +361,8 @@ def test_load_from_checkpoint_with_empty_repo(
         )
 
         # Check that we got no documents
-        assert len(outputs) == 2
-        assert len(outputs[-1].items) == 0
+        assert len(outputs) == 3
+        assert len(outputs[1].items) == 0
         assert not outputs[-1].next_checkpoint.has_more
 
 
@@ -886,7 +938,7 @@ def test_load_from_checkpoint_cursor_pagination_completion(
     assert cp4.cached_repo is not None
     assert cp4.cached_repo.id == mock_repo1.id  # Last processed repo
     assert (
-        cp4.stage == GithubConnectorStage.PRS
+        cp4.stage == GithubConnectorStage.FILES_MD
     )  # Reset for a hypothetical next run/repo
     assert cp4.curr_page == 0
     assert cp4.num_retrieved == 0
