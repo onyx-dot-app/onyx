@@ -25,8 +25,6 @@ from fastapi import UploadFile
 from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
-import fitz  # PyMuPDF for better PDF handling and OCR fallback
-import pytesseract  # OCR library
 
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
@@ -41,15 +39,6 @@ logger = setup_logger()
 
 # NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
 TEXT_SECTION_SEPARATOR = "\n\n"
-
-# OCR Configuration
-OCR_CONFIG = {
-    "MIN_TEXT_RATIO": 0.5,  # Minimum text per page ratio to consider text extraction successful  
-    "MIN_WORDS_PER_PAGE": 10,  # Minimum words per page for successful text extraction
-    "OCR_DPI": 300,  # DPI for OCR processing
-    "OCR_LANG": "eng",  # Tesseract language
-    "MAX_OCR_PAGES": 50,  # Maximum pages to process with OCR (to prevent excessive processing)
-}
 
 ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
     ".txt",
@@ -92,6 +81,11 @@ IMAGE_MEDIA_TYPES = [
     "image/png",
     "image/jpeg",
     "image/webp",
+]
+
+KNOWN_OPENPYXL_BUGS = [
+    "Value must be either numerical or a string containing a wildcard",
+    "File contains no valid workbook part",
 ]
 
 
@@ -239,172 +233,26 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def _should_use_ocr_fallback(text_content: str, total_pages: int) -> bool:
+def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     """
-    Determine if OCR fallback should be used based on extracted text quality.
-    
-    Args:
-        text_content: Extracted text from PDF
-        total_pages: Total number of pages in the PDF
-        
-    Returns:
-        True if OCR fallback should be used
+    Extract text from a PDF. For embedded images, a more complex approach is needed.
+    This is a minimal approach returning text only.
     """
-    if not text_content.strip():
-        logger.info("No text extracted, using OCR fallback")
-        return True
-    
-    words = text_content.split()
-    total_words = len(words)
-    words_per_page = total_words / total_pages if total_pages > 0 else 0
-    
-    # Check if we have enough words per page
-    if words_per_page < OCR_CONFIG["MIN_WORDS_PER_PAGE"]:
-        logger.info(f"Low word density ({words_per_page:.1f} words/page), using OCR fallback")
-        return True
-    
-    # Check text ratio (non-whitespace characters)
-    non_whitespace_chars = len(re.sub(r'\s', '', text_content))
-    total_chars = len(text_content)
-    text_ratio = non_whitespace_chars / total_chars if total_chars > 0 else 0
-    
-    if text_ratio < OCR_CONFIG["MIN_TEXT_RATIO"]:
-        logger.info(f"Low text ratio ({text_ratio:.2f}), using OCR fallback")
-        return True
-    
-    return False
+    text, _, _ = read_pdf_file(file, pdf_pass)
+    return text
 
 
-def _extract_text_with_ocr(pdf_document: fitz.Document, file_name: str = "") -> str:
-    """
-    Extract text from PDF using OCR on each page.
-    
-    Args:
-        pdf_document: PyMuPDF document object
-        file_name: Name of the file for logging
-        
-    Returns:
-        Extracted text from all pages
-    """
-    logger.info(f"Starting OCR processing for {file_name}")
-    
-    if len(pdf_document) > OCR_CONFIG["MAX_OCR_PAGES"]:
-        logger.warning(
-            f"PDF has {len(pdf_document)} pages, limiting OCR to first {OCR_CONFIG['MAX_OCR_PAGES']} pages"
-        )
-        pages_to_process = OCR_CONFIG["MAX_OCR_PAGES"]
-    else:
-        pages_to_process = len(pdf_document)
-    
-    ocr_text_parts = []
-    
-    for page_num in range(pages_to_process):
-        try:
-            page = pdf_document[page_num]
-            
-            # Convert page to image
-            mat = fitz.Matrix(OCR_CONFIG["OCR_DPI"] / 72, OCR_CONFIG["OCR_DPI"] / 72)
-            pix = page.get_pixmap(matrix=mat)
-            img_data = pix.tobytes("png")
-            
-            # Convert to PIL Image for OCR
-            image = Image.open(io.BytesIO(img_data))
-            
-            # Perform OCR
-            page_text = pytesseract.image_to_string(
-                image, 
-                lang=OCR_CONFIG["OCR_LANG"],
-                config='--psm 6'  # Assume uniform block of text
-            )
-            
-            if page_text.strip():
-                ocr_text_parts.append(f"--- Page {page_num + 1} ---\n{page_text.strip()}")
-                logger.debug(f"OCR extracted {len(page_text.split())} words from page {page_num + 1}")
-            else:
-                logger.debug(f"No text extracted via OCR from page {page_num + 1}")
-                
-        except Exception as e:
-            logger.error(f"OCR failed for page {page_num + 1} in {file_name}: {e}")
-            # Continue with other pages
-            continue
-    
-    if pages_to_process < len(pdf_document):
-        ocr_text_parts.append(f"\n--- Note: Only processed first {pages_to_process} pages of {len(pdf_document)} total pages ---")
-    
-    final_text = TEXT_SECTION_SEPARATOR.join(ocr_text_parts)
-    logger.info(f"OCR completed for {file_name}. Extracted {len(final_text.split())} total words from {len(ocr_text_parts)} pages")
-    
-    return final_text
-
-
-def _extract_images_from_pdf_pymupdf(pdf_document: fitz.Document) -> list[tuple[bytes, str]]:
-    """
-    Extract images from PDF using PyMuPDF.
-    
-    Args:
-        pdf_document: PyMuPDF document object
-        
-    Returns:
-        List of (image_bytes, image_name) tuples
-    """
-    extracted_images = []
-    
-    for page_num in range(len(pdf_document)):
-        try:
-            page = pdf_document[page_num]
-            image_list = page.get_images()
-            
-            for img_index, img in enumerate(image_list):
-                xref = img[0]  # xref number
-                pix = fitz.Pixmap(pdf_document, xref)
-                
-                if pix.n - pix.alpha < 4:  # GRAY or RGB
-                    img_data = pix.tobytes("png")
-                    image_name = f"page_{page_num + 1}_image_{img_index + 1}.png"
-                    extracted_images.append((img_data, image_name))
-                else:  # CMYK: convert to RGB first
-                    pix1 = fitz.Pixmap(fitz.csRGB, pix)
-                    img_data = pix1.tobytes("png")
-                    image_name = f"page_{page_num + 1}_image_{img_index + 1}.png"
-                    extracted_images.append((img_data, image_name))
-                    pix1 = None
-                    
-                pix = None
-                
-        except Exception as e:
-            logger.error(f"Failed to extract images from page {page_num + 1}: {e}")
-            continue
-    
-    return extracted_images
-
-
-def read_pdf_file_enhanced(
-    file: IO[Any], 
-    pdf_pass: str | None = None, 
-    extract_images: bool = False,
-    file_name: str = ""
+def read_pdf_file(
+    file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
 ) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
-    Enhanced PDF reader with OCR fallback for scanned/blurry PDFs.
-    
-    Args:
-        file: PDF file object
-        pdf_pass: Password for encrypted PDFs
-        extract_images: Whether to extract embedded images
-        file_name: Name of the file for logging
-        
-    Returns:
-        Tuple of (text_content, metadata, extracted_images)
+    Returns the text, basic PDF metadata, and optionally extracted images.
     """
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
-    
     try:
-        # First try with pypdf for text extraction
-        file.seek(0)
         pdf_reader = PdfReader(file)
-        
-        # Handle encryption
+
         if pdf_reader.is_encrypted and pdf_pass is not None:
             decrypt_success = False
             try:
@@ -418,7 +266,7 @@ def read_pdf_file_enhanced(
             logger.warning("No Password for an encrypted PDF, returning empty text.")
             return "", metadata, []
 
-        # Extract basic PDF metadata
+        # Basic PDF metadata
         if pdf_reader.metadata is not None:
             for key, value in pdf_reader.metadata.items():
                 clean_key = key.lstrip("/")
@@ -429,89 +277,32 @@ def read_pdf_file_enhanced(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        # Extract text using pypdf
-        text_pages = []
-        for page in pdf_reader.pages:
-            page_text = page.extract_text()
-            text_pages.append(page_text)
-        
-        initial_text = TEXT_SECTION_SEPARATOR.join(text_pages)
-        total_pages = len(pdf_reader.pages)
-        
-        # Check if we should use OCR fallback
-        use_ocr = _should_use_ocr_fallback(initial_text, total_pages)
-        
-        final_text = initial_text
-        
-        if use_ocr:
-            try:
-                # Use PyMuPDF for OCR processing
-                file.seek(0)
-                file_bytes = file.read()
-                pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
-                
-                # Extract text with OCR
-                ocr_text = _extract_text_with_ocr(pdf_document, file_name)
-                
-                if ocr_text.strip():
-                    final_text = ocr_text
-                    metadata["processing_method"] = "OCR"
-                    logger.info(f"Successfully extracted text via OCR from {file_name}")
-                else:
-                    logger.warning(f"OCR did not extract any text from {file_name}, using original text")
-                    metadata["processing_method"] = "text_extraction_with_ocr_attempted"
-                
-                # Extract images if requested using PyMuPDF (better than pypdf for images)
-                if extract_images:
-                    try:
-                        extracted_images = _extract_images_from_pdf_pymupdf(pdf_document)
-                        logger.info(f"Extracted {len(extracted_images)} images from {file_name}")
-                    except Exception as e:
-                        logger.error(f"Failed to extract images with PyMuPDF from {file_name}: {e}")
-                
-                pdf_document.close()
-                
-            except Exception as e:
-                logger.error(f"OCR processing failed for {file_name}: {e}")
-                metadata["processing_method"] = "text_extraction_only"
-                metadata["ocr_error"] = str(e)
-        else:
-            metadata["processing_method"] = "text_extraction"
-            
-            # Extract images using pypdf if requested and OCR wasn't used
-            if extract_images:
-                try:
-                    for page_num, page in enumerate(pdf_reader.pages):
-                        for image_file_object in page.images:
-                            image = Image.open(io.BytesIO(image_file_object.data))
-                            img_byte_arr = io.BytesIO()
-                            image.save(img_byte_arr, format=image.format)
-                            img_bytes = img_byte_arr.getvalue()
+        text = TEXT_SECTION_SEPARATOR.join(
+            page.extract_text() for page in pdf_reader.pages
+        )
 
-                            image_name = (
-                                f"page_{page_num + 1}_image_{image_file_object.name}."
-                                f"{image.format.lower() if image.format else 'png'}"
-                            )
-                            extracted_images.append((img_bytes, image_name))
-                except Exception as e:
-                    logger.error(f"Failed to extract images with pypdf from {file_name}: {e}")
+        if extract_images:
+            for page_num, page in enumerate(pdf_reader.pages):
+                for image_file_object in page.images:
+                    image = Image.open(io.BytesIO(image_file_object.data))
+                    img_byte_arr = io.BytesIO()
+                    image.save(img_byte_arr, format=image.format)
+                    img_bytes = img_byte_arr.getvalue()
 
-        return final_text, metadata, extracted_images
+                    image_name = (
+                        f"page_{page_num + 1}_image_{image_file_object.name}."
+                        f"{image.format.lower() if image.format else 'png'}"
+                    )
+                    extracted_images.append((img_bytes, image_name))
+
+        return text, metadata, extracted_images
 
     except PdfStreamError:
-        logger.exception(f"Invalid PDF file: {file_name}")
+        logger.exception("Invalid PDF file")
     except Exception:
-        logger.exception(f"Failed to read PDF: {file_name}")
+        logger.exception("Failed to read PDF")
 
     return "", metadata, []
-
-
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None, file_name: str = "") -> str:
-    """
-    Extract text from a PDF with OCR fallback for scanned documents.
-    """
-    text, _, _ = read_pdf_file_enhanced(file, pdf_pass, extract_images=False, file_name=file_name)
-    return text
 
 
 def docx_to_text_and_images(
@@ -526,7 +317,7 @@ def docx_to_text_and_images(
 
     try:
         doc = docx.Document(file)
-    except BadZipFile as e:
+    except (BadZipFile, ValueError) as e:
         logger.warning(
             f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
         )
@@ -550,8 +341,18 @@ def docx_to_text_and_images(
 
     for rel_id, rel in doc.part.rels.items():
         if "image" in rel.reltype:
-            # image is typically in rel.target_part.blob
-            image_bytes = rel.target_part.blob
+            # Skip images that are linked rather than embedded (TargetMode="External")
+            if getattr(rel, "is_external", False):
+                continue
+
+            try:
+                # image is typically in rel.target_part.blob
+                image_bytes = rel.target_part.blob
+            except ValueError:
+                # Safeguard against relationships that lack an internal target_part
+                # (e.g., external relationships or other anomalies)
+                continue
+
             image_name = rel.target_part.partname
             # store
             embedded_images.append((image_bytes, os.path.basename(str(image_name))))
@@ -588,7 +389,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.warning(error_str)
         return ""
     except Exception as e:
-        if "File contains no valid workbook part" in str(e):
+        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.error(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
@@ -664,16 +465,16 @@ def extract_file_text(
 ) -> str:
     """
     Legacy function that returns *only text*, ignoring embedded images.
-    Now uses enhanced PDF processing with OCR fallback.
+    For backward-compatibility in code that only wants text.
 
     NOTE: Ignoring seems to be defined as returning an empty string for files it can't
     handle (such as images).
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
-        ".pdf": lambda f: pdf_to_text(f, file_name=file_name),  # Enhanced with OCR
-        ".docx": lambda f: docx_to_text_and_images(f, file_name)[0],  # no images
-        ".pptx": lambda f: pptx_to_text(f, file_name),
-        ".xlsx": lambda f: xlsx_to_text(f, file_name),
+        ".pdf": pdf_to_text,
+        ".docx": lambda f: docx_to_text_and_images(f)[0],  # no images
+        ".pptx": pptx_to_text,
+        ".xlsx": xlsx_to_text,
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
@@ -728,38 +529,42 @@ def extract_text_and_images(
     pdf_pass: str | None = None,
 ) -> ExtractionResult:
     """
-    Primary new function for the updated connector with enhanced PDF processing.
+    Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
     """
+    file.seek(0)
 
-    try:
-        # Attempt unstructured if env var is set
-        if get_unstructured_api_key():
-            # If the user doesn't want embedded images, unstructured is fine
-            file.seek(0)
+    if get_unstructured_api_key():
+        try:
             text_content = unstructured_to_text(file, file_name)
             return ExtractionResult(
                 text_content=text_content, embedded_images=[], metadata={}
             )
+        except Exception as e:
+            logger.error(
+                f"Failed to process with Unstructured: {str(e)}. "
+                "Falling back to normal processing."
+            )
+            file.seek(0)  # Reset file pointer just in case
 
+    # Default processing
+    try:
         extension = get_file_ext(file_name)
 
         # docx example for embedded images
         if extension == ".docx":
-            file.seek(0)
-            text_content, images = docx_to_text_and_images(file, file_name)
+            text_content, images = docx_to_text_and_images(file)
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
             )
 
-        # Enhanced PDF processing with OCR fallback
+        # PDF example: we do not show complicated PDF image extraction here
+        # so we simply extract text for now and skip images.
         if extension == ".pdf":
-            file.seek(0)
-            text_content, pdf_metadata, images = read_pdf_file_enhanced(
+            text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
                 extract_images=get_image_extraction_and_analysis_enabled(),
-                file_name=file_name
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
@@ -768,7 +573,6 @@ def extract_text_and_images(
         # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
         # You can do something similar to docx if needed.
         if extension == ".pptx":
-            file.seek(0)
             return ExtractionResult(
                 text_content=pptx_to_text(file, file_name=file_name),
                 embedded_images=[],
@@ -776,7 +580,6 @@ def extract_text_and_images(
             )
 
         if extension == ".xlsx":
-            file.seek(0)
             return ExtractionResult(
                 text_content=xlsx_to_text(file, file_name=file_name),
                 embedded_images=[],
@@ -784,19 +587,16 @@ def extract_text_and_images(
             )
 
         if extension == ".eml":
-            file.seek(0)
             return ExtractionResult(
                 text_content=eml_to_text(file), embedded_images=[], metadata={}
             )
 
         if extension == ".epub":
-            file.seek(0)
             return ExtractionResult(
                 text_content=epub_to_text(file), embedded_images=[], metadata={}
             )
 
         if extension == ".html":
-            file.seek(0)
             return ExtractionResult(
                 text_content=parse_html_page_basic(file),
                 embedded_images=[],
@@ -805,7 +605,6 @@ def extract_text_and_images(
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
-            file.seek(0)
             encoding = detect_encoding(file)
             text_content_raw, file_metadata = read_text_file(
                 file, encoding=encoding, ignore_onyx_metadata=False
@@ -818,7 +617,6 @@ def extract_text_and_images(
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
-        file.seek(0)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:
