@@ -8,7 +8,7 @@ from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
-from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.states import QuestionInputState
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
@@ -33,7 +33,9 @@ logger = setup_logger()
 
 
 def search(
-    state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
+    state: QuestionInputState,
+    config: RunnableConfig,
+    writer: StreamWriter = lambda _: None,
 ) -> AnswerUpdate:
     """
     LangGraph node to perform a standard search as part of the DR process.
@@ -52,6 +54,7 @@ def search(
     time_budget = graph_config.behavior.time_budget
 
     search_tool = graph_config.tooling.search_tool
+
     if search_tool is None:
         raise ValueError("search_tool must be provided for agentic search")
 

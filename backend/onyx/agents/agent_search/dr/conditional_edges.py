@@ -6,7 +6,7 @@ from langgraph.types import Send
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
-from onyx.agents.agent_search.dr.states import QuestionUpdate
+from onyx.agents.agent_search.dr.states import QuestionInputState
 
 
 def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
@@ -41,7 +41,7 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         return [
             Send(
                 next_path,
-                QuestionUpdate(
+                QuestionInputState(
                     iteration_nr=state.iteration_nr,
                     parallelization_nr=parallelization_nr,
                     question=query,

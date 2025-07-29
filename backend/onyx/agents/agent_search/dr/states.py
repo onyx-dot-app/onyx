@@ -38,7 +38,7 @@ class OrchestrationUpdate(LoggerUpdate):
     )  # gaps that may be identified by the closer before being able to answer the question.
 
 
-class QuestionUpdate(LoggerUpdate):
+class QuestionInputState(LoggerUpdate):
     iteration_nr: int = 0
     parallelization_nr: int = 0
     question: str | None = None
@@ -64,7 +64,6 @@ class MainState(
     # This includes the core state
     MainInput,
     OrchestrationUpdate,
-    QuestionUpdate,
     AnswerUpdate,
     FinalUpdate,
 ):

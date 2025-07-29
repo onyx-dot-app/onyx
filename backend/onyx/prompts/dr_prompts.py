@@ -43,6 +43,8 @@ Note that the search tool is not well suited for time-ordered questions (e.g., '
 for answering those questions, use them instead.
 You generally should not need to ask clarification questions about the topics being searched for \
 by the {SEARCH} tool, as the retrieved documents will likely provide you with more context.
+Each request to the {SEARCH} tool should largely be written as a SEARCH QUERY, and NOT as a question \
+or an instruction! Also, \
 The {SEARCH} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries.
 """
 

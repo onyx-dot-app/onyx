@@ -6,7 +6,7 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
-from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.states import QuestionInputState
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
 from onyx.agents.agent_search.kb_search.states import MainInput as KbMainInput
@@ -22,7 +22,9 @@ logger = setup_logger()
 
 
 def kg_query(
-    state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
+    state: QuestionInputState,
+    config: RunnableConfig,
+    writer: StreamWriter = lambda _: None,
 ) -> AnswerUpdate:
     """
     LangGraph node to perform a knowledge graph search as part of the DR process.
