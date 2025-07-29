@@ -69,6 +69,12 @@ def orchestrator(
 
     prompt_question = get_prompt_question(question, clarification)
 
+    gaps_str = (
+        ("\n  - " + "\n  - ".join(state.gaps))
+        if state.gaps
+        else "(No explicit gaps were pointed out so far)"
+    )
+
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
@@ -159,6 +165,7 @@ def orchestrator(
             .replace("---current_plan_of_record_string---", plan_of_record.plan)
             .replace("---chat_history_string---", chat_history_string)
             .replace("---remaining_time_budget---", str(remaining_time_budget))
+            .replace("---gaps---", gaps_str)
         )
 
     if remaining_time_budget > 0:

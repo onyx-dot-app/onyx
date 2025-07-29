@@ -1,7 +1,7 @@
-from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
+from onyx.agents.agent_search.dr.conditional_edges import completeness_router
 from onyx.agents.agent_search.dr.conditional_edges import decision_router
 from onyx.agents.agent_search.dr.nodes.dr_a0_clarification import clarifier
 from onyx.agents.agent_search.dr.nodes.dr_a1_orchestrator import orchestrator
@@ -59,6 +59,6 @@ def dr_graph_builder() -> StateGraph:
     graph.add_edge(start_key=DRPath.INTERNET_SEARCH, end_key=DRPath.ORCHESTRATOR)
     graph.add_edge(start_key=DRPath.GENERIC_TOOL, end_key=DRPath.ORCHESTRATOR)
 
-    graph.add_edge(start_key=DRPath.CLOSER, end_key=END)
+    graph.add_conditional_edges(DRPath.CLOSER, completeness_router)
 
     return graph

@@ -30,6 +30,12 @@ class OrchestrationUpdate(LoggerUpdate):
     remaining_time_budget: float = 2.0  # set by default to about 2 searches
     clarification: OrchestrationClarificationInfo | None = None
     available_tools: list[OrchestratorTool] | None = None
+    num_closer_suggestions: int = (
+        0  # how many times the closer was suggested. (Closer can send back now.)
+    )
+    gaps: list[str] = (
+        []
+    )  # gaps that may be identified by the closer before being able to answer the question.
 
 
 class QuestionUpdate(LoggerUpdate):

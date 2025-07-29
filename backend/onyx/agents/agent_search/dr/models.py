@@ -47,6 +47,12 @@ class SearchAnswer(BaseModel):
     claims: list[str] | None = None
 
 
+class TestInfoCompleteResponse(BaseModel):
+    reasoning: str
+    complete: bool
+    gaps: list[str]
+
+
 # TODO: revisit with custom tools implementation in v2
 # each tool should be a class with the attributes below, plus the actual tool implementation
 # this will also allow custom tools to have their own cost
@@ -79,6 +85,7 @@ class IterationAnswer(BaseModel):
 class AggregatedDRContext(BaseModel):
     context: str
     cited_documents: list[InferenceSection]
+    questions_answers_claims: str
 
 
 class DRTimeBudget(str, Enum):

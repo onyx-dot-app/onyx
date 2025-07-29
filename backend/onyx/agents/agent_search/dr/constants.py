@@ -8,6 +8,10 @@ MAX_CHAT_HISTORY_MESSAGES = (
 
 MAX_DR_PARALLEL_SEARCH = 4
 
+MAX_NUM_CLOSER_SUGGESTIONS = (
+    1  # how many times the closer was suggested. (Closer can send back)
+)
+
 CLARIFICATION_REQUEST_PREFIX = "PLEASE CLARIFY:"
 HIGH_LEVEL_PLAN_PREFIX = "HIGH_LEVEL PLAN:"
 
@@ -21,6 +25,6 @@ AVERAGE_TOOL_COSTS: dict[DRPath, float] = {
 
 DR_TIME_BUDGET_BY_TYPE = {
     DRTimeBudget.FAST: 3.0,
-    DRTimeBudget.SHALLOW: 6.0,
-    DRTimeBudget.DEEP: 10.0,
+    DRTimeBudget.SHALLOW: 4.0,
+    DRTimeBudget.DEEP: 6.0,
 }

@@ -53,3 +53,16 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
     else:
         # Custom tools use the gt sub-agent
         return DRPath.GENERIC_TOOL
+
+
+def completeness_router(state: MainState) -> DRPath | str:
+    if not state.query_path:
+        raise IndexError("query_path cannot be empty")
+
+    # go to closer if path is CLOSER or no queries
+    next_path = state.query_path[-1]
+
+    if next_path == DRPath.ORCHESTRATOR:
+        return DRPath.ORCHESTRATOR
+    else:
+        return END

@@ -112,8 +112,34 @@ def aggregate_context(
             output_strings.append("\n---\n")
 
     return AggregatedDRContext(
-        context="\n".join(output_strings),
-        cited_documents=global_documents,
+        context="\n".join(context_components),
+        cited_documents=cited_documents,
+        claim_context=claim_context,
+        questions_answers_claims="\n".join(questions_answers_claims_components),
+    )
+
+
+def get_answers_history_from_iteration_responses(
+    iteration_responses: list[IterationAnswer],
+    time_budget: DRTimeBudget,
+) -> str:
+    """
+    Get the answers history from the iteration responses.
+    """
+
+    return "\n".join(
+        (
+            f"Iteration: {iteration_response.iteration_nr}\n"
+            f"Tool: {iteration_response.tool}\n"
+            f"Iteration Question Number: {iteration_response.parallelization_nr}\n"
+            f"Question: {iteration_response.question}\n"
+            f"Answer: {iteration_response.answer}\n"
+            f"Claims: {iteration_response.claims if iteration_response.claims else 'No claims provided'}"
+        )
+        for iteration_response in sorted(
+            iteration_responses,
+            key=lambda x: (x.iteration_nr, x.parallelization_nr),
+        )
     )
 
 

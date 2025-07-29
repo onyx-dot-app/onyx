@@ -210,7 +210,12 @@ In any case, do not confuse the below with the user query. It is only there to p
 Also, the current time is ---current_time---. Consider that if the question involves dates or \
 time periods.
 
-HINTS:
+GUIDELINES:
+   - the plan needs to ensure that a) the problem is fully understood,  b) the right questions are \
+asked, c) the proper information is gathered, so that the final answer is well-researched and highly relevant, \
+and shows deep understanding of the problem. As an example, if a question pertains to \
+positioning a solution in some market, the plan should include underdstanding the market in full, \
+including the types of customers and user personas, the competitors and their positioning, etc.
    - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
 For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
    --
@@ -355,6 +360,15 @@ Again, to avoid duplication here is the list of previous questions and the tools
 ---question_history_string---
 {SEPARATOR_LINE}
 
+Also, a reviewer may have recently pointed out some gaps in the information gathered so far \
+that would prevent the answering of the overall question. If gaps were provided, \
+you should definitely consider them as you construct the next questions to send to a tool.
+
+Here is the list of gaps that were pointed out by a reviewer:
+{SEPARATOR_LINE}
+---gaps---
+{SEPARATOR_LINE}
+
 When coming up with new questions, please consider the list of questions - and answers that you can find \
 further above - to AVOID REPEATING THE SAME QUESTIONS (for the same tool)!
 
@@ -380,20 +394,28 @@ DIFFERENTIATION/RELATION BETWEEN TOOLS:
 ---tool_differentiation_hints---
 
 MISCELLANEOUS HINTS:
+   - it is CRITICAL to look at the high-level plan and try to evaluate which steps seem to be \
+satisfactory answered, or which areas need more research/information.
+   - if you think a) you can answer the question with the information you already have AND b) \
+the information from the high-level plan has been sufficiently answered in enough detail, then \
+you can use the "{CLOSER}" tool.
    - please first consider whether you already can answer the question with the information you already have. \
 Also consider whether the plan suggests you are already done. If so, you can use the "{CLOSER}" tool.
    - if you think more information is needed because a sub-question was not sufficiently answered, \
 you can generate a modified version of the previous step, thus effectively modifying the plan.
-  - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
+   - you can only consider a tool that fits the remaining time budget! The tool cost must be below \
 the remaining time budget.
-  - if some earlier claims seem to be contradictory or require verification, you can do verification \
+   - if some earlier claims seem to be contradictory or require verification, you can do verification \
 questions assuming it fits the tool in question.
-  - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
+   - you may want to ask some exploratory question that is not directly driving towards the final answer, \
+but that will help you to get a better understanding of the information you need to answer the original question. \
+Examples here could be trying to understand a market, a customer segment, a product, a technoligy etc. better, \
+which should help you to ask better follow-up questions.
+   - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
 new tool seems suitable for the question! If a very similar question for a tool earlier gave something like \
 "The documents do not explicitly mention ...." then  it should be clear that that tool has been exhausted \
 for that query!
-
   - Again, focus is on generating NEW INFORMATION! Try to generate questions that
       - address gaps in the information relative to the original question
       - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
@@ -411,7 +433,7 @@ you need to construct the next question and the tool to send it to. To do so, pl
 the original question, the high-level plan, the tools you have available, and the answers you have so far \
 (either from previous iterations or from the chat history). Make sure that the answer is \
 specific to what is needed, and - if applicable - BUILDS ON TOP of the learnings so far in order to get \
-new targeted information that gets us to be able to answer the original question. (Note again, that sending \
+NEW targeted information that gets us to be able to answer the original question. (Note again, that sending \
 the request to the CLOSER tool is an option if you think the information is sufficient.)
 
 Here is roughly how you should decide whether you are done to call the {CLOSER} tool:
@@ -623,6 +645,55 @@ relevant to the question sent to you.
 {TOOL_OUTPUT_FORMAT}
 """
 
+TEST_INFO_COMPLETE_PROMPT = f"""\
+You are a helpful assistant that is an expert iun trying to determine whether \
+a high-level plan created to gather information in pursuit of a higher-level \
+problem has been sufficiently completed AND the higher-level problem \
+can be addressed. This determination is done by looking at the information gathered so far.
+
+Here is the higher-level problem that needs to be answered:
+{SEPARATOR_LINE}
+---base_question---
+{SEPARATOR_LINE}
+
+Here is the higher-level plan that was created at the outset:
+{SEPARATOR_LINE}
+---high_level_plan---
+{SEPARATOR_LINE}
+
+Here is the list of sub-questions, their summaries, and extracted claims ('facts'):
+{SEPARATOR_LINE}
+---questions_answers_claims---
+{SEPARATOR_LINE}
+
+
+Finally, here is the previous chat history (if any), which may contain relevant information \
+to answer the question:
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
+GUIDELINES:
+  - please look at the high-level plan and try to evaluate whether the information gathered so far \
+sufficiently covers the steps with enough detail so that we can answer the higher-level problem \
+with confidence.
+  - if that is not the case, you should generate a list of 'gaps' that should be filled first \
+before we can answer the higher-level problem.
+  - please think very carefully whether the information is sufficient and sufficiently detailed \
+to answer the higher-level problem.
+
+Please format your answer as a json dictionary in the following format:
+{{
+   "reasoning": "<your analysis in 3-6 sentences of whether or not you think the \
+plan has been sufficiently completed, and the higher-level problem can be answered.>",
+"complete": "<please answer only with True (if we are done) or False (if we are not done and \
+have gaps)>",
+"gaps": "<a list of conceptual gaps that need to be filled before we can answer the higher-level problem. \
+Please list in format ['gap 1', 'gap 2', 'gap 3', ...]. If no gaps are found, keep the \
+liste empty as in [].>"
+}}
+"""
+
 FINAL_ANSWER_PROMPT = f"""
 You are a helpful assistant that can answer a user question based on sub-answers generated earlier \
 and a list of documents that were used to generate the sub-answers. The list of documents is \
@@ -636,6 +707,12 @@ Here is the question that needs to be answered:
 Here is the list of sub-questions, their answers, and the corresponding documents:
 {SEPARATOR_LINE}
 ---iteration_responses_string---
+{SEPARATOR_LINE}
+
+Also, here is the list of claims that were extracted during the sub-question evaluation, \
+and that should guide most of the answer-logic:
+{SEPARATOR_LINE}
+---claim_context---
 {SEPARATOR_LINE}
 
 Finally, here is the previous chat history (if any), which may contain relevant information \

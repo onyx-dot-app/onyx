@@ -5,12 +5,18 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
+from onyx.agents.agent_search.dr.constants import MAX_NUM_CLOSER_SUGGESTIONS
+from onyx.agents.agent_search.dr.models import DRPath
+from onyx.agents.agent_search.dr.models import DRTimeBudget
+from onyx.agents.agent_search.dr.models import TestInfoCompleteResponse
 from onyx.agents.agent_search.dr.states import FinalUpdate
 from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
 from onyx.agents.agent_search.dr.utils import get_prompt_question
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     dispatch_main_answer_stop_info,
@@ -24,6 +30,7 @@ from onyx.chat.models import ExtendedToolResponse
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
 from onyx.prompts.dr_prompts import FINAL_ANSWER_PROMPT
+from onyx.prompts.dr_prompts import TEST_INFO_COMPLETE_PROMPT
 from onyx.tools.tool_implementations.search.search_tool import IndexFilters
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
@@ -37,7 +44,7 @@ logger = setup_logger()
 
 def closer(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
-) -> FinalUpdate:
+) -> FinalUpdate | OrchestrationUpdate:
     """
     LangGraph node to close the DR process and finalize the answer.
     """
@@ -51,6 +58,8 @@ def closer(
     base_question = state.original_question
     if not base_question:
         raise ValueError("Question is required for closer")
+
+    time_budget = graph_config.behavior.time_budget
 
     clarification = state.clarification
     prompt_question = get_prompt_question(base_question, clarification)
@@ -68,7 +77,56 @@ def closer(
         include_documents=False,
     )
     iteration_responses_string = aggregated_context.context
+    questions_answers_claims = aggregated_context.questions_answers_claims
     all_cited_documents = aggregated_context.cited_documents
+    claim_context = aggregated_context.claim_context
+
+    num_closer_suggestions = state.num_closer_suggestions
+
+    if (
+        num_closer_suggestions < MAX_NUM_CLOSER_SUGGESTIONS
+        and time_budget == DRTimeBudget.DEEP
+    ):
+        test_info_complete_prompt = (
+            TEST_INFO_COMPLETE_PROMPT.replace("---base_question---", prompt_question)
+            .replace("---questions_answers_claims---", questions_answers_claims)
+            .replace("---chat_history_string---", chat_history_string)
+            .replace("---claim_context---", claim_context)
+            .replace(
+                "---high_level_plan---",
+                (
+                    state.plan_of_record.plan
+                    if state.plan_of_record
+                    else "No plan available"
+                ),
+            )
+        )
+
+        test_info_complete_json = invoke_llm_json(
+            llm=graph_config.tooling.primary_llm,
+            prompt=test_info_complete_prompt,
+            schema=TestInfoCompleteResponse,
+            timeout_override=40,
+            max_tokens=1000,
+        )
+
+        if test_info_complete_json.complete:
+            pass
+
+        else:
+            return OrchestrationUpdate(
+                query_path=[DRPath.ORCHESTRATOR],
+                query_list=[],
+                log_messages=[
+                    get_langgraph_node_log_string(
+                        graph_component="main",
+                        node_name="closer",
+                        node_start_time=node_start_time,
+                    )
+                ],
+                gaps=test_info_complete_json.gaps,
+                num_closer_suggestions=num_closer_suggestions + 1,
+            )
 
     # Stream out docs - TODO: Improve this with new frontend
     write_custom_event(
@@ -105,6 +163,7 @@ def closer(
         FINAL_ANSWER_PROMPT.replace("---base_question---", prompt_question)
         .replace("---iteration_responses_string---", iteration_responses_string)
         .replace("---chat_history_string---", chat_history_string)
+        .replace("---claim_context---", claim_context)
     )
 
     try:
