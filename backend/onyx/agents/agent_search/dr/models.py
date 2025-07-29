@@ -44,7 +44,6 @@ class OrchestrationClarificationInfo(BaseModel):
 class SearchAnswer(BaseModel):
     reasoning: str
     answer: str
-    citations: str
     claims: list[str] | None = None
 
 
@@ -72,7 +71,7 @@ class IterationAnswer(BaseModel):
     parallelization_nr: int
     question: str
     answer: str
-    cited_documents: list[InferenceSection]
+    cited_documents: dict[int, InferenceSection]
     background_info: str | None = None
     claims: list[str] | None = None
 
@@ -80,7 +79,6 @@ class IterationAnswer(BaseModel):
 class AggregatedDRContext(BaseModel):
     context: str
     cited_documents: list[InferenceSection]
-    claim_context: str
 
 
 class DRTimeBudget(str, Enum):

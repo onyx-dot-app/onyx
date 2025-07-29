@@ -30,7 +30,10 @@ def get_dr_prompt_template(
     relationship_types_string: str | None = None,
     available_tools: list[OrchestratorTool] | None = None,
 ) -> str:
-    # TODO: maybe make path always=TOOL, and use name to differentiate between tools
+    # TODO: instead of using paths as names, have either a TOOL or CLOSER path
+    # the LLM spits out the tool name or CLOSER, which gets converted into a
+    # (TOOL, <TOOL_NAME>) request, or a CLOSER request
+    # revisit in v2 when we have tools and subagents more neatly laid out
     available_tool_names = [tool.path.value for tool in available_tools or []]
     available_tool_paths = [tool.path for tool in available_tools or []]
     available_tool_cost_strings = "\n".join(

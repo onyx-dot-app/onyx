@@ -15,9 +15,7 @@ from onyx.agents.agent_search.dr.models import OrchestratorDecisonsNoPlan
 from onyx.agents.agent_search.dr.states import DRPath
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationUpdate
-from onyx.agents.agent_search.dr.utils import (
-    get_answers_history_from_iteration_responses,
-)
+from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import get_prompt_question
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
@@ -54,9 +52,7 @@ def orchestrator(
     remaining_time_budget = state.remaining_time_budget
     chat_history_string = state.chat_history_string or "(No chat history yet available)"
     answer_history_string = (
-        get_answers_history_from_iteration_responses(
-            iteration_responses=state.iteration_responses, time_budget=time_budget
-        )
+        aggregate_context(state.iteration_responses).context
         or "(No answer history yet available)"
     )
     questions = [
@@ -66,7 +62,9 @@ def orchestrator(
     ]
 
     question_history_string = (
-        "\n  - ".join(questions) if questions else "(No question history yet available)"
+        "\n".join(f"  - {question}" for question in questions)
+        if questions
+        else "(No question history yet available)"
     )
 
     prompt_question = get_prompt_question(question, clarification)

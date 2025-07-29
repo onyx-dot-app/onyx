@@ -4,256 +4,116 @@ from langchain.schema.messages import BaseMessage
 from langchain.schema.messages import HumanMessage
 
 from onyx.agents.agent_search.dr.models import AggregatedDRContext
-from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
-from onyx.agents.agent_search.shared_graph_utils.operators import (
-    dedup_inference_section_list,
-)
 from onyx.context.search.models import InferenceSection
 
+CITATION_PREFIX = "CITE:"
 
-def _extract_citation_numbers_from_text(text: str) -> list[int]:
+
+def extract_document_citations(
+    answer: str, claims: list[str]
+) -> tuple[list[int], str, list[str]]:
     """
-    Extract all citation numbers from text that contains citations in the format [1] or [1, 2, 3].
-    Returns a list of all observed citation numbers in order of appearance.
+    Finds all citations of the form [1], [2, 3], etc. and returns the list of cited indices,
+    as well as the answer and claims with the citations replaced with [<CITATION_PREFIX>1],
+    etc., to help with citation deduplication later on.
     """
-    citations: list[int] = []
+    citations: set[int] = set()
 
     # Pattern to match both single citations [1] and multiple citations [1, 2, 3]
     # This regex matches:
     # - \[(\d+)\] for single citations like [1]
     # - \[(\d+(?:,\s*\d+)*)\] for multiple citations like [1, 2, 3]
-    pattern = r"\[(\d+(?:,\s*\d+)*)\]"
+    pattern = re.compile(r"\[(\d+(?:,\s*\d+)*)\]")
 
-    for match in re.finditer(pattern, text):
-        # Extract the content inside the brackets
-        citation_content = match.group(1)
+    def _extract_and_replace(match: re.Match[str]) -> str:
+        numbers = [int(num) for num in match.group(1).split(",")]
+        citations.update(numbers)
+        return "".join(f"[{CITATION_PREFIX}{num}]" for num in numbers)
 
-        # Split by comma and extract individual numbers
-        numbers = [int(num.strip()) for num in citation_content.split(",")]
-        citations.extend(numbers)
+    new_answer = pattern.sub(_extract_and_replace, answer)
+    new_claims = [pattern.sub(_extract_and_replace, claim) for claim in claims]
 
-    return citations
-
-
-def _replace_citations_with_map(
-    text: str, relevant_citation_map: dict[int, int]
-) -> str:
-    """
-    Replace citations in text using a mapping from old citation numbers to new ones.
-
-    Args:
-        text: Text containing citations in format [number] or [number, number, ...]
-        relevant_citation_map: Mapping from old citation number to new citation number
-
-    Returns:
-        Text with citations replaced according to the mapping
-    """
-
-    def replace_citation(match: re.Match[str]) -> str:
-        citation_content = match.group(1)
-        numbers = [int(num.strip()) for num in citation_content.split(",")]
-
-        # Replace each number with its new value from the map
-        new_numbers = []
-        for num in numbers:
-            if num in relevant_citation_map:
-                new_numbers.append(str(relevant_citation_map[num]))
-            else:
-                # Keep original number if not in map
-                new_numbers.append(str(num))
-
-        return f"[{', '.join(new_numbers)}]"
-
-    # Pattern to match citations: [number] or [number, number, ...]
-    pattern = r"\[(\d+(?:,\s*\d+)*)\]"
-    return re.sub(pattern, replace_citation, text)
-
-
-def extract_document_citations(
-    citation_string: str, answer: str, claims: list[str] | None = None
-) -> tuple[list[int], str, list[str]]:
-    """
-    Get the cited documents and remove the citations from the answer.
-    """
-
-    def _extract_citation_numbers(text: str) -> set[int]:
-        """
-        Extract all citation numbers from text that contains citations in the format [1] or [1, 2, 3].
-        Returns a set of all observed citation numbers.
-        """
-        citations: set[int] = set()
-
-        # Pattern to match both single citations [1] and multiple citations [1, 2, 3]
-        # This regex matches:
-        # - \[(\d+)\] for single citations like [1]
-        # - \[(\d+(?:,\s*\d+)*)\] for multiple citations like [1, 2, 3]
-        pattern = r"\[(\d+(?:,\s*\d+)*)\]"
-
-        for match in re.finditer(pattern, text):
-            # Extract the content inside the brackets
-            citation_content = match.group(1)
-
-            # Split by comma and extract individual numbers
-            numbers = [int(num.strip()) for num in citation_content.split(",")]
-            citations.update(numbers)
-
-        return citations
-
-    overall_citation_set = set(
-        list(_extract_citation_numbers(citation_string + answer))
-        + list(_extract_citation_numbers(" ".join(claims or [])))
-    )
-
-    relevant_citation_map = {
-        citation: citation_index
-        for citation, citation_index in enumerate(list(overall_citation_set), 1)
-    }
-
-    # Replace citations in answer with new indices
-    cleaned_answer = _replace_citations_with_map(answer, relevant_citation_map)
-
-    # Process claims if provided
-    cleaned_claims = []
-    if claims:
-        for claim in claims:
-            cleaned_claim = _replace_citations_with_map(claim, relevant_citation_map)
-            cleaned_claims.append(cleaned_claim)
-
-    return list(overall_citation_set), cleaned_answer, cleaned_claims
+    return list(citations), new_answer, new_claims
 
 
 def aggregate_context(
-    iteration_responses: list[IterationAnswer],
+    iteration_responses: list[IterationAnswer], include_documents: bool = False
 ) -> AggregatedDRContext:
     """
-    Aggregate the context from the sub-answers and cited documents.
+    Converts the iteration response into a single string with unified citations.
+    For example,
+        it 1: the answer is x [3][4]. {3: doc_abc, 4: doc_xyz}
+        it 2: blah blah [1, 3]. {1: doc_xyz, 3: doc_pqr}
+    Output:
+        it 1: the answer is x [1][2].
+        it 2: blah blah [2][3]
+        [1]: doc_xyz
+        [2]: doc_abc
+        [3]: doc_pqr
     """
-    # get inference sections from all iterations
-    cited_documents: list[InferenceSection] = []
+    # mapping of document id to citation number
+    global_citations: dict[str, int] = {}
+    global_documents: list[InferenceSection] = []
+    output_strings: list[str] = []
 
-    citation_map: dict[int, dict[int, dict[int, str]]] = (
-        {}
-    )  # map of document id to citation number string in iteration-nr_doc_nr format
+    # build output string
+    for iteration_response in sorted(
+        iteration_responses,
+        key=lambda x: (x.iteration_nr, x.parallelization_nr),
+    ):
+        output_strings.append(
+            f"Iteration: {iteration_response.iteration_nr}, "
+            f"Question {iteration_response.parallelization_nr}"
+        )
+        output_strings.append(f"Tool: {iteration_response.tool.value}")
+        output_strings.append(f"Question: {iteration_response.question}")
 
-    for iteration_response in iteration_responses:
-        if iteration_response.iteration_nr not in citation_map:
-            citation_map[iteration_response.iteration_nr] = {}
-        if (
-            iteration_response.parallelization_nr
-            not in citation_map[iteration_response.iteration_nr]
-        ):
-            citation_map[iteration_response.iteration_nr][
-                iteration_response.parallelization_nr
-            ] = {}
+        answer_str = iteration_response.answer
+        claims_str = (
+            "".join(f"\n  - {claim}" for claim in iteration_response.claims or [])
+            or "No claims provided"
+        )
 
-        for response_doc_number, cited_document in enumerate(
-            iteration_response.cited_documents, start=1
-        ):
-            cited_doc_copy = cited_document.model_copy(deep=True)
-            # make sure docs maintains ordering by iteration and question number
-            cited_doc_copy.center_chunk.score = (
-                1 - 0.01 * len(cited_documents) - 0.01 * response_doc_number
+        # compute global citation and replace citation in string
+        local_citations = iteration_response.cited_documents
+        for local_number, cited_doc in local_citations.items():
+            cited_doc_id = cited_doc.center_chunk.document_id
+            if cited_doc_id not in global_citations:
+                global_documents.append(cited_doc)
+                global_citations[cited_doc_id] = len(global_documents)
+            global_number = global_citations[cited_doc_id]
+
+            answer_str = answer_str.replace(
+                f"[{CITATION_PREFIX}{local_number}]", f"[{global_number}]"
             )
-            cited_documents.append(cited_doc_copy)
+            claims_str = claims_str.replace(
+                f"[{CITATION_PREFIX}{local_number}]", f"[{global_number}]"
+            )
 
-            citation_map[iteration_response.iteration_nr][
-                iteration_response.parallelization_nr
-            ][response_doc_number] = cited_document.center_chunk.document_id
+        output_strings.append(f"Answer: {answer_str}")
+        output_strings.append(f"Claims: {claims_str}")
+        output_strings.append("\n---\n")
 
-    # get final inference sections and mapping of document id to index
-    cited_documents = dedup_inference_section_list(cited_documents)
-    cited_doc_indices = {
-        section.center_chunk.document_id: index
-        for index, section in enumerate(cited_documents, 1)
-    }
-
-    # generate context string
-    context_components: list[str] = []
-    claim_context_components: list[str] = []
-
-    current_claim_number = 1
-
-    for question_nr, iteration_response in enumerate(iteration_responses, 1):
-        question_text = iteration_response.question
-        answer_text = iteration_response.answer
-        citation_numbers = [
-            cited_doc_indices[cited_document.center_chunk.document_id]
-            for cited_document in iteration_response.cited_documents
-        ]
-        citation_text = (
-            "Cited documents: " + "".join(f"[{index}]" for index in citation_numbers)
-            if citation_numbers
-            else "No citations provided for this answer. Take provided answer at face value."
-        )
-
-        context_components.append(f"Question Number: {question_nr}")
-        context_components.append(f"Question: {question_text}")
-        context_components.append(f"Answer: {answer_text}")
-        context_components.append(citation_text)
-        context_components.append("\n\n---\n\n")
-
-        if iteration_response.claims is not None:
-            for claim in iteration_response.claims:
-                # Create mapping from original citation numbers to new citation numbers for this iteration
-                citation_mapping = {}
-                for response_doc_number, cited_document in enumerate(
-                    iteration_response.cited_documents, start=1
-                ):
-                    doc_id = cited_document.center_chunk.document_id
-                    new_citation_number = cited_doc_indices[doc_id]
-                    citation_mapping[response_doc_number] = new_citation_number
-
-                claim_with_new_citations = _replace_citations_with_map(
-                    text=claim, relevant_citation_map=citation_mapping
+    # add document contents if requested
+    if include_documents:
+        # note: will probably need to merge sections properly with dedup_inference_section_list
+        # at the very start, and use those to build the global citation numbers,
+        # if we intend of frequently calling this with include_documents=True
+        output_strings.append("Cited document contents:")
+        for doc in global_documents:
+            output_strings.append(
+                build_document_context(
+                    doc, global_citations[doc.center_chunk.document_id]
                 )
-
-                claim_context_components.append(
-                    f"Claim {current_claim_number}: {claim_with_new_citations}"
-                )
-                claim_context_components.append("\n")
-                current_claim_number += 1
-
-    # add cited document contents
-    context_components.append("Cited document contents:")
-    for doc in cited_documents:
-        context_components.append(
-            build_document_context(doc, cited_doc_indices[doc.center_chunk.document_id])
-        )
-        context_components.append("\n---\n")
-
-    claim_context = "\n\n".join(claim_context_components)
+            )
+            output_strings.append("\n---\n")
 
     return AggregatedDRContext(
-        context="\n".join(context_components),
-        cited_documents=cited_documents,
-        claim_context=claim_context,
-    )
-
-
-def get_answers_history_from_iteration_responses(
-    iteration_responses: list[IterationAnswer],
-    time_budget: DRTimeBudget,
-) -> str:
-    """
-    Get the answers history from the iteration responses.
-    """
-
-    return "\n".join(
-        (
-            f"Iteration: {iteration_response.iteration_nr}\n"
-            f"Tool: {iteration_response.tool}\n"
-            f"Iteration Question Number: {iteration_response.parallelization_nr}\n"
-            f"Question: {iteration_response.question}\n"
-            f"Answer: {iteration_response.answer}\n"
-            f"Claims: {iteration_response.claims if iteration_response.claims else 'No claims provided'}"
-        )
-        for iteration_response in sorted(
-            iteration_responses,
-            key=lambda x: (x.iteration_nr, x.parallelization_nr),
-        )
+        context="\n".join(output_strings),
+        cited_documents=global_documents,
     )
 
 
@@ -288,37 +148,3 @@ def get_prompt_question(
         )
 
     return question
-
-
-# TODO: remove or write an actual test case
-def test_citation_replacement() -> None:
-    """
-    Test function to verify citation replacement works correctly.
-    """
-    # Test case 1: Single citation
-    text1 = "This is a claim with citation [1]"
-    mapping1 = {1: 5}
-    result1 = _replace_citations_with_map(text1, mapping1)
-    print(
-        f"Test 1: '{text1}' -> '{result1}' (expected: 'This is a claim with citation [5]')"
-    )
-
-    # Test case 2: Multiple citations
-    text2 = "This has citations [1, 2, 3] and [4]"
-    mapping2 = {1: 10, 2: 20, 3: 30, 4: 40}
-    result2 = _replace_citations_with_map(text2, mapping2)
-    print(
-        f"Test 2: '{text2}' -> '{result2}' (expected: 'This has citations [10, 20, 30] and [40]')"
-    )
-
-    # Test case 3: Mixed citations (some in map, some not)
-    text3 = "Mixed citations [1, 5, 2] where 5 is not in map"
-    mapping3 = {1: 100, 2: 200}
-    result3 = _replace_citations_with_map(text3, mapping3)
-    print(
-        f"Test 3: '{text3}' -> '{result3}' (expected: 'Mixed citations [100, 5, 200] where 5 is not in map')"
-    )
-
-
-if __name__ == "__main__":
-    test_citation_replacement()

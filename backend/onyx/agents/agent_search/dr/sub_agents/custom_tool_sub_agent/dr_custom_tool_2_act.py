@@ -141,7 +141,7 @@ def custom_tool_act(
                 parallelization_nr=parallelization_nr,
                 question=query,
                 answer=answer_string,
-                cited_documents=[],
+                cited_documents={},
                 background_info=background_info_string,
             )
         ],

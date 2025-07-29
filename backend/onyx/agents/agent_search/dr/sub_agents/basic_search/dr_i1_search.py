@@ -142,9 +142,7 @@ def search(
         writer,
     )
 
-    # get all citations and remove them from the answer to avoid
-    # incorrect citations when the documents get reordered by the closer
-    citation_string = search_answer_json.citations
+    # get cited documents
     answer_string = search_answer_json.answer
     claims = search_answer_json.claims or []
 
@@ -152,10 +150,11 @@ def search(
         citation_numbers,
         answer_string,
         claims,
-    ) = extract_document_citations(citation_string, answer_string, claims)
-    cited_documents = [
-        retrieved_docs[citation_number - 1] for citation_number in citation_numbers
-    ]
+    ) = extract_document_citations(answer_string, claims)
+    cited_documents = {
+        citation_number: retrieved_docs[citation_number - 1]
+        for citation_number in citation_numbers
+    }
 
     return AnswerUpdate(
         iteration_responses=[
@@ -165,6 +164,7 @@ def search(
                 parallelization_nr=parallelization_nr,
                 question=search_query,
                 answer=answer_string,
+                claims=claims,
                 cited_documents=cited_documents,
             )
         ],

@@ -7,6 +7,7 @@ from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.states import AnswerUpdate
 from onyx.agents.agent_search.dr.states import MainState
+from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
 from onyx.agents.agent_search.kb_search.states import MainInput as KbMainInput
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -14,6 +15,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
+from onyx.context.search.models import InferenceSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -37,25 +39,10 @@ def kg_query(
 
     kb_graph = kb_graph_builder().compile()
 
-    write_custom_event(
-        "basic_response",
-        AgentAnswerPiece(
-            answer_piece=(
-                f"SUB-QUESTION {iteration_nr}.{parallelization_nr} "
-                f"(KNOWLEDGE GRAPH): {search_query}\n\n"
-            ),
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
-
     kb_results = kb_graph.invoke(
         input=KbMainInput(question=search_query, individual_flow=False),
         config=config,
     )
-    full_answer = kb_results.get("final_answer") or "No answer provided"
 
     write_custom_event(
         "basic_response",
@@ -68,6 +55,21 @@ def kg_query(
         writer,
     )
 
+    # get cited documents
+    answer_string = kb_results.get("final_answer") or "No answer provided"
+    claims: list[str] = []
+    retrieved_docs: list[InferenceSection] = kb_results.get("retrieved_documents", [])
+
+    (
+        citation_numbers,
+        answer_string,
+        claims,
+    ) = extract_document_citations(answer_string, claims)
+    cited_documents = {
+        citation_number: retrieved_docs[citation_number - 1]
+        for citation_number in citation_numbers
+    }
+
     return AnswerUpdate(
         iteration_responses=[
             IterationAnswer(
@@ -75,10 +77,9 @@ def kg_query(
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
                 question=search_query,
-                answer=full_answer,
-                cited_documents=kb_results.get(
-                    "retrieved_documents", []
-                ),  # TODO: add citations
+                answer=answer_string,
+                claims=claims,
+                cited_documents=cited_documents,
             )
         ],
         log_messages=[

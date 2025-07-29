@@ -154,20 +154,19 @@ def internet_search(
         writer,
     )
 
-    # get all citations and remove them from the answer to avoid
-    # incorrect citations when the documents get reordered by the closer
-    citation_string = search_answer_json.citations
+    # get cited documents
     answer_string = search_answer_json.answer
-    claims = search_answer_json.claims
+    claims = search_answer_json.claims or []
 
     (
         citation_numbers,
         answer_string,
         claims,
-    ) = extract_document_citations(citation_string, answer_string, claims)
-    cited_documents = [
-        retrieved_docs[citation_number - 1] for citation_number in citation_numbers
-    ]
+    ) = extract_document_citations(answer_string, claims)
+    cited_documents = {
+        citation_number: retrieved_docs[citation_number - 1]
+        for citation_number in citation_numbers
+    }
 
     return BranchUpdate(
         branch_iteration_responses=[
@@ -177,8 +176,8 @@ def internet_search(
                 parallelization_nr=parallelization_nr,
                 question=search_query,
                 answer=answer_string,
-                cited_documents=cited_documents,
                 claims=claims,
+                cited_documents=cited_documents,
             )
         ],
         log_messages=[

@@ -17,9 +17,6 @@ INTERNET_SEARCH = DRPath.INTERNET_SEARCH.value
 
 
 DONE_STANDARD: dict[str, str] = {}
-
-BASIC_SEARCH_PROMPTS: dict[str, str] = {}
-
 DONE_STANDARD[DRTimeBudget.FAST] = (
     "Try to make sure that you think you have enough information to \
 answer the question in the spirit and the level of detail that is pretty explicit in the question."
@@ -435,6 +432,30 @@ science'.>"}}
 """
 
 
+TOOL_OUTPUT_FORMAT = """\
+Please format your answer as a json dictionary in the following format:
+{
+   "reasoning": "<your reasoning in 5-8 sentences of what guides you to your conclusions of \
+the specific search query given the documents. Start out here with a brief statement whether \
+the SPECIFIC CONTEXT is mentioned in the documents. (Example: 'I was not able to find information \
+about yellow curry specifically, but I found information about curry...'). Generate here the \
+information that will be necessary to provide a succinct answer to the specific search query. >",
+   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
+the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
+mentioned in the documents. (Example: 'I was not able to find information about yellow curry specifically, \
+but I found information about curry...'). But this should be be precise and concise, and specifically \
+answer the question. Please cite the document sources inline in format [1][7], etc.>",
+   "claims": "<a list of short claims discussed in the documents as they pertain to the query and/or \
+the original question. These will later be used for follow-up questions and verifications. Note that \
+these may not actually be in the succinct answer above. Note also that each claim \
+should include ONE fact that contains enough context to be verified/questioned by a different system \
+without the need for going back to these documents for additional context. Also here, please cite the \
+document sources inline in format [1][7], etc.. So this should have format like \
+[<claim 1>, <claim 2>, <claim 3>, ...], each with citations.>"
+}
+"""
+
+BASIC_SEARCH_PROMPTS: dict[DRTimeBudget, str] = {}
 BASIC_SEARCH_PROMPTS[
     DRTimeBudget.FAST
 ] = f"""
@@ -487,23 +508,7 @@ very specific, ii) cites the relevant documents at the end, and iii) provides a 
 summary of the information in the cited documents, and cite the documents that are most \
 relevant to the question sent to you.
 
-Please format your answer as a json dictionary in the following format:
-{{
-   "reasoning": "<your reasoning in 3-6 sentences of what guides you to the answer of \
-the specific search query given the documents.
-Start out here with a brief statement whether the SPECIFIC CONTEXT is mentioned in the \
-documents. (Example: 'I was not able to find information about yellow curry specifically, \
-but I found information about curry..'). Any reasoning should be done here. Generate \
-here the information that will be necessary to provide a succinct answer to the specific search query. >",
-   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
-the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
-mentioned in the \
-documents. (Example: 'I was not able to find information about yellow curry specifically, \
-but I found information about curry..').
-But this should be be precise and concise, and specifically answer the question.>",
-"citations": "<the list of document numbers that are relevvant for the answer. \
-Please list in format [1][4][6], etc.>"
-}}
+{TOOL_OUTPUT_FORMAT}
 """
 
 BASIC_SEARCH_PROMPTS[
@@ -558,31 +563,7 @@ very specific, ii) cites the relevant documents at the end, and iii) provides a 
 summary of the information in the cited documents, and cite the documents that are most \
 relevant to the question sent to you.
 
-Please format your answer as a json dictionary in the following format:
-{{
-   "reasoning": "<your reasoning in 5-8 sentences of what guides you to your conclusions of \
-the specific search query given the documents.
-Start out here with a brief statement whether the SPECIFIC CONTEXT is mentioned in the \
-documents. (Example: 'I was not able to find information about yellow curry specifically, \
-but I found information about curry..'). Any reasoning should be done here. Generate \
-here the information that will be necessary to provide a succinct answer to the specific search query. >",
-   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
-the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
-mentioned in the \
-documents. (Example: 'I was not able to find information about yellow curry specifically, \
-but I found information about curry..').
-But this should be be precise and concise, and specifically answer the question. Please cite \
-the document sources inline in format [1][7], etc.>",
-"claims": "<a list of short claims discussed in the documents as they pertain to the query and/or \
-the original question. These will later be used for follow-up questions and verifications. Note that \
-these may not actually be in the succinct answer above. Note also that each claim \
-should include ONE fact that contains enough context to be verified/questioned by a different system \
-without the need for going back to these documents for additional context. Also here, please cite the \
-document sources inline in format [1][7], etc.. So this should have format like \
-[<claim 1>, <claim 2>, <claim 3>, ...], each with citations.>",
-"citations": "<the list of document numbers that are relevvant for the answer and appeared as \
-citations earlier. Please list in format [1][4][6], etc.>"
-}}
+{TOOL_OUTPUT_FORMAT}
 """
 
 TOOL_PROCESSING_PROMPT = f"""
@@ -639,23 +620,7 @@ very specific, ii) cites the relevant documents at the end, and iii) provides a 
 summary of the information in the cited documents, and cite the documents that are most \
 relevant to the question sent to you.
 
-Please format your answer as a json dictionary in the following format:
-{{
-   "reasoning": "<your reasoning in 3-6 sentences of what guides you to the answer of \
-the specific search query given the documents.
-Start out here with a brief statement whether the SPECIFIC CONTEXT is mentioned in the \
-documents. (Example: 'I was not able to find information about yellow curry specifically, \
-but I found information about curry..'). Any reasoning should be done here. Generate \
-here the information that will be necessary to provide a succinct answer to the specific search query. >",
-   "answer": "<the specific answer to the specific search query. This may involve some reasoning over \
-the documents. Again, start out here as well with a brief statement whether the SPECIFIC CONTEXT is \
-mentioned in the \
-documents. (Example: 'I was not able to find information about yellow curry specifically, \
-but I found information about curry..').
-But this should be be precise and concise, and specifically answer the question.>",
-"citations": "<the list of document numbers that are relevvant for the answer. \
-Please list in format [1][4][6], etc.>"
-}}
+{TOOL_OUTPUT_FORMAT}
 """
 
 FINAL_ANSWER_PROMPT = f"""
