@@ -77,9 +77,7 @@ def closer(
         include_documents=False,
     )
     iteration_responses_string = aggregated_context.context
-    questions_answers_claims = aggregated_context.questions_answers_claims
     all_cited_documents = aggregated_context.cited_documents
-    claim_context = aggregated_context.claim_context
 
     num_closer_suggestions = state.num_closer_suggestions
 
@@ -89,9 +87,8 @@ def closer(
     ):
         test_info_complete_prompt = (
             TEST_INFO_COMPLETE_PROMPT.replace("---base_question---", prompt_question)
-            .replace("---questions_answers_claims---", questions_answers_claims)
+            .replace("---questions_answers_claims---", iteration_responses_string)
             .replace("---chat_history_string---", chat_history_string)
-            .replace("---claim_context---", claim_context)
             .replace(
                 "---high_level_plan---",
                 (
@@ -163,7 +160,6 @@ def closer(
         FINAL_ANSWER_PROMPT.replace("---base_question---", prompt_question)
         .replace("---iteration_responses_string---", iteration_responses_string)
         .replace("---chat_history_string---", chat_history_string)
-        .replace("---claim_context---", claim_context)
     )
 
     try:

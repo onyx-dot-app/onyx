@@ -85,7 +85,6 @@ class IterationAnswer(BaseModel):
 class AggregatedDRContext(BaseModel):
     context: str
     cited_documents: list[InferenceSection]
-    questions_answers_claims: str
 
 
 class DRTimeBudget(str, Enum):

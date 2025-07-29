@@ -112,16 +112,13 @@ def aggregate_context(
             output_strings.append("\n---\n")
 
     return AggregatedDRContext(
-        context="\n".join(context_components),
-        cited_documents=cited_documents,
-        claim_context=claim_context,
-        questions_answers_claims="\n".join(questions_answers_claims_components),
+        context="\n".join(output_strings),
+        cited_documents=global_documents,
     )
 
 
 def get_answers_history_from_iteration_responses(
     iteration_responses: list[IterationAnswer],
-    time_budget: DRTimeBudget,
 ) -> str:
     """
     Get the answers history from the iteration responses.

@@ -704,15 +704,9 @@ Here is the question that needs to be answered:
 ---base_question---
 {SEPARATOR_LINE}
 
-Here is the list of sub-questions, their answers, and the corresponding documents:
+Here is the list of sub-questions, their answers, and the extracted facts/claims:
 {SEPARATOR_LINE}
 ---iteration_responses_string---
-{SEPARATOR_LINE}
-
-Also, here is the list of claims that were extracted during the sub-question evaluation, \
-and that should guide most of the answer-logic:
-{SEPARATOR_LINE}
----claim_context---
 {SEPARATOR_LINE}
 
 Finally, here is the previous chat history (if any), which may contain relevant information \
