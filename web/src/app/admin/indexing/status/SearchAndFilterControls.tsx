@@ -30,7 +30,7 @@ export function SearchAndFilterControls({
   filterComponentRef,
 }: SearchAndFilterControlsProps) {
   return (
-    <div className="flex items-center mb-4 gap-x-2">
+    <div className="flex items-center gap-x-2 -mb-4">
       <input
         type="text"
         placeholder="Search connectors..."

@@ -185,7 +185,9 @@ function Main() {
 
       {/* Table component */}
       {isLoadingCcPairsIndexingStatuses ? (
-        <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
+        <div className="mt-12">
+          <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
+        </div>
       ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
         <Text>
           It looks like you don&apos;t have any connectors setup yet. Visit the{" "}

@@ -1101,11 +1101,11 @@ def get_connector_indexing_status_with_pagination(
 
     for source in source_list:
         statuses = source_to_all_statuses[source]
-        # Get current page for this source (default to page 0)
-        current_page = request.source_to_page.get(source, 0)
+        # Get current page for this source (default to page 1, 1-indexed)
+        current_page = request.source_to_page.get(source, 1)
 
-        # Calculate start and end indices for pagination
-        start_idx = current_page * PAGE_SIZE
+        # Calculate start and end indices for pagination (convert to 0-indexed)
+        start_idx = (current_page - 1) * PAGE_SIZE
         end_idx = start_idx + PAGE_SIZE
 
         # Get the page slice for this source

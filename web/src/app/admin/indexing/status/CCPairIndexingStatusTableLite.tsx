@@ -315,7 +315,7 @@ export function CCPairIndexingStatusTableLite({
   }, [ccPairsIndexingStatuses, searchQuery]);
 
   return (
-    <Table>
+    <Table className="-mt-8">
       <TableHeader>
         <ConnectorRow
           invisible
@@ -339,6 +339,7 @@ export function CCPairIndexingStatusTableLite({
       <TableBody>
         {filteredCcPairsIndexingStatuses.map((ccPairStatus) => (
           <React.Fragment key={ccPairStatus.source}>
+            <br className="mt-4" />
             <SummaryRow
               source={ccPairStatus.source}
               summary={ccPairStatus.summary}
@@ -348,22 +349,68 @@ export function CCPairIndexingStatusTableLite({
             {connectorsToggled[ccPairStatus.source] && (
               <>
                 {sourceLoadingStates[ccPairStatus.source] && (
-                  <ConnectorStaggeredSkeleton rowCount={6} />
+                  <ConnectorStaggeredSkeleton rowCount={8} height="h-[73px]" />
                 )}
-                {!sourceLoadingStates[ccPairStatus.source] &&
-                  ccPairStatus.indexing_statuses.map((indexingStatus) => (
-                    <ConnectorRow
-                      key={indexingStatus.cc_pair_id}
-                      ccPairsIndexingStatus={indexingStatus}
-                      isEditable={indexingStatus.is_editable}
-                    />
-                  ))}
+                {!sourceLoadingStates[ccPairStatus.source] && (
+                  <>
+                    {ccPairStatus.indexing_statuses.map((indexingStatus) => (
+                      <ConnectorRow
+                        key={indexingStatus.cc_pair_id}
+                        ccPairsIndexingStatus={indexingStatus}
+                        isEditable={indexingStatus.is_editable}
+                      />
+                    ))}
+                    {/* Add dummy rows to reach 10 total rows for cleaner UI */}
+                    {ccPairStatus.indexing_statuses.length < 10 &&
+                      Array.from({
+                        length: 10 - ccPairStatus.indexing_statuses.length,
+                      }).map((_, index) => {
+                        const isLastDummyRow =
+                          index ===
+                          10 - ccPairStatus.indexing_statuses.length - 1;
+                        return (
+                          <TableRow
+                            key={`dummy-${ccPairStatus.source}-${index}`}
+                            className={
+                              isLastDummyRow
+                                ? "border-l border-r border-b border-border dark:border-neutral-700"
+                                : "border-l border-r border-t-0 border-b-0 border-border dark:border-neutral-700"
+                            }
+                          >
+                            {isLastDummyRow ? (
+                              <TableCell
+                                colSpan={
+                                  isPaidEnterpriseFeaturesEnabled ? 6 : 5
+                                }
+                                className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500"
+                              >
+                                <span className="italic">
+                                  All caught up! No more connectors to show
+                                </span>
+                              </TableCell>
+                            ) : (
+                              <>
+                                <TableCell className="h-[56px]"></TableCell>
+                                <TableCell></TableCell>
+                                <TableCell></TableCell>
+                                {isPaidEnterpriseFeaturesEnabled && (
+                                  <TableCell></TableCell>
+                                )}
+                                <TableCell></TableCell>
+                                <TableCell></TableCell>
+                              </>
+                            )}
+                          </TableRow>
+                        );
+                      })}
+                  </>
+                )}
                 {ccPairStatus.total_pages > 1 && (
                   <TableRow>
                     <TableCell
                       colSpan={isPaidEnterpriseFeaturesEnabled ? 6 : 5}
                     >
-                      <div className="flex justify-center py-4">
+                      <div className="flex justify-center">
                         <PageSelector
                           currentPage={ccPairStatus.current_page}
                           totalPages={ccPairStatus.total_pages}

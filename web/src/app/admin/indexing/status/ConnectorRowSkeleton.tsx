@@ -13,16 +13,18 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 export function ConnectorStaggeredSkeleton({
   rowCount = 5,
   standalone = false,
+  height = "h-20",
 }: {
   rowCount?: number;
   standalone?: boolean;
+  height?: string;
 }) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   const skeletonRows = [...Array(rowCount)].map((_, index) => (
     <TableRow
       key={index}
-      className="border border-border dark:border-neutral-700 hover:bg-accent-background animate-pulse h-20"
+      className={`border border-border dark:border-neutral-700 hover:bg-accent-background animate-pulse ${height}`}
       style={{
         animationDelay: `${index * 150}ms`,
         animationDuration: "1.5s",
