@@ -92,10 +92,7 @@ class RedisConnectorPrune:
 
     @property
     def fenced(self) -> bool:
-        if self.redis.exists(self.fence_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.fence_key))
 
     @property
     def payload(self) -> RedisConnectorPrunePayload | None:
@@ -130,10 +127,7 @@ class RedisConnectorPrune:
         self.redis.set(self.active_key, 0, ex=self.ACTIVE_TTL)
 
     def active(self) -> bool:
-        if self.redis.exists(self.active_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.active_key))
 
     @property
     def generator_complete(self) -> int | None:

@@ -7,7 +7,9 @@ const isPostHogEnabled = !!(
   process.env.NEXT_PUBLIC_POSTHOG_KEY && process.env.NEXT_PUBLIC_POSTHOG_HOST
 );
 
-export function PHProvider({ children }: { children: React.ReactNode }) {
+type PHProviderProps = { children: React.ReactNode };
+
+export function PHProvider({ children }: PHProviderProps) {
   useEffect(() => {
     if (isPostHogEnabled) {
       posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {

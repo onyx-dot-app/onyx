@@ -40,6 +40,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import ColoredFormatter
+from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import PlainFormatter
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -93,7 +94,13 @@ def on_task_prerun(
     kwargs: dict[str, Any] | None = None,
     **other_kwargs: Any,
 ) -> None:
-    pass
+    # Reset any per-task logging context so that prefixes (e.g. pruning_ctx)
+    # from a previous task executed in the same worker process do not leak
+    # into the next task's log messages. This fixes incorrect [CC Pair:/Index Attempt]
+    # prefixes observed when a pruning task finishes and an indexing task
+    # runs in the same process.
+
+    LoggerContextVars.reset()
 
 
 def on_task_postrun(
@@ -474,7 +481,8 @@ class TenantContextFilter(logging.Filter):
 
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
         if tenant_id:
-            tenant_id = tenant_id.split(TENANT_ID_PREFIX)[-1][:5]
+            # Match the 8 character tenant abbreviation used in OnyxLoggingAdapter
+            tenant_id = tenant_id.split(TENANT_ID_PREFIX)[-1][:8]
             record.name = f"[t:{tenant_id}]"
         else:
             record.name = ""

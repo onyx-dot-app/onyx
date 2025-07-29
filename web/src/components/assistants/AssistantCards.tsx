@@ -6,7 +6,7 @@ import { FiImage, FiSearch } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 
 import { Badge } from "../ui/badge";
-import { IIMAGE_GENERATION_TOOL_ID } from "@/app/chat/tools/constants";
+import { IMAGE_GENERATION_TOOL_ID } from "@/app/chat/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
 export const AssistantCard = ({
@@ -27,7 +27,7 @@ export const AssistantCard = ({
             <span>Search</span>
           </>
         );
-      case IIMAGE_GENERATION_TOOL_ID:
+      case IMAGE_GENERATION_TOOL_ID:
         return (
           <>
             <FiImage className="h-3 w-3 my-auto" />

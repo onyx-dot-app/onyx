@@ -195,10 +195,9 @@ def undelete_persona(
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
-    db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> dict[str, str]:
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_type = ChatFileType.IMAGE
     file_id = file_store.save_file(
         content=file.file,

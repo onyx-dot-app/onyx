@@ -101,24 +101,6 @@ beat_task_templates: list[dict] = [
         },
     },
     {
-        "name": "check-for-doc-permissions-sync",
-        "task": OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
-        "schedule": timedelta(seconds=30),
-        "options": {
-            "priority": OnyxCeleryPriority.MEDIUM,
-            "expires": BEAT_EXPIRES_DEFAULT,
-        },
-    },
-    {
-        "name": "check-for-external-group-sync",
-        "task": OnyxCeleryTask.CHECK_FOR_EXTERNAL_GROUP_SYNC,
-        "schedule": timedelta(seconds=20),
-        "options": {
-            "priority": OnyxCeleryPriority.MEDIUM,
-            "expires": BEAT_EXPIRES_DEFAULT,
-        },
-    },
-    {
         "name": "monitor-background-processes",
         "task": OnyxCeleryTask.MONITOR_BACKGROUND_PROCESSES,
         "schedule": timedelta(minutes=5),

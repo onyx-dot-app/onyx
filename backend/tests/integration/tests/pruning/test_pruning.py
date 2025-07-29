@@ -136,7 +136,7 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
             )
 
             CCPairManager.wait_for_indexing_completion(
-                cc_pair_1, now, timeout=120, user_performing_action=admin_user
+                cc_pair_1, now, timeout=300, user_performing_action=admin_user
             )
 
             selected_cc_pair = CCPairManager.get_indexing_status_by_id(

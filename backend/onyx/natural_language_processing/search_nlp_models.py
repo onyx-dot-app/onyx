@@ -22,6 +22,7 @@ from onyx.configs.model_configs import (
     BATCH_SIZE_ENCODE_CHUNKS_FOR_API_EMBEDDING_SERVICES,
 )
 from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.natural_language_processing.exceptions import (
@@ -198,7 +199,9 @@ class EmbeddingModel:
         ) -> tuple[int, list[Embedding]]:
             if self.callback:
                 if self.callback.should_stop():
-                    raise RuntimeError("_batch_encode_texts detected stop signal")
+                    raise ConnectorStopSignal(
+                        "_batch_encode_texts detected stop signal"
+                    )
 
             embed_request = EmbedRequest(
                 model_name=self.model_name,
@@ -255,8 +258,6 @@ class EmbeddingModel:
                     try:
                         result = future.result()
                         batch_results.append(result)
-                        if self.callback:
-                            self.callback.progress("_batch_encode_texts", 1)
                     except Exception as e:
                         logger.exception("Embedding model failed to process batch")
                         raise e
@@ -276,8 +277,6 @@ class EmbeddingModel:
                     request_id=request_id,
                 )
                 embeddings.extend(batch_embeddings)
-                if self.callback:
-                    self.callback.progress("_batch_encode_texts", 1)
 
         return embeddings
 

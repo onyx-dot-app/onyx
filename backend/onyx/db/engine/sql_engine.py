@@ -305,6 +305,18 @@ def get_session_with_current_tenant() -> Generator[Session, None, None]:
         yield session
 
 
+@contextmanager
+def get_session_with_current_tenant_if_none(
+    session: Session | None,
+) -> Generator[Session, None, None]:
+    if session is None:
+        tenant_id = get_current_tenant_id()
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            yield session
+    else:
+        yield session
+
+
 # Used in multi tenant mode when need to refer to the shared `public` schema
 @contextmanager
 def get_session_with_shared_schema() -> Generator[Session, None, None]:

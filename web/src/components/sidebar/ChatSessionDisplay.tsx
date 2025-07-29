@@ -1,13 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChatSession } from "../interfaces";
+import { ChatSession } from "@/app/chat/interfaces";
 import { useState, useEffect, useContext, useRef, useCallback } from "react";
 import {
   deleteChatSession,
   getChatRetentionInfo,
   renameChatSession,
-} from "../lib";
+} from "@/app/chat/lib";
 import { BasicSelectable } from "@/components/BasicClickable";
 import Link from "next/link";
 import {
@@ -20,7 +20,7 @@ import {
 } from "react-icons/fi";
 import { DefaultDropdownElement } from "@/components/Dropdown";
 import { Popover } from "@/components/popover/Popover";
-import { ShareChatSessionModal } from "../modal/ShareChatSessionModal";
+import { ShareChatSessionModal } from "@/app/chat/modal/ShareChatSessionModal";
 import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { DragHandle } from "@/components/table/DragHandle";

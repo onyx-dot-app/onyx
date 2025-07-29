@@ -12,6 +12,7 @@ services:
       - relational_db
       - index
       - cache
+      - minio
     restart: unless-stopped
     ports:
       - "8080"

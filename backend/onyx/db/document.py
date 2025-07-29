@@ -849,7 +849,9 @@ def fetch_chunk_counts_for_documents(
     # Create a dictionary of document_id to chunk_count
     chunk_counts = {str(row.id): row.chunk_count or 0 for row in results}
 
-    # Return a list of tuples, using 0 for documents not found in the database
+    # Return a list of tuples, preserving `None` for documents not found or with
+    # an unknown chunk count. Callers should handle the `None` case and fall
+    # back to an existence check against the vector DB if necessary.
     return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
 
 

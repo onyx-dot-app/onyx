@@ -19,6 +19,8 @@ from onyx.chat.prompt_builder.citations_prompt import compute_max_llm_input_toke
 from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_CHUNKS
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.connectors.models import Document
@@ -26,7 +28,6 @@ from onyx.connectors.models import TextSection
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.models import Persona
 from onyx.db.search_settings import get_current_search_settings
 from onyx.indexing.chunker import Chunker
@@ -95,12 +96,14 @@ class InternetSearchTool(Tool[None]):
         document_pruning_config: DocumentPruningConfig,
         answer_style_config: AnswerStyleConfig,
         provider: str | None = None,
-        num_results: int = 10,
+        num_results: int = NUM_INTERNET_SEARCH_RESULTS,
+        max_chunks: int = NUM_INTERNET_SEARCH_CHUNKS,
     ) -> None:
         self.db_session = db_session
         self.persona = persona
         self.prompt_config = prompt_config
         self.llm = llm
+        self.max_chunks = max_chunks
 
         self.chunks_above = (
             persona.chunks_above
@@ -317,7 +320,7 @@ class InternetSearchTool(Tool[None]):
             image_file_id=None,
         )
 
-    def _combine_chunks_into_sections(
+    def _convert_chunks_into_sections(
         self, chunks: list[IndexChunk], similarity_scores: dict[str, float]
     ) -> list[InferenceSection]:
         inference_chunks: list[InferenceChunk] = []
@@ -333,37 +336,23 @@ class InternetSearchTool(Tool[None]):
             )
             inference_chunks.append(inference_chunk)
 
-        # Group chunks by document ID
-        doc_chunks_map: dict[str, list[InferenceChunk]] = {}
-        for inference_chunk in inference_chunks:
-            if inference_chunk.document_id not in doc_chunks_map:
-                doc_chunks_map[inference_chunk.document_id] = []
-            doc_chunks_map[inference_chunk.document_id].append(inference_chunk)
+        # Limit to max_chunks results to process
+        sorted_inference_chunks = sorted(
+            inference_chunks, key=lambda x: x.score or 0, reverse=True
+        )
+        sorted_inference_chunks = sorted_inference_chunks[: self.max_chunks]
 
-        # Create sections for each document
+        # NOTE: chunks_above and chunks_below are set to 0
+        # If we ever decide to use them, we need to add that logic to the inference section
+        # Section merging/pruning happens after this in run()
         sections: list[InferenceSection] = []
-        for _, doc_chunks in doc_chunks_map.items():
-            # Sort chunks by chunk_id to maintain order
-            sorted_chunks = sorted(doc_chunks, key=lambda x: x.chunk_id)
-
-            # Use the chunk with highest score as the center chunk
-            if all(chunk.score is None for chunk in doc_chunks):
-                # If all scores are None, use the first chunk as center
-                center_chunk = doc_chunks[0]
-            else:
-                center_chunk = max(doc_chunks, key=lambda x: x.score or 0)
-
-            # Create section using the utility function
-            section = inference_section_from_chunks(
-                center_chunk=center_chunk,
-                chunks=sorted_chunks,
+        for inference_chunk in sorted_inference_chunks:
+            new_section = InferenceSection(
+                center_chunk=inference_chunk,
+                chunks=[inference_chunk],
+                combined_content=inference_chunk.content,
             )
-
-            if section is not None:
-                sections.append(section)
-
-        # Sort sections by center chunk score (highest first)
-        sections.sort(key=lambda x: x.center_chunk.score or 0, reverse=True)
+            sections.append(new_section)
 
         return sections
 
@@ -395,11 +384,10 @@ class InternetSearchTool(Tool[None]):
         similarity_scores = self._calculate_cosine_similarity_scores(
             query_embedding, chunks_with_embeddings
         )
-        sections = self._combine_chunks_into_sections(
+        sections = self._convert_chunks_into_sections(
             chunks_with_embeddings, similarity_scores
         )
 
-        # Apply pruning and merging to fit within token budget
         if sections:
             pruned_sections = prune_and_merge_sections(
                 sections=sections,

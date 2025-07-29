@@ -83,6 +83,11 @@ IMAGE_MEDIA_TYPES = [
     "image/webp",
 ]
 
+KNOWN_OPENPYXL_BUGS = [
+    "Value must be either numerical or a string containing a wildcard",
+    "File contains no valid workbook part",
+]
+
 
 class OnyxExtensionType(IntFlag):
     Plain = auto()
@@ -312,7 +317,7 @@ def docx_to_text_and_images(
 
     try:
         doc = docx.Document(file)
-    except BadZipFile as e:
+    except (BadZipFile, ValueError) as e:
         logger.warning(
             f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
         )
@@ -336,8 +341,18 @@ def docx_to_text_and_images(
 
     for rel_id, rel in doc.part.rels.items():
         if "image" in rel.reltype:
-            # image is typically in rel.target_part.blob
-            image_bytes = rel.target_part.blob
+            # Skip images that are linked rather than embedded (TargetMode="External")
+            if getattr(rel, "is_external", False):
+                continue
+
+            try:
+                # image is typically in rel.target_part.blob
+                image_bytes = rel.target_part.blob
+            except ValueError:
+                # Safeguard against relationships that lack an internal target_part
+                # (e.g., external relationships or other anomalies)
+                continue
+
             image_name = rel.target_part.partname
             # store
             embedded_images.append((image_bytes, os.path.basename(str(image_name))))
@@ -374,7 +389,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.warning(error_str)
         return ""
     except Exception as e:
-        if "File contains no valid workbook part" in str(e):
+        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
             logger.error(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
@@ -517,22 +532,27 @@ def extract_text_and_images(
     Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
     """
+    file.seek(0)
 
-    try:
-        # Attempt unstructured if env var is set
-        if get_unstructured_api_key():
-            # If the user doesn't want embedded images, unstructured is fine
-            file.seek(0)
+    if get_unstructured_api_key():
+        try:
             text_content = unstructured_to_text(file, file_name)
             return ExtractionResult(
                 text_content=text_content, embedded_images=[], metadata={}
             )
+        except Exception as e:
+            logger.error(
+                f"Failed to process with Unstructured: {str(e)}. "
+                "Falling back to normal processing."
+            )
+            file.seek(0)  # Reset file pointer just in case
 
+    # Default processing
+    try:
         extension = get_file_ext(file_name)
 
         # docx example for embedded images
         if extension == ".docx":
-            file.seek(0)
             text_content, images = docx_to_text_and_images(file)
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
@@ -541,7 +561,6 @@ def extract_text_and_images(
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
-            file.seek(0)
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
@@ -554,7 +573,6 @@ def extract_text_and_images(
         # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
         # You can do something similar to docx if needed.
         if extension == ".pptx":
-            file.seek(0)
             return ExtractionResult(
                 text_content=pptx_to_text(file, file_name=file_name),
                 embedded_images=[],
@@ -562,7 +580,6 @@ def extract_text_and_images(
             )
 
         if extension == ".xlsx":
-            file.seek(0)
             return ExtractionResult(
                 text_content=xlsx_to_text(file, file_name=file_name),
                 embedded_images=[],
@@ -570,19 +587,16 @@ def extract_text_and_images(
             )
 
         if extension == ".eml":
-            file.seek(0)
             return ExtractionResult(
                 text_content=eml_to_text(file), embedded_images=[], metadata={}
             )
 
         if extension == ".epub":
-            file.seek(0)
             return ExtractionResult(
                 text_content=epub_to_text(file), embedded_images=[], metadata={}
             )
 
         if extension == ".html":
-            file.seek(0)
             return ExtractionResult(
                 text_content=parse_html_page_basic(file),
                 embedded_images=[],
@@ -591,7 +605,6 @@ def extract_text_and_images(
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
-            file.seek(0)
             encoding = detect_encoding(file)
             text_content_raw, file_metadata = read_text_file(
                 file, encoding=encoding, ignore_onyx_metadata=False
@@ -604,7 +617,6 @@ def extract_text_and_images(
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
-        file.seek(0)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:

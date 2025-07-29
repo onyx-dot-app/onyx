@@ -358,7 +358,7 @@ def get_query_history_export_status(
     # If task is None, then it's possible that the task has already finished processing.
     # Therefore, we should then check if the export file has already been stored inside of the file-store.
     # If that *also* doesn't exist, then we can return a 404.
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
 
     report_name = construct_query_history_report_name(request_id)
     has_file = file_store.has_file(
@@ -385,7 +385,7 @@ def download_query_history_csv(
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     report_name = construct_query_history_report_name(request_id)
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     has_file = file_store.has_file(
         file_id=report_name,
         file_origin=FileOrigin.QUERY_HISTORY_CSV,

@@ -4,6 +4,7 @@ from abc import abstractmethod
 from collections import defaultdict
 
 from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import DocumentFailure
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -261,6 +262,11 @@ def embed_chunks_with_failure_handling(
             ),
             [],
         )
+    except ConnectorStopSignal as e:
+        logger.warning(
+            "Connector stop signal detected in embed_chunks_with_failure_handling"
+        )
+        raise e
     except Exception:
         logger.exception("Failed to embed chunk batch. Trying individual docs.")
         # wait a couple seconds to let any rate limits or temporary issues resolve

@@ -1,20 +1,20 @@
-import { ChatSession } from "../interfaces";
+import { ChatSession } from "@/app/chat/interfaces";
 import {
   createFolder,
   updateFolderName,
   deleteFolder,
   addChatToFolder,
   updateFolderDisplayPriorities,
-} from "../folders/FolderManagement";
-import { Folder } from "../folders/interfaces";
+} from "@/app/chat/folders/FolderManagement";
+import { Folder } from "@/app/chat/folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { FiPlus, FiCheck, FiX } from "react-icons/fi";
-import { FolderDropdown } from "../folders/FolderDropdown";
+import { FolderDropdown } from "@/app/chat/folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
 import { useState, useCallback, useRef, useContext, useEffect } from "react";
 import { Caret } from "@/components/icons/icons";
-import { groupSessionsByDateRange } from "../lib";
+import { groupSessionsByDateRange } from "@/app/chat/lib";
 import React from "react";
 import {
   Tooltip,

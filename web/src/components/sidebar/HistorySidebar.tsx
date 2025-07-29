@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/tooltip";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChatSession } from "../interfaces";
-import { Folder } from "../folders/interfaces";
+import { ChatSession } from "@/app/chat/interfaces";
+import { Folder } from "@/app/chat/folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import {
@@ -31,7 +31,7 @@ import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DragEndEvent } from "@dnd-kit/core";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { buildChatUrl } from "../lib";
+import { buildChatUrl } from "@/app/chat/lib";
 import { reorderPinnedAssistants } from "@/lib/assistants/updateAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { DragHandle } from "@/components/table/DragHandle";

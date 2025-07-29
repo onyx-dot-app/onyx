@@ -96,7 +96,7 @@ def get_google_drive_documents_from_database() -> list[dict]:
     result = bind.execute(
         sa.text(
             """
-            SELECT d.id, cc.id as cc_pair_id
+            SELECT d.id
             FROM document d
             JOIN document_by_connector_credential_pair dcc ON d.id = dcc.id
             JOIN connector_credential_pair cc ON dcc.connector_id = cc.connector_id
@@ -109,7 +109,7 @@ def get_google_drive_documents_from_database() -> list[dict]:
 
     documents = []
     for row in result:
-        documents.append({"document_id": row.id, "cc_pair_id": row.cc_pair_id})
+        documents.append({"document_id": row.id})
 
     return documents
 
