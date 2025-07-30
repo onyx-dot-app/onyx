@@ -82,12 +82,13 @@ class OllamaOCRExtractor:
             
             # Look for vision-capable models (in order of preference)
             vision_models = [
-                "llava:latest", 
-                "llava:13b", 
-                "llava:7b",
-                "llava-phi3:latest",
-                "moondream:latest",
-                "bakllava:latest"
+                "llama3.2-vision:11b"
+                # "llava:latest", 
+                # "llava:13b", 
+                # "llava:7b",
+                # "llava-phi3:latest",
+                # "moondream:latest",
+                # "bakllava:latest"
             ]
             
             for model in vision_models:
