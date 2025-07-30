@@ -422,13 +422,12 @@ def generate_simple_sql(
         # run sql
         try:
             query_results = _run_sql(sql_statement, rel_temp_view, ent_temp_view)
+            if not query_results:
+                query_generation_error = "SQL query returned no results"
+                logger.warning(f"{query_generation_error}, retrying...")
         except Exception as e:
             query_generation_error = str(e)
             logger.warning(f"Error executing SQL query: {e}, retrying...")
-
-        if not query_results:
-            query_generation_error = "SQL query returned no results"
-            logger.warning(f"{query_generation_error}, retrying...")
 
         # fix sql and try one more time if sql query didn't work out
         # if the result is still empty after this, the kg probably doesn't have the answer,
