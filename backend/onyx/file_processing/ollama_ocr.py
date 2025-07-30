@@ -51,6 +51,7 @@ class OllamaOCRExtractor:
             "http://127.0.0.1:11434",   # Local alternative
             "http://onyx-ollama:11434", # Some setups use prefixed names
             "http://ollama-server:11434" # Alternative naming
+            "http://host.docker.internal:11434"    # I THINK THIS IS WHAT IS USED IN THE THING SO WE BALL W ITTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
         ]
         
         for url in possible_urls:
