@@ -1,4 +1,16 @@
 services:
+  # i added thisssssssssssssssss
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_ORIGINS=*
+    restart: unless-stopped
+  # ends hereeeeeeeeeeeeeeeeeeeeeee
   api_server:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
@@ -14,6 +26,7 @@ services:
       - index
       - cache
       - inference_model_server
+      - ollama # this was added tooooooooooooooooooooooo
     restart: unless-stopped
     env_file:
       - .env
@@ -31,6 +44,7 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-http://minio:9000}
       - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
       - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - OLLAMA_URL=http://ollama:11434 # this is new toooooooooooooooooooooooooooooooooooooooooooooooooooo
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
