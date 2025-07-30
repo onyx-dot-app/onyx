@@ -449,6 +449,7 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
         return not any(part.startswith(".") for part in normalized_path.split(os.sep))
 
     deduped_file_paths = []
+    deduped_file_names = []
     zip_metadata = {}
     try:
         file_store = get_default_file_store()
@@ -480,6 +481,7 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
                             file_type=mime_type,
                         )
                         deduped_file_paths.append(file_id)
+                        deduped_file_names.append(os.path.basename(file_info))
                 continue
 
             # Special handling for docx files - only store the plaintext version
@@ -488,6 +490,7 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
             ):
                 docx_file_id = convert_docx_to_txt(file, file_store)
                 deduped_file_paths.append(docx_file_id)
+                deduped_file_names.append(file.filename)
                 continue
 
             # Default handling for all other file types
@@ -498,10 +501,15 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
                 file_type=file.content_type or "text/plain",
             )
             deduped_file_paths.append(file_id)
+            deduped_file_names.append(file.filename)
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return FileUploadResponse(file_paths=deduped_file_paths, zip_metadata=zip_metadata)
+    return FileUploadResponse(
+        file_paths=deduped_file_paths,
+        file_names=deduped_file_names,
+        zip_metadata=zip_metadata,
+    )
 
 
 @router.post("/admin/connector/file/upload")

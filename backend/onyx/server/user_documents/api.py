@@ -408,6 +408,7 @@ def create_file_from_link(
                 input_type=InputType.LOAD_STATE,
                 connector_specific_config={
                     "file_locations": [user_file.file_id],
+                    "file_names": [user_file.name],
                     "zip_metadata": {},
                 },
                 refresh_freq=None,

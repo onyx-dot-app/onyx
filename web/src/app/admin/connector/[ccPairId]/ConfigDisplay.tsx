@@ -29,9 +29,9 @@ export function buildConfigEntries(
   sourceType: ValidSources
 ): { [key: string]: string } {
   if (sourceType === ValidSources.File) {
-    return obj.file_locations
+    return obj.file_names
       ? {
-          file_names: obj.file_locations.map(getNameFromPath),
+          file_names: obj.file_names,
         }
       : {};
   } else if (sourceType === ValidSources.GoogleSites) {
