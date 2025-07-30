@@ -330,7 +330,7 @@ def get_entity_stats_by_grounded_source_name(
         .all()
     )
 
-    # `row.grounded_source_name`` is NULLABLE in the database schema.
+    # `row.grounded_source_name` is NULLABLE in the database schema.
     # Thus, for all "ungrounded" entity-types, we use a default name.
     return {
         (row.grounded_source_name or UNGROUNDED_SOURCE_NAME): (
