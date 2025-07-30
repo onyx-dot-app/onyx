@@ -422,17 +422,20 @@ def is_zip_file(file: UploadFile) -> bool:
     """
     Check if the file is a zip file by content type or filename.
     """
-    return (
-        file.content_type
-        and file.content_type.startswith(
-            (
-                "application/zip",
-                "application/x-zip-compressed",  # May be this in Windows
-                "application/x-zip",
-                "multipart/x-zip",
+    return bool(
+        (
+            file.content_type
+            and file.content_type.startswith(
+                (
+                    "application/zip",
+                    "application/x-zip-compressed",  # May be this in Windows
+                    "application/x-zip",
+                    "multipart/x-zip",
+                )
             )
         )
-    ) or (file.filename and file.filename.lower().endswith(".zip"))
+        or (file.filename and file.filename.lower().endswith(".zip"))
+    )
 
 
 def upload_files(files: list[UploadFile]) -> FileUploadResponse:
