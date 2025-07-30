@@ -17,6 +17,8 @@ from bs4 import BeautifulSoup
 from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
+from playwright.sync_api import Route
+from playwright.sync_api import Request
 from playwright.sync_api import sync_playwright
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
@@ -329,7 +331,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
     return playwright, context
 
 
-def abort_unnecessary_resources(route, request):
+def abort_unnecessary_resources(route: Route, request: Request) -> None:
     if request.resource_type in ["image", "stylesheet", "font", "media", "websocket", "manifest", "other"]:
         route.abort()
     else:
