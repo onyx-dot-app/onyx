@@ -15,6 +15,7 @@ from onyx.context.search.models import RetrievalDetails
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.prompts import get_default_prompt
 from onyx.prompts.prompt_utils import clean_up_source
 from onyx.llm.factory import get_default_llms
 from onyx.tools.models import SearchToolOverrideKwargs, ToolResponse
@@ -65,7 +66,8 @@ def search_tool_endpoint(
 
     # Set up configurations
     retrieval_options = RetrievalDetails()
-    prompt_config = PromptConfig.from_model(persona.prompts[0])
+    prompt = persona.prompts[0] if persona.prompts else get_default_prompt(db_session)
+    prompt_config = PromptConfig.from_model(prompt)
     pruning_config = DocumentPruningConfig()
     answer_style_config = AnswerStyleConfig(citation_config=CitationConfig())
     evaluation_type = LLMEvaluationType.SKIP
