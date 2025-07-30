@@ -8,10 +8,12 @@ import httpx
 
 from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from onyx.configs.app_configs import VESPA_REQUEST_TIMEOUT
+from onyx.connectors.connector_runner import batched_docs
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
@@ -22,6 +24,7 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+PRUNING_CHECKPOINTED_BATCH_SIZE = 32
 
 
 def document_batch_to_ids(
@@ -54,6 +57,16 @@ def extract_ids_from_runnable_connector(
         start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
         end = datetime.now(timezone.utc).timestamp()
         doc_batch_generator = runnable_connector.poll_source(start=start, end=end)
+    elif isinstance(runnable_connector, CheckpointedConnector):
+        start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
+        end = datetime.now(timezone.utc).timestamp()
+        checkpoint = runnable_connector.build_dummy_checkpoint()
+        checkpoint_generator = runnable_connector.load_from_checkpoint(
+            start=start, end=end, checkpoint=checkpoint
+        )
+        doc_batch_generator = batched_docs(
+            checkpoint_generator, batch_size=PRUNING_CHECKPOINTED_BATCH_SIZE
+        )
     else:
         raise RuntimeError("Pruning job could not find a valid runnable_connector.")
 

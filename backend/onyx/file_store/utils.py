@@ -46,7 +46,6 @@ def store_user_file_plaintext(user_file_id: int, plaintext_content: str) -> bool
     # Get plaintext file name
     plaintext_file_name = user_file_id_to_plaintext_file_name(user_file_id)
 
-    # Use a separate session to avoid committing the caller's transaction
     try:
         file_store = get_default_file_store()
         file_content = BytesIO(plaintext_content.encode("utf-8"))

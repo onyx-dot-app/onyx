@@ -1,3 +1,4 @@
+import io
 import json
 import mimetypes
 import os
@@ -101,8 +102,9 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.file_processing.extract_file_text import convert_docx_to_txt
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
@@ -124,6 +126,7 @@ from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.models import StatusResponse
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -484,15 +487,17 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
                         deduped_file_names.append(os.path.basename(file_info))
                 continue
 
-            # For mypy, actual check happens at start of function
-            assert file.filename is not None
-
-            # Special handling for docx files - only store the plaintext version
-            if file.content_type and file.content_type.startswith(
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            ):
-                docx_file_id = convert_docx_to_txt(file, file_store)
-                deduped_file_paths.append(docx_file_id)
+            # Special handling for doc files - only store the plaintext version
+            file_type = mime_type_to_chat_file_type(file.content_type)
+            if file_type == ChatFileType.DOC:
+                extracted_text = extract_file_text(file.file, file.filename or "")
+                text_file_id = file_store.save_file(
+                    content=io.BytesIO(extracted_text.encode()),
+                    display_name=file.filename,
+                    file_origin=FileOrigin.CHAT_UPLOAD,
+                    file_type="text/plain",
+                )
+                deduped_file_paths.append(text_file_id)
                 deduped_file_names.append(file.filename)
                 continue
 
