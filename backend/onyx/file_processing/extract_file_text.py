@@ -35,6 +35,8 @@ from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.file_store.file_store import FileStore
 from onyx.utils.logger import setup_logger
 
+from onyx.file_processing.ollama_ocr import is_ollama_ocr_available, get_ollama_ocr        # import from new OCR file
+
 logger = setup_logger()
 
 # NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
@@ -81,11 +83,6 @@ IMAGE_MEDIA_TYPES = [
     "image/png",
     "image/jpeg",
     "image/webp",
-]
-
-KNOWN_OPENPYXL_BUGS = [
-    "Value must be either numerical or a string containing a wildcard",
-    "File contains no valid workbook part",
 ]
 
 
@@ -233,13 +230,81 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+# def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+#     """
+#     Extract text from a PDF. For embedded images, a more complex approach is needed.
+#     This is a minimal approach returning text only.
+#     """
+#     text, _, _ = read_pdf_file(file, pdf_pass)
+#     return text
+
+# revised function to wokr with ollama OCR
+def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:                            #########################3 all below
     """
-    Extract text from a PDF. For embedded images, a more complex approach is needed.
-    This is a minimal approach returning text only.
+    Extract text from a PDF with Ollama OCR fallback for image-based content.
     """
-    text, _, _ = read_pdf_file(file, pdf_pass)
-    return text
+    logger.info("=== PDF EXTRACTION WITH OLLAMA OCR ===")
+    
+    try:
+        # First try standard extraction
+        file.seek(0)
+        pdf_reader = PdfReader(file)
+        logger.info(f"PDF has {len(pdf_reader.pages)} pages")
+        
+        if pdf_reader.is_encrypted:
+            if pdf_pass is not None:
+                decrypt_success = False
+                try:
+                    decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
+                except Exception:
+                    logger.error("Unable to decrypt PDF")
+                if not decrypt_success:
+                    return ""
+            else:
+                logger.warning("No password for encrypted PDF")
+                return ""
+        
+        # Try normal text extraction
+        text_parts = []
+        total_normal_text = 0
+        
+        for page in pdf_reader.pages:
+            page_text = page.extract_text().strip()
+            text_parts.append(page_text)
+            total_normal_text += len(page_text)
+        
+        # Check if we got meaningful text (not just bullets and spaces)
+        meaningful_text = ''.join(text_parts).replace('•', '').replace('\n', '').replace(' ', '')
+        logger.info(f"Normal extraction: {total_normal_text} chars, meaningful: {len(meaningful_text)} chars")
+        
+        # If very little meaningful text, use Ollama OCR
+        if len(meaningful_text) < 500:
+            logger.info("PDF appears to be image-based, checking Ollama OCR availability...")
+            
+            if is_ollama_ocr_available():
+                logger.info("Using Ollama OCR for image-based PDF...")
+                ollama_ocr = get_ollama_ocr()
+                if ollama_ocr:
+                    file.seek(0)  # Reset file pointer
+                    ollama_result = ollama_ocr.extract_text_from_pdf(file)
+                    if len(ollama_result.strip()) > len(meaningful_text):
+                        logger.info(f"Ollama OCR successful: {len(ollama_result)} characters")
+                        return ollama_result
+                    else:
+                        logger.info("Ollama OCR didn't improve results")
+            else:
+                logger.warning("Ollama OCR not available, using normal extraction")
+        else:
+            logger.info("PDF has sufficient normal text, using standard extraction")
+        
+        # Fallback to normal extraction
+        result = TEXT_SECTION_SEPARATOR.join(text_parts)
+        logger.info(f"Using normal extraction: {len(result)} characters")
+        return result
+        
+    except Exception as e:
+        logger.error(f"PDF extraction failed: {e}")
+        return ""                                                                    ############################################## all above
 
 
 def read_pdf_file(
@@ -277,10 +342,15 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # text = TEXT_SECTION_SEPARATOR.join(
+        #     page.extract_text() for page in pdf_reader.pages
+        # )
+        
+        # Use the enhanced PDF text extraction with OCR fallback
+        file.seek(0)  # Reset file pointer for potential OCR use
+        text = pdf_to_text(file, pdf_pass)                                        #########################################################
 
+        
         if extract_images:
             for page_num, page in enumerate(pdf_reader.pages):
                 for image_file_object in page.images:
@@ -317,7 +387,7 @@ def docx_to_text_and_images(
 
     try:
         doc = docx.Document(file)
-    except (BadZipFile, ValueError) as e:
+    except BadZipFile as e:
         logger.warning(
             f"Failed to extract docx {file_name or 'docx file'}: {e}. Attempting to read as text file."
         )
@@ -341,18 +411,8 @@ def docx_to_text_and_images(
 
     for rel_id, rel in doc.part.rels.items():
         if "image" in rel.reltype:
-            # Skip images that are linked rather than embedded (TargetMode="External")
-            if getattr(rel, "is_external", False):
-                continue
-
-            try:
-                # image is typically in rel.target_part.blob
-                image_bytes = rel.target_part.blob
-            except ValueError:
-                # Safeguard against relationships that lack an internal target_part
-                # (e.g., external relationships or other anomalies)
-                continue
-
+            # image is typically in rel.target_part.blob
+            image_bytes = rel.target_part.blob
             image_name = rel.target_part.partname
             # store
             embedded_images.append((image_bytes, os.path.basename(str(image_name))))
@@ -389,7 +449,7 @@ def xlsx_to_text(file: IO[Any], file_name: str = "") -> str:
             logger.warning(error_str)
         return ""
     except Exception as e:
-        if any(s in str(e) for s in KNOWN_OPENPYXL_BUGS):
+        if "File contains no valid workbook part" in str(e):
             logger.error(
                 f"Failed to extract text from {file_name or 'xlsx file'}. This happens due to a bug in openpyxl. {e}"
             )
@@ -532,27 +592,22 @@ def extract_text_and_images(
     Primary new function for the updated connector.
     Returns structured extraction result with text content, embedded images, and metadata.
     """
-    file.seek(0)
 
-    if get_unstructured_api_key():
-        try:
+    try:
+        # Attempt unstructured if env var is set
+        if get_unstructured_api_key():
+            # If the user doesn't want embedded images, unstructured is fine
+            file.seek(0)
             text_content = unstructured_to_text(file, file_name)
             return ExtractionResult(
                 text_content=text_content, embedded_images=[], metadata={}
             )
-        except Exception as e:
-            logger.error(
-                f"Failed to process with Unstructured: {str(e)}. "
-                "Falling back to normal processing."
-            )
-            file.seek(0)  # Reset file pointer just in case
 
-    # Default processing
-    try:
         extension = get_file_ext(file_name)
 
         # docx example for embedded images
         if extension == ".docx":
+            file.seek(0)
             text_content, images = docx_to_text_and_images(file)
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
@@ -561,6 +616,7 @@ def extract_text_and_images(
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
+            file.seek(0)
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
@@ -573,6 +629,7 @@ def extract_text_and_images(
         # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
         # You can do something similar to docx if needed.
         if extension == ".pptx":
+            file.seek(0)
             return ExtractionResult(
                 text_content=pptx_to_text(file, file_name=file_name),
                 embedded_images=[],
@@ -580,6 +637,7 @@ def extract_text_and_images(
             )
 
         if extension == ".xlsx":
+            file.seek(0)
             return ExtractionResult(
                 text_content=xlsx_to_text(file, file_name=file_name),
                 embedded_images=[],
@@ -587,16 +645,19 @@ def extract_text_and_images(
             )
 
         if extension == ".eml":
+            file.seek(0)
             return ExtractionResult(
                 text_content=eml_to_text(file), embedded_images=[], metadata={}
             )
 
         if extension == ".epub":
+            file.seek(0)
             return ExtractionResult(
                 text_content=epub_to_text(file), embedded_images=[], metadata={}
             )
 
         if extension == ".html":
+            file.seek(0)
             return ExtractionResult(
                 text_content=parse_html_page_basic(file),
                 embedded_images=[],
@@ -605,6 +666,7 @@ def extract_text_and_images(
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
+            file.seek(0)
             encoding = detect_encoding(file)
             text_content_raw, file_metadata = read_text_file(
                 file, encoding=encoding, ignore_onyx_metadata=False
@@ -617,6 +679,7 @@ def extract_text_and_images(
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
+        file.seek(0)
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:

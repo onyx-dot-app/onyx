@@ -1,19 +1,5 @@
 FROM python:3.11.7-slim-bookworm
 
-###### added part
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-fra \
-    tesseract-ocr-deu \
-    tesseract-ocr-spa \
-    libtesseract-dev \
-    libleptonica-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-#######
-
-
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
 contains code for both the Community and Enterprise editions of Onyx. If you do not \
@@ -51,7 +37,12 @@ RUN apt-get update && \
         pkg-config \
         gcc \
         nano \
-        vim && \
+        vim \
+        ############                          ###########################
+        tesseract-ocr \        
+        tesseract-ocr-eng \   
+        ######## ################################                             #####################3
+        poppler-utils && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
@@ -66,10 +57,6 @@ RUN pip install --no-cache-dir --upgrade \
         --timeout 30 \
         -r /tmp/requirements.txt \
         -r /tmp/ee-requirements.txt && \
-#### added
-        PyMuPDF==1.23.5 \
-        pytesseract==0.3.10 \
-#####
     pip uninstall -y py && \
     playwright install chromium && \
     playwright install-deps chromium && \
