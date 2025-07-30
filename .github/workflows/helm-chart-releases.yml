@@ -21,6 +21,12 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
+      - name: Add Required Helm Repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add onyx-vespa https://onyx-dot-app.github.io/vespa-helm-charts
+          helm repo update
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         env:
