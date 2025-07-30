@@ -1,5 +1,8 @@
+# File: backend/onyx/file_processing/ollama_ocr.py
+
 import io
 import base64
+import os
 from typing import IO, Any, Optional
 from PIL import Image
 import fitz  # PyMuPDF
@@ -11,54 +14,101 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 class OllamaOCRExtractor:
-    """OCR extraction using Ollama vision models."""
+    """OCR extraction using existing Ollama vision models."""
     
     def __init__(self, 
                  model_name: str = "llava:latest",
-                 ollama_url: str = "http://localhost:11434"):
+                 ollama_url: str = None):
+        # Try to detect Ollama URL from environment or use common defaults
+        if ollama_url is None:
+            ollama_url = self._detect_ollama_url()
+        
         self.model_name = model_name
         self.ollama_url = ollama_url
-        self._check_ollama_availability()
+        self.available = self._check_ollama_availability()
+    
+    def _detect_ollama_url(self) -> str:
+        """Auto-detect Ollama URL from environment or common patterns."""
+        # Check environment variables that Onyx might use for Ollama
+        possible_env_vars = [
+            'OLLAMA_URL',
+            'OLLAMA_BASE_URL', 
+            'OLLAMA_HOST',
+            'LLM_PROVIDER_HOST',
+            'OLLAMA_API_BASE'
+        ]
+        
+        for env_var in possible_env_vars:
+            url = os.getenv(env_var)
+            if url:
+                logger.info(f"Using Ollama URL from {env_var}: {url}")
+                return url.rstrip('/')
+        
+        # Common Docker service names for Ollama in Onyx setups
+        possible_urls = [
+            "http://ollama:11434",      # Most common Docker Compose service name
+            "http://localhost:11434",   # Local development
+            "http://127.0.0.1:11434",   # Local alternative
+            "http://onyx-ollama:11434", # Some setups use prefixed names
+            "http://ollama-server:11434" # Alternative naming
+        ]
+        
+        for url in possible_urls:
+            try:
+                response = requests.get(f"{url}/api/tags", timeout=2)
+                if response.status_code == 200:
+                    logger.info(f"Found Ollama at: {url}")
+                    return url
+            except:
+                continue
+        
+        logger.warning("Could not auto-detect Ollama URL, using default")
+        return "http://ollama:11434"
     
     def _check_ollama_availability(self) -> bool:
-        """Check if Ollama is running and model is available."""
+        """Check if Ollama is running and has vision models available."""
         try:
-            # Check if Ollama is running
+            logger.info(f"Checking Ollama availability at {self.ollama_url}")
             response = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
             if response.status_code != 200:
-                logger.warning("Ollama server not accessible")
+                logger.warning(f"Ollama server not accessible at {self.ollama_url}")
                 return False
             
-            # Check if model is available
+            # Check available models
             models = response.json().get("models", [])
             available_models = [model["name"] for model in models]
+            logger.info(f"Available Ollama models: {available_models}")
             
-            if self.model_name not in available_models:
-                logger.warning(f"Model {self.model_name} not found. Available: {available_models}")
-                # Try to pull the model
-                self._pull_model()
+            # Look for vision-capable models (in order of preference)
+            vision_models = [
+                "llava:latest", 
+                "llava:13b", 
+                "llava:7b",
+                "llava-phi3:latest",
+                "moondream:latest",
+                "bakllava:latest"
+            ]
             
-            return True
+            for model in vision_models:
+                if model in available_models:
+                    self.model_name = model
+                    logger.info(f"Using vision model: {model}")
+                    return True
             
-        except Exception as e:
-            logger.error(f"Failed to check Ollama availability: {e}")
+            # If requested model not found, try to find any llava model
+            llava_models = [m for m in available_models if "llava" in m.lower()]
+            if llava_models:
+                self.model_name = llava_models[0]
+                logger.info(f"Using available LLaVA model: {self.model_name}")
+                return True
+            
+            logger.warning(f"No vision models found. Available models: {available_models}")
+            logger.info("To add a vision model, run: docker exec your_ollama_container ollama pull llava:latest")
             return False
-    
-    def _pull_model(self):
-        """Pull the vision model if not available."""
-        try:
-            logger.info(f"Pulling model {self.model_name}...")
-            response = requests.post(
-                f"{self.ollama_url}/api/pull",
-                json={"name": self.model_name},
-                timeout=300  # 5 minutes for model download
-            )
-            if response.status_code == 200:
-                logger.info(f"Successfully pulled {self.model_name}")
-            else:
-                logger.error(f"Failed to pull model: {response.text}")
+            
         except Exception as e:
-            logger.error(f"Error pulling model: {e}")
+            logger.warning(f"Ollama OCR not available: {e}")
+            return False
     
     def _image_to_base64(self, image_bytes: bytes) -> str:
         """Convert image bytes to base64 string."""
@@ -69,28 +119,33 @@ class OllamaOCRExtractor:
         try:
             base64_image = self._image_to_base64(image_bytes)
             
-            prompt = """Please extract all text from this image. 
-            Return only the text content, maintaining the original formatting and structure.
-            Do not add any commentary or explanations."""
+            prompt = """Please extract ALL text from this image exactly as it appears. 
+            Maintain the original formatting, spacing, and structure.
+            Include headers, paragraphs, bullet points, and any other text elements.
+            Do not add explanations or commentary - only return the extracted text."""
             
             payload = {
                 "model": self.model_name,
                 "prompt": prompt,
                 "images": [base64_image],
-                "stream": False
+                "stream": False,
+                "options": {
+                    "temperature": 0,  # More deterministic output
+                    "top_p": 0.9
+                }
             }
             
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
                 json=payload,
-                timeout=60
+                timeout=120  # Longer timeout for vision processing
             )
             
             if response.status_code == 200:
                 result = response.json()
                 return result.get("response", "").strip()
             else:
-                logger.error(f"Ollama API error: {response.text}")
+                logger.error(f"Ollama API error: {response.status_code} - {response.text}")
                 return ""
                 
         except Exception as e:
@@ -99,16 +154,20 @@ class OllamaOCRExtractor:
     
     def extract_text_from_pdf(self, file: IO[Any]) -> str:
         """Extract text from PDF using Ollama OCR."""
+        if not self.available:
+            logger.warning("Ollama OCR not available")
+            return ""
+            
         try:
             file.seek(0)
             pdf_document = fitz.open(stream=file.read(), filetype="pdf")
-            logger.info(f"Processing PDF with {len(pdf_document)} pages using Ollama OCR")
+            logger.info(f"Processing PDF with {len(pdf_document)} pages using Ollama OCR (model: {self.model_name})")
             
             extracted_pages = []
             
             for page_num in range(len(pdf_document)):
                 try:
-                    logger.info(f"Processing page {page_num + 1}...")
+                    logger.info(f"Processing page {page_num + 1} with Ollama OCR...")
                     page = pdf_document.load_page(page_num)
                     
                     # Render page as high-quality image
@@ -149,6 +208,8 @@ def get_ollama_ocr() -> Optional[OllamaOCRExtractor]:
     if _ollama_ocr is None:
         try:
             _ollama_ocr = OllamaOCRExtractor()
+            if not _ollama_ocr.available:
+                _ollama_ocr = None
         except Exception as e:
             logger.error(f"Failed to initialize Ollama OCR: {e}")
             return None
@@ -157,4 +218,4 @@ def get_ollama_ocr() -> Optional[OllamaOCRExtractor]:
 def is_ollama_ocr_available() -> bool:
     """Check if Ollama OCR is available."""
     ocr = get_ollama_ocr()
-    return ocr is not None
+    return ocr is not None and ocr.available
