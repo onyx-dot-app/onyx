@@ -549,8 +549,6 @@ class WebConnector(LoadConnector):
         page = session_ctx.playwright_context.new_page()
         page.route("**/*", abort_unnecessary_resources)
         try:
-            from remote_pdb import RemotePdb
-            RemotePdb('127.0.0.1', 4444).set_trace()
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
