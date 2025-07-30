@@ -10,7 +10,7 @@ visit https://github.com/onyx-dot-app/onyx."
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
-    HF_HOME=/app/cache/huggingface
+    HF_HOME=/app/.cache/huggingface
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
@@ -38,10 +38,10 @@ snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 
-# In case the user has volumes mounted to /root/.cache/huggingface that they've downloaded while
-# running Onyx, don't overwrite it with the built-in cache folder (ensure it's readable by the non-root user)
-RUN mkdir -p $HF_HOME && \
-    mv /root/.cache/huggingface/* $HF_HOME
+# In case the user has volumes mounted to /.cache/huggingface that they've downloaded while
+# running Onyx, move the current contents of the cache folder to a temporary location to ensure 
+# it's preserved in order to combine with the user's cache contents
+RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface
 
 # Create non-root user for security best practices
 RUN groupadd -g 1001 onyx && \
