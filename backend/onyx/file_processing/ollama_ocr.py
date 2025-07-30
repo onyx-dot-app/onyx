@@ -17,7 +17,7 @@ class OllamaOCRExtractor:
     """OCR extraction using existing Ollama vision models."""
     
     def __init__(self, 
-                 model_name: str = "llava:latest",
+                 model_name: str = "llama3.2-vision:11b",
                  ollama_url: str = None):
         # Try to detect Ollama URL from environment or use common defaults
         if ollama_url is None:
