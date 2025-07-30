@@ -40,7 +40,6 @@ from onyx.prompts.kg_prompts import ENTITY_SOURCE_DETECTION_PROMPT
 from onyx.prompts.kg_prompts import ENTITY_TABLE_DESCRIPTION
 from onyx.prompts.kg_prompts import RELATIONSHIP_TABLE_DESCRIPTION
 from onyx.prompts.kg_prompts import SIMPLE_ENTITY_SQL_PROMPT
-from onyx.prompts.kg_prompts import SIMPLE_SQL_CORRECTION_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_ERROR_FIX_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
@@ -362,53 +361,6 @@ def generate_simple_sql(
                 kg_entity_view_name=ent_temp_view,
             )
             raise e
-
-        if state.query_type == KGRelationshipDetection.RELATIONSHIPS.value:
-            # Correction if needed for the more complex relationship table sql:
-
-            correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
-                "---draft_sql---", sql_statement
-            )
-
-            msg = [
-                HumanMessage(
-                    content=correction_prompt,
-                )
-            ]
-
-            try:
-                llm_response = run_with_timeout(
-                    KG_SQL_GENERATION_TIMEOUT,
-                    primary_llm.invoke,
-                    prompt=msg,
-                    timeout_override=25,
-                    max_tokens=1500,
-                )
-
-                cleaned_response = (
-                    str(llm_response.content)
-                    .replace("```json\n", "")
-                    .replace("\n```", "")
-                )
-
-                sql_statement = (
-                    cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
-                )
-                sql_statement = sql_statement.split(";")[0].strip() + ";"
-                sql_statement = sql_statement.replace("sql", "").strip()
-
-            except Exception as e:
-                logger.error(
-                    f"Error in generating the sql correction: {e}. Original model response: {cleaned_response}"
-                )
-
-                drop_views(
-                    allowed_docs_view_name=doc_temp_view,
-                    kg_relationships_view_name=rel_temp_view,
-                    kg_entity_view_name=ent_temp_view,
-                )
-
-                raise e
 
         # display sql statement with view names replaced by general view names
         sql_statement_display = sql_statement.replace(

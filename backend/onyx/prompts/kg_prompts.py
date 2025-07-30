@@ -964,6 +964,7 @@ Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> star
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
 """.strip()
 
+# TODO: remove following before merging after enough testing
 SIMPLE_SQL_CORRECTION_PROMPT = f"""
 You are an expert in reviewing and fixing SQL statements.
 
