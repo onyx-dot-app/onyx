@@ -9,6 +9,7 @@ import {
   FederatedConnectorDetail,
   ValidSources,
   ConnectorIndexingStatusLiteResponse,
+  IndexingStatusRequest,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
@@ -91,22 +92,24 @@ const INDEXING_STATUS_PAGINATED_URL =
   "/api/manage/admin/connector/indexing-status-with-pagination";
 const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
-// Simple hook that efficiently handles pagination and search
 export const useConnectorIndexingStatusWithPagination = (
   filters: Omit<IndexingStatusRequest, "source" | "source_to_page"> = {},
   refreshInterval = 30000
 ) => {
   const { mutate } = useSWRConfig();
+  //maintains the current page for each source
   const [sourcePages, setSourcePages] = useState<Record<ValidSources, number>>(
     {} as Record<ValidSources, number>
   );
   const [mergedData, setMergedData] = useState<
     ConnectorIndexingStatusLiteResponse[]
   >([]);
+  //maintains the loading state for each source
   const [sourceLoadingStates, setSourceLoadingStates] = useState<
     Record<ValidSources, boolean>
   >({} as Record<ValidSources, boolean>);
 
+  //ref to maintain the current source pages for the main request
   const sourcePagesRef = useRef(sourcePages);
   sourcePagesRef.current = sourcePages;
 
@@ -118,7 +121,7 @@ export const useConnectorIndexingStatusWithPagination = (
       last_status_filters: [],
       docs_count_operator: null,
       docs_count_value: null,
-      source_to_page: sourcePagesRef.current, // ✅ Use current pagination state
+      source_to_page: sourcePagesRef.current, // Use current pagination state
       ...filters,
     }),
     [filters]
@@ -140,14 +143,12 @@ export const useConnectorIndexingStatusWithPagination = (
     }
   }, [data]);
 
-  // Function to handle page changes
+  // Function to handle page changes for a specific source
   const handlePageChange = useCallback(
     async (source: ValidSources, page: number) => {
       // Update the source page state
       setSourcePages((prev) => ({ ...prev, [source]: page }));
 
-      // The main SWR will automatically refetch due to the dependency on sourcePages
-      // But for immediate UI feedback, we can also do a targeted fetch
       const sourceRequest: IndexingStatusRequest = {
         ...filters,
         source: source,
@@ -798,37 +799,24 @@ export const useUserGroups = (): {
   };
 };
 
-interface IndexingStatusRequest {
-  secondary_index?: boolean;
-  access_type_filters?: string[];
-  last_status_filters?: string[];
-  docs_count_operator?: ">" | "<" | "=" | null;
-  docs_count_value?: number | null;
-  source_to_page?: Record<ValidSources, number>;
-  source?: ValidSources;
-}
-
 export const fetchConnectorIndexingStatusPaginated = async (
   request: IndexingStatusRequest = {}
 ): Promise<ConnectorIndexingStatusLiteResponse[]> => {
-  const response = await fetch(
-    "/api/manage/admin/connector/indexing-status-with-pagination",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        secondary_index: false,
-        access_type_filters: [],
-        last_status_filters: [],
-        docs_count_operator: null,
-        docs_count_value: null,
-        source_to_page: {},
-        ...request,
-      }),
-    }
-  );
+  const response = await fetch(INDEXING_STATUS_PAGINATED_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      secondary_index: false,
+      access_type_filters: [],
+      last_status_filters: [],
+      docs_count_operator: null,
+      docs_count_value: null,
+      source_to_page: {},
+      ...request,
+    }),
+  });
 
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);

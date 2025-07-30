@@ -190,6 +190,12 @@ export interface ConnectorIndexingStatusLite {
   in_repeated_error_state: boolean;
 }
 
+export interface FederatedConnectorStatus {
+  id: number;
+  source: ValidSources;
+  name: string;
+}
+
 export interface SourceSummary {
   total_connectors: number;
   active_connectors: number;
@@ -202,7 +208,7 @@ export interface ConnectorIndexingStatusLiteResponse {
   summary: SourceSummary;
   current_page: number;
   total_pages: number;
-  indexing_statuses: ConnectorIndexingStatusLite[];
+  indexing_statuses: (ConnectorIndexingStatusLite | FederatedConnectorStatus)[];
 }
 
 export interface FederatedConnectorDetail {
@@ -530,4 +536,14 @@ export interface FederatedConnectorCreateRequest {
 export interface FederatedConnectorCreateResponse {
   id: number;
   source: string;
+}
+
+export interface IndexingStatusRequest {
+  secondary_index?: boolean;
+  access_type_filters?: string[];
+  last_status_filters?: string[];
+  docs_count_operator?: ">" | "<" | "=" | null;
+  docs_count_value?: number | null;
+  source_to_page?: Record<ValidSources, number>;
+  source?: ValidSources;
 }

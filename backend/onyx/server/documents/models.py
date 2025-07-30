@@ -22,6 +22,7 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
+from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.utils import mask_credential_dict
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -416,7 +417,7 @@ class ConnectorIndexingStatusLiteResponse(BaseModel):
     summary: SourceSummary
     current_page: int
     total_pages: int
-    indexing_statuses: list[ConnectorIndexingStatusLite]
+    indexing_statuses: list[ConnectorIndexingStatusLite | FederatedConnectorStatus]
 
 
 class ConnectorCredentialPairIdentifier(BaseModel):
@@ -546,4 +547,5 @@ class IndexingStatusRequest(BaseModel):
     last_status_filters: list[IndexingStatus] = Field(default_factory=list)
     docs_count_operator: DocsCountOperator | None = None
     docs_count_value: int | None = None
+    name_filter: str | None = None
     source_to_page: dict[DocumentSource, int] = Field(default_factory=dict)

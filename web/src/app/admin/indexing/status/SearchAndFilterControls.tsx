@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { FiX } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FilterComponent, FilterOptions } from "./FilterComponent";
@@ -15,6 +17,7 @@ interface SearchAndFilterControlsProps {
   onClearFilters: () => void;
   hasActiveFilters: boolean;
   filterComponentRef: React.RefObject<{ resetFilters: () => void }>;
+  resetPagination: () => void;
 }
 
 export function SearchAndFilterControls({
@@ -28,16 +31,49 @@ export function SearchAndFilterControls({
   onClearFilters,
   hasActiveFilters,
   filterComponentRef,
+  resetPagination,
 }: SearchAndFilterControlsProps) {
+  const [localSearchValue, setLocalSearchValue] = useState(searchQuery);
+
+  // Debounce the search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      resetPagination();
+      onSearchChange(localSearchValue);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [localSearchValue, onSearchChange]);
+
+  // Sync with external searchQuery changes (e.g., when filters are cleared)
+  useEffect(() => {
+    setLocalSearchValue(searchQuery);
+  }, [searchQuery]);
+
+  const handleClearSearch = () => {
+    setLocalSearchValue("");
+  };
+
   return (
     <div className="flex items-center gap-x-2 -mb-4">
-      <input
-        type="text"
-        placeholder="Search connectors..."
-        value={searchQuery}
-        onChange={(e) => onSearchChange(e.target.value)}
-        className="w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-      />
+      <div className="relative w-96 flex-none">
+        <input
+          type="text"
+          placeholder="Search connectors..."
+          value={localSearchValue}
+          onChange={(e) => setLocalSearchValue(e.target.value)}
+          className="w-full h-9 border border-border rounded-md bg-background-50 px-3 py-1 pr-9 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+        {localSearchValue && (
+          <button
+            onClick={handleClearSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
+            aria-label="Clear search"
+          >
+            <FiX className="h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+          </button>
+        )}
+      </div>
 
       <Button
         className="h-9"

@@ -19,6 +19,7 @@ import {
   ConnectorIndexingStatusLiteResponse,
   SourceSummary,
   ConnectorIndexingStatusLite,
+  FederatedConnectorStatus,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
@@ -42,6 +43,12 @@ import { ConnectorCredentialPairStatus } from "../../connector/[ccPairId]/types"
 import { PageSelector } from "@/components/PageSelector";
 import { LoadingAnimation } from "@/components/Loading";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
+
+function isFederatedConnectorStatus(
+  status: ConnectorIndexingStatusLite | FederatedConnectorStatus
+) {
+  return status.name?.toLowerCase().includes("federated");
+}
 
 function SummaryRow({
   source,
@@ -214,7 +221,7 @@ function FederatedConnectorRow({
   federatedConnector,
   invisible,
 }: {
-  federatedConnector: FederatedConnectorDetail;
+  federatedConnector: FederatedConnectorStatus;
   invisible?: boolean;
 }) {
   const router = useRouter();
@@ -279,41 +286,17 @@ export function CCPairIndexingStatusTableLite({
   connectorsToggled,
   toggleSource,
   onPageChange,
-  searchQuery,
   sourceLoadingStates = {} as Record<ValidSources, boolean>,
 }: {
   ccPairsIndexingStatuses: ConnectorIndexingStatusLiteResponse[];
   connectorsToggled: Record<ValidSources, boolean>;
   toggleSource: (source: ValidSources, toggled?: boolean | null) => void;
   onPageChange: (source: ValidSources, newPage: number) => void;
-  searchQuery: string;
   sourceLoadingStates?: Record<ValidSources, boolean>;
 }) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  // Filter connectors based on search query
-  const filteredCcPairsIndexingStatuses = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return ccPairsIndexingStatuses;
-    }
-
-    return ccPairsIndexingStatuses
-      .map((ccPairStatus) => {
-        const filteredIndexingStatuses = ccPairStatus.indexing_statuses.filter(
-          (indexingStatus) =>
-            indexingStatus.name
-              ?.toLowerCase()
-              .includes(searchQuery.toLowerCase()) || false
-        );
-
-        return {
-          ...ccPairStatus,
-          indexing_statuses: filteredIndexingStatuses,
-        };
-      })
-      .filter((ccPairStatus) => ccPairStatus.indexing_statuses.length > 0);
-  }, [ccPairsIndexingStatuses, searchQuery]);
-
+  // Filter connectors based on search quer
   return (
     <Table className="-mt-8">
       <TableHeader>
@@ -337,9 +320,9 @@ export function CCPairIndexingStatusTableLite({
         />
       </TableHeader>
       <TableBody>
-        {filteredCcPairsIndexingStatuses.map((ccPairStatus) => (
+        {ccPairsIndexingStatuses.map((ccPairStatus) => (
           <React.Fragment key={ccPairStatus.source}>
-            <br className="mt-4" />
+            <br className="mt-4 dark:bg-neutral-700" />
             <SummaryRow
               source={ccPairStatus.source}
               summary={ccPairStatus.summary}
@@ -349,19 +332,45 @@ export function CCPairIndexingStatusTableLite({
             {connectorsToggled[ccPairStatus.source] && (
               <>
                 {sourceLoadingStates[ccPairStatus.source] && (
-                  <ConnectorStaggeredSkeleton rowCount={8} height="h-[73px]" />
+                  <ConnectorStaggeredSkeleton rowCount={8} height="h-[79px]" />
                 )}
                 {!sourceLoadingStates[ccPairStatus.source] && (
                   <>
-                    {ccPairStatus.indexing_statuses.map((indexingStatus) => (
-                      <ConnectorRow
-                        key={indexingStatus.cc_pair_id}
-                        ccPairsIndexingStatus={indexingStatus}
-                        isEditable={indexingStatus.is_editable}
-                      />
-                    ))}
+                    <TableRow className="border border-border dark:border-neutral-700">
+                      <TableHead>Name</TableHead>
+                      <TableHead>Last Indexed</TableHead>
+                      <TableHead>Status</TableHead>
+                      {isPaidEnterpriseFeaturesEnabled && (
+                        <TableHead>Permissions / Access</TableHead>
+                      )}
+                      <TableHead>Total Docs</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                    {ccPairStatus.indexing_statuses.map((indexingStatus) => {
+                      if (isFederatedConnectorStatus(indexingStatus)) {
+                        const status =
+                          indexingStatus as FederatedConnectorStatus;
+                        return (
+                          <FederatedConnectorRow
+                            key={status.id}
+                            federatedConnector={status}
+                          />
+                        );
+                      } else {
+                        const status =
+                          indexingStatus as ConnectorIndexingStatusLite;
+                        return (
+                          <ConnectorRow
+                            key={status.cc_pair_id}
+                            ccPairsIndexingStatus={status}
+                            isEditable={status.is_editable}
+                          />
+                        );
+                      }
+                    })}
                     {/* Add dummy rows to reach 10 total rows for cleaner UI */}
                     {ccPairStatus.indexing_statuses.length < 10 &&
+                      ccPairStatus.total_pages > 1 &&
                       Array.from({
                         length: 10 - ccPairStatus.indexing_statuses.length,
                       }).map((_, index) => {
@@ -376,13 +385,22 @@ export function CCPairIndexingStatusTableLite({
                                 ? "border-l border-r border-b border-border dark:border-neutral-700"
                                 : "border-l border-r border-t-0 border-b-0 border-border dark:border-neutral-700"
                             }
+                            style={
+                              isLastDummyRow
+                                ? {
+                                    borderBottom: "1px solid var(--border)",
+                                    borderRight: "1px solid var(--border)",
+                                    borderLeft: "1px solid var(--border)",
+                                  }
+                                : {}
+                            }
                           >
                             {isLastDummyRow ? (
                               <TableCell
                                 colSpan={
                                   isPaidEnterpriseFeaturesEnabled ? 6 : 5
                                 }
-                                className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500"
+                                className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500 border-b border-r border-l border-border dark:border-neutral-700"
                               >
                                 <span className="italic">
                                   All caught up! No more connectors to show

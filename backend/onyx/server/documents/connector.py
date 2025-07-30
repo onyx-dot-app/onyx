@@ -97,15 +97,19 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
+from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
 from onyx.db.index_attempt import get_latest_index_attempts_parallel
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.db.models import UserRole
+from onyx.file_processing.extract_file_text import convert_docx_to_txt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -133,6 +137,7 @@ from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.documents.models import RunConnectorRequest
 from onyx.server.documents.models import SourceSummary
+from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.logger import setup_logger
@@ -145,6 +150,7 @@ logger = setup_logger()
 
 _GMAIL_CREDENTIAL_ID_COOKIE_NAME = "gmail_credential_id"
 _GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id"
+_INDEXING_STATUS_PAGE_SIZE = 10
 
 SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
 use the ingestion APIs for multiple files"
@@ -904,7 +910,6 @@ def get_connector_indexing_status_with_pagination(
     db_session: Session = Depends(get_session),
 ) -> list[ConnectorIndexingStatusLiteResponse]:
     tenant_id = get_current_tenant_id()
-    print(f"request: {request}")
 
     if MOCK_CONNECTOR_FILE_PATH:
         import json
@@ -926,36 +931,58 @@ def get_connector_indexing_status_with_pagination(
     # see https://stackoverflow.com/questions/75758327/
     # sqlalchemy-method-connection-for-bind-is-already-in-progress
     # for why we can't pass in the current db_session to these functions
-    (
-        non_editable_cc_pairs,
-        editable_cc_pairs,
-        latest_index_attempts,
-        latest_finished_index_attempts,
-    ) = run_functions_tuples_in_parallel(
-        [
+
+    parallel_functions = [
+        # Get editable connector/credential pairs
+        (
+            get_connector_credential_pairs_for_user_parallel,
+            (user, True, None, True, True, True, True, request.source),
+        ),
+        # Get federated connectors
+        (fetch_all_federated_connectors_parallel, ()),
+        # Get most recent index attempts
+        (get_latest_index_attempts_parallel, (request.secondary_index, True, False)),
+        # Get most recent finished index attempts
+        (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
+    ]
+
+    non_editable_cc_pairs: list[ConnectorCredentialPair]
+    editable_cc_pairs: list[ConnectorCredentialPair]
+    federated_connectors: list[FederatedConnector]
+    latest_index_attempts: list[IndexAttempt]
+    latest_finished_index_attempts: list[IndexAttempt]
+
+    if user.role == UserRole.ADMIN:
+        # For Admin users, we already got all the cc pair in editable_cc_pairs
+        # its not needed to get them again
+        (
+            editable_cc_pairs,
+            federated_connectors,
+            latest_index_attempts,
+            latest_finished_index_attempts,
+        ) = run_functions_tuples_in_parallel(parallel_functions)
+        non_editable_cc_pairs = []
+    else:
+        parallel_functions.append(
             # Get non-editable connector/credential pairs
             (
                 get_connector_credential_pairs_for_user_parallel,
                 (user, False, None, True, True, True, True, request.source),
             ),
-            # Get editable connector/credential pairs
-            (
-                get_connector_credential_pairs_for_user_parallel,
-                (user, True, None, True, True, True, True, request.source),
-            ),
-            # Get most recent index attempts
-            (
-                get_latest_index_attempts_parallel,
-                (request.secondary_index, True, False),
-            ),
-            # Get most recent finished index attempts
-            (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
-        ]
-    )
+        )
+
+        (
+            editable_cc_pairs,
+            federated_connectors,
+            latest_index_attempts,
+            latest_finished_index_attempts,
+            non_editable_cc_pairs,
+        ) = run_functions_tuples_in_parallel(parallel_functions)
 
     # Cast results to proper types
     non_editable_cc_pairs = cast(list[ConnectorCredentialPair], non_editable_cc_pairs)
     editable_cc_pairs = cast(list[ConnectorCredentialPair], editable_cc_pairs)
+    federated_connectors = cast(list[FederatedConnector], federated_connectors)
     latest_index_attempts = cast(list[IndexAttempt], latest_index_attempts)
     latest_finished_index_attempts = cast(
         list[IndexAttempt], latest_finished_index_attempts
@@ -997,6 +1024,9 @@ def get_connector_indexing_status_with_pagination(
     # Process editable cc_pairs
     editable_statuses: list[ConnectorIndexingStatusLite] = []
     for cc_pair in editable_cc_pairs:
+        # TODO remove this to enable ingestion API
+        if cc_pair.name == "DefaultCCPair":
+            continue
         latest_attempt = cc_pair_to_latest_index_attempt.get(
             (cc_pair.connector_id, cc_pair.credential_id)
         )
@@ -1016,6 +1046,9 @@ def get_connector_indexing_status_with_pagination(
     # Process non-editable cc_pairs
     non_editable_statuses: list[ConnectorIndexingStatusLite] = []
     for cc_pair in non_editable_cc_pairs:
+        # TODO remove this to enable ingestion API
+        if cc_pair.name == "DefaultCCPair":
+            continue
         latest_attempt = cc_pair_to_latest_index_attempt.get(
             (cc_pair.connector_id, cc_pair.credential_id)
         )
@@ -1032,22 +1065,48 @@ def get_connector_indexing_status_with_pagination(
         if status:
             non_editable_statuses.append(status)
 
+    # Process federated connectors
+    federated_statuses: list[FederatedConnectorStatus] = []
+    for federated_connector in federated_connectors:
+        federated_status = FederatedConnectorStatus(
+            id=federated_connector.id,
+            source=federated_connector.source,
+            name=f"{federated_connector.source.replace('_', ' ').title()}",
+        )
+
+        federated_statuses.append(federated_status)
+
     source_to_summary: dict[DocumentSource, SourceSummary] = {}
+
     # Calculate source summary
-    for status in editable_statuses + non_editable_statuses:
-        if status.source not in source_to_summary:
-            source_to_summary[status.source] = SourceSummary(
+    for connector_status in (
+        editable_statuses + non_editable_statuses + federated_statuses
+    ):
+        if isinstance(connector_status, FederatedConnectorStatus):
+            source = connector_status.source.to_non_federated_source()
+        else:
+            source = connector_status.source
+
+        # Skip if source is None (federated connectors without mapping)
+        if source is None:
+            continue
+
+        if source not in source_to_summary:
+            source_to_summary[source] = SourceSummary(
                 total_connectors=0,
                 active_connectors=0,
                 public_connectors=0,
                 total_docs_indexed=0,
             )
-        source_to_summary[status.source].total_connectors += 1
-        if status.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE:
-            source_to_summary[status.source].active_connectors += 1
-        if status.access_type == AccessType.PUBLIC:
-            source_to_summary[status.source].public_connectors += 1
-        source_to_summary[status.source].total_docs_indexed += status.docs_indexed
+        source_to_summary[source].total_connectors += 1
+        if isinstance(connector_status, ConnectorIndexingStatusLite):
+            if connector_status.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE:
+                source_to_summary[source].active_connectors += 1
+            if connector_status.access_type == AccessType.PUBLIC:
+                source_to_summary[source].public_connectors += 1
+            source_to_summary[
+                source
+            ].total_docs_indexed += connector_status.docs_indexed
 
     # Apply filters only if any are provided
     has_filters = bool(
@@ -1057,6 +1116,7 @@ def get_connector_indexing_status_with_pagination(
             request.docs_count_operator is not None
             and request.docs_count_value is not None
         )
+        or request.name_filter
     )
 
     if has_filters:
@@ -1066,6 +1126,7 @@ def get_connector_indexing_status_with_pagination(
             request.last_status_filters,
             request.docs_count_operator,
             request.docs_count_value,
+            request.name_filter,
         )
         non_editable_statuses = _apply_connector_status_filters(
             non_editable_statuses,
@@ -1073,6 +1134,11 @@ def get_connector_indexing_status_with_pagination(
             request.last_status_filters,
             request.docs_count_operator,
             request.docs_count_value,
+            request.name_filter,
+        )
+        federated_statuses = _apply_federated_connector_status_filters(
+            federated_statuses,
+            request.name_filter,
         )
 
     # Track admin page visit for analytics
@@ -1085,15 +1151,27 @@ def get_connector_indexing_status_with_pagination(
     )
 
     # Group statuses by source for pagination
-    source_to_all_statuses: dict[DocumentSource, list[ConnectorIndexingStatusLite]] = {}
+    source_to_all_statuses: dict[
+        DocumentSource, list[ConnectorIndexingStatusLite | FederatedConnectorStatus]
+    ] = {}
     # Group by source
-    for status in editable_statuses + non_editable_statuses:
-        if status.source not in source_to_all_statuses:
-            source_to_all_statuses[status.source] = []
-        source_to_all_statuses[status.source].append(status)
+    for connector_status in (
+        editable_statuses + non_editable_statuses + federated_statuses
+    ):
+        if isinstance(connector_status, FederatedConnectorStatus):
+            source = connector_status.source.to_non_federated_source()
+        else:
+            source = connector_status.source
+
+        # Skip if source is None (federated connectors without mapping)
+        if source is None:
+            continue
+
+        if source not in source_to_all_statuses:
+            source_to_all_statuses[source] = []
+        source_to_all_statuses[source].append(connector_status)
 
     # Create paginated response objects by source
-    PAGE_SIZE = 10
     response_list: list[ConnectorIndexingStatusLiteResponse] = []
 
     source_list = list(source_to_all_statuses.keys())
@@ -1105,8 +1183,8 @@ def get_connector_indexing_status_with_pagination(
         current_page = request.source_to_page.get(source, 1)
 
         # Calculate start and end indices for pagination (convert to 0-indexed)
-        start_idx = (current_page - 1) * PAGE_SIZE
-        end_idx = start_idx + PAGE_SIZE
+        start_idx = (current_page - 1) * _INDEXING_STATUS_PAGE_SIZE
+        end_idx = start_idx + _INDEXING_STATUS_PAGE_SIZE
 
         # Get the page slice for this source
         page_statuses = statuses[start_idx:end_idx]
@@ -1118,7 +1196,7 @@ def get_connector_indexing_status_with_pagination(
                     source=source,
                     summary=source_to_summary[source],
                     current_page=current_page,
-                    total_pages=math.ceil(len(statuses) / PAGE_SIZE),
+                    total_pages=math.ceil(len(statuses) / _INDEXING_STATUS_PAGE_SIZE),
                     indexing_statuses=page_statuses,
                 )
             )
@@ -1174,9 +1252,10 @@ def _apply_connector_status_filters(
     last_status_filters: list[IndexingStatus],
     docs_count_operator: DocsCountOperator | None,
     docs_count_value: int | None,
+    name_filter: str | None,
 ) -> list[ConnectorIndexingStatusLite]:
     """Apply filters to a list of ConnectorIndexingStatusLite objects"""
-    filtered_statuses = []
+    filtered_statuses: list[ConnectorIndexingStatusLite] = []
 
     for status in statuses:
         # Filter by access type
@@ -1202,6 +1281,29 @@ def _apply_connector_status_filters(
                 and status.docs_indexed != docs_count_value
             ):
                 continue
+
+        # Filter by name
+        if status.name:
+            if name_filter and name_filter.lower() not in status.name.lower():
+                continue
+        else:
+            if name_filter:
+                continue
+
+        filtered_statuses.append(status)
+
+    return filtered_statuses
+
+
+def _apply_federated_connector_status_filters(
+    statuses: list[FederatedConnectorStatus],
+    name_filter: str | None,
+) -> list[FederatedConnectorStatus]:
+    filtered_statuses: list[FederatedConnectorStatus] = []
+
+    for status in statuses:
+        if name_filter and name_filter.lower() not in status.name.lower():
+            continue
 
         filtered_statuses.append(status)
 

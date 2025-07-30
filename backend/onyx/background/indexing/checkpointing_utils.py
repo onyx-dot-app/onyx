@@ -6,6 +6,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
@@ -163,13 +164,13 @@ def get_latest_valid_checkpoint(
 
 
 def get_index_attempts_with_old_checkpoints(
-    db_session: Session, days_to_keep: int = 7
+    db_session: Session, days_to_keep: int = NUM_DAYS_TO_KEEP_CHECKPOINTS
 ) -> list[IndexAttempt]:
     """Get all index attempts with checkpoints older than the specified number of days.
 
     Args:
         db_session: The database session
-        days_to_keep: Number of days to keep checkpoints for (default: 7)
+        days_to_keep: Number of days to keep checkpoints for (default: NUM_DAYS_TO_KEEP_CHECKPOINTS)
 
     Returns:
         Number of checkpoints deleted

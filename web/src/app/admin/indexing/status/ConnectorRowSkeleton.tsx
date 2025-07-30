@@ -16,7 +16,7 @@ export function ConnectorStaggeredSkeleton({
   height = "h-20",
 }: {
   rowCount?: number;
-  standalone?: boolean;
+  standalone?: boolean; // if you want to show skeleton which is not in a table, set this to true
   height?: string;
 }) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();

@@ -19,15 +19,7 @@ import { ValidSources } from "@/lib/types";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { ConnectorStaggeredSkeleton } from "./ConnectorRowSkeleton";
-
-interface IndexingStatusRequest {
-  secondary_index?: boolean;
-  access_type_filters?: string[];
-  last_status_filters?: string[];
-  docs_count_operator?: ">" | "<" | "=" | null;
-  docs_count_value?: number | null;
-  source_to_page?: Record<ValidSources, number>;
-}
+import { IndexingStatusRequest } from "@/lib/types";
 
 function Main() {
   // State for filter management
@@ -64,8 +56,9 @@ function Main() {
       last_status_filters: filterOptions.lastStatus || [],
       docs_count_operator: filterOptions.docsCountFilter.operator,
       docs_count_value: filterOptions.docsCountFilter.value,
+      name_filter: searchQuery,
     };
-  }, [filterOptions]);
+  }, [filterOptions, searchQuery]);
 
   // Use the paginated hook with filter request and 30-second refresh
   const {
@@ -92,7 +85,6 @@ function Main() {
     setFilterOptions(newFilterOptions);
     // Reset pagination when filters change
     resetPagination();
-    // The hook will automatically refetch data when the request changes
   };
 
   // Toggle source expand/collapse functions
@@ -178,6 +170,7 @@ function Main() {
         onCollapseAll={collapseAll}
         filterOptions={filterOptions}
         onFilterChange={handleFilterChange}
+        resetPagination={resetPagination}
         onClearFilters={handleClearFilters}
         hasActiveFilters={hasActiveFilters}
         filterComponentRef={filterComponentRef}
@@ -189,7 +182,7 @@ function Main() {
           <ConnectorStaggeredSkeleton rowCount={8} standalone={true} />
         </div>
       ) : !ccPairsIndexingStatuses || ccPairsIndexingStatuses.length === 0 ? (
-        <Text>
+        <Text className="mt-12">
           It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
           <Link className="text-link" href="/admin/add-connector">
             Add Connector
@@ -202,7 +195,6 @@ function Main() {
           connectorsToggled={connectorsToggled}
           toggleSource={toggleSource}
           onPageChange={handlePageChange}
-          searchQuery={searchQuery}
           sourceLoadingStates={sourceLoadingStates}
         />
       )}
