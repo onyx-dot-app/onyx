@@ -11,7 +11,7 @@ from onyx.kg.models import KGAttributeEntityOption
 from onyx.server.kg.models import EntityType
 
 
-_UNGROUNDED_SOURCE_NAME = "Ungrounded"
+UNGROUNDED_SOURCE_NAME = "Ungrounded"
 
 
 def get_entity_types_with_grounded_source_name(
@@ -87,7 +87,7 @@ def get_configured_entity_types(db_session: Session) -> dict[str, list[KGEntityT
 
     et_map = defaultdict(list)
     for et in ets:
-        key = et.grounded_source_name or _UNGROUNDED_SOURCE_NAME
+        key = et.grounded_source_name or UNGROUNDED_SOURCE_NAME
         et_map[key].append(et)
 
     return et_map
