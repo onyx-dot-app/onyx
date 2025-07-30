@@ -37,6 +37,20 @@ def kg_query(
     if not search_query:
         raise ValueError("search_query is not set")
 
+    write_custom_event(
+        "basic_response",
+        AgentAnswerPiece(
+            answer_piece=(
+                f"SUB-QUESTION {iteration_nr}.{parallelization_nr} "
+                f"(KNOWLEDGE GRAPH): {search_query}\n\n"
+            ),
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
     logger.debug(f"Conducting a knowledge graph search for: {search_query}")
 
     kb_graph = kb_graph_builder().compile()
@@ -61,6 +75,10 @@ def kg_query(
     answer_string = kb_results.get("final_answer") or "No answer provided"
     claims: list[str] = []
     retrieved_docs: list[InferenceSection] = kb_results.get("retrieved_documents", [])
+
+    # add citations for the sql retrieved documents
+    for i in range(len(retrieved_docs)):
+        answer_string += f"[{i+1}]"
 
     (
         citation_numbers,

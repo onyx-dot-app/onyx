@@ -139,6 +139,7 @@ CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 DANSWER_REDIS_FUNCTION_LOCK_PREFIX = "da_function_lock:"
 
 TMP_DRALPHA_PERSONA_NAME = "KG Beta"
+TMP_KG_TOOL_NAME = "run_kg_search"
 
 
 class DocumentSource(str, Enum):

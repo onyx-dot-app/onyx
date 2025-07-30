@@ -45,7 +45,7 @@ def get_dr_prompt_template(
         for tool_2 in available_tool_paths:
             if (tool_1, tool_2) in TOOL_DIFFERENTIATION_HINTS:
                 tool_differentiations.append(
-                    "- " + TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
+                    TOOL_DIFFERENTIATION_HINTS[(tool_1, tool_2)]
                 )
     tool_differentiation_hint_string = (
         "\n".join(tool_differentiations) or "(No differentiating hints available)"

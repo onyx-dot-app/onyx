@@ -26,6 +26,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import TMP_KG_TOOL_NAME
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
@@ -62,7 +63,7 @@ def _get_available_tools(
         )
 
         # TODO: add proper KG search tool
-        if tool.name == "run_kg_search":
+        if tool.name == TMP_KG_TOOL_NAME:
             if not kg_enabled:
                 logger.warning("KG must be enabled to use KG search tool")
                 continue

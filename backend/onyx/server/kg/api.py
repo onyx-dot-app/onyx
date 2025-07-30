@@ -1,8 +1,12 @@
+from typing import Any
+
 from fastapi import APIRouter
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
+from onyx.configs.constants import TMP_KG_TOOL_NAME
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.entities import get_entity_stats_by_grounded_source_name
@@ -17,6 +21,8 @@ from onyx.db.persona import create_update_persona
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
+from onyx.db.tools import create_tool
+from onyx.db.tools import get_tool_by_name
 from onyx.kg.resets.reset_index import reset_full_kg_index__commit
 from onyx.kg.setup.kg_default_entity_definitions import (
     populate_missing_default_entity_types__commit,
@@ -36,6 +42,8 @@ from onyx.tools.built_in_tools import get_search_tool
 
 _KG_BETA_ASSISTANT_DESCRIPTION = "The KG Beta assistant uses the Onyx Knowledge Graph (beta) structure \
 to answer questions"
+_KG_TOOL_DISPLAY_NAME = "KG Search"
+_KG_TOOL_DESCRIPTION = "Runs the KG Search. Only works inside the KG Beta agent."
 
 admin_router = APIRouter(prefix="/admin/kg")
 
@@ -95,12 +103,42 @@ def enable_or_disable_kg(
     enable_kg(enable_req=req)
     populate_missing_default_entity_types__commit(db_session=db_session)
 
-    # Create or restore KG Beta persona
-
     # Get the search tool
     search_tool = get_search_tool(db_session=db_session)
     if not search_tool:
         raise RuntimeError("SearchTool not found in the database.")
+
+    # Get or create the KG tool
+    try:
+        kg_tool = get_tool_by_name(_KG_TOOL_DISPLAY_NAME, db_session=db_session)
+    except ValueError:
+        kg_openapi_schema: dict[str, Any] = {
+            "openapi": "3.0.0",
+            "info": {
+                "version": "1.0.0",
+                "title": _KG_TOOL_DISPLAY_NAME,
+                "description": _KG_TOOL_DESCRIPTION,
+            },
+            "servers": [{"url": "http://localhost:8080"}],
+            "paths": {
+                "/kg_search": {
+                    "get": {
+                        "summary": _KG_TOOL_DESCRIPTION,
+                        "operationId": TMP_KG_TOOL_NAME,
+                    }
+                }
+            },
+        }
+
+        kg_tool = create_tool(
+            name=_KG_TOOL_DISPLAY_NAME,
+            description=_KG_TOOL_DESCRIPTION,
+            openapi_schema=kg_openapi_schema,
+            custom_headers=None,
+            user_id=user.id if user else None,
+            db_session=db_session,
+            passthrough_auth=False,
+        )
 
     # Check if we have a previously created persona
     kg_config_settings = get_kg_config_settings()
@@ -132,7 +170,7 @@ def enable_or_disable_kg(
     is_public = len(user_ids) == 0
 
     persona_request = PersonaUpsertRequest(
-        name="KG Beta",
+        name=TMP_DRALPHA_PERSONA_NAME,
         description=_KG_BETA_ASSISTANT_DESCRIPTION,
         system_prompt=KG_BETA_ASSISTANT_SYSTEM_PROMPT,
         task_prompt=KG_BETA_ASSISTANT_TASK_PROMPT,
@@ -145,7 +183,7 @@ def enable_or_disable_kg(
         recency_bias=RecencyBiasSetting.NO_DECAY,
         prompt_ids=[0],
         document_set_ids=[],
-        tool_ids=[search_tool.id],
+        tool_ids=[search_tool.id, kg_tool.id],
         llm_model_provider_override=None,
         llm_model_version_override=None,
         starter_messages=None,
