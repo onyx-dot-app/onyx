@@ -32,9 +32,11 @@ def is_valid_image_type(mime_type: str) -> bool:
     Returns:
         True if the MIME type is a valid image type, False otherwise
     """
-    if not mime_type:
-        return False
-    return mime_type.startswith("image/") and mime_type not in EXCLUDED_IMAGE_TYPES
+    return (
+        bool(mime_type)
+        and mime_type.startswith("image/")
+        and mime_type not in EXCLUDED_IMAGE_TYPES
+    )
 
 
 def is_supported_by_vision_llm(mime_type: str) -> bool:

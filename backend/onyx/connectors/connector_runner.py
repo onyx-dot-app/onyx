@@ -25,6 +25,24 @@ TimeRange = tuple[datetime, datetime]
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 
+def batched_docs(
+    checkpoint_connector_generator: CheckpointOutput[CT],
+    batch_size: int,
+) -> Generator[list[Document], None, None]:
+    batch: list[Document] = []
+    for document, failure, next_checkpoint in CheckpointOutputWrapper[CT]()(
+        checkpoint_connector_generator
+    ):
+        if document is None:
+            continue
+        batch.append(document)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if len(batch) > 0:
+        yield batch
+
+
 class CheckpointOutputWrapper(Generic[CT]):
     """
     Wraps a CheckpointOutput generator to give things back in a more digestible format,
