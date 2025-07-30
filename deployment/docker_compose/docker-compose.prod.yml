@@ -8,7 +8,7 @@ services:
       /bin/sh -c "
       alembic upgrade head &&
       echo \"Starting Onyx Api Server\" &&
-      uvicorn onyx.main:app --host 0.0.0.0 --port 8080"
+      uvicorn onyx.main:app --host 0.0.0.0 --port 8080 --timeout-keep-alive 120"
     depends_on:
       - relational_db
       - index
