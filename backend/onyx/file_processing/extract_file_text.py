@@ -35,6 +35,8 @@ from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.file_store.file_store import FileStore
 from onyx.utils.logger import setup_logger
 
+from onyx.file_processing.ollama_ocr import is_ollama_ocr_available, get_ollama_ocr        # import from new OCR file
+
 logger = setup_logger()
 
 # NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
@@ -228,13 +230,81 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+# def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
+#     """
+#     Extract text from a PDF. For embedded images, a more complex approach is needed.
+#     This is a minimal approach returning text only.
+#     """
+#     text, _, _ = read_pdf_file(file, pdf_pass)
+#     return text
+
+# revised function to wokr with ollama OCR
+def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:                            #########################3 all below
     """
-    Extract text from a PDF. For embedded images, a more complex approach is needed.
-    This is a minimal approach returning text only.
+    Extract text from a PDF with Ollama OCR fallback for image-based content.
     """
-    text, _, _ = read_pdf_file(file, pdf_pass)
-    return text
+    logger.info("=== PDF EXTRACTION WITH OLLAMA OCR ===")
+    
+    try:
+        # First try standard extraction
+        file.seek(0)
+        pdf_reader = PdfReader(file)
+        logger.info(f"PDF has {len(pdf_reader.pages)} pages")
+        
+        if pdf_reader.is_encrypted:
+            if pdf_pass is not None:
+                decrypt_success = False
+                try:
+                    decrypt_success = pdf_reader.decrypt(pdf_pass) != 0
+                except Exception:
+                    logger.error("Unable to decrypt PDF")
+                if not decrypt_success:
+                    return ""
+            else:
+                logger.warning("No password for encrypted PDF")
+                return ""
+        
+        # Try normal text extraction
+        text_parts = []
+        total_normal_text = 0
+        
+        for page in pdf_reader.pages:
+            page_text = page.extract_text().strip()
+            text_parts.append(page_text)
+            total_normal_text += len(page_text)
+        
+        # Check if we got meaningful text (not just bullets and spaces)
+        meaningful_text = ''.join(text_parts).replace('•', '').replace('\n', '').replace(' ', '')
+        logger.info(f"Normal extraction: {total_normal_text} chars, meaningful: {len(meaningful_text)} chars")
+        
+        # If very little meaningful text, use Ollama OCR
+        if len(meaningful_text) < 100:
+            logger.info("PDF appears to be image-based, checking Ollama OCR availability...")
+            
+            if is_ollama_ocr_available():
+                logger.info("Using Ollama OCR for image-based PDF...")
+                ollama_ocr = get_ollama_ocr()
+                if ollama_ocr:
+                    file.seek(0)  # Reset file pointer
+                    ollama_result = ollama_ocr.extract_text_from_pdf(file)
+                    if len(ollama_result.strip()) > len(meaningful_text):
+                        logger.info(f"Ollama OCR successful: {len(ollama_result)} characters")
+                        return ollama_result
+                    else:
+                        logger.info("Ollama OCR didn't improve results")
+            else:
+                logger.warning("Ollama OCR not available, using normal extraction")
+        else:
+            logger.info("PDF has sufficient normal text, using standard extraction")
+        
+        # Fallback to normal extraction
+        result = TEXT_SECTION_SEPARATOR.join(text_parts)
+        logger.info(f"Using normal extraction: {len(result)} characters")
+        return result
+        
+    except Exception as e:
+        logger.error(f"PDF extraction failed: {e}")
+        return ""                                                                    ############################################## all above
 
 
 def read_pdf_file(
@@ -272,10 +342,15 @@ def read_pdf_file(
                 ):
                     metadata[clean_key] = ", ".join(value)
 
-        text = TEXT_SECTION_SEPARATOR.join(
-            page.extract_text() for page in pdf_reader.pages
-        )
+        # text = TEXT_SECTION_SEPARATOR.join(
+        #     page.extract_text() for page in pdf_reader.pages
+        # )
+        
+        # Use the enhanced PDF text extraction with OCR fallback
+        file.seek(0)  # Reset file pointer for potential OCR use
+        text = pdf_to_text(file, pdf_pass)                                        #########################################################
 
+        
         if extract_images:
             for page_num, page in enumerate(pdf_reader.pages):
                 for image_file_object in page.images:
