@@ -434,7 +434,20 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
         file_store = get_default_file_store()
         seen_zip = False
         for file in files:
-            if file.content_type and file.content_type.startswith("application/zip"):
+            # Check for zip files by content type first, then filename fallback
+            is_zip_file = (
+                file.content_type
+                and file.content_type.startswith(
+                    (
+                        "application/zip",
+                        "application/x-zip-compressed",  # May be this in Windows
+                        "application/x-zip",
+                        "multipart/x-zip",
+                    )
+                )
+            ) or (file.filename and file.filename.lower().endswith(".zip"))
+
+            if is_zip_file:
                 if seen_zip:
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
                 seen_zip = True
