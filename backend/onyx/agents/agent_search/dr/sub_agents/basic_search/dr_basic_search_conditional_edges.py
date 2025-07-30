@@ -4,9 +4,7 @@ from langgraph.types import Send
 
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.states import DRPath
-from onyx.agents.agent_search.dr.sub_agents.states import (
-    BranchInput,
-)
+from onyx.agents.agent_search.dr.states import QuestionInputState
 from onyx.agents.agent_search.dr.sub_agents.states import (
     SubAgentInput,
 )
@@ -17,12 +15,13 @@ def branching_router(state: SubAgentInput) -> list[Send | Hashable] | DRPath | s
     return [
         Send(
             "act",
-            BranchInput(
+            QuestionInputState(
                 iteration_nr=state.iteration_nr,
                 parallelization_nr=parallelization_nr,
-                branch_question=query,
-                main_question="",
-                context="",
+                question=query,
+                log_messages=[],
+                tool=DRPath.SEARCH,
+                active_source_types=state.active_source_types,
             ),
         )
         for parallelization_nr, query in enumerate(

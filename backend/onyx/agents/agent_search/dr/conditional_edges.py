@@ -30,6 +30,8 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         and (state.iteration_nr > 0)
     ):
         return DRPath.CLOSER
+    elif next_path == DRPath.SEARCH:
+        return DRPath.SEARCH
 
     # send search/kg requests (parallel only for search)
     # TODO: MAX_DR_PARALLEL_SEARCH should be tool-dependent
@@ -44,8 +46,10 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
                 QuestionInputState(
                     iteration_nr=state.iteration_nr,
                     parallelization_nr=parallelization_nr,
+                    log_messages=[],
                     question=query,
                     tool=next_path,
+                    active_source_types=state.active_source_types,
                 ),
             )
             for parallelization_nr, query in enumerate(queries)

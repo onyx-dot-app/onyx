@@ -3,9 +3,7 @@ from datetime import datetime
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.states import (
-    LoggerUpdate,
-)
+from onyx.agents.agent_search.dr.states import LoggerUpdate
 from onyx.agents.agent_search.dr.sub_agents.states import (
     SubAgentInput,
 )
@@ -17,7 +15,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def is_branch(
+def basic_search_branch(
     state: SubAgentInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> LoggerUpdate:
     """
@@ -27,12 +25,14 @@ def is_branch(
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
 
-    logger.debug(f"Search start for Internet Search {iteration_nr} at {datetime.now()}")
+    state.query_list
+
+    logger.debug(f"Search start for Basic Search {iteration_nr} at {datetime.now()}")
 
     return LoggerUpdate(
         log_messages=[
             get_langgraph_node_log_string(
-                graph_component="internet_search",
+                graph_component="basic_search",
                 node_name="branching",
                 node_start_time=node_start_time,
             )

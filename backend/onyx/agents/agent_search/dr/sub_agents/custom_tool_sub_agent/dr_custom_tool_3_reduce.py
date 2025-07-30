@@ -3,10 +3,10 @@ from datetime import datetime
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+from onyx.agents.agent_search.dr.sub_agents.states import (
     SubAgentMainState,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+from onyx.agents.agent_search.dr.sub_agents.states import (
     SubAgentUpdate,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import (

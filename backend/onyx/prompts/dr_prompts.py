@@ -846,3 +846,35 @@ think multiple clarification questions are needed.>"
 
 ANSWER:
 """
+
+BASE_SEARCH_PROCESSING_PROMPT = f"""
+You are a helpful assistant that is great at processing a search request in order to \
+predict which document types shoild be included in the search, and to rewrite the \
+query into a query that is much better suited for a search query against the predicted \
+document types.
+
+Here is the initial search query:
+{SEPARATOR_LINE}
+---branch_query---
+{SEPARATOR_LINE}
+
+Here is the list of document types that are available for the search:
+{SEPARATOR_LINE}
+---active_source_types_str---
+{SEPARATOR_LINE}
+To interpret what the document types refer to, please refer to your own knowledge.
+
+Please format your answer as a json dictionary in the following format:
+{{
+"specified_source_types": "<list of document types that should be included in the search. \
+ONLY specify document types that are EXPLICITLY mentioned in the query. If none are \
+reliably found or if in doubt, select an empty list []. Note that this list will act \
+as a filter for the search, where an empty list implies all types. Again, if in doubt, \
+return [] here.>",
+"rewritten_query": "<the rewritten query that is much better suited for a search query against the predicted \
+document types. Keep it precise but do not lose critical context! And think about how the information likely \
+looks in the documents.>"
+}}
+
+ANSWER:
+"""

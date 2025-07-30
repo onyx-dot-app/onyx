@@ -4,10 +4,10 @@ from langgraph.types import Send
 
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.states import DRPath
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+from onyx.agents.agent_search.dr.sub_agents.states import (
     BranchInput,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+from onyx.agents.agent_search.dr.sub_agents.states import (
     SubAgentInput,
 )
 

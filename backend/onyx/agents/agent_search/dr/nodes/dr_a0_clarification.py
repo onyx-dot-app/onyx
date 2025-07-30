@@ -27,6 +27,8 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import TMP_KG_TOOL_NAME
+from onyx.db.connector import fetch_unique_document_sources
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
@@ -163,6 +165,12 @@ def clarifier(
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
+    with get_session_with_current_tenant() as db_session:
+        active_source_types = fetch_unique_document_sources(db_session)
+
+    if not active_source_types:
+        raise ValueError("No active source types found")
+
     # get clarification (unless time budget is FAST)
     clarification = None
     if time_budget != DRTimeBudget.FAST:
@@ -256,4 +264,5 @@ def clarifier(
         ],
         clarification=clarification,
         available_tools=available_tools,
+        active_source_types=active_source_types,
     )

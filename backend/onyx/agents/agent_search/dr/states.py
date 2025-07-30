@@ -11,7 +11,7 @@ from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.models import OrchestrationPlan
 from onyx.agents.agent_search.dr.models import OrchestratorTool
 from onyx.context.search.models import InferenceSection
-
+from onyx.db.connector import DocumentSource
 
 ### States ###
 
@@ -36,13 +36,15 @@ class OrchestrationUpdate(LoggerUpdate):
     gaps: list[str] = (
         []
     )  # gaps that may be identified by the closer before being able to answer the question.
+    active_source_types: list[DocumentSource] | None = None
 
 
 class QuestionInputState(LoggerUpdate):
-    iteration_nr: int = 0
-    parallelization_nr: int = 0
-    question: str | None = None
+    iteration_nr: int
+    parallelization_nr: int
+    question: str
     tool: DRPath | str | None = None  # needed for custom tools
+    active_source_types: list[DocumentSource] | None
 
 
 class AnswerUpdate(LoggerUpdate):

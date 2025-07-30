@@ -99,3 +99,8 @@ class DRPromptPurpose(str, Enum):
     PLAN = "PLAN"
     NEXT_STEP = "NEXT_STEP"
     CLARIFICATION = "CLARIFICATION"
+
+
+class BaseSearchProcessingResponse(BaseModel):
+    specified_source_types: list[str]
+    rewritten_query: str

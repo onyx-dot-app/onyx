@@ -7,10 +7,10 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.models import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+from onyx.agents.agent_search.dr.sub_agents.states import (
     BranchInput,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_states import (
+from onyx.agents.agent_search.dr.sub_agents.states import (
     BranchUpdate,
 )
 from onyx.agents.agent_search.dr.utils import extract_document_citations

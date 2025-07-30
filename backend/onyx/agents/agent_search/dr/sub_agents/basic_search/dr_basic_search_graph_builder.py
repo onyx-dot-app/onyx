@@ -2,16 +2,16 @@ from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_1_branch import (
-    is_branch,
+from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_1_branch import (
+    basic_search_branch,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_2_act import (
-    internet_search,
+from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_2_act import (
+    basic_search,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_3_reduce import (
+from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_3_reduce import (
     is_reducer,
 )
-from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_conditional_edges import (
+from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_conditional_edges import (
     branching_router,
 )
 from onyx.agents.agent_search.dr.sub_agents.states import (
@@ -26,7 +26,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def dr_is_graph_builder() -> StateGraph:
+def dr_basic_search_graph_builder() -> StateGraph:
     """
     LangGraph graph builder for Internet Search Sub-Agent
     """
@@ -35,9 +35,9 @@ def dr_is_graph_builder() -> StateGraph:
 
     ### Add nodes ###
 
-    graph.add_node("branch", is_branch)
+    graph.add_node("branch", basic_search_branch)
 
-    graph.add_node("act", internet_search)
+    graph.add_node("act", basic_search)
 
     graph.add_node("reducer", is_reducer)
 
