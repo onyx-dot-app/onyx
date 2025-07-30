@@ -1,4 +1,3 @@
-import { getNameFromPath } from "@/lib/fileUtils";
 import { ValidSources } from "@/lib/types";
 import { EditIcon } from "@/components/icons/icons";
 
