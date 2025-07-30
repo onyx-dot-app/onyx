@@ -101,3 +101,6 @@ prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 prometheus_fastapi_instrumentator==7.1.0
 sendgrid==6.11.0
+PyMuPDF>=1.23.0   # these are new
+requests>=2.31.0  #
+Pillow>=10.0.0    #
