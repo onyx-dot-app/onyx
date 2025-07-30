@@ -64,7 +64,7 @@ class OllamaOCRExtractor:
                 continue
         
         logger.warning("Could not auto-detect Ollama URL, using default")
-        return "http://ollama:11434"
+        return "http://host.docker.internal:11434"
     
     def _check_ollama_availability(self) -> bool:
         """Check if Ollama is running and has vision models available."""
