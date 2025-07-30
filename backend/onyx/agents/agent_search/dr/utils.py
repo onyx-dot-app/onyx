@@ -117,29 +117,6 @@ def aggregate_context(
     )
 
 
-def get_answers_history_from_iteration_responses(
-    iteration_responses: list[IterationAnswer],
-) -> str:
-    """
-    Get the answers history from the iteration responses.
-    """
-
-    return "\n".join(
-        (
-            f"Iteration: {iteration_response.iteration_nr}\n"
-            f"Tool: {iteration_response.tool}\n"
-            f"Iteration Question Number: {iteration_response.parallelization_nr}\n"
-            f"Question: {iteration_response.question}\n"
-            f"Answer: {iteration_response.answer}\n"
-            f"Claims: {iteration_response.claims if iteration_response.claims else 'No claims provided'}"
-        )
-        for iteration_response in sorted(
-            iteration_responses,
-            key=lambda x: (x.iteration_nr, x.parallelization_nr),
-        )
-    )
-
-
 def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) -> str:
     """
     Get the chat history (up to max_messages) as a string.
