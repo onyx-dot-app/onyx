@@ -32,7 +32,10 @@ export function buildConfigEntries(
       ? {
           file_names: obj.file_names,
         }
-      : {};
+      : {
+          // For deployments that don't run file_names migration
+          file_locations: obj.file_locations,
+        };
   } else if (sourceType === ValidSources.GoogleSites) {
     return {
       base_url: obj.base_url,
