@@ -34,12 +34,12 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         return DRPath.SEARCH
 
     # send search/kg requests (parallel only for search)
-    # TODO: MAX_DR_PARALLEL_SEARCH should be tool-dependent
+    # TODO: remove the stuff below here and refactor kg_search to be similar to the rest
     queries = state.query_list[:MAX_DR_PARALLEL_SEARCH]
     if next_path == DRPath.KNOWLEDGE_GRAPH:
         queries = queries[:1]
 
-    if next_path in (DRPath.SEARCH, DRPath.KNOWLEDGE_GRAPH):
+    if next_path in (DRPath.KNOWLEDGE_GRAPH,):
         return [
             Send(
                 next_path,

@@ -89,13 +89,12 @@ def basic_search(
     implied_start_date = search_processing.time_filter
 
     # Validate time_filter format if it exists
+    implied_time_filter = None
     if implied_start_date:
 
         # Check if time_filter is in YYYY-MM-DD format
         date_pattern = r"^\d{4}-\d{2}-\d{2}$"
-        if not re.match(date_pattern, implied_start_date):
-            implied_time_filter = None
-        else:
+        if re.match(date_pattern, implied_start_date):
             implied_time_filter = datetime.strptime(implied_start_date, "%Y-%m-%d")
 
     specified_source_types: list[DocumentSource] | None = [

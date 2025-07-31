@@ -155,7 +155,11 @@ def construct_deep_search_filters(
 
     if div_con_structure:
         for entity_type in double_grounded_entity_types:
-            if entity_type.grounded_source_name.lower() in div_con_structure[0].lower():
+            # entity_type is guaranteed to have grounded_source_name
+            if (
+                cast(str, entity_type.grounded_source_name).lower()
+                in div_con_structure[0].lower()
+            ):
                 source_division = True
                 break
 

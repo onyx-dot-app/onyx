@@ -13,7 +13,6 @@ from onyx.agents.agent_search.dr.sub_agents.states import (
 
 
 def branching_router(state: SubAgentInput) -> list[Send | Hashable] | DRPath | str:
-    # TODO: should this be moved to dr.conditional_edges.py?
     return [
         Send(
             "act",

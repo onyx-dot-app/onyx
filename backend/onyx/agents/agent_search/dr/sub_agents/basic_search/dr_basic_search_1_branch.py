@@ -25,8 +25,6 @@ def basic_search_branch(
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
 
-    state.query_list
-
     logger.debug(f"Search start for Basic Search {iteration_nr} at {datetime.now()}")
 
     return LoggerUpdate(
