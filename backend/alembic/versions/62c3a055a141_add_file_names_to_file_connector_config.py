@@ -10,6 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 import json
 import os
+import logging
 
 
 # revision identifiers, used by Alembic.
@@ -22,11 +23,16 @@ SKIP_FILE_NAME_MIGRATION = (
     os.environ.get("SKIP_FILE_NAME_MIGRATION", "true").lower() == "true"
 )
 
+logger = logging.getLogger("alembic.runtime.migration")
+
 
 def upgrade() -> None:
     if SKIP_FILE_NAME_MIGRATION:
+        logger.info(
+            "Skipping file name migration. Hint: set SKIP_FILE_NAME_MIGRATION=false to run this migration"
+        )
         return
-
+    logger.info("Running file name migration")
     # Get connection
     conn = op.get_bind()
 
