@@ -142,6 +142,7 @@ from onyx.server.models import StatusResponse
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.threadpool_concurrency import CallableProtocol
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -911,16 +912,6 @@ def get_connector_indexing_status_with_pagination(
 ) -> list[ConnectorIndexingStatusLiteResponse]:
     tenant_id = get_current_tenant_id()
 
-    if MOCK_CONNECTOR_FILE_PATH:
-        import json
-
-        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
-            raw_data = json.load(f)
-            connector_indexing_statuses = [
-                ConnectorIndexingStatus(**status) for status in raw_data
-            ]
-        return connector_indexing_statuses
-
     # NOTE: If the connector is deleting behind the scenes,
     # accessing cc_pairs can be inconsistent and members like
     # connector or credential may be None.
@@ -932,7 +923,7 @@ def get_connector_indexing_status_with_pagination(
     # sqlalchemy-method-connection-for-bind-is-already-in-progress
     # for why we can't pass in the current db_session to these functions
 
-    parallel_functions = [
+    parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs
         (
             get_connector_credential_pairs_for_user_parallel,

@@ -14,7 +14,7 @@ def get_index_attempts(
     cutoff_date = get_db_current_time(db_session) - timedelta(days=days_to_keep)
     return (
         db_session.query(IndexAttempt)
-        .filter(IndexAttempt.created_at < cutoff_date)
+        .filter(IndexAttempt.time_created < cutoff_date)
         .all()
     )
 
