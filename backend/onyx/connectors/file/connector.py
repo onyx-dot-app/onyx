@@ -230,12 +230,13 @@ class LocalFileConnector(LoadConnector):
     def __init__(
         self,
         file_locations: list[Path | str],
-        file_names: list[str],
+        file_names: list[
+            str
+        ],  # Must accept this parameter as connector_specific_config is unpacked as args
         zip_metadata: dict[str, Any],
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
-        self.file_names = file_names
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
         self.zip_metadata = zip_metadata
