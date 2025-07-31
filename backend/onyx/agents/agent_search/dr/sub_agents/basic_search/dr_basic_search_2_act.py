@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from typing import cast
 
@@ -64,7 +65,7 @@ def basic_search(
     # rewrite query and identify source types
 
     active_source_types_str = ", ".join(
-        [source.value for source in state.active_source_types]
+        [source.value for source in state.active_source_types or []]
     )
 
     base_search_processing_prompt = BASE_SEARCH_PROCESSING_PROMPT.replace(
@@ -85,6 +86,18 @@ def basic_search(
 
     rewritten_query = search_processing.rewritten_query
 
+    implied_start_date = search_processing.time_filter
+
+    # Validate time_filter format if it exists
+    if implied_start_date:
+
+        # Check if time_filter is in YYYY-MM-DD format
+        date_pattern = r"^\d{4}-\d{2}-\d{2}$"
+        if not re.match(date_pattern, implied_start_date):
+            implied_time_filter = None
+        else:
+            implied_time_filter = datetime.strptime(implied_start_date, "%Y-%m-%d")
+
     specified_source_types: list[DocumentSource] | None = [
         DocumentSource(source_type)
         for source_type in search_processing.specified_source_types
@@ -101,6 +114,8 @@ def basic_search(
                 f"(SEARCH): {branch_query}\n\n"
                 f"REWRITTEN QUERY: {rewritten_query}\n\n"
                 f"PREDICTED SOURCE TYPES: {specified_source_types}\n\n"
+                f"PREDICTED TIME FILTER: {implied_time_filter}\n\n"
+                " --- \n\n"
             ),
             level=0,
             level_question_num=0,
@@ -121,6 +136,7 @@ def basic_search(
         for tool_response in search_tool.run(
             query=rewritten_query,
             document_sources=specified_source_types,
+            time_filter=implied_time_filter,
             override_kwargs=SearchToolOverrideKwargs(
                 force_no_rerank=True,
                 alternate_db_session=search_db_session,
@@ -162,6 +178,7 @@ def basic_search(
 
     # Run LLM
 
+    # search_answer_json = None
     search_answer_json = invoke_llm_json(
         llm=graph_config.tooling.primary_llm,
         prompt=search_prompt,
@@ -188,6 +205,8 @@ def basic_search(
     # get cited documents
     answer_string = search_answer_json.answer
     claims = search_answer_json.claims or []
+    # answer_string = ""
+    # claims = []
 
     (
         citation_numbers,

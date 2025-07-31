@@ -3,6 +3,7 @@ import socket
 from enum import auto
 from enum import Enum
 
+
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
 ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
 ONYX_EMAILABLE_LOGO_MAX_DIM = 512
@@ -515,3 +516,57 @@ else:
 class OnyxCallTypes(str, Enum):
     FIREFLIES = "FIREFLIES"
     GONG = "GONG"
+
+
+# TODO: this should be stored likely in database
+DocumentSourceDescription: dict[DocumentSource, str] = {
+    # Special case, document passed in via Onyx APIs without specifying a source type
+    DocumentSource.INGESTION_API: "ingestion_api",
+    DocumentSource.SLACK: "slack channels",
+    DocumentSource.WEB: "web pages",
+    DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
+    DocumentSource.GMAIL: "email messages",
+    DocumentSource.REQUESTTRACKER: "requesttracker",
+    DocumentSource.GITHUB: "github data",
+    DocumentSource.GITBOOK: "gitbook data",
+    DocumentSource.GITLAB: "gitlab data",
+    DocumentSource.GURU: "guru data",
+    DocumentSource.BOOKSTACK: "bookstack data",
+    DocumentSource.CONFLUENCE: "confluence data (pages, spaces, etc.)",
+    DocumentSource.JIRA: "jira data (issues, tickets, projects, etc.)",
+    DocumentSource.SLAB: "slab data",
+    DocumentSource.PRODUCTBOARD: "productboard data (boards, etc.)",
+    DocumentSource.FILE: "files",
+    DocumentSource.NOTION: "notion data - a workspace that combines note-taking, \
+project management, and collaboration tools into a single, customizable platform",
+    DocumentSource.ZULIP: "zulip data",
+    DocumentSource.LINEAR: "linear data - project management tool, including tickets etc.",
+    DocumentSource.HUBSPOT: "hubspot data - CRM and marketing automation data",
+    DocumentSource.DOCUMENT360: "document360 data",
+    DocumentSource.GONG: "gong - call transcripts",
+    DocumentSource.GOOGLE_SITES: "google_sites - websites",
+    DocumentSource.ZENDESK: "zendesk - customer support data",
+    DocumentSource.LOOPIO: "loopio - rfp data",
+    DocumentSource.DROPBOX: "dropbox - files",
+    DocumentSource.SHAREPOINT: "sharepoint - files",
+    DocumentSource.TEAMS: "teams - chat and collaboration",
+    DocumentSource.SALESFORCE: "salesforce - CRM data",
+    DocumentSource.DISCOURSE: "discourse - discussion forums",
+    DocumentSource.AXERO: "axero - employee engagement data",
+    DocumentSource.CLICKUP: "clickup - project management tool",
+    DocumentSource.MEDIAWIKI: "mediawiki - wiki data",
+    DocumentSource.WIKIPEDIA: "wikipedia - encyclopedia data",
+    DocumentSource.ASANA: "asana",
+    DocumentSource.S3: "s3",
+    DocumentSource.R2: "r2",
+    DocumentSource.GOOGLE_CLOUD_STORAGE: "google_cloud_storage - cloud storage",
+    DocumentSource.OCI_STORAGE: "oci_storage - cloud storage",
+    DocumentSource.XENFORO: "xenforo - forum data",
+    DocumentSource.DISCORD: "discord - chat and collaboration",
+    DocumentSource.FRESHDESK: "freshdesk - customer support data",
+    DocumentSource.FIREFLIES: "fireflies - call transcripts",
+    DocumentSource.EGNYTE: "egnyte - files",
+    DocumentSource.AIRTABLE: "airtable - database",
+    DocumentSource.HIGHSPOT: "highspot - CRM data",
+    DocumentSource.IMAP: "imap - email data",
+}

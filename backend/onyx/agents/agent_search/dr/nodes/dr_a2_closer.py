@@ -74,7 +74,7 @@ def closer(
 
     aggregated_context = aggregate_context(
         state.iteration_responses,
-        include_documents=False,
+        include_documents=True,
     )
     iteration_responses_string = aggregated_context.context
     all_cited_documents = aggregated_context.cited_documents

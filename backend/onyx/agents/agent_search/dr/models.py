@@ -104,3 +104,4 @@ class DRPromptPurpose(str, Enum):
 class BaseSearchProcessingResponse(BaseModel):
     specified_source_types: list[str]
     rewritten_query: str
+    time_filter: str

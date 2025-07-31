@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.models import DRTimeBudget
 from onyx.agents.agent_search.dr.states import DRPath
@@ -849,9 +851,11 @@ ANSWER:
 
 BASE_SEARCH_PROCESSING_PROMPT = f"""
 You are a helpful assistant that is great at processing a search request in order to \
-predict which document types shoild be included in the search, and to rewrite the \
+understand which document types should be included in the search if specified in the query, \
+whether there is a time filter implied in the query, and to rewrite the \
 query into a query that is much better suited for a search query against the predicted \
 document types.
+
 
 Here is the initial search query:
 {SEPARATOR_LINE}
@@ -864,6 +868,28 @@ Here is the list of document types that are available for the search:
 {SEPARATOR_LINE}
 To interpret what the document types refer to, please refer to your own knowledge.
 
+And today is {datetime.now().strftime("%Y-%m-%d")}.
+
+With this, please try to identify mentioned source types and time filters, and \
+rewrite the query.
+
+Guidelines:
+ - if one or more source types have been identified in 'specified_source_types', \
+they MUST NOT be part of the rewritten search query... take it out in that case! \
+Particularly look for expressions like '...in our Google docs...', '...in our \
+Google calls', etc., in which case the source type is 'google_drive' or 'gong' \
+should not be included in the rewritten query!
+ - if a time filter has been identified in 'time_filter', it MUST NOT be part of \
+the rewritten search query... take it out in that case! Look for expressions like \
+'...of this year...', '...of this month...', etc., in which case the time filter \
+should not be included in the rewritten query!
+
+Example:
+query:'find information about customers in our Google drive docs of this year' -> \
+   specified_source_types: ['google_drive'] \
+   time_filter: '2025-01-01' \
+   rewritten_query: 'customer information'
+
 Please format your answer as a json dictionary in the following format:
 {{
 "specified_source_types": "<list of document types that should be included in the search. \
@@ -871,7 +897,11 @@ ONLY specify document types that are EXPLICITLY mentioned in the query. If none 
 reliably found or if in doubt, select an empty list []. Note that this list will act \
 as a filter for the search, where an empty list implies all types. Again, if in doubt, \
 return [] here.>",
-"rewritten_query": "<the rewritten query that is much better suited for a search query against the predicted \
+"time_filter": "<try to identify whether there is (start!) time filter explicitly \
+mentioned or implied in the user query. If so, write here the start date in format \
+'YYYY-MM-DD'. If no filter is implied, write 'None' here.>",
+"rewritten_query": "<compose a short rewritten query that is much better suited for a \
+search query against the predicted \
 document types. Keep it precise but do not lose critical context! And think about how the information likely \
 looks in the documents.>"
 }}
