@@ -214,9 +214,9 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
     if file_ids:
         logger.notice("Deleting stored files!")
         file_store = get_default_file_store()
-        for id in file_ids:
-            logger.notice(f"Deleting file {id}")
-            file_store.delete_file(id)
+        for file_id in file_ids:
+            logger.notice(f"Deleting file {file_id}")
+            file_store.delete_file(file_id)
 
     db_session.commit()
 
