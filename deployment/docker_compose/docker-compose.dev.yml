@@ -515,55 +515,12 @@ services:
         reservations:
           memory: 16G
   llama_stack_server:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.llama_stack
     platform: linux/amd64
     ports:
       - "8321:8321"
-    entrypoint: ["/bin/bash", "-c"]
-    command: >
-      "echo 'Updating package manager and installing dependencies...' &&
-      apt-get update &&
-      apt-get install -y build-essential curl git &&
-      echo 'Installing uv package manager...' &&
-      curl -LsSf https://astral.sh/uv/install.sh | sh &&
-      echo 'Setting up PATH for uv...' &&
-      export PATH=/root/.local/bin:\$PATH &&
-      echo 'Verifying uv installation...' &&
-      uv --version &&
-      echo 'Installing Python packages with compatible versions...' &&
-      pip install --no-cache-dir --upgrade pip==23.3.1 &&
-      pip install --no-cache-dir setuptools==68.2.2 &&
-      pip install --no-cache-dir wheel &&
-      pip install --no-cache-dir numpy==1.24.3 &&
-      pip install --no-cache-dir faiss-cpu==1.7.4 &&
-      echo 'Installing opentelemetry packages...' &&
-      pip install --no-cache-dir opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation opentelemetry-exporter-otlp opentelemetry-instrumentation-requests opentelemetry-instrumentation-urllib3 opentelemetry-instrumentation-logging opentelemetry-propagator-b3 opentelemetry-propagator-jaeger &&
-      echo 'Installing aiosqlite...' &&
-      pip install --no-cache-dir aiosqlite &&
-      echo 'Installing fireworks-ai...' &&
-      pip install --no-cache-dir fireworks-ai &&
-      echo 'Installing litellm...' &&
-      pip install --no-cache-dir litellm &&
-      echo 'Installing together...' &&
-      pip install --no-cache-dir together &&
-      echo 'Installing ollama...' &&
-      pip install --no-cache-dir ollama &&
-      echo 'Installing sqlalchemy...' &&
-      pip install --no-cache-dir sqlalchemy &&
-      echo 'Installing sqlite-vec...' &&
-      pip install --no-cache-dir sqlite-vec &&
-      echo 'Installing autoevals...' &&
-      pip install --no-cache-dir autoevals &&
-      echo 'Installing llama-stack...' &&
-      pip install --no-cache-dir llama-stack &&
-      echo 'Building llama stack starter config...' &&
-      llama stack build --template starter --image-type venv --image-name llama-stack-venv &&
-      echo 'Verifying installations...' &&
-      python -c 'import faiss; print(f\"Faiss version: {faiss.__version__}\")' &&
-      python -c 'import llama_stack; print(f\"Llama Stack imported successfully\")' &&
-      ls -la /app/ &&
-      echo 'All packages installed and config built successfully' &&
-      exec python -m llama_stack.distribution.server.server --yaml-config /app/config.yaml --port 8321"
     environment:
       - TOGETHER_API_KEY=${TOGETHER_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

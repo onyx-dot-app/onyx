@@ -1,0 +1,70 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Add uv to PATH
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Install Python packages with compatible versions
+RUN pip install --no-cache-dir --upgrade pip==23.3.1 && \
+    pip install --no-cache-dir setuptools==68.2.2 wheel && \
+    pip install --no-cache-dir numpy==1.24.3 && \
+    pip install --no-cache-dir faiss-cpu==1.7.4
+
+# Install OpenTelemetry packages
+RUN pip install --no-cache-dir \
+    opentelemetry-api \
+    opentelemetry-sdk \
+    opentelemetry-instrumentation \
+    opentelemetry-exporter-otlp \
+    opentelemetry-instrumentation-requests \
+    opentelemetry-instrumentation-urllib3 \
+    opentelemetry-instrumentation-logging \
+    opentelemetry-propagator-b3 \
+    opentelemetry-propagator-jaeger
+
+# Install other required packages
+RUN pip install --no-cache-dir \
+    aiosqlite \
+    fireworks-ai \
+    litellm \
+    together \
+    ollama \
+    sqlalchemy \
+    sqlite-vec \
+    autoevals \
+    llama-stack
+
+# Build llama stack starter config
+RUN llama stack build --template starter --image-type venv --image-name llama-stack-venv
+
+# Verify installations
+RUN python -c 'import faiss; print(f"Faiss version: {faiss.__version__}")' && \
+    python -c 'import llama_stack; print(f"Llama Stack imported successfully")'
+
+# Create directories for logs and data
+RUN mkdir -p /var/log /app/data
+
+# Set environment variables
+ENV PYTHONPATH=/usr/local/lib/python3.11/site-packages
+
+# Expose port
+EXPOSE 8321
+
+# Set entrypoint
+ENTRYPOINT ["python", "-m", "llama_stack.distribution.server.server"]
+
+# Default command
+CMD ["--yaml-config", "/app/config.yaml", "--port", "8321"]
