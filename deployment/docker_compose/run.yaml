@@ -1,0 +1,1624 @@
+version: '2'
+image_name: starter
+apis:
+- agents
+- datasetio
+- eval
+- files
+- inference
+- safety
+- scoring
+- telemetry
+- tool_runtime
+- vector_io
+providers:
+  inference:
+  - provider_id: openai
+    provider_type: remote::openai
+    config:
+      api_key: ${env.OPENAI_API_KEY:}
+  - provider_id: fireworks
+    provider_type: remote::fireworks
+    config:
+      url: https://api.fireworks.ai/inference/v1
+      api_key: ${env.FIREWORKS_API_KEY:}
+  - provider_id: together
+    provider_type: remote::together
+    config:
+      url: https://api.together.xyz/v1
+      api_key: ${env.TOGETHER_API_KEY:}
+  - provider_id: ollama
+    provider_type: remote::ollama
+    config:
+      url: ${env.OLLAMA_URL:http://localhost:11434}
+  - provider_id: anthropic
+    provider_type: remote::anthropic
+    config:
+      api_key: ${env.ANTHROPIC_API_KEY:}
+  - provider_id: gemini
+    provider_type: remote::gemini
+    config:
+      api_key: ${env.GEMINI_API_KEY:}
+  - provider_id: groq
+    provider_type: remote::groq
+    config:
+      url: https://api.groq.com
+      api_key: ${env.GROQ_API_KEY:}
+  - provider_id: sambanova
+    provider_type: remote::sambanova
+    config:
+      url: https://api.sambanova.ai/v1
+      api_key: ${env.SAMBANOVA_API_KEY:}
+  - provider_id: vllm
+    provider_type: remote::vllm
+    config:
+      url: ${env.VLLM_URL:http://localhost:8000/v1}
+      max_tokens: ${env.VLLM_MAX_TOKENS:4096}
+      api_token: ${env.VLLM_API_TOKEN:fake}
+      tls_verify: ${env.VLLM_TLS_VERIFY:true}
+  - provider_id: sentence-transformers
+    provider_type: inline::sentence-transformers
+    config: {}
+  vector_io:
+  - provider_id: sqlite-vec
+    provider_type: inline::sqlite-vec
+    config:
+      db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/sqlite_vec.db
+  - provider_id: ${env.ENABLE_CHROMADB+chromadb}
+    provider_type: remote::chromadb
+    config:
+      url: ${env.CHROMADB_URL:}
+  - provider_id: ${env.ENABLE_PGVECTOR+pgvector}
+    provider_type: remote::pgvector
+    config:
+      host: ${env.PGVECTOR_HOST:localhost}
+      port: ${env.PGVECTOR_PORT:5432}
+      db: ${env.PGVECTOR_DB:}
+      user: ${env.PGVECTOR_USER:}
+      password: ${env.PGVECTOR_PASSWORD:}
+  files:
+  - provider_id: meta-reference-files
+    provider_type: inline::localfs
+    config:
+      storage_dir: ${env.FILES_STORAGE_DIR:~/.llama/distributions/starter/files}
+      metadata_store:
+        type: sqlite
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/files_metadata.db
+  safety:
+  - provider_id: llama-guard
+    provider_type: inline::llama-guard
+    config:
+      excluded_categories: []
+  agents:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      persistence_store:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/agents_store.db
+      responses_store:
+        type: sqlite
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/responses_store.db
+  telemetry:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      service_name: "${env.OTEL_SERVICE_NAME:\u200B}"
+      sinks: ${env.TELEMETRY_SINKS:console,sqlite}
+      sqlite_db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/trace_store.db
+  eval:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      kvstore:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/meta_reference_eval.db
+  datasetio:
+  - provider_id: huggingface
+    provider_type: remote::huggingface
+    config:
+      kvstore:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/huggingface_datasetio.db
+  - provider_id: localfs
+    provider_type: inline::localfs
+    config:
+      kvstore:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/localfs_datasetio.db
+  scoring:
+  - provider_id: basic
+    provider_type: inline::basic
+    config: {}
+  - provider_id: llm-as-judge
+    provider_type: inline::llm-as-judge
+    config: {}
+  - provider_id: braintrust
+    provider_type: inline::braintrust
+    config:
+      openai_api_key: ${env.OPENAI_API_KEY:}
+  tool_runtime:
+  - provider_id: brave-search
+    provider_type: remote::brave-search
+    config:
+      api_key: ${env.BRAVE_SEARCH_API_KEY:}
+      max_results: 3
+  - provider_id: tavily-search
+    provider_type: remote::tavily-search
+    config:
+      api_key: ${env.TAVILY_SEARCH_API_KEY:}
+      max_results: 3
+  - provider_id: rag-runtime
+    provider_type: inline::rag-runtime
+    config: {}
+  - provider_id: model-context-protocol
+    provider_type: remote::model-context-protocol
+    config: {}
+metadata_store:
+  type: sqlite
+  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/registry.db
+inference_store:
+  type: sqlite
+  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/inference_store.db
+models:
+- metadata: {}
+  model_id: openai/gpt-4o
+  provider_id: openai
+  provider_model_id: openai/gpt-4o
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-mini
+  provider_id: openai
+  provider_model_id: openai/gpt-4o-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/chatgpt-4o-latest
+  provider_id: openai
+  provider_model_id: openai/chatgpt-4o-latest
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-3.5-turbo-0125
+  provider_id: openai
+  provider_model_id: gpt-3.5-turbo-0125
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-3.5-turbo
+  provider_id: openai
+  provider_model_id: gpt-3.5-turbo
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-3.5-turbo-instruct
+  provider_id: openai
+  provider_model_id: gpt-3.5-turbo-instruct
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4
+  provider_id: openai
+  provider_model_id: gpt-4
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4-turbo
+  provider_id: openai
+  provider_model_id: gpt-4-turbo
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o
+  provider_id: openai
+  provider_model_id: gpt-4o
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-2024-08-06
+  provider_id: openai
+  provider_model_id: gpt-4o-2024-08-06
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-mini
+  provider_id: openai
+  provider_model_id: gpt-4o-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-audio-preview
+  provider_id: openai
+  provider_model_id: gpt-4o-audio-preview
+  model_type: llm
+- metadata: {}
+  model_id: openai/chatgpt-4o-latest
+  provider_id: openai
+  provider_model_id: chatgpt-4o-latest
+  model_type: llm
+- metadata: {}
+  model_id: openai/o1
+  provider_id: openai
+  provider_model_id: o1
+  model_type: llm
+- metadata: {}
+  model_id: openai/o1-mini
+  provider_id: openai
+  provider_model_id: o1-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/o3-mini
+  provider_id: openai
+  provider_model_id: o3-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/o4-mini
+  provider_id: openai
+  provider_model_id: o4-mini
+  model_type: llm
+- metadata:
+    embedding_dimension: 1536
+    context_length: 8192
+  model_id: openai/text-embedding-3-small
+  provider_id: openai
+  provider_model_id: openai/text-embedding-3-small
+  model_type: embedding
+- metadata:
+    embedding_dimension: 3072
+    context_length: 8192
+  model_id: openai/text-embedding-3-large
+  provider_id: openai
+  provider_model_id: openai/text-embedding-3-large
+  model_type: embedding
+- metadata:
+    embedding_dimension: 1536
+    context_length: 8192
+  model_id: openai/text-embedding-3-small
+  provider_id: openai
+  provider_model_id: text-embedding-3-small
+  model_type: embedding
+- metadata:
+    embedding_dimension: 3072
+    context_length: 8192
+  model_id: openai/text-embedding-3-large
+  provider_id: openai
+  provider_model_id: text-embedding-3-large
+  model_type: embedding
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p1-8b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-8b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-8b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p1-70b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.1-70B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p1-405b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-405b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.1-405B-Instruct-FP8
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-405b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p2-3b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-3b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-3b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p2-11b-vision-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-11b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.2-11B-Vision-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-11b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p2-90b-vision-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-90b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.2-90B-Vision-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-90b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p3-70b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p3-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p3-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-guard-3-8b
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-8b
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-Guard-3-8B
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-8b
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-guard-3-11b-vision
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-11b-vision
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-Guard-3-11B-Vision
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-11b-vision
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama4-scout-instruct-basic
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-scout-instruct-basic
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-scout-instruct-basic
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama4-maverick-instruct-basic
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-maverick-instruct-basic
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-maverick-instruct-basic
+  model_type: llm
+- metadata:
+    embedding_dimension: 768
+    context_length: 8192
+  model_id: fireworks/nomic-ai/nomic-embed-text-v1.5
+  provider_id: fireworks
+  provider_model_id: nomic-ai/nomic-embed-text-v1.5
+  model_type: embedding
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.1-70B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.1-405B-Instruct-FP8
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-3B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-3B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-3B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-11B-Vision-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-90B-Vision-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.3-70B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-Guard-3-8B
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-Guard-3-8B
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-Guard-3-11B-Vision-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-Guard-3-11B-Vision-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-Guard-3-11B-Vision
+  provider_id: together
+  provider_model_id: meta-llama/Llama-Guard-3-11B-Vision-Turbo
+  model_type: llm
+- metadata:
+    embedding_dimension: 768
+    context_length: 8192
+  model_id: togethercomputer/m2-bert-80M-8k-retrieval
+  provider_id: together
+  provider_model_id: togethercomputer/m2-bert-80M-8k-retrieval
+  model_type: embedding
+- metadata:
+    embedding_dimension: 768
+    context_length: 32768
+  model_id: togethercomputer/m2-bert-80M-32k-retrieval
+  provider_id: together
+  provider_model_id: togethercomputer/m2-bert-80M-32k-retrieval
+  model_type: embedding
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  model_type: llm
+- metadata: {}
+  model_id: ollama/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: ollama
+  provider_model_id: llama3.2:3b
+  model_type: llm
+- metadata: {}
+  model_id: anthropic/claude-3-5-sonnet-latest
+  provider_id: anthropic
+  provider_model_id: anthropic/claude-3-5-sonnet-latest
+  model_type: llm
+- metadata: {}
+  model_id: anthropic/claude-3-7-sonnet-latest
+  provider_id: anthropic
+  provider_model_id: anthropic/claude-3-7-sonnet-latest
+  model_type: llm
+- metadata: {}
+  model_id: anthropic/claude-3-5-haiku-latest
+  provider_id: anthropic
+  provider_model_id: anthropic/claude-3-5-haiku-latest
+  model_type: llm
+- metadata:
+    embedding_dimension: 1024
+    context_length: 32000
+  model_id: anthropic/voyage-3
+  provider_id: anthropic
+  provider_model_id: anthropic/voyage-3
+  model_type: embedding
+- metadata:
+    embedding_dimension: 512
+    context_length: 32000
+  model_id: anthropic/voyage-3-lite
+  provider_id: anthropic
+  provider_model_id: anthropic/voyage-3-lite
+  model_type: embedding
+- metadata:
+    embedding_dimension: 1024
+    context_length: 32000
+  model_id: anthropic/voyage-code-3
+  provider_id: anthropic
+  provider_model_id: anthropic/voyage-code-3
+  model_type: embedding
+- metadata: {}
+  model_id: gemini/gemini-1.5-flash
+  provider_id: gemini
+  provider_model_id: gemini/gemini-1.5-flash
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-1.5-pro
+  provider_id: gemini
+  provider_model_id: gemini/gemini-1.5-pro
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-2.0-flash
+  provider_id: gemini
+  provider_model_id: gemini/gemini-2.0-flash
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-2.5-flash
+  provider_id: gemini
+  provider_model_id: gemini/gemini-2.5-flash
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-2.5-pro
+  provider_id: gemini
+  provider_model_id: gemini/gemini-2.5-pro
+  model_type: llm
+- metadata:
+    embedding_dimension: 768
+    context_length: 2048
+  model_id: gemini/text-embedding-004
+  provider_id: gemini
+  provider_model_id: gemini/text-embedding-004
+  model_type: embedding
+- metadata: {}
+  model_id: groq/llama3-8b-8192
+  provider_id: groq
+  provider_model_id: groq/llama3-8b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama3-8b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-3.1-8b-instant
+  provider_id: groq
+  provider_model_id: groq/llama-3.1-8b-instant
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama3-70b-8192
+  provider_id: groq
+  provider_model_id: groq/llama3-70b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3-70B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama3-70b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-3.3-70b-versatile
+  provider_id: groq
+  provider_model_id: groq/llama-3.3-70b-versatile
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-3.3-70b-versatile
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-3.2-3b-preview
+  provider_id: groq
+  provider_model_id: groq/llama-3.2-3b-preview
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-3.2-3b-preview
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-4-scout-17b-16e-instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/llama-4-scout-17b-16e-instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-4-maverick-17b-128e-instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.1-8B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-8B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-8B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.1-405B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-405B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.1-405B-Instruct-FP8
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-405B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.2-1B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-1B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-1B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-1B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.2-3B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-3B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-3B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.3-70B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.3-70B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.3-70B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-3.2-11B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-11B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-11B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-11B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-3.2-90B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-90B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-90B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-90B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-4-Scout-17B-16E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Maverick-17B-128E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Maverick-17B-128E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-Guard-3-8B
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-Guard-3-8B
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata:
+    embedding_dimension: 384
+  model_id: all-MiniLM-L6-v2
+  provider_id: sentence-transformers
+  model_type: embedding
+shields:
+- shield_id: meta-llama/Llama-Guard-3-8B
+vector_dbs: []
+datasets: []
+scoring_fns: []
+benchmarks: []
+tool_groups:
+- toolgroup_id: builtin::websearch
+  provider_id: tavily-search
+- toolgroup_id: builtin::rag
+  provider_id: rag-runtime
+server:
+  port: 8321
+
+
+
+
+version: '2'
+image_name: starter
+apis:
+- agents
+- datasetio
+- eval
+- files
+- inference
+- safety
+- scoring
+- telemetry
+- tool_runtime
+- vector_io
+providers:
+  inference:
+  - provider_id: openai
+    provider_type: remote::openai
+    config:
+      api_key: ${env.OPENAI_API_KEY:}
+  - provider_id: fireworks
+    provider_type: remote::fireworks
+    config:
+      url: https://api.fireworks.ai/inference/v1
+      api_key: ${env.FIREWORKS_API_KEY:}
+  - provider_id: together
+    provider_type: remote::together
+    config:
+      url: https://api.together.xyz/v1
+      api_key: ${env.TOGETHER_API_KEY:}
+  - provider_id: ollama
+    provider_type: remote::ollama
+    config:
+      url: ${env.OLLAMA_URL:http://localhost:11434}
+  - provider_id: anthropic
+    provider_type: remote::anthropic
+    config:
+      api_key: ${env.ANTHROPIC_API_KEY:}
+  - provider_id: gemini
+    provider_type: remote::gemini
+    config:
+      api_key: ${env.GEMINI_API_KEY:}
+  - provider_id: groq
+    provider_type: remote::groq
+    config:
+      url: https://api.groq.com
+      api_key: ${env.GROQ_API_KEY:}
+  - provider_id: sambanova
+    provider_type: remote::sambanova
+    config:
+      url: https://api.sambanova.ai/v1
+      api_key: ${env.SAMBANOVA_API_KEY:}
+  - provider_id: vllm
+    provider_type: remote::vllm
+    config:
+      url: ${env.VLLM_URL:http://localhost:8000/v1}
+      max_tokens: ${env.VLLM_MAX_TOKENS:4096}
+      api_token: ${env.VLLM_API_TOKEN:fake}
+      tls_verify: ${env.VLLM_TLS_VERIFY:true}
+  - provider_id: sentence-transformers
+    provider_type: inline::sentence-transformers
+    config: {}
+  vector_io:
+  - provider_id: sqlite-vec
+    provider_type: inline::sqlite-vec
+    config:
+      db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/sqlite_vec.db
+  - provider_id: ${env.ENABLE_CHROMADB+chromadb}
+    provider_type: remote::chromadb
+    config:
+      url: ${env.CHROMADB_URL:}
+  - provider_id: ${env.ENABLE_PGVECTOR+pgvector}
+    provider_type: remote::pgvector
+    config:
+      host: ${env.PGVECTOR_HOST:localhost}
+      port: ${env.PGVECTOR_PORT:5432}
+      db: ${env.PGVECTOR_DB:}
+      user: ${env.PGVECTOR_USER:}
+      password: ${env.PGVECTOR_PASSWORD:}
+  files:
+  - provider_id: meta-reference-files
+    provider_type: inline::localfs
+    config:
+      storage_dir: ${env.FILES_STORAGE_DIR:~/.llama/distributions/starter/files}
+      metadata_store:
+        type: sqlite
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/files_metadata.db
+  safety:
+  - provider_id: llama-guard
+    provider_type: inline::llama-guard
+    config:
+      excluded_categories: []
+  agents:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      persistence_store:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/agents_store.db
+      responses_store:
+        type: sqlite
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/responses_store.db
+  telemetry:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      service_name: "${env.OTEL_SERVICE_NAME:\u200B}"
+      sinks: ${env.TELEMETRY_SINKS:console,sqlite}
+      sqlite_db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/trace_store.db
+  eval:
+  - provider_id: meta-reference
+    provider_type: inline::meta-reference
+    config:
+      kvstore:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/meta_reference_eval.db
+  datasetio:
+  - provider_id: huggingface
+    provider_type: remote::huggingface
+    config:
+      kvstore:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/huggingface_datasetio.db
+  - provider_id: localfs
+    provider_type: inline::localfs
+    config:
+      kvstore:
+        type: sqlite
+        namespace: null
+        db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/localfs_datasetio.db
+  scoring:
+  - provider_id: basic
+    provider_type: inline::basic
+    config: {}
+  - provider_id: llm-as-judge
+    provider_type: inline::llm-as-judge
+    config: {}
+  - provider_id: braintrust
+    provider_type: inline::braintrust
+    config:
+      openai_api_key: ${env.OPENAI_API_KEY:}
+  tool_runtime:
+  - provider_id: brave-search
+    provider_type: remote::brave-search
+    config:
+      api_key: ${env.BRAVE_SEARCH_API_KEY:}
+      max_results: 3
+  - provider_id: tavily-search
+    provider_type: remote::tavily-search
+    config:
+      api_key: ${env.TAVILY_SEARCH_API_KEY:}
+      max_results: 3
+  - provider_id: rag-runtime
+    provider_type: inline::rag-runtime
+    config: {}
+  - provider_id: model-context-protocol
+    provider_type: remote::model-context-protocol
+    config: {}
+metadata_store:
+  type: sqlite
+  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/registry.db
+inference_store:
+  type: sqlite
+  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/starter}/inference_store.db
+models:
+- metadata: {}
+  model_id: openai/gpt-4o
+  provider_id: openai
+  provider_model_id: openai/gpt-4o
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-mini
+  provider_id: openai
+  provider_model_id: openai/gpt-4o-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/chatgpt-4o-latest
+  provider_id: openai
+  provider_model_id: openai/chatgpt-4o-latest
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-3.5-turbo-0125
+  provider_id: openai
+  provider_model_id: gpt-3.5-turbo-0125
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-3.5-turbo
+  provider_id: openai
+  provider_model_id: gpt-3.5-turbo
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-3.5-turbo-instruct
+  provider_id: openai
+  provider_model_id: gpt-3.5-turbo-instruct
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4
+  provider_id: openai
+  provider_model_id: gpt-4
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4-turbo
+  provider_id: openai
+  provider_model_id: gpt-4-turbo
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o
+  provider_id: openai
+  provider_model_id: gpt-4o
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-2024-08-06
+  provider_id: openai
+  provider_model_id: gpt-4o-2024-08-06
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-mini
+  provider_id: openai
+  provider_model_id: gpt-4o-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/gpt-4o-audio-preview
+  provider_id: openai
+  provider_model_id: gpt-4o-audio-preview
+  model_type: llm
+- metadata: {}
+  model_id: openai/chatgpt-4o-latest
+  provider_id: openai
+  provider_model_id: chatgpt-4o-latest
+  model_type: llm
+- metadata: {}
+  model_id: openai/o1
+  provider_id: openai
+  provider_model_id: o1
+  model_type: llm
+- metadata: {}
+  model_id: openai/o1-mini
+  provider_id: openai
+  provider_model_id: o1-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/o3-mini
+  provider_id: openai
+  provider_model_id: o3-mini
+  model_type: llm
+- metadata: {}
+  model_id: openai/o4-mini
+  provider_id: openai
+  provider_model_id: o4-mini
+  model_type: llm
+- metadata:
+    embedding_dimension: 1536
+    context_length: 8192
+  model_id: openai/text-embedding-3-small
+  provider_id: openai
+  provider_model_id: openai/text-embedding-3-small
+  model_type: embedding
+- metadata:
+    embedding_dimension: 3072
+    context_length: 8192
+  model_id: openai/text-embedding-3-large
+  provider_id: openai
+  provider_model_id: openai/text-embedding-3-large
+  model_type: embedding
+- metadata:
+    embedding_dimension: 1536
+    context_length: 8192
+  model_id: openai/text-embedding-3-small
+  provider_id: openai
+  provider_model_id: text-embedding-3-small
+  model_type: embedding
+- metadata:
+    embedding_dimension: 3072
+    context_length: 8192
+  model_id: openai/text-embedding-3-large
+  provider_id: openai
+  provider_model_id: text-embedding-3-large
+  model_type: embedding
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p1-8b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-8b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-8b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p1-70b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.1-70B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p1-405b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-405b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.1-405B-Instruct-FP8
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p1-405b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p2-3b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-3b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-3b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p2-11b-vision-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-11b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.2-11B-Vision-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-11b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p2-90b-vision-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-90b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.2-90B-Vision-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p2-90b-vision-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-v3p3-70b-instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p3-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-v3p3-70b-instruct
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-guard-3-8b
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-8b
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-Guard-3-8B
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-8b
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama-guard-3-11b-vision
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-11b-vision
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-Guard-3-11B-Vision
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama-guard-3-11b-vision
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama4-scout-instruct-basic
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-scout-instruct-basic
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-scout-instruct-basic
+  model_type: llm
+- metadata: {}
+  model_id: accounts/fireworks/models/llama4-maverick-instruct-basic
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-maverick-instruct-basic
+  model_type: llm
+- metadata: {}
+  model_id: fireworks/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: fireworks
+  provider_model_id: accounts/fireworks/models/llama4-maverick-instruct-basic
+  model_type: llm
+- metadata:
+    embedding_dimension: 768
+    context_length: 8192
+  model_id: fireworks/nomic-ai/nomic-embed-text-v1.5
+  provider_id: fireworks
+  provider_model_id: nomic-ai/nomic-embed-text-v1.5
+  model_type: embedding
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.1-70B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.1-405B-Instruct-FP8
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-3B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-3B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-3B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-11B-Vision-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.2-90B-Vision-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.3-70B-Instruct-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-3.3-70B-Instruct-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Meta-Llama-Guard-3-8B
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-Guard-3-8B
+  provider_id: together
+  provider_model_id: meta-llama/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-Guard-3-11B-Vision-Turbo
+  provider_id: together
+  provider_model_id: meta-llama/Llama-Guard-3-11B-Vision-Turbo
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-Guard-3-11B-Vision
+  provider_id: together
+  provider_model_id: meta-llama/Llama-Guard-3-11B-Vision-Turbo
+  model_type: llm
+- metadata:
+    embedding_dimension: 768
+    context_length: 8192
+  model_id: togethercomputer/m2-bert-80M-8k-retrieval
+  provider_id: together
+  provider_model_id: togethercomputer/m2-bert-80M-8k-retrieval
+  model_type: embedding
+- metadata:
+    embedding_dimension: 768
+    context_length: 32768
+  model_id: togethercomputer/m2-bert-80M-32k-retrieval
+  provider_id: together
+  provider_model_id: togethercomputer/m2-bert-80M-32k-retrieval
+  model_type: embedding
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  model_type: llm
+- metadata: {}
+  model_id: together/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  provider_id: together
+  provider_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  model_type: llm
+- metadata: {}
+  model_id: ollama/llama3.1:8b
+  provider_id: ollama
+  provider_model_id: llama3.1:8b
+  model_type: llm
+- metadata: {}
+  model_id: ollama/llama3.2:3b
+  provider_id: ollama
+  provider_model_id: llama3.2:3b
+  model_type: llm
+- metadata: {}
+  model_id: anthropic/claude-3-5-sonnet-latest
+  provider_id: anthropic
+  provider_model_id: anthropic/claude-3-5-sonnet-latest
+  model_type: llm
+- metadata: {}
+  model_id: anthropic/claude-3-7-sonnet-latest
+  provider_id: anthropic
+  provider_model_id: anthropic/claude-3-7-sonnet-latest
+  model_type: llm
+- metadata: {}
+  model_id: anthropic/claude-3-5-haiku-latest
+  provider_id: anthropic
+  provider_model_id: anthropic/claude-3-5-haiku-latest
+  model_type: llm
+- metadata:
+    embedding_dimension: 1024
+    context_length: 32000
+  model_id: anthropic/voyage-3
+  provider_id: anthropic
+  provider_model_id: anthropic/voyage-3
+  model_type: embedding
+- metadata:
+    embedding_dimension: 512
+    context_length: 32000
+  model_id: anthropic/voyage-3-lite
+  provider_id: anthropic
+  provider_model_id: anthropic/voyage-3-lite
+  model_type: embedding
+- metadata:
+    embedding_dimension: 1024
+    context_length: 32000
+  model_id: anthropic/voyage-code-3
+  provider_id: anthropic
+  provider_model_id: anthropic/voyage-code-3
+  model_type: embedding
+- metadata: {}
+  model_id: gemini/gemini-1.5-flash
+  provider_id: gemini
+  provider_model_id: gemini/gemini-1.5-flash
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-1.5-pro
+  provider_id: gemini
+  provider_model_id: gemini/gemini-1.5-pro
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-2.0-flash
+  provider_id: gemini
+  provider_model_id: gemini/gemini-2.0-flash
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-2.5-flash
+  provider_id: gemini
+  provider_model_id: gemini/gemini-2.5-flash
+  model_type: llm
+- metadata: {}
+  model_id: gemini/gemini-2.5-pro
+  provider_id: gemini
+  provider_model_id: gemini/gemini-2.5-pro
+  model_type: llm
+- metadata:
+    embedding_dimension: 768
+    context_length: 2048
+  model_id: gemini/text-embedding-004
+  provider_id: gemini
+  provider_model_id: gemini/text-embedding-004
+  model_type: embedding
+- metadata: {}
+  model_id: groq/llama3-8b-8192
+  provider_id: groq
+  provider_model_id: groq/llama3-8b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama3-8b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-3.1-8b-instant
+  provider_id: groq
+  provider_model_id: groq/llama-3.1-8b-instant
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama3-70b-8192
+  provider_id: groq
+  provider_model_id: groq/llama3-70b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3-70B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama3-70b-8192
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-3.3-70b-versatile
+  provider_id: groq
+  provider_model_id: groq/llama-3.3-70b-versatile
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-3.3-70b-versatile
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-3.2-3b-preview
+  provider_id: groq
+  provider_model_id: groq/llama-3.2-3b-preview
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-3.2-3b-preview
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-4-scout-17b-16e-instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/llama-4-scout-17b-16e-instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-scout-17b-16e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/llama-4-maverick-17b-128e-instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: groq
+  provider_model_id: groq/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: groq/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: groq
+  provider_model_id: groq/meta-llama/llama-4-maverick-17b-128e-instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.1-8B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-8B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.1-8B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-8B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.1-405B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-405B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.1-405B-Instruct-FP8
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.1-405B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.2-1B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-1B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-1B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-1B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.2-3B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-3B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-3B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.2-3B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-3.3-70B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.3-70B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.3-70B-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-3.3-70B-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-3.2-11B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-11B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-11B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-11B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-3.2-90B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-90B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-3.2-90B-Vision-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-3.2-90B-Vision-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-4-Scout-17B-16E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-4-Scout-17B-16E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Scout-17B-16E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Maverick-17B-128E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-4-Maverick-17B-128E-Instruct
+  provider_id: sambanova
+  provider_model_id: sambanova/Llama-4-Maverick-17B-128E-Instruct
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/Meta-Llama-Guard-3-8B
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata: {}
+  model_id: sambanova/meta-llama/Llama-Guard-3-8B
+  provider_id: sambanova
+  provider_model_id: sambanova/Meta-Llama-Guard-3-8B
+  model_type: llm
+- metadata:
+    embedding_dimension: 384
+  model_id: all-MiniLM-L6-v2
+  provider_id: sentence-transformers
+  model_type: embedding
+shields:
+- shield_id: meta-llama/Llama-Guard-3-8B
+vector_dbs: []
+datasets: []
+scoring_fns: []
+benchmarks: []
+tool_groups:
+- toolgroup_id: builtin::websearch
+  provider_id: tavily-search
+- toolgroup_id: builtin::rag
+  provider_id: rag-runtime
+server:
+  port: 8321
+#

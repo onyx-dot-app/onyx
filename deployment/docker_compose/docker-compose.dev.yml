@@ -131,7 +131,7 @@ services:
       - ONYX_QUERY_HISTORY_TYPE=${ONYX_QUERY_HISTORY_TYPE:-}
 
       # Vespa Language Forcing
-      # See: https://docs.vespa.ai/en/linguistics.html 
+      # See: https://docs.vespa.ai/en/linguistics.html
       - VESPA_LANGUAGE_OVERRIDE=${VESPA_LANGUAGE_OVERRIDE:-}
 
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
@@ -451,7 +451,7 @@ services:
     # NOTE: we have to use dos2unix to remove Carriage Return chars from the file
     # in order to make this work on both Unix-like systems and windows
     command: >
-      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh 
+      /bin/sh -c "dos2unix /etc/nginx/conf.d/run-nginx.sh
       && /etc/nginx/conf.d/run-nginx.sh app.conf.template.dev"
 
   cache:
@@ -482,10 +482,145 @@ services:
       timeout: 20s
       retries: 3
 
+  ollama:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    image: ollama/ollama
+    platform: linux/amd64
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "ollama serve &
+      sleep 10 &&
+      ollama pull llama3.2:3b &&
+      ollama pull llama3.1:8b &&
+      ollama pull llama3.1:70b &&
+      ollama pull llama3.1:8b-instruct-fp16 &&
+      echo 'All models downloaded successfully' &&
+      wait"
+    deploy:
+      resources:
+        limits:
+          memory: 32G
+        reservations:
+          memory: 16G
+  llama_stack_server:
+    image: python:3.11-slim
+    platform: linux/amd64
+    ports:
+      - "8321:8321"
+    entrypoint: ["/bin/bash", "-c"]
+    command: >
+      "echo 'Updating package manager and installing dependencies...' &&
+      apt-get update &&
+      apt-get install -y build-essential curl git &&
+      echo 'Installing uv package manager...' &&
+      curl -LsSf https://astral.sh/uv/install.sh | sh &&
+      echo 'Setting up PATH for uv...' &&
+      export PATH=/root/.local/bin:\$PATH &&
+      echo 'Verifying uv installation...' &&
+      uv --version &&
+      echo 'Installing Python packages with compatible versions...' &&
+      pip install --no-cache-dir --upgrade pip==23.3.1 &&
+      pip install --no-cache-dir setuptools==68.2.2 &&
+      pip install --no-cache-dir wheel &&
+      pip install --no-cache-dir numpy==1.24.3 &&
+      pip install --no-cache-dir faiss-cpu==1.7.4 &&
+      echo 'Installing opentelemetry packages...' &&
+      pip install --no-cache-dir opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation opentelemetry-exporter-otlp opentelemetry-instrumentation-requests opentelemetry-instrumentation-urllib3 opentelemetry-instrumentation-logging opentelemetry-propagator-b3 opentelemetry-propagator-jaeger &&
+      echo 'Installing aiosqlite...' &&
+      pip install --no-cache-dir aiosqlite &&
+      echo 'Installing fireworks-ai...' &&
+      pip install --no-cache-dir fireworks-ai &&
+      echo 'Installing litellm...' &&
+      pip install --no-cache-dir litellm &&
+      echo 'Installing together...' &&
+      pip install --no-cache-dir together &&
+      echo 'Installing ollama...' &&
+      pip install --no-cache-dir ollama &&
+      echo 'Installing sqlalchemy...' &&
+      pip install --no-cache-dir sqlalchemy &&
+      echo 'Installing sqlite-vec...' &&
+      pip install --no-cache-dir sqlite-vec &&
+      echo 'Installing autoevals...' &&
+      pip install --no-cache-dir autoevals &&
+      echo 'Installing llama-stack...' &&
+      pip install --no-cache-dir llama-stack &&
+      echo 'Building llama stack starter config...' &&
+      llama stack build --template starter --image-type venv --image-name llama-stack-venv &&
+      echo 'Verifying installations...' &&
+      python -c 'import faiss; print(f\"Faiss version: {faiss.__version__}\")' &&
+      python -c 'import llama_stack; print(f\"Llama Stack imported successfully\")' &&
+      ls -la /app/ &&
+      echo 'All packages installed and config built successfully' &&
+      exec python -m llama_stack.distribution.server.server --yaml-config /app/config.yaml --port 8321"
+    environment:
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PYTHONPATH=/usr/local/lib/python3.11/site-packages
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_HOST=ollama
+      - OLLAMA_PORT=11434
+      # Set Ollama models to only use the ones we download and know are supported
+      - OLLAMA_INFERENCE_MODEL=llama3.2:3b
+      - OLLAMA_EMBEDDING_MODEL=__disabled__
+      - OLLAMA_EMBEDDING_DIMENSION=384
+      # Integration with Onyx services
+      - POSTGRES_HOST=relational_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_DB=${POSTGRES_DB:-}
+      - REDIS_HOST=cache
+      - REDIS_PORT=6379
+      # MinIO configuration for file storage
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_AWS_ACCESS_KEY_ID=${S3_AWS_ACCESS_KEY_ID:-minioadmin}
+      - S3_AWS_SECRET_ACCESS_KEY=${S3_AWS_SECRET_ACCESS_KEY:-minioadmin}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      ollama:
+        condition: service_started
+      relational_db:
+        condition: service_started
+      cache:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    volumes:
+      - llama_stack_logs:/var/log
+      - llama_stack_data:/app/data
+      - ./run.yaml:/app/config.yaml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8321/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
 volumes:
   db_volume:
-  vespa_volume: # Created by the container itself
+  vespa_volume:
+  redis_volume:
+  llama_stack_logs:
+  llama_stack_data:
   minio_data:
+  ollama_data:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
