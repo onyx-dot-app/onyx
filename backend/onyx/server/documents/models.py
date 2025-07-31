@@ -475,7 +475,7 @@ class GoogleServiceAccountCredentialRequest(BaseModel):
 
 class FileUploadResponse(BaseModel):
     file_paths: list[str]
-    file_names: list[str]
+    file_names: list[str] | None = None
     zip_metadata: dict[str, Any]
 
 
