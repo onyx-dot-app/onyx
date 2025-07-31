@@ -48,7 +48,7 @@ spec:
               "--loglevel=INFO",
               "--hostname=light@%n",
               "-Q",
-              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup",
+              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup,index_attempt_cleanup",
             ]
           resources:
             {{- toYaml .Values.celery_worker_light.resources | nindent 12 }}

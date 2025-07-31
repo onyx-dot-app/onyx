@@ -1019,6 +1019,11 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
             # We need to batch this because during the initial run, the system might have a large number
             # of index attempts since they were never deleted. After that, the number will be
             # significantly lower.
+            if len(old_attempts) == 0:
+                task_logger.info(
+                    "check_for_index_attempt_cleanup - No index attempts to cleanup"
+                )
+
             for i in range(0, len(old_attempts), batch_size):
                 batch = old_attempts[i : i + batch_size]
                 task_logger.info(

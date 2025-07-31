@@ -1,16 +1,12 @@
 "use client";
 
-import { LoadingAnimation } from "@/components/Loading";
 import { NotebookIcon } from "@/components/icons/icons";
-import { CCPairIndexingStatusTableLite } from "./CCPairIndexingStatusTableLite";
+import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
 import { AdminPageTitle } from "@/components/admin/Title";
 import Link from "next/link";
 import Text from "@/components/ui/text";
-import {
-  useConnectorIndexingStatusWithPagination,
-  useFederatedConnectors,
-} from "@/lib/hooks";
+import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
 import { Button } from "@/components/ui/button";
 import { useState, useRef, useMemo } from "react";
@@ -190,7 +186,7 @@ function Main() {
           page to get started!
         </Text>
       ) : (
-        <CCPairIndexingStatusTableLite
+        <CCPairIndexingStatusTable
           ccPairsIndexingStatuses={ccPairsIndexingStatuses}
           connectorsToggled={connectorsToggled}
           toggleSource={toggleSource}
