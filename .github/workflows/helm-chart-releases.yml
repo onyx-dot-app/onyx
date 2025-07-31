@@ -23,6 +23,11 @@ jobs:
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.12.1
+
       - name: Add Required Helm Repositories
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
