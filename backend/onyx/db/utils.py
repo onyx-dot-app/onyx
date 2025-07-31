@@ -1,7 +1,9 @@
+from enum import Enum
 from typing import Any
 
 from psycopg2 import errorcodes
 from psycopg2 import OperationalError
+from pydantic import BaseModel
 from sqlalchemy import inspect
 
 from onyx.db.models import Base
@@ -27,3 +29,14 @@ def is_retryable_sqlalchemy_error(exc: BaseException) -> bool:
         pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
         return pgcode in RETRYABLE_PG_CODES
     return False
+
+
+class DocumentRow(BaseModel):
+    id: str
+    doc_metadata: dict[str, Any]
+    external_user_group_ids: list[str]
+
+
+class SortOrder(str, Enum):
+    ASC = "asc"
+    DESC = "desc"

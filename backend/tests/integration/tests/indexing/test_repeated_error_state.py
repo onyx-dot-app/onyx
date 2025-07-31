@@ -3,7 +3,7 @@ import uuid
 
 import httpx
 
-from onyx.background.celery.tasks.indexing.utils import (
+from onyx.background.celery.tasks.docprocessing.utils import (
     NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
 )
 from onyx.configs.constants import DocumentSource

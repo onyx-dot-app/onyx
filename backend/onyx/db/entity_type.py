@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
@@ -7,6 +9,9 @@ from onyx.db.models import Connector
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGAttributeEntityOption
 from onyx.server.kg.models import EntityType
+
+
+UNGROUNDED_SOURCE_NAME = "Ungrounded"
 
 
 def get_entity_types_with_grounded_source_name(
@@ -45,7 +50,7 @@ def get_entity_types(
         )
 
 
-def get_configured_entity_types(db_session: Session) -> list[KGEntityType]:
+def get_configured_entity_types(db_session: Session) -> dict[str, list[KGEntityType]]:
     # get entity types from configured sources
     configured_connector_sources = {
         source.value.lower()
@@ -73,11 +78,19 @@ def get_configured_entity_types(db_session: Session) -> list[KGEntityType]:
             elif isinstance(implied_et, str):
                 if implied_et not in entity_type_set:
                     entity_type_set.add(implied_et)
-    return (
+
+    ets = (
         db_session.query(KGEntityType)
         .filter(KGEntityType.id_name.in_(entity_type_set))
         .all()
     )
+
+    et_map = defaultdict(list)
+    for et in ets:
+        key = et.grounded_source_name or UNGROUNDED_SOURCE_NAME
+        et_map[key].append(et)
+
+    return et_map
 
 
 def update_entity_types_and_related_connectors__commit(
@@ -99,7 +112,10 @@ def update_entity_types_and_related_connectors__commit(
     configured_entity_types = get_configured_entity_types(db_session=db_session)
 
     active_entity_type_sources = {
-        et.grounded_source_name for et in configured_entity_types if et.active
+        et.grounded_source_name
+        for ets in configured_entity_types.values()
+        for et in ets
+        if et.active
     }
 
     # Update connectors that should be enabled

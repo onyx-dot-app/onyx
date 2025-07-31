@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import FixedLogo from "../../components/logo/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useChatContext } from "@/components/context/ChatContext";
-import { HistorySidebar } from "../chat/sessionSidebar/HistorySidebar";
+import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import AssistantModal from "./mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
@@ -35,11 +35,9 @@ export default function SidebarWrapper<T extends object>({
   const toggleSidebar = useCallback(() => {
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
-      String(!sidebarVisible).toLocaleLowerCase()
-    ),
-      {
-        path: "/",
-      };
+      String(!sidebarVisible).toLocaleLowerCase(),
+      { path: "/" }
+    );
     setSidebarVisible((sidebarVisible) => !sidebarVisible);
   }, [sidebarVisible]);
 

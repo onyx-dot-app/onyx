@@ -15,9 +15,8 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas_for_user
+from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
-from onyx.db.persona import PersonaLoadType
 from onyx.db.persona import upsert_persona
 from onyx.db.prompts import upsert_prompt
 from onyx.db.tools import get_tool_by_name
@@ -243,9 +242,8 @@ def list_assistants(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> ListAssistantsResponse:
-    personas = list(
-        get_personas_for_user(
-            load_type=PersonaLoadType.FULL,
+    persona_snapshots = list(
+        get_raw_personas_for_user(
             user=user,
             db_session=db_session,
             get_editable=False,
@@ -254,21 +252,21 @@ def list_assistants(
 
     # Apply filtering based on after and before
     if after:
-        personas = [p for p in personas if p.id > int(after)]
+        persona_snapshots = [p for p in persona_snapshots if p.id > int(after)]
     if before:
-        personas = [p for p in personas if p.id < int(before)]
+        persona_snapshots = [p for p in persona_snapshots if p.id < int(before)]
 
     # Apply ordering
-    personas.sort(key=lambda p: p.id, reverse=(order == "desc"))
+    persona_snapshots.sort(key=lambda p: p.id, reverse=(order == "desc"))
 
     # Apply limit
-    personas = personas[:limit]
+    persona_snapshots = persona_snapshots[:limit]
 
-    assistants = [persona_to_assistant(p) for p in personas]
+    assistants = [persona_to_assistant(p) for p in persona_snapshots]
 
     return ListAssistantsResponse(
         data=assistants,
         first_id=assistants[0].id if assistants else None,
         last_id=assistants[-1].id if assistants else None,
-        has_more=len(personas) == limit,
+        has_more=len(persona_snapshots) == limit,
     )

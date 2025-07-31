@@ -48,7 +48,9 @@ from onyx.db.relationships import (
     delete_from_kg_relationships_extraction_staging__no_commit,
 )
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
+from onyx.db.utils import DocumentRow
 from onyx.db.utils import model_to_dict
+from onyx.db.utils import SortOrder
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
@@ -79,10 +81,6 @@ def count_documents_by_needs_sync(session: Session) -> int:
 
     return (
         session.query(DbDocument.id)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
         .filter(
             or_(
                 DbDocument.last_modified > DbDocument.last_synced,
@@ -93,65 +91,20 @@ def count_documents_by_needs_sync(session: Session) -> int:
     )
 
 
-def construct_document_select_for_connector_credential_pair_by_needs_sync(
-    connector_id: int, credential_id: int
-) -> Select:
-    return (
-        select(DbDocument)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-                or_(
-                    DbDocument.last_modified > DbDocument.last_synced,
-                    DbDocument.last_synced.is_(None),
-                ),
-            )
+def construct_document_id_select_by_needs_sync() -> Select:
+    """Get all document IDs that need syncing across all connector credential pairs.
+
+    Returns a Select statement for documents where:
+    1. last_modified is newer than last_synced
+    2. last_synced is null (meaning we've never synced)
+    AND the document has a relationship with a connector/credential pair
+    """
+    return select(DbDocument.id).where(
+        or_(
+            DbDocument.last_modified > DbDocument.last_synced,
+            DbDocument.last_synced.is_(None),
         )
     )
-
-
-def construct_document_id_select_for_connector_credential_pair_by_needs_sync(
-    connector_id: int, credential_id: int
-) -> Select:
-    return (
-        select(DbDocument.id)
-        .join(
-            DocumentByConnectorCredentialPair,
-            DbDocument.id == DocumentByConnectorCredentialPair.id,
-        )
-        .where(
-            and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-                or_(
-                    DbDocument.last_modified > DbDocument.last_synced,
-                    DbDocument.last_synced.is_(None),
-                ),
-            )
-        )
-    )
-
-
-def get_all_documents_needing_vespa_sync_for_cc_pair(
-    db_session: Session, cc_pair_id: int
-) -> list[DbDocument]:
-    cc_pair = get_connector_credential_pair_from_id(
-        db_session=db_session,
-        cc_pair_id=cc_pair_id,
-    )
-    if not cc_pair:
-        raise ValueError(f"No CC pair found with ID: {cc_pair_id}")
-
-    stmt = construct_document_select_for_connector_credential_pair_by_needs_sync(
-        cc_pair.connector_id, cc_pair.credential_id
-    )
-
-    return list(db_session.scalars(stmt).all())
 
 
 def construct_document_id_select_for_connector_credential_pair(
@@ -199,7 +152,7 @@ def get_documents_for_cc_pair(
 
 
 def get_document_ids_for_connector_credential_pair(
-    db_session: Session, connector_id: int, credential_id: int, limit: int | None = None
+    db_session: Session, connector_id: int, credential_id: int
 ) -> list[str]:
     doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
         and_(
@@ -208,6 +161,47 @@ def get_document_ids_for_connector_credential_pair(
         )
     )
     return list(db_session.execute(doc_ids_stmt).scalars().all())
+
+
+def get_documents_for_connector_credential_pair_limited_columns(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    sort_order: SortOrder | None = None,
+) -> Sequence[DocumentRow]:
+
+    doc_ids_subquery = select(DocumentByConnectorCredentialPair.id).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+    doc_ids_subquery = doc_ids_subquery.join(
+        DbDocument, DocumentByConnectorCredentialPair.id == DbDocument.id
+    )
+
+    stmt = select(
+        DbDocument.id, DbDocument.doc_metadata, DbDocument.external_user_group_ids
+    )
+
+    stmt = stmt.where(DbDocument.id.in_(doc_ids_subquery))
+
+    if sort_order == SortOrder.ASC:
+        stmt = stmt.order_by(DbDocument.last_modified.asc())
+    elif sort_order == SortOrder.DESC:
+        stmt = stmt.order_by(DbDocument.last_modified.desc())
+
+    rows = db_session.execute(stmt).mappings().all()
+
+    doc_rows: list[DocumentRow] = []
+    for row in rows:
+        doc_row = DocumentRow(
+            id=row.id,
+            doc_metadata=row.doc_metadata,
+            external_user_group_ids=row.external_user_group_ids,
+        )
+        doc_rows.append(doc_row)
+    return doc_rows
 
 
 def get_documents_for_connector_credential_pair(
@@ -419,6 +413,7 @@ def upsert_documents(
                         if doc.external_access
                         else {}
                     ),
+                    doc_metadata=doc.doc_metadata,
                 )
             )
             for doc in seen_documents.values()
@@ -438,6 +433,7 @@ def upsert_documents(
             "external_user_emails": insert_stmt.excluded.external_user_emails,
             "external_user_group_ids": insert_stmt.excluded.external_user_group_ids,
             "is_public": insert_stmt.excluded.is_public,
+            "doc_metadata": insert_stmt.excluded.doc_metadata,
         },
     )
     db_session.execute(on_conflict_stmt)
@@ -898,7 +894,9 @@ def fetch_chunk_counts_for_documents(
     # Create a dictionary of document_id to chunk_count
     chunk_counts = {str(row.id): row.chunk_count or 0 for row in results}
 
-    # Return a list of tuples, using 0 for documents not found in the database
+    # Return a list of tuples, preserving `None` for documents not found or with
+    # an unknown chunk count. Callers should handle the `None` case and fall
+    # back to an existence check against the vector DB if necessary.
     return [(doc_id, chunk_counts.get(doc_id, 0)) for doc_id in document_ids]
 
 
@@ -1078,7 +1076,7 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
 
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0
+    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
 
 
 def update_document_kg_stages(
@@ -1101,7 +1099,7 @@ def update_document_kg_stages(
     result = db_session.execute(stmt)
     # The hasattr check is needed for type checking, even though rowcount
     # is guaranteed to exist at runtime for UPDATE operations
-    return result.rowcount if hasattr(result, "rowcount") else 0
+    return result.rowcount if hasattr(result, "rowcount") else 0  # type: ignore
 
 
 def get_skipped_kg_documents(db_session: Session) -> list[str]:

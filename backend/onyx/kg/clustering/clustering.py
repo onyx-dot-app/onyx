@@ -34,7 +34,7 @@ from onyx.kg.models import KGGroundingType
 from onyx.kg.utils.formatting_utils import make_relationship_id
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
@@ -180,7 +180,7 @@ def _cluster_one_grounded_entity(
                     # find entities of the same type with a similar name
                     *filtering,
                     KGEntity.entity_type_id_name == entity.entity_type_id_name,
-                    getattr(func, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE).similarity_op(
+                    getattr(func, POSTGRES_DEFAULT_SCHEMA).similarity_op(
                         KGEntity.name, entity_name
                     ),
                 )

@@ -267,7 +267,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         result = ""
         for prop_name, prop in properties.items():
-            if not prop:
+            if not prop or not isinstance(prop, dict):
                 continue
 
             try:

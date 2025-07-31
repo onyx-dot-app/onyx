@@ -50,7 +50,10 @@ export function PersonasTable({
   const { popup, setPopup } = usePopup();
   const { refreshUser, isAdmin } = useUser();
 
-  const editablePersonas = personas.filter((p) => !p.builtin_persona);
+  const editablePersonas = useMemo(() => {
+    return personas.filter((p) => !p.builtin_persona);
+  }, [personas]);
+
   const editablePersonaIds = useMemo(() => {
     return new Set(editablePersonas.map((p) => p.id.toString()));
   }, [editablePersonas]);

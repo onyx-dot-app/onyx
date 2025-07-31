@@ -14,7 +14,8 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.configs.app_configs import AZURE_DALLE_API_VERSION
 from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
-from onyx.configs.chat_configs import BING_API_KEY
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_CHUNKS
+from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
@@ -47,6 +48,45 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class SearchToolConfig(BaseModel):
+    answer_style_config: AnswerStyleConfig = Field(
+        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
+    )
+    document_pruning_config: DocumentPruningConfig = Field(
+        default_factory=DocumentPruningConfig
+    )
+    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
+    rerank_settings: RerankingDetails | None = None
+    selected_sections: list[InferenceSection] | None = None
+    chunks_above: int = 0
+    chunks_below: int = 0
+    full_doc: bool = False
+    latest_query_files: list[InMemoryChatFile] | None = None
+    # Use with care, should only be used for OnyxBot in channels with multiple users
+    bypass_acl: bool = False
+
+
+class InternetSearchToolConfig(BaseModel):
+    answer_style_config: AnswerStyleConfig = Field(
+        default_factory=lambda: AnswerStyleConfig(
+            citation_config=CitationConfig(all_docs_useful=True)
+        )
+    )
+    document_pruning_config: DocumentPruningConfig = Field(
+        default_factory=DocumentPruningConfig
+    )
+
+
+class ImageGenerationToolConfig(BaseModel):
+    additional_headers: dict[str, str] | None = None
+
+
+class CustomToolConfig(BaseModel):
+    chat_session_id: UUID | None = None
+    message_id: int | None = None
+    additional_headers: dict[str, str] | None = None
 
 
 def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
@@ -100,40 +140,26 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
     )
 
 
-class SearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(citation_config=CitationConfig())
+# Note: this is not very clear / not the way things should generally be done. (+impure function)
+# TODO: refactor the tool config flow to be easier
+def _configure_document_pruning_for_tool_config(
+    tool_config: SearchToolConfig | InternetSearchToolConfig,
+    tools: list[Tool],
+    llm: LLM,
+) -> None:
+    """Helper function to configure document pruning settings for tool configs"""
+    tool_config.document_pruning_config.tool_num_tokens = compute_all_tool_tokens(
+        tools,
+        get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        ),
     )
-    document_pruning_config: DocumentPruningConfig = Field(
-        default_factory=DocumentPruningConfig
-    )
-    retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
-    rerank_settings: RerankingDetails | None = None
-    selected_sections: list[InferenceSection] | None = None
-    chunks_above: int = 0
-    chunks_below: int = 0
-    full_doc: bool = False
-    latest_query_files: list[InMemoryChatFile] | None = None
-    # Use with care, should only be used for OnyxBot in channels with multiple users
-    bypass_acl: bool = False
-
-
-class InternetSearchToolConfig(BaseModel):
-    answer_style_config: AnswerStyleConfig = Field(
-        default_factory=lambda: AnswerStyleConfig(
-            citation_config=CitationConfig(all_docs_useful=True)
+    tool_config.document_pruning_config.using_tool_message = (
+        explicit_tool_calling_supported(
+            llm.config.model_provider, llm.config.model_name
         )
     )
-
-
-class ImageGenerationToolConfig(BaseModel):
-    additional_headers: dict[str, str] | None = None
-
-
-class CustomToolConfig(BaseModel):
-    chat_session_id: UUID | None = None
-    message_id: int | None = None
-    additional_headers: dict[str, str] | None = None
 
 
 def construct_tools(
@@ -179,7 +205,7 @@ def construct_tools(
                     prompt_config=prompt_config,
                     llm=llm,
                     fast_llm=fast_llm,
-                    pruning_config=search_tool_config.document_pruning_config,
+                    document_pruning_config=search_tool_config.document_pruning_config,
                     answer_style_config=search_tool_config.answer_style_config,
                     selected_sections=search_tool_config.selected_sections,
                     chunks_above=search_tool_config.chunks_above,
@@ -219,17 +245,25 @@ def construct_tools(
                 if not internet_search_tool_config:
                     internet_search_tool_config = InternetSearchToolConfig()
 
-                if not BING_API_KEY:
+                try:
+                    tool_dict[db_tool_model.id] = [
+                        InternetSearchTool(
+                            db_session=db_session,
+                            persona=persona,
+                            prompt_config=prompt_config,
+                            llm=llm,
+                            document_pruning_config=internet_search_tool_config.document_pruning_config,
+                            answer_style_config=internet_search_tool_config.answer_style_config,
+                            provider=None,  # Will use default provider
+                            num_results=NUM_INTERNET_SEARCH_RESULTS,
+                            max_chunks=NUM_INTERNET_SEARCH_CHUNKS,
+                        )
+                    ]
+                except ValueError as e:
+                    logger.error(f"Failed to initialize Internet Search Tool: {e}")
                     raise ValueError(
-                        "Internet search tool requires a Bing API key, please contact your Onyx admin to get it added!"
+                        "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
                     )
-                tool_dict[db_tool_model.id] = [
-                    InternetSearchTool(
-                        api_key=BING_API_KEY,
-                        answer_style_config=internet_search_tool_config.answer_style_config,
-                        prompt_config=prompt_config,
-                    )
-                ]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
@@ -262,19 +296,11 @@ def construct_tools(
 
     # factor in tool definition size when pruning
     if search_tool_config:
-        search_tool_config.document_pruning_config.tool_num_tokens = (
-            compute_all_tool_tokens(
-                tools,
-                get_tokenizer(
-                    model_name=llm.config.model_name,
-                    provider_type=llm.config.model_provider,
-                ),
-            )
-        )
-        search_tool_config.document_pruning_config.using_tool_message = (
-            explicit_tool_calling_supported(
-                llm.config.model_provider, llm.config.model_name
-            )
+        _configure_document_pruning_for_tool_config(search_tool_config, tools, llm)
+
+    if internet_search_tool_config:
+        _configure_document_pruning_for_tool_config(
+            internet_search_tool_config, tools, llm
         )
 
     return tool_dict

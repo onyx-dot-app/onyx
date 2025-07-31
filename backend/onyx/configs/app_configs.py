@@ -35,6 +35,9 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 )  # 1 day
 DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "true"
 
+# Controls whether users can use User Knowledge (personal documents) in assistants
+DISABLE_USER_KNOWLEDGE = os.environ.get("DISABLE_USER_KNOWLEDGE", "").lower() == "true"
+
 # Controls whether to allow admin query history reports with:
 # 1. associated user emails
 # 2. anonymized user emails
@@ -308,25 +311,40 @@ except ValueError:
         CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER_DEFAULT
     )
 
-CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT = 3
+CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT = 6
 try:
-    env_value = os.environ.get("CELERY_WORKER_INDEXING_CONCURRENCY")
+    env_value = os.environ.get("CELERY_WORKER_DOCPROCESSING_CONCURRENCY")
     if not env_value:
         env_value = os.environ.get("NUM_INDEXING_WORKERS")
 
     if not env_value:
-        env_value = str(CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT)
-    CELERY_WORKER_INDEXING_CONCURRENCY = int(env_value)
+        env_value = str(CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT)
+    CELERY_WORKER_DOCPROCESSING_CONCURRENCY = int(env_value)
 except ValueError:
-    CELERY_WORKER_INDEXING_CONCURRENCY = CELERY_WORKER_INDEXING_CONCURRENCY_DEFAULT
+    CELERY_WORKER_DOCPROCESSING_CONCURRENCY = (
+        CELERY_WORKER_DOCPROCESSING_CONCURRENCY_DEFAULT
+    )
 
+CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT = 1
+try:
+    env_value = os.environ.get("CELERY_WORKER_DOCFETCHING_CONCURRENCY")
+    if not env_value:
+        env_value = os.environ.get("NUM_DOCFETCHING_WORKERS")
+
+    if not env_value:
+        env_value = str(CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT)
+    CELERY_WORKER_DOCFETCHING_CONCURRENCY = int(env_value)
+except ValueError:
+    CELERY_WORKER_DOCFETCHING_CONCURRENCY = (
+        CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
+    )
 
 CELERY_WORKER_KG_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_KG_PROCESSING_CONCURRENCY") or 4
 )
 
 # The maximum number of tasks that can be queued up to sync to Vespa in a single pass
-VESPA_SYNC_MAX_TASKS = 1024
+VESPA_SYNC_MAX_TASKS = 8192
 
 DB_YIELD_PER_DEFAULT = 64
 
@@ -448,6 +466,11 @@ CONFLUENCE_TIMEZONE_OFFSET = float(
 
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
+# Default size threshold for SharePoint files (20MB)
+SHAREPOINT_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("SHAREPOINT_CONNECTOR_SIZE_THRESHOLD", 20 * 1024 * 1024)
 )
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [

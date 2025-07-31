@@ -1,6 +1,5 @@
 from collections import defaultdict
 from collections.abc import Callable
-from functools import partial
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -23,6 +22,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
@@ -41,7 +41,6 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
@@ -62,7 +61,6 @@ from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
@@ -144,6 +142,7 @@ def _upsert_documents_in_db(
             secondary_owners=get_experts_stores_representations(doc.secondary_owners),
             from_ingestion_api=doc.from_ingestion_api,
             external_access=doc.external_access,
+            doc_metadata=doc.doc_metadata,
         )
         document_metadata_list.append(db_doc_metadata)
 
@@ -290,6 +289,10 @@ def index_doc_batch_with_handler(
             enable_contextual_rag=enable_contextual_rag,
             llm=llm,
         )
+
+    except ConnectorStopSignal as e:
+        logger.warning("Connector stop signal detected in index_doc_batch_with_handler")
+        raise e
     except Exception as e:
         # don't log the batch directly, it's too much text
         document_ids = [doc.id for doc in document_batch]
@@ -496,36 +499,33 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
                 # Try to get image summary
                 try:
-                    with get_session_with_current_tenant() as db_session:
-                        file_store = get_default_file_store(db_session)
+                    file_store = get_default_file_store()
 
-                        file_record = file_store.read_file_record(
+                    file_record = file_store.read_file_record(
+                        file_id=section.image_file_id
+                    )
+                    if not file_record:
+                        logger.warning(
+                            f"Image file {section.image_file_id} not found in FileStore"
+                        )
+
+                        processed_section.text = "[Image could not be processed]"
+                    else:
+                        # Get the image data
+                        image_data_io = file_store.read_file(
                             file_id=section.image_file_id
                         )
-                        if not file_record:
-                            logger.warning(
-                                f"Image file {section.image_file_id} not found in FileStore"
-                            )
+                        image_data = image_data_io.read()
+                        summary = summarize_image_with_error_handling(
+                            llm=llm,
+                            image_data=image_data,
+                            context_name=file_record.display_name or "Image",
+                        )
 
-                            processed_section.text = "[Image could not be processed]"
+                        if summary:
+                            processed_section.text = summary
                         else:
-                            # Get the image data
-                            image_data_io = file_store.read_file(
-                                file_id=section.image_file_id
-                            )
-                            image_data = image_data_io.read()
-                            summary = summarize_image_with_error_handling(
-                                llm=llm,
-                                image_data=image_data,
-                                context_name=file_record.display_name or "Image",
-                            )
-
-                            if summary:
-                                processed_section.text = summary
-                            else:
-                                processed_section.text = (
-                                    "[Image could not be summarized]"
-                                )
+                            processed_section.text = "[Image could not be summarized]"
                 except Exception as e:
                     logger.error(f"Error processing image section: {e}")
                     processed_section.text = "[Error processing image]"
@@ -832,7 +832,7 @@ def index_doc_batch(
             )
         )
 
-        doc_id_to_previous_chunk_cnt: dict[str, int | None] = {
+        doc_id_to_previous_chunk_cnt: dict[str, int] = {
             document_id: chunk_count
             for document_id, chunk_count in fetch_chunk_counts_for_documents(
                 document_ids=updatable_ids,
@@ -1029,7 +1029,7 @@ def index_doc_batch(
         db_session.commit()
 
     result = IndexingPipelineResult(
-        new_docs=len([r for r in insertion_records if r.already_existed is False]),
+        new_docs=len([r for r in insertion_records if not r.already_existed]),
         total_docs=len(filtered_documents),
         total_chunks=len(access_aware_chunks),
         failures=vector_db_write_failures + embedding_failures,
@@ -1038,8 +1038,10 @@ def index_doc_batch(
     return result
 
 
-def build_indexing_pipeline(
+def run_indexing_pipeline(
     *,
+    document_batch: list[Document],
+    index_attempt_metadata: IndexAttemptMetadata,
     embedder: IndexingEmbedder,
     information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
@@ -1047,8 +1049,7 @@ def build_indexing_pipeline(
     tenant_id: str,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
-    callback: IndexingHeartbeatInterface | None = None,
-) -> IndexingPipelineProtocol:
+) -> IndexingPipelineResult:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
     all_search_settings = get_active_search_settings(db_session)
     if (
@@ -1078,15 +1079,15 @@ def build_indexing_pipeline(
         enable_large_chunks=multipass_config.enable_large_chunks,
         enable_contextual_rag=enable_contextual_rag,
         # after every doc, update status in case there are a bunch of really long docs
-        callback=callback,
     )
 
-    return partial(
-        index_doc_batch_with_handler,
+    return index_doc_batch_with_handler(
         chunker=chunker,
         embedder=embedder,
         information_content_classification_model=information_content_classification_model,
         document_index=document_index,
+        document_batch=document_batch,
+        index_attempt_metadata=index_attempt_metadata,
         ignore_time_skip=ignore_time_skip,
         db_session=db_session,
         tenant_id=tenant_id,

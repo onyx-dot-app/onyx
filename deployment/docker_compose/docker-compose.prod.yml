@@ -13,6 +13,7 @@ services:
       - relational_db
       - index
       - cache
+      - minio
       - inference_model_server
     restart: unless-stopped
     env_file:

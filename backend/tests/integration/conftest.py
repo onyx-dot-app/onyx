@@ -19,6 +19,15 @@ from tests.integration.common_utils.vespa import vespa_fixture
 BASIC_USER_NAME = "basic_user"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def initialize_db() -> None:
+    # Make sure that the db engine is initialized before any tests are run
+    SqlEngine.init_engine(
+        pool_size=10,
+        max_overflow=5,
+    )
+
+
 def load_env_vars(env_file: str = ".env") -> None:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     env_path = os.path.join(current_dir, env_file)
@@ -45,19 +54,6 @@ errors.
 Commenting out till we can get to the bottom of it. For now, just using
 instantiate the session directly within the test.
 """
-# @pytest.fixture
-# def db_session() -> Generator[Session, None, None]:
-#     with get_session_with_current_tenant() as session:
-#         yield session
-
-
-@pytest.fixture(scope="session", autouse=True)
-def initialize_db() -> None:
-    # Make sure that the db engine is initialized before any tests are run
-    SqlEngine.init_engine(
-        pool_size=10,
-        max_overflow=5,
-    )
 
 
 @pytest.fixture

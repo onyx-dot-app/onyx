@@ -47,6 +47,7 @@ from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_document_ids_for_connector_credential_pair
+from onyx.db.document import get_documents_for_connector_credential_pair_limited_columns
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -58,7 +59,9 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
+from onyx.db.utils import DocumentRow
 from onyx.db.utils import is_retryable_sqlalchemy_error
+from onyx.db.utils import SortOrder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
@@ -422,7 +425,7 @@ def connector_permission_sync_generator_task(
 
     lock: RedisLock = r.lock(
         OnyxRedisLocks.CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX
-        + f"_{redis_connector.id}",
+        + f"_{redis_connector.cc_pair_id}",
         timeout=CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
         thread_local=False,
     )
@@ -498,16 +501,31 @@ def connector_permission_sync_generator_task(
             # this is can be used to determine documents that are "missing" and thus
             # should no longer be accessible. The decision as to whether we should find
             # every document during the doc sync process is connector-specific.
-            def fetch_all_existing_docs_fn() -> list[str]:
-                return get_document_ids_for_connector_credential_pair(
+            def fetch_all_existing_docs_fn(
+                sort_order: SortOrder | None = None,
+            ) -> list[DocumentRow]:
+                result = get_documents_for_connector_credential_pair_limited_columns(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                    sort_order=sort_order,
+                )
+                return list(result)
+
+            def fetch_all_existing_docs_ids_fn() -> list[str]:
+                result = get_document_ids_for_connector_credential_pair(
                     db_session=db_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                 )
+                return result
 
             doc_sync_func = sync_config.doc_sync_config.doc_sync_func
             document_external_accesses = doc_sync_func(
-                cc_pair, fetch_all_existing_docs_fn, callback
+                cc_pair,
+                fetch_all_existing_docs_fn,
+                fetch_all_existing_docs_ids_fn,
+                callback,
             )
 
             task_logger.info(

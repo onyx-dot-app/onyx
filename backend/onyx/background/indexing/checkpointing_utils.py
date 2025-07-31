@@ -33,7 +33,7 @@ def save_checkpoint(
     """Save a checkpoint for a given index attempt to the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
 
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_store.save_file(
         content=BytesIO(checkpoint.model_dump_json().encode()),
         display_name=checkpoint_pointer,
@@ -52,11 +52,11 @@ def save_checkpoint(
 
 
 def load_checkpoint(
-    db_session: Session, index_attempt_id: int, connector: BaseConnector
+    index_attempt_id: int, connector: BaseConnector
 ) -> ConnectorCheckpoint:
     """Load a checkpoint for a given index attempt from the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
     checkpoint_data = checkpoint_io.read().decode("utf-8")
     if isinstance(connector, CheckpointedConnector):
@@ -71,7 +71,7 @@ def get_latest_valid_checkpoint(
     window_start: datetime,
     window_end: datetime,
     connector: BaseConnector,
-) -> ConnectorCheckpoint:
+) -> tuple[ConnectorCheckpoint, bool]:
     """Get the latest valid checkpoint for a given connector credential pair"""
     checkpoint_candidates = get_recent_completed_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
@@ -83,7 +83,7 @@ def get_latest_valid_checkpoint(
     # don't keep using checkpoints if we've had a bunch of failed attempts in a row
     # where we make no progress. Only do this if we have had at least
     # _NUM_RECENT_ATTEMPTS_TO_CONSIDER completed attempts.
-    if len(checkpoint_candidates) == _NUM_RECENT_ATTEMPTS_TO_CONSIDER:
+    if len(checkpoint_candidates) >= _NUM_RECENT_ATTEMPTS_TO_CONSIDER:
         had_any_progress = False
         for candidate in checkpoint_candidates:
             if (
@@ -99,7 +99,7 @@ def get_latest_valid_checkpoint(
                 f"found for cc_pair={cc_pair_id}. Ignoring checkpoint to let the run start "
                 "from scratch."
             )
-            return connector.build_dummy_checkpoint()
+            return connector.build_dummy_checkpoint(), False
 
     # filter out any candidates that don't meet the criteria
     checkpoint_candidates = [
@@ -140,11 +140,10 @@ def get_latest_valid_checkpoint(
         logger.info(
             f"No valid checkpoint found for cc_pair={cc_pair_id}. Starting from scratch."
         )
-        return checkpoint
+        return checkpoint, False
 
     try:
         previous_checkpoint = load_checkpoint(
-            db_session=db_session,
             index_attempt_id=latest_valid_checkpoint_candidate.id,
             connector=connector,
         )
@@ -153,14 +152,14 @@ def get_latest_valid_checkpoint(
             f"Failed to load checkpoint from previous failed attempt with ID "
             f"{latest_valid_checkpoint_candidate.id}. Falling back to default checkpoint."
         )
-        return checkpoint
+        return checkpoint, False
 
     logger.info(
         f"Using checkpoint from previous failed attempt with ID "
         f"{latest_valid_checkpoint_candidate.id}. Previous checkpoint: "
         f"{previous_checkpoint}"
     )
-    return previous_checkpoint
+    return previous_checkpoint, True
 
 
 def get_index_attempts_with_old_checkpoints(
@@ -201,7 +200,7 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
     if not index_attempt.checkpoint_pointer:
         return None
 
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_store.delete_file(index_attempt.checkpoint_pointer)
 
     index_attempt.checkpoint_pointer = None

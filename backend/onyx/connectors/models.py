@@ -11,6 +11,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.db.enums import IndexModelStatus
 from onyx.utils.text_processing import make_url_compatible
 
 
@@ -182,6 +183,7 @@ class DocumentBase(BaseModel):
 
     # only filled in EE for connectors w/ permission sync enabled
     external_access: ExternalAccess | None = None
+    doc_metadata: dict[str, Any] | None = None
 
     def get_title_for_document_index(
         self,
@@ -363,6 +365,10 @@ class ConnectorFailure(BaseModel):
         return values
 
 
+class ConnectorStopSignal(Exception):
+    """A custom exception used to signal a stop in processing."""
+
+
 class OnyxMetadata(BaseModel):
     # Note that doc_id cannot be overriden here as it may cause issues
     # with the display functionalities in the UI. Ask @chris if clarification is needed.
@@ -373,3 +379,24 @@ class OnyxMetadata(BaseModel):
     secondary_owners: list[BasicExpertInfo] | None = None
     doc_updated_at: datetime | None = None
     title: str | None = None
+
+
+class DocExtractionContext(BaseModel):
+    index_name: str
+    cc_pair_id: int
+    connector_id: int
+    credential_id: int
+    source: DocumentSource
+    earliest_index_time: float
+    from_beginning: bool
+    is_primary: bool
+    should_fetch_permissions_during_indexing: bool
+    search_settings_status: IndexModelStatus
+    doc_extraction_complete_batch_num: int | None
+
+
+class DocIndexingContext(BaseModel):
+    batches_done: int
+    total_failures: int
+    net_doc_change: int
+    total_chunks: int

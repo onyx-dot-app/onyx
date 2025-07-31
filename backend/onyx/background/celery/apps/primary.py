@@ -9,6 +9,7 @@ from celery import signals
 from celery import Task
 from celery.apps.worker import Worker
 from celery.exceptions import WorkerShutdown
+from celery.result import AsyncResult
 from celery.signals import celeryd_init
 from celery.signals import worker_init
 from celery.signals import worker_ready
@@ -18,9 +19,7 @@ from redis.lock import Lock as RedisLock
 import onyx.background.celery.apps.app_base as app_base
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import celery_is_worker_primary
-from onyx.background.celery.tasks.indexing.utils import (
-    get_unfenced_index_attempt_ids,
-)
+from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
 from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
@@ -29,9 +28,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
-from onyx.redis.redis_connector_credential_pair import (
-    RedisGlobalConnectorCredentialPair,
-)
+from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
@@ -156,7 +153,10 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     r.delete(OnyxRedisConstants.ACTIVE_FENCES)
 
-    RedisGlobalConnectorCredentialPair.reset_all(r)
+    # NOTE: we want to remove the `Redis*` classes, prefer to just have functions
+    # This is the preferred way to do this going forward
+    reset_document_sync(r)
+
     RedisDocumentSet.reset_all(r)
     RedisUserGroup.reset_all(r)
     RedisConnectorDelete.reset_all(r)
@@ -167,24 +167,50 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     RedisConnectorExternalGroupSync.reset_all(r)
 
     # mark orphaned index attempts as failed
+    # This uses database coordination instead of Redis fencing
     with get_session_with_current_tenant() as db_session:
-        unfenced_attempt_ids = get_unfenced_index_attempt_ids(db_session, r)
-        for attempt_id in unfenced_attempt_ids:
+        # Get potentially orphaned attempts (those with active status and task IDs)
+        potentially_orphaned_ids = IndexingCoordination.get_orphaned_index_attempt_ids(
+            db_session
+        )
+
+        for attempt_id in potentially_orphaned_ids:
             attempt = get_index_attempt(db_session, attempt_id)
-            if not attempt:
+
+            # handle case where not started or docfetching is done but indexing is not
+            if (
+                not attempt
+                or not attempt.celery_task_id
+                or attempt.total_batches is not None
+            ):
                 continue
 
-            failure_reason = (
-                f"Canceling leftover index attempt found on startup: "
-                f"index_attempt={attempt.id} "
-                f"cc_pair={attempt.connector_credential_pair_id} "
-                f"search_settings={attempt.search_settings_id}"
-            )
-            logger.warning(failure_reason)
-            logger.exception(
-                f"Marking attempt {attempt.id} as canceled due to validation error 2"
-            )
-            mark_attempt_canceled(attempt.id, db_session, failure_reason)
+            # Check if the Celery task actually exists
+            try:
+
+                result: AsyncResult = AsyncResult(attempt.celery_task_id)
+
+                # If the task is not in PENDING state, it exists in Celery
+                if result.state != "PENDING":
+                    continue
+
+                # Task is orphaned - mark as failed
+                failure_reason = (
+                    f"Orphaned index attempt found on startup - Celery task not found: "
+                    f"index_attempt={attempt.id} "
+                    f"cc_pair={attempt.connector_credential_pair_id} "
+                    f"search_settings={attempt.search_settings_id} "
+                    f"celery_task_id={attempt.celery_task_id}"
+                )
+                logger.warning(failure_reason)
+                mark_attempt_canceled(attempt.id, db_session, failure_reason)
+
+            except Exception:
+                # If we can't check the task status, be conservative and continue
+                logger.warning(
+                    f"Could not verify Celery task status on startup for attempt {attempt.id}, "
+                    f"task_id={attempt.celery_task_id}"
+                )
 
 
 @worker_ready.connect
@@ -291,7 +317,7 @@ for bootstep in base_bootsteps:
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.connector_deletion",
-        "onyx.background.celery.tasks.indexing",
+        "onyx.background.celery.tasks.docprocessing",
         "onyx.background.celery.tasks.periodic",
         "onyx.background.celery.tasks.pruning",
         "onyx.background.celery.tasks.shared",

@@ -41,11 +41,13 @@ class DocumentSearchRequest(ChunkContext):
 
 
 class BasicCreateChatMessageRequest(ChunkContext):
-    """Before creating messages, be sure to create a chat_session and get an id
+    """If a chat_session_id is not provided, a persona_id must be provided to automatically create a new chat session
     Note, for simplicity this option only allows for a single linear chain of messages
     """
 
-    chat_session_id: UUID
+    chat_session_id: UUID | None = None
+    # Optional persona_id to create a new chat session if chat_session_id is not provided
+    persona_id: int | None = None
     # New message contents
     message: str
     # Defaults to using retrieval with no additional filters
@@ -61,6 +63,12 @@ class BasicCreateChatMessageRequest(ChunkContext):
 
     # If True, uses agentic search instead of basic search
     use_agentic_search: bool = False
+
+    @model_validator(mode="after")
+    def validate_chat_session_or_persona(self) -> "BasicCreateChatMessageRequest":
+        if self.chat_session_id is None and self.persona_id is None:
+            raise ValueError("Either chat_session_id or persona_id must be provided")
+        return self
 
 
 class BasicCreateChatMessageWithHistoryRequest(ChunkContext):
@@ -170,6 +178,9 @@ class ChatBasicResponse(BaseModel):
     agent_answers: dict[int, list[AgentAnswer]] | None = None
     agent_sub_queries: dict[int, dict[int, list[AgentSubQuery]]] | None = None
     agent_refined_answer_improvement: bool | None = None
+
+    # Chat session ID for tracking conversation continuity
+    chat_session_id: UUID | None = None
 
 
 class OneShotQARequest(ChunkContext):

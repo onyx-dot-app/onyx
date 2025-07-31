@@ -203,7 +203,9 @@ class IndexAttemptManager:
             )
 
             if index_attempt.status and index_attempt.status.is_terminal():
-                print(f"IndexAttempt {index_attempt_id} completed")
+                print(
+                    f"IndexAttempt {index_attempt_id} completed with status {index_attempt.status}"
+                )
                 return
 
             elapsed = time.monotonic() - start
@@ -216,6 +218,7 @@ class IndexAttemptManager:
                 f"Waiting for IndexAttempt {index_attempt_id} to complete. "
                 f"elapsed={elapsed:.2f} timeout={timeout}"
             )
+            time.sleep(5)
 
     @staticmethod
     def get_index_attempt_errors_for_cc_pair(

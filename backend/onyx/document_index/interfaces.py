@@ -45,7 +45,7 @@ class IndexBatchParams:
     Information necessary for efficiently indexing a batch of documents
     """
 
-    doc_id_to_previous_chunk_cnt: dict[str, int | None]
+    doc_id_to_previous_chunk_cnt: dict[str, int]
     doc_id_to_new_chunk_cnt: dict[str, int]
     tenant_id: str
     large_chunks_enabled: bool
@@ -91,6 +91,7 @@ class DocumentMetadata:
     from_ingestion_api: bool = False
 
     external_access: ExternalAccess | None = None
+    doc_metadata: dict[str, Any] | None = None
 
 
 @dataclass

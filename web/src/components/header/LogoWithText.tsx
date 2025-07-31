@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { pageType } from "@/app/chat/sessionSidebar/types";
+import { pageType } from "@/components/sidebar/types";
 import { Logo } from "../logo/Logo";
 import Link from "next/link";
 import { LogoComponent } from "@/components/logo/FixedLogo";

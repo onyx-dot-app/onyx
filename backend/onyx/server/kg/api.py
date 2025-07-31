@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.entities import get_entity_stats_by_grounded_source_name
 from onyx.db.entity_type import get_configured_entity_types
 from onyx.db.entity_type import update_entity_types_and_related_connectors__commit
 from onyx.db.kg_config import disable_kg
@@ -28,6 +29,8 @@ from onyx.server.kg.models import EnableKGConfigRequest
 from onyx.server.kg.models import EntityType
 from onyx.server.kg.models import KGConfig
 from onyx.server.kg.models import KGConfig as KGConfigAPIModel
+from onyx.server.kg.models import SourceAndEntityTypeView
+from onyx.server.kg.models import SourceStatistics
 from onyx.tools.built_in_tools import get_search_tool
 
 
@@ -54,7 +57,7 @@ def get_kg_exposed(_: User | None = Depends(current_admin_user)) -> bool:
 def reset_kg(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[EntityType]:
+) -> SourceAndEntityTypeView:
     reset_full_kg_index__commit(db_session)
     populate_missing_default_entity_types__commit(db_session=db_session)
     return get_kg_entity_types(db_session=db_session)
@@ -173,11 +176,30 @@ def enable_or_disable_kg(
 def get_kg_entity_types(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[EntityType]:
+) -> SourceAndEntityTypeView:
     # when using for the first time, populate with default entity types
-    kg_entity_types = get_configured_entity_types(db_session=db_session)
+    entity_types = {
+        source_name: [EntityType.from_model(et) for et in ets]
+        for source_name, ets in get_configured_entity_types(
+            db_session=db_session
+        ).items()
+    }
 
-    return [EntityType.from_model(kg_entity_type) for kg_entity_type in kg_entity_types]
+    source_statistics = {
+        source_name: SourceStatistics(
+            source_name=source_name,
+            last_updated=last_updated,
+            entities_count=entities_count,
+        )
+        for source_name, (
+            last_updated,
+            entities_count,
+        ) in get_entity_stats_by_grounded_source_name(db_session=db_session).items()
+    }
+
+    return SourceAndEntityTypeView(
+        source_statistics=source_statistics, entity_types=entity_types
+    )
 
 
 @admin_router.put("/entity-types")

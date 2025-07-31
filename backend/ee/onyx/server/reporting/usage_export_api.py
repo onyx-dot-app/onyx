@@ -53,7 +53,7 @@ def read_usage_report(
     db_session: Session = Depends(get_session),
 ) -> Response:
     try:
-        file = get_usage_report_data(db_session, report_name)
+        file = get_usage_report_data(report_name)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

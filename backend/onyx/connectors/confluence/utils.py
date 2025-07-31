@@ -23,7 +23,6 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import OnyxExtensionType
@@ -224,19 +223,17 @@ def _process_image_attachment(
     """Process an image attachment by saving it without generating a summary."""
     try:
         # Use the standardized image storage and section creation
-        with get_session_with_current_tenant() as db_session:
-            section, file_name = store_image_and_create_section(
-                db_session=db_session,
-                image_data=raw_bytes,
-                file_id=Path(attachment["id"]).name,
-                display_name=attachment["title"],
-                media_type=media_type,
-                file_origin=FileOrigin.CONNECTOR,
-            )
-            logger.info(f"Stored image attachment with file name: {file_name}")
+        section, file_name = store_image_and_create_section(
+            image_data=raw_bytes,
+            file_id=Path(attachment["id"]).name,
+            display_name=attachment["title"],
+            media_type=media_type,
+            file_origin=FileOrigin.CONNECTOR,
+        )
+        logger.info(f"Stored image attachment with file name: {file_name}")
 
-            # Return empty text but include the file_name for later processing
-            return AttachmentProcessingResult(text="", file_name=file_name, error=None)
+        # Return empty text but include the file_name for later processing
+        return AttachmentProcessingResult(text="", file_name=file_name, error=None)
     except Exception as e:
         msg = f"Image storage failed for {attachment['title']}: {e}"
         logger.error(msg, exc_info=e)

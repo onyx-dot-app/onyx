@@ -5,6 +5,8 @@ from typing import Protocol
 from typing import TYPE_CHECKING
 
 from onyx.context.search.models import InferenceChunk
+from onyx.db.utils import DocumentRow
+from onyx.db.utils import SortOrder
 
 # Avoid circular imports
 if TYPE_CHECKING:
@@ -15,14 +17,34 @@ if TYPE_CHECKING:
 
 
 class FetchAllDocumentsFunction(Protocol):
-    """Protocol for a function that fetches all document IDs for a connector credential pair."""
+    """Protocol for a function that fetches documents for a connector credential pair.
 
-    def __call__(self) -> list[str]:
+    This protocol defines the interface for functions that retrieve documents
+    from the database, typically used in permission synchronization workflows.
+    """
+
+    def __call__(
+        self,
+        sort_order: SortOrder | None,
+    ) -> list[DocumentRow]:
         """
-        Returns a list of document IDs for a connector credential pair.
+        Fetches documents for a connector credential pair.
+        """
+        ...
 
-        This is typically used to determine which documents should no longer be
-        accessible during the document sync process.
+
+class FetchAllDocumentsIdsFunction(Protocol):
+    """Protocol for a function that fetches document IDs for a connector credential pair.
+
+    This protocol defines the interface for functions that retrieve document IDs
+    from the database, typically used in permission synchronization workflows.
+    """
+
+    def __call__(
+        self,
+    ) -> list[str]:
+        """
+        Fetches document IDs for a connector credential pair.
         """
         ...
 
@@ -32,6 +54,7 @@ DocSyncFuncType = Callable[
     [
         "ConnectorCredentialPair",
         FetchAllDocumentsFunction,
+        FetchAllDocumentsIdsFunction,
         Optional["IndexingHeartbeatInterface"],
     ],
     Generator["DocExternalAccess", None, None],

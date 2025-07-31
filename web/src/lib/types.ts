@@ -434,6 +434,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  Imap = "imap",
 
   // Federated Connectors
   FederatedSlack = "federated_slack",
@@ -454,6 +455,7 @@ export const validAutoSyncSources = [
   ValidSources.Gmail,
   ValidSources.Slack,
   ValidSources.Salesforce,
+  ValidSources.GitHub,
 ] as const;
 
 // Create a type from the array elements
