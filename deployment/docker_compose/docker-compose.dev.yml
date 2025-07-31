@@ -573,7 +573,6 @@ services:
 volumes:
   db_volume:
   vespa_volume:
-  redis_volume:
   llama_stack_logs:
   llama_stack_data:
   minio_data:
