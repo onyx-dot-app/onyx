@@ -219,3 +219,21 @@ def web_html_cleanup(
     cleaned_text = page_text.replace("\u200b", "")
 
     return ParsedHTML(title=title, cleaned_text=cleaned_text)
+
+def remove_by_selector(soup: bs4.BeautifulSoup, selector: list[str]):
+    tag = soup.select_one("meta[name='remove_by_selector']")
+    if tag and tag.has_attr("content"):
+        page_selector = [tag["content"].strip()]
+    else:
+        page_selector = []
+
+    for sel in (selector + page_selector):
+        sel = sel.strip()
+        if not sel:
+            continue
+        for s in sel.split(","):
+            s = s.strip()
+            if not s:
+                continue
+            for tag in soup.select(s):
+                tag.decompose()
