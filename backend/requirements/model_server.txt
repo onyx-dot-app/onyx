@@ -12,7 +12,7 @@ sentence-transformers==4.0.2
 sentencepiece==0.2.0
 setfit==1.1.1
 torch==2.6.0
-transformers==4.49.0
+transformers==4.52.1
 uvicorn==0.21.1
 voyageai==0.2.3
 litellm==1.72.2
