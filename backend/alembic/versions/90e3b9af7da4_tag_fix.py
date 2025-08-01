@@ -7,10 +7,16 @@ Create Date: 2025-08-01 20:58:14.607624
 """
 
 import os
+from typing import Generator
 
 from alembic import op
 import sqlalchemy as sa
 from onyx.utils.logger import setup_logger
+import json
+from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
+from onyx.db.search_settings import SearchSettings
+from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 
 logger = setup_logger()
 
@@ -112,7 +118,170 @@ def remove_old_tags() -> None:
     the document got reindexed, the old tag would not be removed.
     This function removes those old tags by comparing it against the tags in vespa.
     """
-    # TODO:
+    current_search_settings, future_search_settings = active_search_settings()
+    document_index = get_default_document_index(
+        current_search_settings, future_search_settings
+    )
+
+    # Get the index name
+    if hasattr(document_index, "index_name"):
+        index_name = document_index.index_name
+    else:
+        # Default index name if we can't get it from the document_index
+        index_name = "danswer_index"
+
+    for batch in _get_batch_documents_with_multiple_tags():
+        n_deleted = 0
+
+        for document_id in batch:
+            true_metadata = _get_vespa_metadata(document_id, index_name)
+            tags = _get_document_tags(document_id)
+
+            # identify document__tags to delete
+            to_delete: list[str] = []
+            for tag_id, tag_key, tag_value in tags:
+                true_val = true_metadata.get(tag_key, "")
+                if (isinstance(true_val, list) and tag_value not in true_val) or (
+                    isinstance(true_val, str) and tag_value != true_val
+                ):
+                    to_delete.append(str(tag_id))
+
+            if not to_delete:
+                continue
+
+            # delete old document__tags
+            bind = op.get_bind()
+            result = bind.execute(
+                sa.text(
+                    f"""
+                    DELETE FROM document__tag
+                    WHERE document_id = '{document_id}'
+                    AND tag_id IN ({','.join(to_delete)})
+                    """
+                )
+            )
+            n_deleted += result.rowcount
+        print(f"Processed {len(batch)} documents and deleted {n_deleted} tags")
+
+
+def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
+    result = op.get_bind().execute(
+        sa.text(
+            """
+        SELECT * FROM search_settings WHERE status = 'PRESENT' ORDER BY id DESC LIMIT 1
+        """
+        )
+    )
+    search_settings_fetch = result.fetchall()
+    search_settings = (
+        SearchSettings(**search_settings_fetch[0]._asdict())
+        if search_settings_fetch
+        else None
+    )
+
+    result2 = op.get_bind().execute(
+        sa.text(
+            """
+        SELECT * FROM search_settings WHERE status = 'FUTURE' ORDER BY id DESC LIMIT 1
+        """
+        )
+    )
+    search_settings_future_fetch = result2.fetchall()
+    search_settings_future = (
+        SearchSettings(**search_settings_future_fetch[0]._asdict())
+        if search_settings_future_fetch
+        else None
+    )
+
+    if not isinstance(search_settings, SearchSettings):
+        raise RuntimeError(
+            "current search settings is of type " + str(type(search_settings))
+        )
+    if (
+        not isinstance(search_settings_future, SearchSettings)
+        and search_settings_future is not None
+    ):
+        raise RuntimeError(
+            "future search settings is of type " + str(type(search_settings_future))
+        )
+
+    return search_settings, search_settings_future
+
+
+def _get_batch_documents_with_multiple_tags(
+    batch_size: int = 128,
+) -> Generator[list[str], None, None]:
+    """
+    Returns a list of document ids which contain a one to many tag.
+    The document may either contain a list metadata value, or may contain leftover
+    old tags from reindexing.
+    """
+    offset_clause = ""
+    bind = op.get_bind()
+
+    while True:
+        batch = bind.execute(
+            sa.text(
+                f"""
+                SELECT DISTINCT document__tag.document_id
+                FROM tag
+                JOIN document__tag ON tag.id = document__tag.tag_id
+                GROUP BY tag.tag_key, tag.source, document__tag.document_id
+                HAVING count(*) > 1 {offset_clause}
+                ORDER BY document__tag.document_id
+                LIMIT {batch_size}
+                """
+            )
+        ).fetchall()
+        if not batch:
+            break
+        doc_ids = [document_id for document_id, in batch]
+        yield doc_ids
+        offset_clause = f"AND document__tag.document_id > '{doc_ids[-1]}'"
+
+
+def _get_vespa_metadata(
+    document_id: str, index_name: str
+) -> dict[str, str | list[str]]:
+    url = DOCUMENT_ID_ENDPOINT.format(index_name=index_name)
+
+    # Document-Selector language
+    selection = (
+        f"{index_name}.document_id=='{document_id}' and {index_name}.chunk_id==0"
+    )
+
+    params = {
+        "selection": selection,
+        "wantedDocumentCount": 1,
+        "fieldSet": f"{index_name}:metadata",
+    }
+
+    with get_vespa_http_client() as client:
+        resp = client.get(url, params=params)
+        resp.raise_for_status()
+
+    docs = resp.json().get("documents", [])
+    if not docs:
+        raise RuntimeError(f"No chunk-0 found for document {document_id}")
+
+    # for some reason, metadata is a string
+    metadata = docs[0]["fields"]["metadata"]
+    return json.loads(metadata)
+
+
+def _get_document_tags(document_id: str) -> list[tuple[int, str, str]]:
+    bind = op.get_bind()
+    result = bind.execute(
+        sa.text(
+            f"""
+            SELECT tag.id, tag.tag_key, tag.tag_value
+            FROM tag
+            JOIN document__tag ON tag.id = document__tag.tag_id
+            WHERE document__tag.document_id = '{document_id}'
+            """
+        )
+    ).fetchall()
+    return result
 
 
 def upgrade() -> None:
