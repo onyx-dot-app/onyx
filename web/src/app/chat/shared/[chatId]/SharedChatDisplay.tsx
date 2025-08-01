@@ -7,7 +7,7 @@ import {
   buildLatestMessageChain,
   getCitedDocumentsFromMessage,
   processRawChatHistory,
-} from "../../lib";
+} from "../../services/lib";
 import { AIMessage, HumanMessage } from "../../message/Messages";
 import { AgenticMessage } from "../../message/AgenticMessage";
 import { Callout } from "@/components/ui/callout";
@@ -17,7 +17,7 @@ import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
-import { DocumentResults } from "../../documentSidebar/DocumentResults";
+import { DocumentResults } from "../../components/documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
 import FunctionalHeader from "@/components/chat/Header";
 import FixedLogo from "@/components/logo/FixedLogo";

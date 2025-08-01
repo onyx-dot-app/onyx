@@ -1,4 +1,4 @@
-import { SourceChip } from "../input/ChatInputBar";
+import { SourceChip } from "../components/input/ChatInputBar";
 
 import { useEffect } from "react";
 import { useState } from "react";

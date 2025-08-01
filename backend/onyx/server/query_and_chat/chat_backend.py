@@ -96,6 +96,9 @@ from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from onyx.server.query_and_chat.streaming_utils import (
+    create_simplified_packets_for_session,
+)
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
@@ -237,6 +240,14 @@ def get_chat_session(
         prefetch_tool_calls=True,
     )
 
+    # Convert messages to ChatMessageDetail format
+    chat_message_details = [
+        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
+    ]
+
+    # Create simplified packets for the session
+    simplified_packets = create_simplified_packets_for_session(chat_message_details)
+
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
         description=chat_session.description,
@@ -249,13 +260,13 @@ def get_chat_session(
             chat_session.persona.icon_shape if chat_session.persona else None
         ),
         current_alternate_model=chat_session.current_alternate_model,
-        messages=[
-            translate_db_message_to_chat_message_detail(msg) for msg in session_messages
-        ],
+        messages=chat_message_details,
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
         deleted=chat_session.deleted,
+        # specifically for the Onyx Chat UI
+        packets=simplified_packets,
     )
 
 

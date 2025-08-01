@@ -8,7 +8,7 @@ import React, {
 import { FiSearch } from "react-icons/fi";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { BaseQuestionIdentifier, SubQuestionDetail } from "../interfaces";
-import { SourceChip2 } from "../input/ChatInputBar";
+import { SourceChip2 } from "../components/input/ChatInputBar";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { openDocument } from "@/lib/search/utils";
 import { SourcesDisplay } from "./SourcesDisplay";
