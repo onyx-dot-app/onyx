@@ -7,7 +7,8 @@ import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
-from uuid import UUID
+from uuid #import UUID                        ######## just importinng all of it for shiggles
+from typing import Dict, Any                    ######### other new import hereeeeeeeeeeeeeeeeee
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -16,6 +17,7 @@ from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
+from fastapi import BackgroundTasks                # new import hereeeeeeeeeeeeeeeeeeeeeeeeee
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -927,3 +929,193 @@ async def search_chats(
         has_more=has_more,
         next_page=page + 1 if has_more else None,
     )
+
+#################### adding uesr file upload progress code hereeeeeeeeeeeeeeeeeeeee ##################################
+# In-memory storage for progress tracking (in production, use Redis or similar)
+upload_progress: Dict[str, Dict[str, Any]] = {}
+
+@router.post("/file")
+def upload_files_for_chat(
+    files: list[UploadFile],
+    background_tasks: BackgroundTasks,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> dict[str, any]:
+    """Upload files with progress tracking"""
+    
+    # Generate unique upload session ID
+    upload_id = str(uuid.uuid4())
+    
+    # Initialize progress tracking
+    upload_progress[upload_id] = {
+        "status": "uploading",
+        "progress": 0,
+        "files": {file.filename: {"status": "uploading", "progress": 0} for file in files},
+        "total_files": len(files),
+        "completed_files": 0
+    }
+    
+    # Process files in background
+    background_tasks.add_task(
+        process_files_with_progress, 
+        files, 
+        upload_id, 
+        db_session, 
+        user
+    )
+    
+    return {
+        "upload_id": upload_id,
+        "status": "processing",
+        "message": "Files are being processed"
+    }
+
+async def process_files_with_progress(
+    files: list[UploadFile],
+    upload_id: str,
+    db_session: Session,
+    user: User | None
+):
+    """Process files with progress updates"""
+    try:
+        file_descriptors = []
+        
+        for i, file in enumerate(files):
+            filename = file.filename or f"file_{i}"
+            
+            # Update file status to processing
+            upload_progress[upload_id]["files"][filename]["status"] = "processing"
+            upload_progress[upload_id]["files"][filename]["progress"] = 25
+            
+            # Validate file
+            if not is_file_type_allowed(file):
+                upload_progress[upload_id]["files"][filename]["status"] = "error"
+                upload_progress[upload_id]["files"][filename]["error"] = "File type not allowed"
+                continue
+            
+            file_content = await file.read()
+            file_size = len(file_content)
+            
+            if file_size > MAX_FILE_SIZE:
+                upload_progress[upload_id]["files"][filename]["status"] = "error"
+                upload_progress[upload_id]["files"][filename]["error"] = "File too large"
+                continue
+            
+            # Update progress - file validated
+            upload_progress[upload_id]["files"][filename]["progress"] = 50
+            
+            # Process file based on type
+            file_type = mime_type_to_chat_file_type(file.content_type)
+            
+            # Save original file
+            file_id = file_store.save_file(
+                content=io.BytesIO(file_content),
+                display_name=filename,
+                file_origin=FileOrigin.CHAT_UPLOAD,
+                file_type=file.content_type,
+            )
+            
+            # Update progress - file saved
+            upload_progress[upload_id]["files"][filename]["progress"] = 75
+            upload_progress[upload_id]["files"][filename]["status"] = "indexing"
+            
+            # Extract text if document
+            text_file_id = None
+            if file_type == ChatFileType.DOC:
+                extracted_text_io = io.BytesIO(file_content)
+                extracted_text = extract_file_text(
+                    file=extracted_text_io,
+                    file_name=filename,
+                )
+                
+                text_file_id = file_store.save_file(
+                    content=io.BytesIO(extracted_text.encode()),
+                    display_name=filename,
+                    file_origin=FileOrigin.CHAT_UPLOAD,
+                    file_type="text/plain",
+                )
+            
+            # Create database records
+            user_files = create_user_files([file], RECENT_DOCS_FOLDER_ID, user, db_session)
+            
+            # Create connector for RAG indexing
+            connector_base = ConnectorBase(
+                name=f"UserFile-{int(time.time())}",
+                source=DocumentSource.FILE,
+                input_type=InputType.LOAD_STATE,
+                connector_specific_config={
+                    "file_locations": [user_file.file_id for user_file in user_files],
+                    "zip_metadata": {},
+                },
+            )
+            
+            # Create connector and credential pair
+            connector = create_connector(connector_base, user, db_session)
+            credential = create_credential(db_session, user, connector.source)
+            create_connector_credential_pair(connector.id, credential.id, user, db_session)
+            
+            # Create file descriptor
+            file_descriptor = FileDescriptor(
+                id=file_id,
+                type=file_type,
+                name=filename,
+                size=file_size,
+                text_file_id=text_file_id,
+            )
+            file_descriptors.append(file_descriptor)
+            
+            # Mark file as complete
+            upload_progress[upload_id]["files"][filename]["status"] = "complete"
+            upload_progress[upload_id]["files"][filename]["progress"] = 100
+            upload_progress[upload_id]["completed_files"] += 1
+            
+            # Small delay to show progress
+            await asyncio.sleep(0.1)
+        
+        # Mark entire upload as complete
+        upload_progress[upload_id]["status"] = "complete"
+        upload_progress[upload_id]["progress"] = 100
+        upload_progress[upload_id]["file_descriptors"] = [fd.dict() for fd in file_descriptors]
+        
+        # Clean up progress after 5 minutes
+        asyncio.create_task(cleanup_progress(upload_id, 300))
+        
+    except Exception as e:
+        upload_progress[upload_id]["status"] = "error"
+        upload_progress[upload_id]["error"] = str(e)
+
+@router.get("/file/progress/{upload_id}")
+def get_upload_progress(upload_id: str):
+    """Get upload progress for a specific upload session"""
+    if upload_id not in upload_progress:
+        return {"error": "Upload session not found"}
+    
+    return upload_progress[upload_id]
+
+@router.get("/file/progress/{upload_id}/stream")
+def stream_upload_progress(upload_id: str):
+    """Stream upload progress using Server-Sent Events"""
+    def generate():
+        while upload_id in upload_progress:
+            progress_data = upload_progress[upload_id]
+            yield f"data: {json.dumps(progress_data)}\n\n"
+            
+            if progress_data["status"] in ["complete", "error"]:
+                break
+                
+            asyncio.sleep(0.5)
+    
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
+
+async def cleanup_progress(upload_id: str, delay: int):
+    """Clean up progress data after delay"""
+    await asyncio.sleep(delay)
+    if upload_id in upload_progress:
+        del upload_progress[upload_id]
+
+
+###################### ends hereeeeeeeeeeeeee ######################################################
