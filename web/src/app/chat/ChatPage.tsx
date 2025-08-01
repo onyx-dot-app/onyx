@@ -140,6 +140,12 @@ import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
 import { useFederatedConnectors } from "@/lib/hooks";
 import { Button } from "@/components/ui/button";
+//////////////////////////////////////////////////////////////// new imports ///////////////////////////////////////////////
+import { useUploadProgress } from '../../hooks/useUploadProgress';
+import { UploadProgressList } from '../../components/UploadProgressIndicator';
+import { uploadFilesForChatWithRealProgress } from './lib';
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -184,6 +190,15 @@ export function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const {                                      //////////////// added for upload progress ///////////////////////////
+    uploadProgress,
+    startUpload,
+    setProcessingStage,
+    setError,
+    completeUpload,
+    removeProgress
+  } = useUploadProgress();
+  
   const {
     chatSessions,
     ccPairs,
@@ -3562,6 +3577,10 @@ export function ChatPage({
           </div>
           <FixedLogo backgroundToggled={sidebarVisible || showHistorySidebar} />
         </div>
+          <UploadProgressList                                              ////////////////////////// added ///////////////////////
+            uploadProgress={uploadProgress}
+            onRemove={removeProgress}
+          />
       </div>
     </>
   );
