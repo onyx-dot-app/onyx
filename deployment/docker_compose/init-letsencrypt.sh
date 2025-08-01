@@ -22,11 +22,21 @@ docker_compose_cmd() {
 COMPOSE_CMD=$(docker_compose_cmd)
 
 # Only add www to domain list if domain wasn't explicitly set as a subdomain
+# <<<<<<< n-4t
 # if [[ ! $DOMAIN == www.* ]]; then
 #     domains=("$DOMAIN" "www.$DOMAIN")
 # else
 domains=("$DOMAIN")
 # fi
+# =======
+#if [[ ! $DOMAIN == www.* ]]; then
+#    domains=("$DOMAIN" "www.$DOMAIN")
+#else
+#    domains=("$DOMAIN")
+#fi
+
+# domains=("$DOMAIN")
+# >>>>>>> main
 
 rsa_key_size=4096
 data_path="../data/certbot"

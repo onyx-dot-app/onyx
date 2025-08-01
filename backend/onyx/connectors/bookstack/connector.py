@@ -21,12 +21,24 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 
+# <<<<<<< n-4t
+# import base64
+# import logging
+# =======
+# ##############################################################################################
 import base64
 import logging
+#import re
+#from bs4 import BeautifulSoup
+# >>>>>>> main
 from io import BytesIO
 from onyx.file_processing.extract_file_text import extract_text_and_images, ExtractionResult
 
 logger = logging.getLogger(__name__)
+# <<<<<<< n-4t
+# =======
+# ##############################################################################################
+# >>>>>>> main
 
 class BookstackConnector(LoadConnector, PollConnector):
     def __init__(
@@ -165,45 +177,48 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         page_html = "<h1>" + html.escape(title) + "</h1>" + str(page_data.get("html"))
         text = parse_html_page_basic(page_html)
-        
+
         attachment_sections = []
-        
         try:
+            # Get all attachments - we need to filter by page ID later
             all_attachments = bookstack_client.get("/attachments", {"filter[uploaded_to]": page_id}).get("data", [])
-            
             for attachment in all_attachments:
                 attachment_id = str(attachment.get("id"))
                 try:
+                    # Get full attachment details
                     attachment_details = bookstack_client.get(f"/attachments/{attachment_id}", {})
-                    
                     attachment_name = attachment_details.get("name", "Unnamed Attachment")
                     is_external = attachment_details.get("external", False)
                     content = attachment_details.get("content", "")
                     extension = attachment_details.get("extension", "")
-                    
+
+                    # Determine filename
                     file_name = attachment_name
                     if extension and not file_name.endswith(f".{extension}"):
                         file_name += f".{extension}"
-                    
+                    # Build BookStack URL for this attachment
                     attachment_url = bookstack_client.build_app_url(f"/attachments/{attachment_id}")
-                    
                     if is_external:
+                        # External link (like SharePoint)
                         link_url = content
                         attachment_sections.append(TextSection(
                             link=attachment_url,
                             text=f"EXTERNAL ATTACHMENT: {file_name}\nLink: {link_url}"
                         ))
                     else:
+
+                        # File attachment with base64 content
                         if not content:
                             logger.warning(f"No content for attachment {attachment_id}")
                             continue
-
+                        
                         try:
                             file_bytes = base64.b64decode(content)
                         except Exception as decode_error:
                             logger.error(f"Failed to decode attachment {attachment_id}: {str(decode_error)}")
                             continue
                         
+                        # Process the file content
                         file_content = BytesIO(file_bytes)
                         extraction_result = extract_text_and_images(
                             file=file_content,
@@ -229,6 +244,7 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         time.sleep(0.1)
         
+        # Combine page content with attachments
         all_sections = [TextSection(link=url, text=text)] + attachment_sections
         
         return Document(

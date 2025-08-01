@@ -49,7 +49,7 @@ nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
 openai==1.75.0
-openpyxl==3.0.10
+openpyxl==3.1.2
 passlib==1.7.4
 playwright==1.41.2
 psutil==5.9.5
@@ -101,6 +101,8 @@ prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 prometheus_fastapi_instrumentator==7.1.0
 sendgrid==6.11.0
+
 PyMuPDF>=1.23.0   # these are new
 requests>=2.31.0  #
 Pillow>=10.0.0    #
+
