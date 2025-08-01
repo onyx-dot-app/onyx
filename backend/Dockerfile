@@ -38,10 +38,12 @@ RUN apt-get update && \
         gcc \
         nano \
         vim \
+
         ############                          ###########################
         tesseract-ocr \        
         tesseract-ocr-eng \   
         ######## ################################                             #####################3
+
         poppler-utils && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean

@@ -21,16 +21,24 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 
-##############################################################################################
+# <<<<<<< n-4t
+# import base64
+# import logging
+# =======
+# ##############################################################################################
 import base64
 import logging
 #import re
 #from bs4 import BeautifulSoup
+# >>>>>>> main
 from io import BytesIO
 from onyx.file_processing.extract_file_text import extract_text_and_images, ExtractionResult
 
 logger = logging.getLogger(__name__)
-##############################################################################################
+# <<<<<<< n-4t
+# =======
+# ##############################################################################################
+# >>>>>>> main
 
 class BookstackConnector(LoadConnector, PollConnector):
     def __init__(
@@ -169,6 +177,7 @@ class BookstackConnector(LoadConnector, PollConnector):
         )
         page_html = "<h1>" + html.escape(title) + "</h1>" + str(page_data.get("html"))
         text = parse_html_page_basic(page_html)
+
         attachment_sections = []
         try:
             # Get all attachments - we need to filter by page ID later
@@ -197,6 +206,7 @@ class BookstackConnector(LoadConnector, PollConnector):
                             text=f"EXTERNAL ATTACHMENT: {file_name}\nLink: {link_url}"
                         ))
                     else:
+
                         # File attachment with base64 content
                         if not content:
                             logger.warning(f"No content for attachment {attachment_id}")

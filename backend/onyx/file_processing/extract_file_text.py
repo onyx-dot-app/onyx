@@ -278,7 +278,11 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:             
         logger.info(f"Normal extraction: {total_normal_text} chars, meaningful: {len(meaningful_text)} chars")
         
         # If very little meaningful text, use Ollama OCR
+# <<<<<<< n-4t
+#         if len(meaningful_text) < 100:
+# =======
         if len(meaningful_text) < 500:
+# >>>>>>> main
             logger.info("PDF appears to be image-based, checking Ollama OCR availability...")
             
             if is_ollama_ocr_available():

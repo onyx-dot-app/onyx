@@ -608,6 +608,10 @@ class Document(Base):
     retrieval_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="document"
     )
+
+    doc_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True, default=None
+    )
     tags = relationship(
         "Tag",
         secondary=Document__Tag.__table__,

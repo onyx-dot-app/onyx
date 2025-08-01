@@ -17,7 +17,11 @@ class OllamaOCRExtractor:
     """OCR extraction using existing Ollama vision models."""
     
     def __init__(self, 
+# <<<<<<< n-4t
+#                  model_name: str = "llama3.2-vision:11b",
+# =======
                  model_name: str = "granite3.2-vision",
+# >>>>>>> main
                  ollama_url: str = None):
         # Try to detect Ollama URL from environment or use common defaults
         if ollama_url is None:
@@ -82,8 +86,12 @@ class OllamaOCRExtractor:
             
             # Look for vision-capable models (in order of preference)
             vision_models = [
+# <<<<<<< n-4t
+#                 "llama3.2-vision:11b"
+# =======
                 "llama3.2-vision:11b",
-		"granite3.2-vision:latest"
+		            "granite3.2-vision:latest"
+# >>>>>>> main
                 # "llava:latest", 
                 # "llava:13b", 
                 # "llava:7b",

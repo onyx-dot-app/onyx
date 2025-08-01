@@ -418,6 +418,26 @@ def extract_zip_metadata(zf: zipfile.ZipFile) -> dict[str, Any]:
     return zip_metadata
 
 
+def is_zip_file(file: UploadFile) -> bool:
+    """
+    Check if the file is a zip file by content type or filename.
+    """
+    return bool(
+        (
+            file.content_type
+            and file.content_type.startswith(
+                (
+                    "application/zip",
+                    "application/x-zip-compressed",  # May be this in Windows
+                    "application/x-zip",
+                    "multipart/x-zip",
+                )
+            )
+        )
+        or (file.filename and file.filename.lower().endswith(".zip"))
+    )
+
+
 def upload_files(files: list[UploadFile]) -> FileUploadResponse:
     for file in files:
         if not file.filename:
@@ -434,7 +454,7 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
         file_store = get_default_file_store()
         seen_zip = False
         for file in files:
-            if file.content_type and file.content_type.startswith("application/zip"):
+            if is_zip_file(file):
                 if seen_zip:
                     raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
                 seen_zip = True
