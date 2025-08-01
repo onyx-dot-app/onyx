@@ -677,8 +677,8 @@ class KGEntityType(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    grounded_source_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=False
+    grounded_source_name: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=False
     )
 
     entity_values: Mapped[list[str]] = mapped_column(
