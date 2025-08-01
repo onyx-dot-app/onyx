@@ -7,10 +7,20 @@ import {
   ConnectorStatus,
   CCPairBasicInfo,
   FederatedConnectorDetail,
+  ValidSources,
+  ConnectorIndexingStatusLiteResponse,
+  IndexingStatusRequest,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useContext, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import { parseLlmDescriptor } from "./llm/utils";
@@ -78,7 +88,124 @@ export const useObjectState = <T>(
 };
 
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
+const INDEXING_STATUS_PAGINATED_URL =
+  "/api/manage/admin/connector/indexing-status-with-pagination";
 const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
+
+export const useConnectorIndexingStatusWithPagination = (
+  filters: Omit<IndexingStatusRequest, "source" | "source_to_page"> = {},
+  refreshInterval = 30000
+) => {
+  const { mutate } = useSWRConfig();
+  //maintains the current page for each source
+  const [sourcePages, setSourcePages] = useState<Record<ValidSources, number>>(
+    {} as Record<ValidSources, number>
+  );
+  const [mergedData, setMergedData] = useState<
+    ConnectorIndexingStatusLiteResponse[]
+  >([]);
+  //maintains the loading state for each source
+  const [sourceLoadingStates, setSourceLoadingStates] = useState<
+    Record<ValidSources, boolean>
+  >({} as Record<ValidSources, boolean>);
+
+  //ref to maintain the current source pages for the main request
+  const sourcePagesRef = useRef(sourcePages);
+  sourcePagesRef.current = sourcePages;
+
+  // Main request that includes current pagination state
+  const mainRequest: IndexingStatusRequest = useMemo(
+    () => ({
+      secondary_index: false,
+      access_type_filters: [],
+      last_status_filters: [],
+      docs_count_operator: null,
+      docs_count_value: null,
+      source_to_page: sourcePagesRef.current, // Use current pagination state
+      ...filters,
+    }),
+    [filters]
+  );
+
+  const swrKey = [INDEXING_STATUS_PAGINATED_URL, JSON.stringify(mainRequest)];
+
+  // Main data fetch with auto-refresh
+  const { data, isLoading, error } = useSWR<
+    ConnectorIndexingStatusLiteResponse[]
+  >(swrKey, () => fetchConnectorIndexingStatusPaginated(mainRequest), {
+    refreshInterval,
+  });
+
+  // Update merged data when main data changes
+  useEffect(() => {
+    if (data) {
+      setMergedData(data);
+    }
+  }, [data]);
+
+  // Function to handle page changes for a specific source
+  const handlePageChange = useCallback(
+    async (source: ValidSources, page: number) => {
+      // Update the source page state
+      setSourcePages((prev) => ({ ...prev, [source]: page }));
+
+      const sourceRequest: IndexingStatusRequest = {
+        ...filters,
+        source: source,
+        source_to_page: { [source]: page } as Record<ValidSources, number>,
+      };
+      setSourceLoadingStates((prev) => ({ ...prev, [source]: true }));
+
+      try {
+        const sourceData =
+          await fetchConnectorIndexingStatusPaginated(sourceRequest);
+        if (sourceData && sourceData.length > 0) {
+          setMergedData((prevData) =>
+            prevData
+              .map((existingSource) =>
+                existingSource.source === source
+                  ? sourceData[0]
+                  : existingSource
+              )
+              .filter(
+                (item): item is ConnectorIndexingStatusLiteResponse =>
+                  item !== undefined
+              )
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Failed to fetch page ${page} for source ${source}:`,
+          error
+        );
+      } finally {
+        setSourceLoadingStates((prev) => ({ ...prev, [source]: false }));
+      }
+    },
+    [filters]
+  );
+
+  // Function to refresh all data (maintains current pagination)
+  const refreshAllData = useCallback(() => {
+    mutate(swrKey);
+  }, [mutate, swrKey]);
+
+  // Reset pagination when filters change (but not search)
+  const resetPagination = useCallback(() => {
+    setSourcePages({} as Record<ValidSources, number>);
+  }, []);
+
+  return {
+    data: mergedData,
+    isLoading,
+    error,
+    handlePageChange,
+    sourcePages,
+    sourceLoadingStates,
+    refreshAllData,
+    resetPagination,
+  };
+};
 
 export const useConnectorCredentialIndexingStatus = (
   refreshInterval = 30000, // 30 seconds
@@ -670,6 +797,32 @@ export const useUserGroups = (): {
     ...swrResponse,
     refreshUserGroups: () => mutate(USER_GROUP_URL),
   };
+};
+
+export const fetchConnectorIndexingStatusPaginated = async (
+  request: IndexingStatusRequest = {}
+): Promise<ConnectorIndexingStatusLiteResponse[]> => {
+  const response = await fetch(INDEXING_STATUS_PAGINATED_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      secondary_index: false,
+      access_type_filters: [],
+      last_status_filters: [],
+      docs_count_operator: null,
+      docs_count_value: null,
+      source_to_page: {},
+      ...request,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
 };
 
 const MODEL_DISPLAY_NAMES: { [key: string]: string } = {

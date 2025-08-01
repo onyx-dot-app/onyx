@@ -116,12 +116,13 @@ def get_connector_credential_pairs_for_user(
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
     include_user_files: bool = False,
+    order_by_desc: bool = False,
+    source: DocumentSource | None = None,
 ) -> list[ConnectorCredentialPair]:
     if eager_load_user:
         assert (
             eager_load_credential
         ), "eager_load_credential must be True if eager_load_user is True"
-
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
@@ -134,11 +135,20 @@ def get_connector_credential_pairs_for_user(
         stmt = stmt.options(load_opts)
 
     stmt = _add_user_filters(stmt, user, get_editable)
+
+    if source:
+        stmt = stmt.join(ConnectorCredentialPair.connector).where(
+            Connector.source == source.value
+        )
+
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
 
     if not include_user_files:
         stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
+
+    if order_by_desc:
+        stmt = stmt.order_by(desc(ConnectorCredentialPair.id))
 
     return list(db_session.scalars(stmt).unique().all())
 
@@ -153,16 +163,20 @@ def get_connector_credential_pairs_for_user_parallel(
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
+    order_by_desc: bool = False,
+    source: DocumentSource | None = None,
 ) -> list[ConnectorCredentialPair]:
     with get_session_with_current_tenant() as db_session:
         return get_connector_credential_pairs_for_user(
-            db_session,
-            user,
-            get_editable,
-            ids,
-            eager_load_connector,
-            eager_load_credential,
-            eager_load_user,
+            db_session=db_session,
+            user=user,
+            get_editable=get_editable,
+            ids=ids,
+            eager_load_connector=eager_load_connector,
+            eager_load_credential=eager_load_credential,
+            eager_load_user=eager_load_user,
+            order_by_desc=order_by_desc,
+            source=source,
         )
 
 
