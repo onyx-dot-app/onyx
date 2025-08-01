@@ -227,6 +227,10 @@ class LocalFileConnector(LoadConnector):
     file_names are the names of the files
     """
 
+    # Note: file_names is a required parameter, but should not break backwards compatibility.
+    # If add_file_names migration is not run, old file connector configs will not have file_names.
+    # This is fine because the configs are not re-used to instantiate the connector.
+    # file_names is only used for display purposes in the UI and file_locations is used as a fallback.
     def __init__(
         self,
         file_locations: list[Path | str],

@@ -484,6 +484,9 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
                         deduped_file_names.append(os.path.basename(file_info))
                 continue
 
+            # For mypy, actual check happens at start of function
+            assert file.filename is not None
+
             # Special handling for docx files - only store the plaintext version
             if file.content_type and file.content_type.startswith(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
