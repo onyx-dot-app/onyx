@@ -16,6 +16,8 @@ import json
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.db.search_settings import SearchSettings
+from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.constants import AuthType
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 
 logger = setup_logger()
@@ -27,8 +29,11 @@ down_revision = "3fc5d75723b3"
 branch_labels = None
 depends_on = None
 
-# FIXME: set true before merge
-SKIP_TAG_FIX = os.environ.get("SKIP_TAG_FIX", "false").lower() == "true"
+SKIP_TAG_FIX = os.environ.get("SKIP_TAG_FIX", "true").lower() == "true"
+
+# override for cloud
+if AUTH_TYPE == AuthType.CLOUD:
+    SKIP_TAG_FIX = True
 
 
 def set_is_list_for_known_tags() -> None:
