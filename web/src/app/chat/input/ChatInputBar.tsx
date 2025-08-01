@@ -41,6 +41,7 @@ import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
 
 const MAX_INPUT_HEIGHT = 200;
+
 export const SourceChip2 = ({
   icon,
   title,
@@ -170,8 +171,8 @@ export const SourceChip = ({
   </div>
 );
 
-interface ChatInputBarProps {
-  toggleDocSelection: () => void;
+export interface ChatInputBarProps {
+  toggleDocSelection?: () => void;
   removeDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
@@ -196,6 +197,7 @@ interface ChatInputBarProps {
   availableDocumentSets: DocumentSetSummary[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
+  enableAgentic?: boolean;
   proSearchEnabled: boolean;
   setProSearchEnabled: (proSearchEnabled: boolean) => void;
 }
@@ -218,7 +220,6 @@ export function ChatInputBar({
   selectedAssistant,
   setAlternativeAssistant,
 
-  setFiles,
   handleFileUpload,
   textAreaRef,
   alternativeAssistant,
@@ -226,6 +227,11 @@ export function ChatInputBar({
   availableDocumentSets,
   availableTags,
   llmManager,
+
+  // The agentic toggle should be on by default.
+  // Only for the Search UI do we disable it.
+  enableAgentic = true,
+
   proSearchEnabled,
   setProSearchEnabled,
 }: ChatInputBarProps) {
@@ -840,15 +846,17 @@ export function ChatInputBar({
 
             <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
               <div className="space-x-1 flex  px-4 ">
-                <ChatInputOption
-                  flexPriority="stiff"
-                  name="File"
-                  Icon={FiPlusCircle}
-                  onClick={() => {
-                    toggleDocSelection();
-                  }}
-                  tooltipContent={"Upload files and attach user files"}
-                />
+                {toggleDocSelection && (
+                  <ChatInputOption
+                    flexPriority="stiff"
+                    name="File"
+                    Icon={FiPlusCircle}
+                    onClick={() => {
+                      toggleDocSelection();
+                    }}
+                    tooltipContent={"Upload files and attach user files"}
+                  />
+                )}
 
                 <LLMPopover
                   llmProviders={llmProviders}
@@ -877,12 +885,14 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
-                {retrievalEnabled && settings?.settings.pro_search_enabled && (
-                  <AgenticToggle
-                    proSearchEnabled={proSearchEnabled}
-                    setProSearchEnabled={setProSearchEnabled}
-                  />
-                )}
+                {retrievalEnabled &&
+                  enableAgentic &&
+                  settings?.settings.pro_search_enabled && (
+                    <AgenticToggle
+                      proSearchEnabled={proSearchEnabled}
+                      setProSearchEnabled={setProSearchEnabled}
+                    />
+                  )}
                 <button
                   id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${

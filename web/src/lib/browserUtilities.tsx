@@ -9,7 +9,7 @@ export enum OperatingSystem {
   Other = "Other",
 }
 
-export const useOperatingSystem = (): OperatingSystem => {
+export function useOperatingSystem(): OperatingSystem {
   const [os, setOS] = useState<OperatingSystem>(OperatingSystem.Other);
 
   useEffect(() => {
@@ -22,16 +22,16 @@ export const useOperatingSystem = (): OperatingSystem => {
   }, []);
 
   return os;
-};
+}
 
-// Use this to handle the sidebar shortcut for the chat page
-// The shortcut is Ctrl+E on Windows/Linux and Cmd+E on Mac
-// This hook handles the keyboard event and toggles the sidebar
-export const useSidebarShortcut = (router: any, toggleSidebar: () => void) => {
+// Use this to handle the sidebar shortcut for the chat page.
+// The shortcut is Ctrl+E on Windows/Linux and Cmd+E on Mac.
+// This hook handles the keyboard event and toggles the sidebar.
+export function useSidebarShortcut(toggleSidebar: () => void) {
   const os = useOperatingSystem();
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    function handleKeyDown(event: KeyboardEvent) {
       const isMac = os === OperatingSystem.Mac;
       const modifierKey = isMac ? event.metaKey : event.ctrlKey;
 
@@ -39,16 +39,16 @@ export const useSidebarShortcut = (router: any, toggleSidebar: () => void) => {
         event.preventDefault();
         toggleSidebar();
       }
-    };
+    }
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => {
+    return function () {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [router, toggleSidebar, os]);
-};
+  }, [toggleSidebar, os]);
+}
 
-const KeyboardSymbol = () => {
+function KeyboardSymbol() {
   const os = useOperatingSystem();
 
   if (os === OperatingSystem.Windows) {
@@ -56,6 +56,6 @@ const KeyboardSymbol = () => {
   } else {
     return <MacIcon size={12} />;
   }
-};
+}
 
 export default KeyboardSymbol;

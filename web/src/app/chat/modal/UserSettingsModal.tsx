@@ -34,6 +34,17 @@ import { getSourceMetadata } from "@/lib/sources";
 
 type SettingsSection = "settings" | "password" | "connectors";
 
+type UserSettingsModalProps = {
+  setPopup: (popupSpec: PopupSpec | null) => void;
+  llmProviders: LLMProviderDescriptor[];
+  setCurrentLlm?: (newLlm: LlmDescriptor) => void;
+  onClose: () => void;
+  defaultModel: string | null;
+  ccPairs?: CCPairBasicInfo[];
+  federatedConnectors?: FederatedConnectorOAuthStatus[];
+  refetchFederatedConnectors?: () => void;
+};
+
 export function UserSettingsModal({
   setPopup,
   llmProviders,
@@ -43,16 +54,7 @@ export function UserSettingsModal({
   ccPairs,
   federatedConnectors,
   refetchFederatedConnectors,
-}: {
-  setPopup: (popupSpec: PopupSpec | null) => void;
-  llmProviders: LLMProviderDescriptor[];
-  setCurrentLlm?: (newLlm: LlmDescriptor) => void;
-  onClose: () => void;
-  defaultModel: string | null;
-  ccPairs?: CCPairBasicInfo[];
-  federatedConnectors?: FederatedConnectorOAuthStatus[];
-  refetchFederatedConnectors?: () => void;
-}) {
+}: UserSettingsModalProps) {
   const {
     refreshUser,
     user,

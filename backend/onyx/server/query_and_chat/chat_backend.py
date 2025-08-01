@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import io
 import json
@@ -76,6 +75,7 @@ from onyx.secondary_llm_flows.chat_session_naming import (
 )
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
+from onyx.server.query_and_chat.chat_utils import is_connected
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
@@ -375,29 +375,6 @@ def delete_chat_session_by_id(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-async def is_connected(request: Request) -> Callable[[], bool]:
-    main_loop = asyncio.get_event_loop()
-
-    def is_connected_sync() -> bool:
-        future = asyncio.run_coroutine_threadsafe(request.is_disconnected(), main_loop)
-        try:
-            is_connected = not future.result(timeout=0.05)
-            return is_connected
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Asyncio timed out (potentially missed request to stop streaming)"
-            )
-            return True
-        except Exception as e:
-            error_msg = str(e)
-            logger.critical(
-                f"An unexpected error occured with the disconnect check coroutine: {error_msg}"
-            )
-            return True
-
-    return is_connected_sync
 
 
 @router.post("/send-message")

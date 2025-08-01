@@ -5,6 +5,7 @@ import React, {
   forwardRef,
   useContext,
   useCallback,
+  useState,
 } from "react";
 import Link from "next/link";
 import {
@@ -23,10 +24,11 @@ import {
   DocumentIcon2,
   KnowledgeGroupIcon,
   NewChatIcon,
+  LeftToLineIcon,
+  RightToLineIcon,
 } from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
-import { pageType } from "./types";
-import LogoWithText from "@/components/header/LogoWithText";
+
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DragEndEvent } from "@dnd-kit/core";
 import { useAssistants } from "@/components/context/AssistantsContext";
@@ -54,23 +56,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
-
-interface HistorySidebarProps {
-  liveAssistant?: MinimalPersonaSnapshot | null;
-  page: pageType;
-  existingChats?: ChatSession[];
-  currentChatSession?: ChatSession | null | undefined;
-  folders?: Folder[];
-  toggleSidebar?: () => void;
-  toggled?: boolean;
-  removeToggle?: () => void;
-  reset?: () => void;
-  showShareModal?: (chatSession: ChatSession) => void;
-  showDeleteModal?: (chatSession: ChatSession) => void;
-  explicitlyUntoggle: () => void;
-  setShowAssistantsModal: (show: boolean) => void;
-  toggleChatSessionSearchModal?: () => void;
-}
+import { FiSidebar } from "react-icons/fi";
+import AssistantModal from "@/app/assistants/mine/AssistantModal";
 
 interface SortableAssistantProps {
   assistant: MinimalPersonaSnapshot;
@@ -169,26 +156,44 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
   );
 };
 
-export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
+interface SidebarProps {
+  liveAssistant?: MinimalPersonaSnapshot | null;
+  existingChats?: ChatSession[];
+  currentChatSession?: ChatSession | null | undefined;
+  folders?: Folder[];
+  removeToggle?: () => void;
+  reset?: () => void;
+  showShareModal?: (chatSession: ChatSession) => void;
+  showDeleteModal?: (chatSession: ChatSession) => void;
+  toggleChatSessionSearchModal?: () => void;
+
+  // sidebar-visibility related
+  sidebarVisible: boolean;
+  sidebarPinned: boolean;
+  toggleSidebarPinned: () => void;
+}
+
+export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(
   (
     {
       liveAssistant,
       reset = () => null,
-      setShowAssistantsModal = () => null,
-      toggled,
-      page,
       existingChats,
       currentChatSession,
       folders,
-      explicitlyUntoggle,
-      toggleSidebar,
       removeToggle,
       showShareModal,
       toggleChatSessionSearchModal,
       showDeleteModal,
+
+      // sidebar-visibility related
+      sidebarVisible,
+      sidebarPinned,
+      toggleSidebarPinned,
     },
     ref: ForwardedRef<HTMLDivElement>
   ) => {
+    const [showAssistantsModal, setShowAssistantsModal] = useState(false);
     const searchParams = useSearchParams();
     const router = useRouter();
     const { user, toggleAssistantPinnedStatus } = useUser();
@@ -243,23 +248,20 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       return null;
     }
 
+    function newChatUrl(): string {
+      return `/chat${currentChatSession ? `?assistantId=${currentChatSession.persona_id}` : ""}`;
+    }
+
     const handleNewChat = () => {
       reset();
       console.log("currentChatSession", currentChatSession);
-
-      const newChatUrl =
-        `/${page}` +
-        (currentChatSession
-          ? `?assistantId=${currentChatSession.persona_id}`
-          : "");
-      router.push(newChatUrl);
+      router.push(newChatUrl());
     };
 
     return (
-      <>
-        <div
-          ref={ref}
-          className={`
+      <div
+        ref={ref}
+        className={`
             flex
             flex-none
             gap-y-4
@@ -276,157 +278,165 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             pt-2
             transition-transform 
             `}
-        >
-          <div className="px-4 pl-2">
-            <LogoWithText
-              showArrow={true}
-              toggled={toggled}
-              page={page}
-              toggleSidebar={toggleSidebar}
-              explicitlyUntoggle={explicitlyUntoggle}
-            />
-          </div>
-          {page == "chat" && (
-            <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
-              <Link
-                className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
-                href={
-                  `/${page}` +
-                  (currentChatSession
-                    ? `?assistantId=${currentChatSession?.persona_id}`
-                    : "")
-                }
-                onClick={(e) => {
-                  if (e.metaKey || e.ctrlKey) {
-                    return;
-                  }
-                  if (handleNewChat) {
-                    handleNewChat();
-                  }
-                }}
-              >
-                <NewChatIcon size={20} className="flex-none" />
-                <p className="my-auto flex font-normal  items-center ">
-                  New Chat
-                </p>
-              </Link>
-              <Link
-                className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-                href="/chat/my-documents"
-              >
-                <KnowledgeGroupIcon
-                  size={20}
-                  className="flex-none text-text-history-sidebar-button"
-                />
-                <p className="my-auto flex font-normal items-center text-base">
-                  My Documents
-                </p>
-              </Link>
-              {user?.preferences?.shortcut_enabled && (
-                <Link
-                  className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
-                  href="/chat/input-prompts"
-                >
-                  <DocumentIcon2
+      >
+        <div className="px-4 h-[40px] flex flex-row justify-end items-center w-full">
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={toggleSidebarPinned}>
+                  {sidebarPinned && !combinedSettings?.isMobile ? (
+                    <LeftToLineIcon className="mobile:hidden text-sidebar-toggle" />
+                  ) : (
+                    <RightToLineIcon className="mobile:hidden text-sidebar-toggle" />
+                  )}
+                  <FiSidebar
                     size={20}
-                    className="flex-none text-text-history-sidebar-button"
+                    className="hidden mobile:block text-text-mobile-sidebar"
                   />
-                  <p className="my-auto flex font-normal items-center text-base">
-                    Prompt Shortcuts
-                  </p>
-                </Link>
-              )}
-            </div>
-          )}
-          <div className="h-full  relative overflow-x-hidden overflow-y-auto">
-            <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
-              Assistants
-            </div>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis]}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="!border-none">
+                {sidebarVisible ? `Unpin sidebar` : "Pin sidebar"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <div className="px-4 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center">
+          <Link
+            className="w-full px-2 py-1 group rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
+            href={newChatUrl()}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey) {
+                return;
+              }
+              if (handleNewChat) {
+                handleNewChat();
+              }
+            }}
+          >
+            <NewChatIcon size={20} className="flex-none" />
+            <p className="my-auto flex font-normal  items-center ">New Chat</p>
+          </Link>
+          <Link
+            className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+            href="/chat/my-documents"
+          >
+            <KnowledgeGroupIcon
+              size={20}
+              className="flex-none text-text-history-sidebar-button"
+            />
+            <p className="my-auto flex font-normal items-center text-base">
+              My Documents
+            </p>
+          </Link>
+          {user?.preferences?.shortcut_enabled && (
+            <Link
+              className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
+              href="/chat/input-prompts"
             >
-              <SortableContext
-                items={pinnedAssistants.map((a) =>
-                  a.id === 0 ? "assistant-0" : a.id
-                )}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
-                  {pinnedAssistants.map((assistant: MinimalPersonaSnapshot) => (
-                    <SortableAssistant
-                      key={assistant.id === 0 ? "assistant-0" : assistant.id}
-                      assistant={assistant}
-                      active={assistant.id === liveAssistant?.id}
-                      onClick={() => {
-                        router.push(
-                          buildChatUrl(searchParams, null, assistant.id)
-                        );
-                      }}
-                      onPinAction={async (e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        await toggleAssistantPinnedStatus(
-                          pinnedAssistants.map((a) => a.id),
-                          assistant.id,
-                          false
-                        );
-                        await refreshAssistants();
-                      }}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
-            {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
-              liveAssistant && (
-                <div className="w-full mt-1 pr-4">
+              <DocumentIcon2
+                size={20}
+                className="flex-none text-text-history-sidebar-button"
+              />
+              <p className="my-auto flex font-normal items-center text-base">
+                Prompt Shortcuts
+              </p>
+            </Link>
+          )}
+        </div>
+        <div className="h-full  relative overflow-x-hidden overflow-y-auto">
+          <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center">
+            Assistants
+          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+            modifiers={[restrictToVerticalAxis]}
+          >
+            <SortableContext
+              items={pinnedAssistants.map((a) =>
+                a.id === 0 ? "assistant-0" : a.id
+              )}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
+                {pinnedAssistants.map((assistant: MinimalPersonaSnapshot) => (
                   <SortableAssistant
-                    pinned={false}
-                    assistant={liveAssistant}
-                    active={liveAssistant.id === liveAssistant?.id}
+                    key={assistant.id === 0 ? "assistant-0" : assistant.id}
+                    assistant={assistant}
+                    active={assistant.id === liveAssistant?.id}
                     onClick={() => {
                       router.push(
-                        buildChatUrl(searchParams, null, liveAssistant.id)
+                        buildChatUrl(searchParams, null, assistant.id)
                       );
                     }}
                     onPinAction={async (e: React.MouseEvent) => {
                       e.stopPropagation();
                       await toggleAssistantPinnedStatus(
-                        [...pinnedAssistants.map((a) => a.id)],
-                        liveAssistant.id,
-                        true
+                        pinnedAssistants.map((a) => a.id),
+                        assistant.id,
+                        false
                       );
                       await refreshAssistants();
                     }}
                   />
-                </div>
-              )}
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+          {!pinnedAssistants.some((a) => a.id === liveAssistant?.id) &&
+            liveAssistant && (
+              <div className="w-full mt-1 pr-4">
+                <SortableAssistant
+                  pinned={false}
+                  assistant={liveAssistant}
+                  active={liveAssistant.id === liveAssistant?.id}
+                  onClick={() => {
+                    router.push(
+                      buildChatUrl(searchParams, null, liveAssistant.id)
+                    );
+                  }}
+                  onPinAction={async (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    await toggleAssistantPinnedStatus(
+                      [...pinnedAssistants.map((a) => a.id)],
+                      liveAssistant.id,
+                      true
+                    );
+                    await refreshAssistants();
+                  }}
+                />
+              </div>
+            )}
 
-            <div className="w-full px-4">
-              <button
-                aria-label="Explore Assistants"
-                onClick={() => setShowAssistantsModal(true)}
-                className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
-              >
-                Explore Assistants
-              </button>
-            </div>
-
-            <PagesTab
-              toggleChatSessionSearchModal={toggleChatSessionSearchModal}
-              showDeleteModal={showDeleteModal}
-              showShareModal={showShareModal}
-              closeSidebar={removeToggle}
-              existingChats={existingChats}
-              currentChatId={currentChatId}
-              folders={folders}
-            />
+          <div className="w-full px-4">
+            <button
+              aria-label="Explore Assistants"
+              onClick={() => setShowAssistantsModal(true)}
+              className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
+            >
+              Explore Assistants
+            </button>
           </div>
+
+          <PagesTab
+            toggleChatSessionSearchModal={toggleChatSessionSearchModal}
+            showDeleteModal={showDeleteModal}
+            showShareModal={showShareModal}
+            closeSidebar={removeToggle}
+            existingChats={existingChats}
+            currentChatId={currentChatId}
+            folders={folders}
+          />
         </div>
-      </>
+
+        {showAssistantsModal && (
+          <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
+        )}
+      </div>
     );
   }
 );
-HistorySidebar.displayName = "HistorySidebar";
+
+Sidebar.displayName = "Sidebar";
