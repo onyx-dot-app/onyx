@@ -23,6 +23,7 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.db.external_perm import mark_old_external_groups_as_stale
 from ee.onyx.db.external_perm import remove_stale_external_groups
 from ee.onyx.db.external_perm import upsert_external_groups
+from ee.onyx.external_permissions.perm_sync_types import SyncWarning
 from ee.onyx.external_permissions.sync_params import (
     get_all_cc_pair_agnostic_group_sync_sources,
 )
@@ -36,6 +37,7 @@ from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
+from onyx.configs.constants import NotificationType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
@@ -49,6 +51,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.notification import create_notification
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
@@ -398,7 +401,8 @@ def connector_external_group_sync_generator_task(
         payload.started = datetime.now(timezone.utc)
         redis_connector.external_group_sync.set_fence(payload)
 
-        _perform_external_group_sync(
+        # sync warnings are stored in the sync record and it will displayed in the connector settings page
+        sync_warnings: SyncWarning | None = _perform_external_group_sync(
             cc_pair_id=cc_pair_id,
             tenant_id=tenant_id,
         )
@@ -409,7 +413,15 @@ def connector_external_group_sync_generator_task(
                 entity_id=cc_pair_id,
                 sync_type=SyncType.EXTERNAL_GROUP,
                 sync_status=SyncStatus.SUCCESS,
+                sync_warnings=sync_warnings.warnings if sync_warnings else None,
             )
+            if sync_warnings:
+                create_notification(
+                    user_id=sync_warnings.cc_pair_owner,
+                    notif_type=NotificationType.GROUP_SYNC_WARNING,
+                    db_session=db_session,
+                    additional_data=sync_warnings.warnings,
+                )
     except Exception as e:
         error_msg = format_error_for_logging(e)
         task_logger.warning(
@@ -448,7 +460,7 @@ def connector_external_group_sync_generator_task(
 def _perform_external_group_sync(
     cc_pair_id: int,
     tenant_id: str,
-) -> None:
+) -> SyncWarning | None:
     with get_session_with_current_tenant() as db_session:
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
@@ -481,10 +493,14 @@ def _perform_external_group_sync(
             f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
         )
         external_user_group_batch: list[ExternalUserGroup] = []
+        sync_warnings: SyncWarning | None = None
         try:
             external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
             for external_user_group in external_user_group_generator:
-                external_user_group_batch.append(external_user_group)
+                if isinstance(external_user_group, ExternalUserGroup):
+                    external_user_group_batch.append(external_user_group)
+                else:
+                    sync_warnings = external_user_group
                 if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
                     logger.debug(
                         f"New external user groups: {external_user_group_batch}"
@@ -518,6 +534,8 @@ def _perform_external_group_sync(
         remove_stale_external_groups(db_session, cc_pair_id)
 
         mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
+
+        return sync_warnings
 
 
 def validate_external_group_sync_fences(

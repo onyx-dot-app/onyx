@@ -32,6 +32,7 @@ import {
   ConnectorCredentialPairStatus,
   IndexAttemptError,
   statusIsNotCurrentlyActive,
+  SyncWarnings,
 } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import EditPropertyModal from "@/components/modals/EditPropertyModal";
@@ -62,6 +63,8 @@ import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button } from "@/components/ui/button";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { GithubSyncWarning } from "./GithubSyncWarning";
 
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
@@ -98,6 +101,17 @@ function Main({ ccPairId }: { ccPairId: number }) {
     buildCCPairInfoUrl(ccPairId),
     errorHandlingFetcher,
     { refreshInterval: 5000 } // 5 seconds
+  );
+  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const {
+    data: syncWarnings,
+    isLoading: isLoadingSyncWarnings,
+    error: syncWarningsError,
+  } = useSWR<SyncWarnings>(
+    isPaidEnterpriseFeaturesEnabled
+      ? `${buildCCPairInfoUrl(ccPairId)}/sync-groups/warnings`
+      : null,
+    errorHandlingFetcher
   );
 
   const {
@@ -354,7 +368,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   if (
     isLoadingCCPair ||
     isLoadingIndexAttempts ||
-    isLoadingMostRecentIndexAttempts
+    isLoadingMostRecentIndexAttempts ||
+    isLoadingSyncWarnings
   ) {
     return <ThreeDotsLoader />;
   }
@@ -674,6 +689,18 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 refresh={() => refresh()}
               />
             </div>
+          </>
+        )}
+
+      {ccPair.connector.source === "github" &&
+        syncWarnings &&
+        syncWarnings.users_without_email &&
+        syncWarnings.users_without_email.length > 0 && (
+          <>
+            <Title size="md" className="mt-10 mb-2">
+              Permission Sync Warnings
+            </Title>
+            <GithubSyncWarning usernames={syncWarnings.users_without_email} />
           </>
         )}
 

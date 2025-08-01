@@ -54,6 +54,10 @@ export interface CCPairFullInfo {
   latest_checkpoint_description: string | null;
 }
 
+export interface SyncWarnings {
+  users_without_email: string[];
+}
+
 export interface PaginatedIndexAttempts {
   index_attempts: IndexAttemptSnapshot[];
   page: number;

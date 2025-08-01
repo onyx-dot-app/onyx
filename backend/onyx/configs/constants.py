@@ -211,6 +211,7 @@ class NotificationType(str, Enum):
     REINDEX = "reindex"
     PERSONA_SHARED = "persona_shared"
     TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending"  # 2 days left in trial
+    GROUP_SYNC_WARNING = "group_sync_warning"  # Warning about group sync
 
 
 class BlobType(str, Enum):

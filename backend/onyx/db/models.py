@@ -1848,6 +1848,10 @@ class SyncRecord(Base):
     sync_end_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Store validation warnings from connector permission sync operations
+    sync_warnings: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     __table_args__ = (
         Index(
