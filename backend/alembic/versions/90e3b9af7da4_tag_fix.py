@@ -6,14 +6,16 @@ Create Date: 2025-08-01 20:58:14.607624
 
 """
 
+import json
+import logging
 import os
-from typing import Generator
+
 from typing import cast
+from typing import Generator
 
 from alembic import op
 import sqlalchemy as sa
-from onyx.utils.logger import setup_logger
-import json
+
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.db.search_settings import SearchSettings
@@ -21,7 +23,7 @@ from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.constants import AuthType
 from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 
-logger = setup_logger()
+logger = logging.getLogger("alembic.runtime.migration")
 
 
 # revision identifiers, used by Alembic.
@@ -100,7 +102,7 @@ def set_is_list_for_list_tags() -> None:
     )
 
 
-def print_list_tags() -> None:
+def log_list_tags() -> None:
     bind = op.get_bind()
     result = bind.execute(
         sa.text(
@@ -112,7 +114,9 @@ def print_list_tags() -> None:
             """
         )
     ).fetchall()
-    print("List tags:\n" + "\n".join(f"  {source}: {key}" for source, key in result))
+    logger.info(
+        "List tags:\n" + "\n".join(f"  {source}: {key}" for source, key in result)
+    )
 
 
 def remove_old_tags() -> None:
@@ -165,7 +169,7 @@ def remove_old_tags() -> None:
                 )
             )
             n_deleted += result.rowcount
-        print(f"Processed {len(batch)} documents and deleted {n_deleted} tags")
+        logger.info(f"Processed {len(batch)} documents and deleted {n_deleted} tags")
 
 
 def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
@@ -311,14 +315,14 @@ def upgrade() -> None:
             "This can cause issues when using the knowledge graph, or "
             "when filtering for documents by tags."
         )
-        print_list_tags()
+        log_list_tags()
         return
 
     remove_old_tags()
     set_is_list_for_list_tags()
 
     # debug
-    print_list_tags()
+    log_list_tags()
 
 
 def downgrade() -> None:
