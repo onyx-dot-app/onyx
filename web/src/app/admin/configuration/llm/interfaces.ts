@@ -36,6 +36,7 @@ export interface WellKnownLLMProviderDescriptor {
   default_fast_model: string | null;
   is_public: boolean;
   groups: number[];
+  has_curated_models: boolean;
 }
 
 export interface LLMModelDescriptor {
@@ -59,6 +60,7 @@ export interface LLMProvider {
   default_vision_model: string | null;
   is_default_vision_provider: boolean | null;
   model_configurations: ModelConfiguration[];
+  use_recommended_models: boolean | null;
 }
 
 export interface LLMProviderView extends LLMProvider {

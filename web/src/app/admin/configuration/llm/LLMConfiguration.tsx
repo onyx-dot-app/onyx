@@ -134,12 +134,20 @@ export function LLMConfiguration() {
   const { data: llmProviderDescriptors } = useSWR<
     WellKnownLLMProviderDescriptor[]
   >("/api/admin/llm/built-in/options", errorHandlingFetcher);
+  const { data: llmOptionsWithAllModels } = useSWR<{
+    regular: WellKnownLLMProviderDescriptor[];
+    all: WellKnownLLMProviderDescriptor[];
+  }>("/api/admin/llm/built-in/options-with-all-models", errorHandlingFetcher);
   const { data: existingLlmProviders } = useSWR<LLMProviderView[]>(
     LLM_PROVIDERS_ADMIN_URL,
     errorHandlingFetcher
   );
 
-  if (!llmProviderDescriptors || !existingLlmProviders) {
+  if (
+    !llmProviderDescriptors ||
+    !existingLlmProviders ||
+    !llmOptionsWithAllModels
+  ) {
     return <ThreeDotsLoader />;
   }
 
@@ -158,6 +166,7 @@ export function LLMConfiguration() {
           <ConfiguredLLMProviderDisplay
             existingLlmProviders={existingLlmProviders}
             llmProviderDescriptors={llmProviderDescriptors}
+            allLlmProviderDescriptors={llmOptionsWithAllModels.all}
           />
         </>
       ) : (

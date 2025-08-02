@@ -82,6 +82,7 @@ class LLMProvider(BaseModel):
     groups: list[int] = Field(default_factory=list)
     deployment_name: str | None = None
     default_vision_model: str | None = None
+    use_recommended_models: bool | None = None
 
 
 class LLMProviderUpsertRequest(LLMProvider):
@@ -127,6 +128,7 @@ class LLMProviderView(LLMProvider):
             is_public=llm_provider_model.is_public,
             groups=groups,
             deployment_name=llm_provider_model.deployment_name,
+            use_recommended_models=llm_provider_model.use_recommended_models,
             model_configurations=list(
                 ModelConfigurationView.from_model(
                     model_configuration, llm_provider_model.provider
