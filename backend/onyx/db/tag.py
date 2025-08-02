@@ -4,6 +4,7 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -57,6 +58,8 @@ def create_or_add_document_tag(
     if tag not in document.tags:
         document.tags.append(tag)
 
+    # is_list is False by default, no need to manually set it
+
     db_session.commit()
     return tag
 
@@ -105,8 +108,60 @@ def create_or_add_document_tag_list(
         if tag not in document.tags:
             document.tags.append(tag)
 
+    # update is_list flag
+    db_session.flush()
+    tag_ids = [t.id for t in all_tags]
+    if tag_ids:
+        db_session.execute(
+            update(Document__Tag)
+            .where(
+                Document__Tag.document_id == document_id,
+                Document__Tag.tag_id.in_(tag_ids),
+            )
+            .values(is_list=True)
+        )
+
     db_session.commit()
     return all_tags
+
+
+def upsert_document_tags(
+    document_id: str,
+    source: DocumentSource,
+    metadata: dict[str, str | list[str]],
+    db_session: Session,
+) -> list[Tag]:
+    document = db_session.get(Document, document_id)
+    if not document:
+        raise ValueError("Invalid Document, cannot attach Tags")
+
+    old_tag_ids: set[int] = {tag.id for tag in document.tags}
+
+    new_tags: list[Tag] = []
+    new_tag_ids: set[int] = set()
+    for k, v in metadata.items():
+        if isinstance(v, list):
+            new_tags.extend(
+                create_or_add_document_tag_list(k, v, source, document_id, db_session)
+            )
+            new_tag_ids.update({tag.id for tag in new_tags})
+            continue
+
+        new_tag = create_or_add_document_tag(k, v, source, document_id, db_session)
+        if new_tag:
+            new_tag_ids.add(new_tag.id)
+            new_tags.append(new_tag)
+
+    delete_tags = old_tag_ids - new_tag_ids
+    if delete_tags:
+        delete_stmt = delete(Document__Tag).where(
+            Document__Tag.document_id == document_id,
+            Document__Tag.tag_id.in_(delete_tags),
+        )
+        db_session.execute(delete_stmt)
+        db_session.commit()
+
+    return new_tags
 
 
 def find_tags(
