@@ -1,7 +1,7 @@
 """tag-fix
 
 Revision ID: 90e3b9af7da4
-Revises: 3fc5d75723b3
+Revises: 62c3a055a141
 Create Date: 2025-08-01 20:58:14.607624
 
 """
@@ -26,7 +26,7 @@ logger = setup_logger()
 
 # revision identifiers, used by Alembic.
 revision = "90e3b9af7da4"
-down_revision = "3fc5d75723b3"
+down_revision = "62c3a055a141"
 branch_labels = None
 depends_on = None
 
