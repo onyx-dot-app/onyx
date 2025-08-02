@@ -1293,6 +1293,7 @@ class Tag(Base):
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False)
     )
+    is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     documents = relationship(
         "Document",
@@ -1302,7 +1303,11 @@ class Tag(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tag_key", "tag_value", "source", name="_tag_key_value_source_uc"
+            "tag_key",
+            "tag_value",
+            "source",
+            "is_list",
+            name="_tag_key_value_source_list_uc",
         ),
     )
 
