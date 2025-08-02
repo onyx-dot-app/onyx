@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import TagType
 from onyx.db.models import Document
 from onyx.db.models import Document__Tag
 from onyx.db.models import Tag
@@ -43,6 +44,13 @@ def create_or_add_document_tag(
     if not document:
         raise ValueError("Invalid Document, cannot attach Tags")
 
+    # Remove any existing tags with the same tag_key for this document
+    previous_tags_for_key_in_document = {
+        tag for tag in document.tags if tag.tag_key == tag_key and tag.source == source
+    }
+
+    # Removal will be done later
+
     tag_stmt = select(Tag).where(
         Tag.tag_key == tag_key,
         Tag.tag_value == tag_value,
@@ -51,11 +59,40 @@ def create_or_add_document_tag(
     tag = db_session.execute(tag_stmt).scalar_one_or_none()
 
     if not tag:
-        tag = Tag(tag_key=tag_key, tag_value=tag_value, source=source)
+        tag = Tag(
+            tag_key=tag_key,
+            tag_value=tag_value,
+            source=source,
+            tag_type=TagType.SINGLE,
+        )
         db_session.add(tag)
+
+    elif tag.tag_type is None:
+        tag.tag_type = TagType.SINGLE
 
     if tag not in document.tags:
         document.tags.append(tag)
+
+    # remove any tags that are no longer in the document
+    # for this key - use SQL operation instead of loop. This is less readable but
+    # more efficient for many tag changes.
+    previous_tags_to_remove = [
+        prev_tag
+        for prev_tag in previous_tags_for_key_in_document
+        if prev_tag.tag_value != tag.tag_value
+    ]
+
+    if previous_tags_to_remove:
+        # Remove the association between document and tags
+        stmt = delete(Document__Tag).where(
+            and_(
+                Document__Tag.document_id == document_id,
+                Document__Tag.tag_id.in_(
+                    [prev_tag.id for prev_tag in previous_tags_to_remove]
+                ),
+            )
+        )
+        db_session.execute(stmt)
 
     db_session.commit()
     return tag
@@ -78,6 +115,11 @@ def create_or_add_document_tag_list(
     if not document:
         raise ValueError("Invalid Document, cannot attach Tags")
 
+    # Prep removing any existing tags with the same tag_key for this document
+    previous_tags_for_key_in_document = [
+        tag for tag in document.tags if tag.tag_key == tag_key and tag.source == source
+    ]
+
     existing_tags_stmt = select(Tag).where(
         Tag.tag_key == tag_key,
         Tag.tag_value.in_(valid_tag_values),
@@ -89,10 +131,23 @@ def create_or_add_document_tag_list(
     new_tags = []
     for tag_value in valid_tag_values:
         if tag_value not in existing_tag_values:
-            new_tag = Tag(tag_key=tag_key, tag_value=tag_value, source=source)
+            new_tag = Tag(
+                tag_key=tag_key,
+                tag_value=tag_value,
+                source=source,
+                tag_type=TagType.LIST,
+            )
             db_session.add(new_tag)
             new_tags.append(new_tag)
             existing_tag_values.add(tag_value)
+        else:
+            # Find the existing tag and update its type if needed
+            for existing_tag in existing_tags:
+                if (
+                    existing_tag.tag_value == tag_value
+                    and existing_tag.tag_type is None
+                ):
+                    existing_tag.tag_type = TagType.LIST
 
     if new_tags:
         logger.debug(
@@ -104,6 +159,33 @@ def create_or_add_document_tag_list(
     for tag in all_tags:
         if tag not in document.tags:
             document.tags.append(tag)
+
+    # remove any tags that are no longer in the document
+    # Use a single SQL operation instead of loops. This is less readable but
+    # more efficient.
+    previous_tag_values_to_remove = [
+        tag.tag_value
+        for tag in previous_tags_for_key_in_document
+        if tag.tag_value not in tag_values
+    ]
+
+    if previous_tag_values_to_remove:
+        # Remove the association between document and tags
+        stmt = delete(Document__Tag).where(
+            and_(
+                Document__Tag.document_id == document_id,
+                Document__Tag.tag_id.in_(
+                    select(Tag.id).where(
+                        and_(
+                            Tag.tag_key == tag_key,
+                            Tag.tag_value.in_(previous_tag_values_to_remove),
+                            Tag.source == source,
+                        )
+                    )
+                ),
+            )
+        )
+        db_session.execute(stmt)
 
     db_session.commit()
     return all_tags

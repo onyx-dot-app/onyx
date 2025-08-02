@@ -195,6 +195,11 @@ class DocumentSource(str, Enum):
     MOCK_CONNECTOR = "mock_connector"
 
 
+class TagType(str, Enum):
+    SINGLE = "single"
+    LIST = "list"
+
+
 class FederatedConnectorSource(str, Enum):
     FEDERATED_SLACK = "federated_slack"
 
