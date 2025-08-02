@@ -293,6 +293,16 @@ def upgrade() -> None:
         "tag",
         sa.Column("is_list", sa.Boolean(), nullable=False, server_default="false"),
     )
+    op.drop_constraint(
+        constraint_name="_tag_key_value_source_uc",
+        table_name="tag",
+        type_="unique",
+    )
+    op.create_unique_constraint(
+        constraint_name="_tag_key_value_source_list_uc",
+        table_name="tag",
+        columns=["tag_key", "tag_value", "source", "is_list"],
+    )
     set_is_list_for_known_tags()
 
     if SKIP_TAG_FIX:
@@ -314,4 +324,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     # the migration adds and populates the is_list column, and removes old bugged tags
     # there isn't a point in adding back the bugged tags, so we just drop the column
+    op.drop_constraint(
+        constraint_name="_tag_key_value_source_list_uc",
+        table_name="tag",
+        type_="unique",
+    )
+    op.create_unique_constraint(
+        constraint_name="_tag_key_value_source_uc",
+        table_name="tag",
+        columns=["tag_key", "tag_value", "source"],
+    )
     op.drop_column("tag", "is_list")

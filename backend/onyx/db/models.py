@@ -1303,7 +1303,11 @@ class Tag(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tag_key", "tag_value", "source", name="_tag_key_value_source_uc"
+            "tag_key",
+            "tag_value",
+            "source",
+            "is_list",
+            name="_tag_key_value_source_list_uc",
         ),
     )
 
