@@ -8,6 +8,7 @@ Create Date: 2025-08-01 20:58:14.607624
 
 import os
 from typing import Generator
+from typing import cast
 
 from alembic import op
 import sqlalchemy as sa
@@ -64,12 +65,10 @@ def set_is_list_for_known_tags() -> None:
         bind.execute(
             sa.text(
                 f"""
-                UPDATE document__tag AS dt
+                UPDATE tag
                 SET is_list = true
-                FROM tag
-                WHERE tag.id = dt.tag_id
-                AND tag.tag_key = '{key}'
-                AND tag.source = '{source}'
+                WHERE tag_key = '{key}'
+                AND source = '{source}'
                 """
             )
         )
@@ -85,7 +84,7 @@ def set_is_list_for_list_tags() -> None:
     bind.execute(
         sa.text(
             """
-            UPDATE document__tag AS dt
+            UPDATE tag
             SET is_list = true
             FROM (
                 SELECT DISTINCT tag.tag_key, tag.source
@@ -94,8 +93,8 @@ def set_is_list_for_list_tags() -> None:
                 GROUP BY tag.tag_key, tag.source, document__tag.document_id
                 HAVING count(*) > 1
             ) AS list_tags
-            JOIN tag ON tag.tag_key = list_tags.tag_key AND tag.source = list_tags.source
-            WHERE dt.tag_id = tag.id
+            WHERE tag.tag_key = list_tags.tag_key
+            AND tag.source = list_tags.source
             """
         )
     )
@@ -106,8 +105,8 @@ def print_list_tags() -> None:
     result = bind.execute(
         sa.text(
             """
-            SELECT DISTINCT source, tag_key FROM document__tag
-            JOIN tag ON tag.id = document__tag.tag_id
+            SELECT DISTINCT source, tag_key
+            FROM tag
             WHERE is_list
             ORDER BY source, tag_key
             """
@@ -255,7 +254,7 @@ def _get_vespa_metadata(
         f"{index_name}.document_id=='{document_id}' and {index_name}.chunk_id==0"
     )
 
-    params = {
+    params: dict[str, str | int] = {
         "selection": selection,
         "wantedDocumentCount": 1,
         "fieldSet": f"{index_name}:metadata",
@@ -286,12 +285,12 @@ def _get_document_tags(document_id: str) -> list[tuple[int, str, str]]:
             """
         )
     ).fetchall()
-    return result
+    return cast(list[tuple[int, str, str]], result)
 
 
 def upgrade() -> None:
     op.add_column(
-        "document__tag",
+        "tag",
         sa.Column("is_list", sa.Boolean(), nullable=False, server_default="false"),
     )
     set_is_list_for_known_tags()
@@ -315,4 +314,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     # the migration adds and populates the is_list column, and removes old bugged tags
     # there isn't a point in adding back the bugged tags, so we just drop the column
-    op.drop_column("document__tag", "is_list")
+    op.drop_column("tag", "is_list")

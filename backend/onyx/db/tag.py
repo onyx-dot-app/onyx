@@ -4,7 +4,6 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -48,17 +47,16 @@ def create_or_add_document_tag(
         Tag.tag_key == tag_key,
         Tag.tag_value == tag_value,
         Tag.source == source,
+        Tag.is_list.is_(False),
     )
     tag = db_session.execute(tag_stmt).scalar_one_or_none()
 
     if not tag:
-        tag = Tag(tag_key=tag_key, tag_value=tag_value, source=source)
+        tag = Tag(tag_key=tag_key, tag_value=tag_value, source=source, is_list=False)
         db_session.add(tag)
 
     if tag not in document.tags:
         document.tags.append(tag)
-
-    # is_list is False by default, no need to manually set it
 
     db_session.commit()
     return tag
@@ -85,6 +83,7 @@ def create_or_add_document_tag_list(
         Tag.tag_key == tag_key,
         Tag.tag_value.in_(valid_tag_values),
         Tag.source == source,
+        Tag.is_list.is_(True),
     )
     existing_tags = list(db_session.execute(existing_tags_stmt).scalars().all())
     existing_tag_values = {tag.tag_value for tag in existing_tags}
@@ -92,7 +91,9 @@ def create_or_add_document_tag_list(
     new_tags = []
     for tag_value in valid_tag_values:
         if tag_value not in existing_tag_values:
-            new_tag = Tag(tag_key=tag_key, tag_value=tag_value, source=source)
+            new_tag = Tag(
+                tag_key=tag_key, tag_value=tag_value, source=source, is_list=True
+            )
             db_session.add(new_tag)
             new_tags.append(new_tag)
             existing_tag_values.add(tag_value)
@@ -107,19 +108,6 @@ def create_or_add_document_tag_list(
     for tag in all_tags:
         if tag not in document.tags:
             document.tags.append(tag)
-
-    # update is_list flag
-    db_session.flush()
-    tag_ids = [t.id for t in all_tags]
-    if tag_ids:
-        db_session.execute(
-            update(Document__Tag)
-            .where(
-                Document__Tag.document_id == document_id,
-                Document__Tag.tag_id.in_(tag_ids),
-            )
-            .values(is_list=True)
-        )
 
     db_session.commit()
     return all_tags
@@ -208,22 +196,31 @@ def get_structured_tags_for_document(
         raise ValueError("Invalid Document, cannot find tags")
 
     document_metadata: dict[str, Any] = {}
-    is_list: dict[int, bool] = {
-        res[0]: res[1]
-        for res in db_session.query(Document__Tag.tag_id, Document__Tag.is_list)
-        .filter(Document__Tag.document_id == document_id)
-        .all()
-    }
-
     for tag in document.tags:
-        if is_list.get(tag.id, False):
+        if tag.is_list:
             document_metadata.setdefault(tag.tag_key, [])
-            # just in case
+            # should always be a list (if tag.is_list is always True for this key), but just in case
             if not isinstance(document_metadata[tag.tag_key], list):
+                logger.warning(
+                    "Inconsistent is_list for document %s, tag_key %s",
+                    document_id,
+                    tag.tag_key,
+                )
                 document_metadata[tag.tag_key] = [document_metadata[tag.tag_key]]
             document_metadata[tag.tag_key].append(tag.tag_value)
-        else:
-            document_metadata[tag.tag_key] = tag.tag_value
+            continue
+
+        # set value (ignore duplicate keys, though there should be none)
+        document_metadata.setdefault(tag.tag_key, tag.tag_value)
+
+        # should always be a value, but just in case (treat it as a list in this case)
+        if isinstance(document_metadata[tag.tag_key], list):
+            logger.warning(
+                "Inconsistent is_list for document %s, tag_key %s",
+                document_id,
+                tag.tag_key,
+            )
+            document_metadata[tag.tag_key] = [document_metadata[tag.tag_key]]
     return document_metadata
 
 

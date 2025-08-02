@@ -379,8 +379,6 @@ class Document__Tag(Base):
         ForeignKey("tag.id"), primary_key=True, index=True
     )
 
-    is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
 
 class Persona__Tool(Base):
     __tablename__ = "persona__tool"
@@ -1295,6 +1293,7 @@ class Tag(Base):
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False)
     )
+    is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     documents = relationship(
         "Document",
