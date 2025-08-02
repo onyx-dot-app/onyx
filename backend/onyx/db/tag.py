@@ -153,17 +153,20 @@ def get_structured_tags_for_document(
         raise ValueError("Invalid Document, cannot find tags")
 
     document_metadata: dict[str, Any] = {}
+    is_list: dict[int, bool] = {
+        res[0]: res[1]
+        for res in db_session.query(Document__Tag.tag_id, Document__Tag.is_list)
+        .filter(Document__Tag.document_id == document_id)
+        .all()
+    }
+
     for tag in document.tags:
-        is_list: bool = (
-            db_session.query(Document__Tag.is_list)
-            .filter(
-                Document__Tag.document_id == document_id,
-                Document__Tag.tag_id == tag.id,
-            )
-            .scalar()
-        )
-        if is_list:
-            document_metadata.setdefault(tag.tag_key, []).append(tag.tag_value)
+        if is_list.get(tag.id, False):
+            document_metadata.setdefault(tag.tag_key, [])
+            # just in case
+            if not isinstance(document_metadata[tag.tag_key], list):
+                document_metadata[tag.tag_key] = [document_metadata[tag.tag_key]]
+            document_metadata[tag.tag_key].append(tag.tag_value)
         else:
             document_metadata[tag.tag_key] = tag.tag_value
     return document_metadata
