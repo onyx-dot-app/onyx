@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
+from pydantic import model_validator
 
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
@@ -110,12 +111,22 @@ class BaseFilters(BaseModel):
     source_type: list[DocumentSource] | None = None
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
+    time_cutoff_end: datetime | None = None
     tags: list[Tag] | None = None
     kg_entities: list[str] | None = None
     kg_relationships: list[str] | None = None
     kg_terms: list[str] | None = None
     kg_sources: list[str] | None = None
     kg_chunk_id_zero_only: bool | None = False
+
+    @model_validator(mode="after")
+    def validate_time_range(self) -> "BaseFilters":
+        """Validate that time_cutoff_end is after time_cutoff when both are provided."""
+        if self.time_cutoff is not None and self.time_cutoff_end is not None:
+            if self.time_cutoff_end < self.time_cutoff:
+                raise ValueError("time_cutoff_end must be after time_cutoff")
+
+        return self
 
 
 class UserFileFilters(BaseModel):
