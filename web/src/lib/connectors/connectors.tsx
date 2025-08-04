@@ -180,28 +180,6 @@ export const connectorConfigs: Record<
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
-  github_pages: {
-    description: "Configure GitHub Pages connector",
-    values: [
-      {
-        type: "text",
-        query:
-          "Enter the base URL of the GitHub Pages site (e.g., https://username.github.io/):",
-        label: "Base URL",
-        name: "base_url",
-        optional: false,
-      },
-      {
-        type: "number",
-        query: "Set the batch size for indexing (default is 10):",
-        label: "Batch Size",
-        name: "batch_size",
-        optional: true,
-        default: 10,
-      },
-    ],
-    advanced_values: [],
-  },
   github: {
     description: "Configure GitHub connector",
     values: [
