@@ -1558,7 +1558,7 @@ export interface GithubConfig {
   include_issues: boolean;
 }
 
-export interface GithubPagesConfig {
+export interface GitHubPagesConfig {
   repo_owner: string;
   repo_name: string;
   branch?: string;
