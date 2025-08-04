@@ -19,7 +19,7 @@ def github_pages_connector() -> GitHubPagesConnector:
     connector.load_credentials(
         {
             "github_username": "test_user",
-            "github_personal_access_token": "test_token",
+            "github_access_token": "test_token",
         }
     )
     return connector
