@@ -54,11 +54,11 @@ SKIP_EXTENSIONS = {
 
 class GitHubPagesFileInfo(BaseModel):
     """Information about a file in the GitHub Pages repository"""
-    path: str
+    path: str  # Relative path for processing (adjusted for root_directory)
     sha: str
     size: int
     url: str
-    download_url: str
+    download_url: str  # Full GitHub raw URL (uses original item.path)
     last_modified: datetime | None = None
 
 
@@ -110,10 +110,11 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Load GitHub credentials"""
         github_token = credentials.get("github_access_token")
-        if not github_token:
-            raise ConnectorMissingCredentialError("GitHub access token required")
-        
-        self.github_client = Github(github_token)
+        if github_token:
+            self.github_client = Github(github_token)
+        else:
+            # Allow access to public repositories without token
+            self.github_client = Github()
         return None
 
     def _should_process_file(self, file_path: str) -> bool:
@@ -207,11 +208,11 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
                     logger.warning(f"File too large, skipping: {file_path} ({item.size} bytes)")
                     continue
                 
-                # Build download URL
+                # Build download URL - use original item.path for raw GitHub URL
                 download_url = f"https://raw.githubusercontent.com/{self.repo_owner}/{self.repo_name}/{self.branch}/{item.path}"
                 
                 files_info.append(GitHubPagesFileInfo(
-                    path=file_path,
+                    path=file_path,  # Use adjusted path for processing
                     sha=item.sha,
                     size=item.size or 0,
                     url=item.url,
@@ -350,6 +351,9 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
         """
         Gets the last modification date of a file via GitHub API.
         
+        Note: This makes an API call per file which could impact rate limits.
+        Consider caching or batching for large repositories.
+        
         Args:
             file_info: File information
             
@@ -363,7 +367,10 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
             repo = self.github_client.get_repo(f"{self.repo_owner}/{self.repo_name}")
             
             # Get the commits that modified this file
-            commits = repo.get_commits(path=file_info.path, sha=self.branch)
+            # Note: This is expensive for polling - consider optimizing for production
+            # Extract original path from download_url for API call
+            original_path = file_info.download_url.split(f"/{self.branch}/", 1)[1]
+            commits = repo.get_commits(path=original_path, sha=self.branch)
             
             # Take the most recent commit
             if commits.totalCount > 0:
