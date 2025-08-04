@@ -1,5 +1,18 @@
+// web/src/components/UploadProgressIndicator.tsx
 import React from 'react';
-import { UploadProgressState } from '../hooks/useUploadProgress';
+
+// Define the interfaces directly in this file since they're not exported from the hook
+export interface UploadProgressState {
+  isUploading: boolean;
+  progress: number;
+  stage: 'uploading' | 'processing' | 'indexing' | 'complete' | 'error';
+  fileName: string;
+  error?: string;
+}
+
+export interface FileUploadProgress {
+  [fileName: string]: UploadProgressState;
+}
 
 interface UploadProgressIndicatorProps {
   fileName: string;
@@ -84,7 +97,7 @@ export const UploadProgressIndicator: React.FC<UploadProgressIndicatorProps> = (
 };
 
 interface UploadProgressListProps {
-  uploadProgress: { [fileName: string]: UploadProgressState };
+  uploadProgress: FileUploadProgress;
   onRemove?: (fileName: string) => void;
 }
 
