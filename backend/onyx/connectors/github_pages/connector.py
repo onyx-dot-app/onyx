@@ -1,4 +1,5 @@
 import io
+import os
 import re
 from datetime import datetime
 from datetime import timezone
@@ -55,10 +56,11 @@ SKIP_EXTENSIONS = {
 class GitHubPagesFileInfo(BaseModel):
     """Information about a file in the GitHub Pages repository"""
     path: str  # Relative path for processing (adjusted for root_directory)
+    original_path: str  # Original full path in repository for API calls
     sha: str
     size: int
     url: str
-    download_url: str  # Full GitHub raw URL (uses original item.path)
+    download_url: str  # Full GitHub raw URL (uses original_path)
     last_modified: datetime | None = None
 
 
@@ -103,6 +105,7 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
         self.max_depth = max_depth
         self.batch_size = batch_size
         self.github_client: Github | None = None
+        self._session = requests.Session()  # Reuse connections for better performance
         
         # Build GitHub Pages base URL
         self.pages_base_url = f"https://{repo_owner}.github.io/{repo_name}/"
@@ -127,9 +130,8 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
         Returns:
             True if file should be processed, False otherwise
         """
-        # Get file extension
-        _, ext = file_path.lower().rsplit(".", 1) if "." in file_path else ("", "")
-        ext = f".{ext}" if ext else ""
+        # Get file extension safely using os.path.splitext
+        _, ext = os.path.splitext(file_path.lower())
         
         # Check if extension is supported
         if ext in SUPPORTED_EXTENSIONS:
@@ -213,6 +215,7 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
                 
                 files_info.append(GitHubPagesFileInfo(
                     path=file_path,  # Use adjusted path for processing
+                    original_path=item.path,  # Store original path for API calls
                     sha=item.sha,
                     size=item.size or 0,
                     url=item.url,
@@ -258,7 +261,7 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
             Text content of the file
         """
         try:
-            response = requests.get(file_info.download_url, timeout=30)
+            response = self._session.get(file_info.download_url, timeout=30)
             response.raise_for_status()
             
             # Detect encoding
@@ -293,8 +296,7 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
         Returns:
             Processed text content
         """
-        _, ext = file_path.lower().rsplit(".", 1) if "." in file_path else ("", "")
-        ext = f".{ext}" if ext else ""
+        _, ext = os.path.splitext(file_path.lower())
         
         if ext in [".html", ".htm"]:
             # HTML processing with BeautifulSoup
@@ -343,7 +345,7 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
         
         # For Markdown files, change extension to .html
         if file_path.endswith((".md", ".markdown")):
-            file_path = file_path.rsplit(".", 1)[0] + ".html"
+            file_path = os.path.splitext(file_path)[0] + ".html"
         
         return urljoin(self.pages_base_url, file_path)
 
@@ -368,9 +370,8 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
             
             # Get the commits that modified this file
             # Note: This is expensive for polling - consider optimizing for production
-            # Extract original path from download_url for API call
-            original_path = file_info.download_url.split(f"/{self.branch}/", 1)[1]
-            commits = repo.get_commits(path=original_path, sha=self.branch)
+            # Use original_path for GitHub API calls
+            commits = repo.get_commits(path=file_info.original_path, sha=self.branch)
             
             # Take the most recent commit
             if commits.totalCount > 0:
@@ -550,6 +551,11 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
                 )
             else:
                 raise ConnectorValidationError(f"Repository validation failed: {e}")
+
+    def __del__(self):
+        """Clean up session resources"""
+        if hasattr(self, '_session'):
+            self._session.close()
 
 
 if __name__ == "__main__":
