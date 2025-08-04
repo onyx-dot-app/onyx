@@ -2133,13 +2133,34 @@ export function ChatPage({
     }
   };
 
-  const handleMessageSpecificFileUpload = async (acceptedFiles: File[]) => {
+  // const handleMessageSpecificFileUpload = async (acceptedFiles: File[]) => {
+  //   const [_, llmModel] = getFinalLLM(
+  //     llmProviders,
+  //     liveAssistant ?? null,
+  //     llmManager.currentLlm
+  //   );
+  //   const llmAcceptsImages = true;//modelSupportsImageInput(llmProviders, llmModel);
+
+  //   const imageFiles = acceptedFiles.filter((file) =>
+  //     file.type.startsWith("image/")
+  //   );
+
+  //   if (imageFiles.length > 0 && !llmAcceptsImages) {
+  //     setPopup({
+  //       type: "error",
+  //       message:
+  //         "The current model does not support image input. Please select a model with Vision support.",
+  //     });
+  //     return;
+  //   }
+    const handleMessageSpecificFileUpload = async (acceptedFiles: File[]) => {        /////////////////// start of changes
+    // LLM image support check
     const [_, llmModel] = getFinalLLM(
       llmProviders,
       liveAssistant ?? null,
       llmManager.currentLlm
     );
-    const llmAcceptsImages = true;//modelSupportsImageInput(llmProviders, llmModel);
+    const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
 
     const imageFiles = acceptedFiles.filter((file) =>
       file.type.startsWith("image/")
@@ -2153,6 +2174,65 @@ export function ChatPage({
       });
       return;
     }
+
+    if (acceptedFiles.length === 0) return;
+
+    // Set UI state to uploading
+    updateChatState("uploading", currentSessionId());
+
+    // Start tracking progress for each file
+    acceptedFiles.forEach((file) => startUpload(file.name));
+
+    try {
+      // Call the new library function for uploading with progress
+      const [fileDescriptors, error] = await uploadFilesForChatWithRealProgress(
+        acceptedFiles,
+        // Callback to update progress UI
+        (fileName, stage, _progress, errorMsg) => {
+          if (stage === "error") {
+            setError(fileName, errorMsg || "Upload failed");
+          } else if (stage === "complete") {
+            completeUpload(fileName);
+          } else {
+            setProcessingStage(fileName, stage);
+          }
+        }
+      );
+
+      // Handle batch-level errors from the upload function
+      if (error) {
+        console.error("Upload error:", error);
+        acceptedFiles.forEach((file) => {
+          // Avoid overwriting a specific file error with a general one
+          if (!uploadProgress[file.name] || !uploadProgress[file.name].error) {
+            setError(file.name, error);
+          }
+        });
+        setPopup({ type: "error", message: `File upload failed: ${error}` });
+        return; // Early exit on batch error
+      }
+
+      // On success, add the uploaded files to the current message
+      if (fileDescriptors) {
+        setCurrentMessageFiles((prev) => [...prev, ...fileDescriptors]);
+      }
+    } catch (err: any) {
+      // Handle unexpected exceptions during the upload process
+      console.error("Upload failed:", err);
+      const errorMessage =
+        err.message || "An unexpected error occurred during upload.";
+      acceptedFiles.forEach((file) => {
+        setError(file.name, errorMessage);
+      });
+      setPopup({
+        type: "error",
+        message: errorMessage,
+      });
+    } finally {
+      // Always reset the UI state back to "input"
+      updateChatState("input", currentSessionId());
+    }
+  };                                                      /////////////////////////////////////////// end of changes
 
     updateChatState("uploading", currentSessionId());
 
