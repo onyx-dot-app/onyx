@@ -94,7 +94,7 @@ dropbox==11.36.2
 boto3-stubs[s3]==1.34.133
 shapely==2.0.6
 stripe==10.12.0
-urllib3==2.2.3
+urllib3==1.26.18
 mistune==0.8.4
 sentry-sdk==2.14.0
 prometheus_client==0.21.0

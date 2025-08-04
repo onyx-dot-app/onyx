@@ -483,7 +483,9 @@ export default function AddConnector({
           if (result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             setPopup({
-              message: `Operation timed out after ${CONNECTOR_CREATION_TIMEOUT_MS / 1000} seconds. Check your configuration for errors?`,
+              message: `Operation timed out after ${
+                CONNECTOR_CREATION_TIMEOUT_MS / 1000
+              } seconds. Check your configuration for errors?`,
               type: "error",
             });
 

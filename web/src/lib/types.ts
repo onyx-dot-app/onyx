@@ -390,6 +390,7 @@ export interface UserGroup {
 export enum ValidSources {
   Web = "web",
   GitHub = "github",
+  GitHubPages = "github_pages",
   GitLab = "gitlab",
   Slack = "slack",
   GoogleDrive = "google_drive",

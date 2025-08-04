@@ -251,6 +251,7 @@ export interface ImapCredentialJson {
 
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
+  github_pages: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",

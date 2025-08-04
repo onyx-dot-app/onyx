@@ -180,6 +180,28 @@ export const connectorConfigs: Record<
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  github_pages: {
+    description: "Configure GitHub Pages connector",
+    values: [
+      {
+        type: "text",
+        query:
+          "Enter the base URL of the GitHub Pages site (e.g., https://username.github.io/):",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+      },
+      {
+        type: "number",
+        query: "Set the batch size for indexing (default is 10):",
+        label: "Batch Size",
+        name: "batch_size",
+        optional: true,
+        default: 10,
+      },
+    ],
+    advanced_values: [],
+  },
   github: {
     description: "Configure GitHub connector",
     values: [
@@ -244,6 +266,65 @@ export const connectorConfigs: Record<
       },
     ],
     advanced_values: [],
+  },
+  github_pages: {
+    description: "Configure GitHub Pages connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the GitHub username or organization:",
+        label: "Repository Owner",
+        name: "repo_owner",
+        optional: false,
+      },
+      {
+        type: "text",
+        query: "Enter the repository name:",
+        label: "Repository Name",
+        name: "repo_name",
+        optional: false,
+        description: "The repository that contains the GitHub Pages site",
+      },
+      {
+        type: "text",
+        query: "Enter the branch name (optional):",
+        label: "Branch",
+        name: "branch",
+        optional: true,
+        description:
+          "The branch containing the GitHub Pages site (default: main)",
+        default: "main",
+      },
+      {
+        type: "text",
+        query: "Enter root directory (optional):",
+        label: "Root Directory",
+        name: "root_directory",
+        optional: true,
+        description: "Only index files under this path (e.g., docs/)",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        query: "Maximum crawl depth:",
+        label: "Max Depth",
+        name: "max_depth",
+        optional: true,
+        description: "Maximum depth for crawling (default: 10)",
+        default: 10,
+      },
+      {
+        type: "number",
+        query: "Maximum files to index:",
+        label: "Max Files",
+        name: "max_files",
+        optional: true,
+        description: "Maximum number of files to index (default: 1000)",
+        default: 1000,
+      },
+    ],
+    overrideDefaultFreq: 60 * 60 * 24, // 24 hours
   },
   gitlab: {
     description: "Configure GitLab connector",
@@ -1460,6 +1541,11 @@ export interface ConnectorBase<T> {
   from_beginning?: boolean;
 }
 
+export interface GitHubPagesConfig {
+  repo_owner: string;
+  repo_name: string;
+}
+
 export interface Connector<T> extends ConnectorBase<T> {
   id: number;
   credential_ids: number[];
@@ -1492,6 +1578,15 @@ export interface GithubConfig {
   repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
+}
+
+export interface GithubPagesConfig {
+  repo_owner: string;
+  repo_name: string;
+  branch?: string;
+  root_directory?: string;
+  max_depth?: number;
+  max_files?: number;
 }
 
 export interface GitlabConfig {
