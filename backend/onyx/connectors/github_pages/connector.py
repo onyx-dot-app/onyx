@@ -492,7 +492,7 @@ class GitHubPagesConnector(LoadConnector, PollConnector):
             # Check branch existence
             try:
                 repo.get_branch(self.branch)
-            except Exception:
+            except GithubException:
                 raise ConnectorValidationError(
                     f"Branch '{self.branch}' not found in repository"
                 )
