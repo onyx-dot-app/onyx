@@ -27,6 +27,7 @@ class LLMConfig(BaseModel):
     api_version: str | None = None
     deployment_name: str | None = None
     credentials_file: str | None = None
+    profanity_check: bool
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 

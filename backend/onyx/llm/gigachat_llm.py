@@ -188,6 +188,7 @@ class GigachatModelServer(LLM):
             model_name=self._model,
             temperature=0,
             api_key=self._api_key,
+            profanity_check=False,
         )
 
     def _invoke_implementation(
