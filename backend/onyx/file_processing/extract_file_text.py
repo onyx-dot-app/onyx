@@ -323,7 +323,7 @@ def docx_to_text_and_images(
     file: IO[Any], file_name: str = ""
 ) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
-    Extract text from a docx. If embed_images=True, also extract inline images.
+    Extract text from a docx.
     Return (text_content, list_of_images).
     """
     md = MarkItDown(enable_plugins=False)
