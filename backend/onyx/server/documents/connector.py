@@ -17,13 +17,11 @@ from google.oauth2.credentials import Credentials  # type: ignore
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.configs.app_configs import CURATOR_ALLOWED_CONNECTOR_LIST
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
 from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
@@ -897,36 +895,6 @@ def _validate_connector_allowed(source: DocumentSource) -> None:
     )
 
 
-def _validate_connector_allowed_for_curator(source: DocumentSource, user: User) -> None:
-    """Additional validation for curators based on CURATOR_ALLOWED_CONNECTOR_LIST"""
-    # First check general connector restrictions
-    _validate_connector_allowed(source)
-
-    # If user is not a curator, no additional restrictions
-    if user.role not in [UserRole.CURATOR, UserRole.GLOBAL_CURATOR]:
-        return
-
-    # If no curator-specific restrictions are set, allow all enabled connectors
-    if not CURATOR_ALLOWED_CONNECTOR_LIST:
-        return
-
-    allowed_connectors = [
-        x.strip() for x in CURATOR_ALLOWED_CONNECTOR_LIST.split(",") if x.strip()
-    ]
-
-    # Check if the connector type is in the allowed list for curators
-    for connector_type in allowed_connectors:
-        if source.value.lower().replace("_", "") == connector_type.lower().replace(
-            "_", ""
-        ):
-            return
-
-    raise ValueError(
-        "This connector type is not available for your role. "
-        "Please contact your system administrator if you need access to this connector type."
-    )
-
-
 @router.post("/admin/connector")
 def create_connector_from_model(
     connector_data: ConnectorUpdateRequest,
@@ -936,7 +904,7 @@ def create_connector_from_model(
     tenant_id = get_current_tenant_id()
 
     try:
-        _validate_connector_allowed_for_curator(connector_data.source, user)
+        _validate_connector_allowed(connector_data.source)
 
         fetch_ee_implementation_or_noop(
             "onyx.db.user_group", "validate_object_creation_for_user", None
@@ -986,7 +954,7 @@ def create_connector_with_mock_credential(
         object_is_perm_sync=connector_data.access_type == AccessType.SYNC,
     )
     try:
-        _validate_connector_allowed_for_curator(connector_data.source, user)
+        _validate_connector_allowed(connector_data.source)
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,
@@ -1061,7 +1029,7 @@ def update_connector_from_model(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     try:
-        _validate_connector_allowed_for_curator(connector_data.source, user)
+        _validate_connector_allowed(connector_data.source)
         fetch_ee_implementation_or_noop(
             "onyx.db.user_group", "validate_object_creation_for_user", None
         )(

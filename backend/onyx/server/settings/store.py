@@ -1,4 +1,3 @@
-from onyx.configs.app_configs import CURATOR_ALLOWED_CONNECTOR_LIST
 from onyx.configs.app_configs import CURATORS_CANNOT_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
@@ -58,9 +57,6 @@ def load_settings() -> Settings:
     # Set curator settings from environment variables
     settings.curators_cannot_edit_non_owned_assistants = (
         CURATORS_CANNOT_EDIT_NON_OWNED_ASSISTANTS
-    )
-    settings.curator_allowed_connector_list = (
-        CURATOR_ALLOWED_CONNECTOR_LIST if CURATOR_ALLOWED_CONNECTOR_LIST else None
     )
 
     return settings

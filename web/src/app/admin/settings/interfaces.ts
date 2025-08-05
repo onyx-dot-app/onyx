@@ -33,7 +33,6 @@ export interface Settings {
 
   // Curator settings
   curators_cannot_edit_non_owned_assistants?: boolean;
-  curator_allowed_connector_list?: string | null;
 }
 
 export enum NotificationType {
