@@ -719,88 +719,25 @@ export function buildChatUrl(
   return `/${search ? "search" : "chat"}`;
 }
 
-// export async function uploadFilesForChat(
-//   files: File[]
-// ): Promise<[FileDescriptor[], string | null]> {
-//   const formData = new FormData();
-//   files.forEach((file) => {
-//     formData.append("files", file);
-//   });
-
-//   const response = await fetch("/api/chat/file", {
-//     method: "POST",
-//     body: formData,
-//   });
-//   if (!response.ok) {
-//     return [[], `Failed to upload files - ${(await response.json()).detail}`];
-//   }
-//   const responseJson = await response.json();
-
-//   return [responseJson.files as FileDescriptor[], null];
-// }
-
-//////////////////////////////////////// START OF MODIFIED FUNCTION /////////////////////////////////////////////////
-
 export async function uploadFilesForChat(
-  files: File[],
-  onProgress?: (fileName: string, stage: 'uploading' | 'processing' | 'indexing' | 'complete' | 'error', progress?: number, error?: string) => void
+  files: File[]
 ): Promise<[FileDescriptor[], string | null]> {
   const formData = new FormData();
   files.forEach((file) => {
     formData.append("files", file);
-    // Initialize progress for each file
-    onProgress?.(file.name, 'uploading', 0);
   });
 
-  try {
-    const response = await fetch("/api/chat/file", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      files.forEach(file => {
-        onProgress?.(file.name, 'error', 0, `Upload failed: ${response.statusText}`);
-      });
-      return [[], errorText];
-    }
-
-    // Simulate upload progress stages since we can't get real-time feedback from backend
-    // In a real implementation, you might want to modify the backend to provide progress updates
-    for (const file of files) {
-      // Upload complete
-      onProgress?.(file.name, 'uploading', 100);
-      
-      // Processing stage
-      setTimeout(() => {
-        onProgress?.(file.name, 'processing', 50);
-      }, 100);
-      
-      // Indexing stage
-      setTimeout(() => {
-        onProgress?.(file.name, 'indexing', 75);
-      }, 500);
-      
-      // Complete
-      setTimeout(() => {
-        onProgress?.(file.name, 'complete', 100);
-      }, 1000);
-    }
-
-    const data = await response.json();
-    return [data.files, null];
-    
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    files.forEach(file => {
-      onProgress?.(file.name, 'error', 0, errorMessage);
-    });
-    return [[], errorMessage];
+  const response = await fetch("/api/chat/file", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    return [[], `Failed to upload files - ${(await response.json()).detail}`];
   }
-}
+  const responseJson = await response.json();
 
-///////////////////// END OF MODIFIED FUNCTION //////////////////////////////////////////////////////////////////
+  return [responseJson.files as FileDescriptor[], null];
+}
 
 export function useScrollonStream({
   chatState,
