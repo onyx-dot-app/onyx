@@ -1,4 +1,3 @@
-from onyx.configs.app_configs import CURATORS_CANNOT_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.app_configs import DISABLE_USER_KNOWLEDGE
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import KV_SETTINGS_KEY
@@ -53,11 +52,6 @@ def load_settings() -> Settings:
     # Override user knowledge setting if disabled via environment variable
     if DISABLE_USER_KNOWLEDGE:
         settings.user_knowledge_enabled = False
-
-    # Set curator settings from environment variables
-    settings.curators_cannot_edit_non_owned_assistants = (
-        CURATORS_CANNOT_EDIT_NON_OWNED_ASSISTANTS
-    )
 
     return settings
 

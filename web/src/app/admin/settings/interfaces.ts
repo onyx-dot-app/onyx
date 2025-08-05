@@ -30,9 +30,6 @@ export interface Settings {
 
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
-
-  // Curator settings
-  curators_cannot_edit_non_owned_assistants?: boolean;
 }
 
 export enum NotificationType {
