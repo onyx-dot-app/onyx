@@ -121,7 +121,6 @@ export const useConnectorIndexingStatusWithPagination = (
       last_status_filters: [],
       docs_count_operator: null,
       docs_count_value: null,
-      source_to_page: sourcePagesRef.current, // Use current pagination state
       ...filters,
     }),
     [filters]
@@ -132,9 +131,17 @@ export const useConnectorIndexingStatusWithPagination = (
   // Main data fetch with auto-refresh
   const { data, isLoading, error } = useSWR<
     ConnectorIndexingStatusLiteResponse[]
-  >(swrKey, () => fetchConnectorIndexingStatusPaginated(mainRequest), {
-    refreshInterval,
-  });
+  >(
+    swrKey,
+    () =>
+      fetchConnectorIndexingStatusPaginated(
+        mainRequest,
+        sourcePagesRef.current
+      ),
+    {
+      refreshInterval,
+    }
+  );
 
   // Update merged data when main data changes
   useEffect(() => {
@@ -800,7 +807,8 @@ export const useUserGroups = (): {
 };
 
 export const fetchConnectorIndexingStatusPaginated = async (
-  request: IndexingStatusRequest = {}
+  request: IndexingStatusRequest = {},
+  sourcePages: Record<ValidSources, number> | null = null
 ): Promise<ConnectorIndexingStatusLiteResponse[]> => {
   const response = await fetch(INDEXING_STATUS_PAGINATED_URL, {
     method: "POST",
@@ -813,7 +821,7 @@ export const fetchConnectorIndexingStatusPaginated = async (
       last_status_filters: [],
       docs_count_operator: null,
       docs_count_value: null,
-      source_to_page: {},
+      source_to_page: sourcePages || {}, // Use current pagination state
       ...request,
     }),
   });
