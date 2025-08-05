@@ -381,8 +381,9 @@ def check_indexing_completion(
             db_session, index_attempt_id, batches_processed
         )
 
-        # Check for stalls (3-6 hour timeout)
-        if timed_out:
+        # Check for stalls (3-6 hour timeout). Only applies to in-progress attempts.
+        attempt = get_index_attempt(db_session, index_attempt_id)
+        if timed_out and attempt and attempt.status == IndexingStatus.IN_PROGRESS:
             logger.error(
                 f"Indexing attempt {index_attempt_id} has been indexing for 3-6 hours without progress. "
                 f"Marking it as failed."
