@@ -876,12 +876,13 @@ def build_request_details(
             sender_id=sender_id,
             email=email,
             bypass_filters=tagged,
-            is_bot_msg=False,
+            is_slash_command=False,
             is_bot_dm=event.get("channel_type") == "im",
         )
 
     elif req.type == "slash_commands":
         channel = req.payload["channel_id"]
+        channel_name = req.payload["channel_name"]
         msg = req.payload["text"]
         sender = req.payload["user_id"]
         expert_info = expert_info_from_slack_id(
@@ -899,8 +900,8 @@ def build_request_details(
             sender_id=sender,
             email=email,
             bypass_filters=True,
-            is_bot_msg=True,
-            is_bot_dm=False,
+            is_slash_command=True,
+            is_bot_dm=channel_name == "directmessage",
         )
 
     raise RuntimeError("Programming fault, this should never happen.")

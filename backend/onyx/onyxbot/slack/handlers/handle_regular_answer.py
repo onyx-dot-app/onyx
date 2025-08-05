@@ -81,14 +81,14 @@ def handle_regular_answer(
     messages = message_info.thread_messages
 
     message_ts_to_respond_to = message_info.msg_to_respond
-    is_bot_msg = message_info.is_bot_msg
+    is_slash_command = message_info.is_slash_command
 
     # Capture whether response mode for channel is ephemeral. Even if the channel is set
     # to respond with an ephemeral message, we still send as non-ephemeral if
     # the message is a dm with the Onyx bot.
     send_as_ephemeral = (
         slack_channel_config.channel_config.get("is_ephemeral", False)
-        or message_info.is_bot_msg
+        or message_info.is_slash_command
     ) and not message_info.is_bot_dm
 
     # If the channel mis configured to respond with an ephemeral message,
@@ -164,7 +164,7 @@ def handle_regular_answer(
     # in an attached document set were available to all users in the channel.)
     bypass_acl = False
 
-    if not message_ts_to_respond_to and not is_bot_msg:
+    if not message_ts_to_respond_to and not is_slash_command:
         # if the message is not "/onyx" command, then it should have a message ts to respond to
         raise RuntimeError(
             "No message timestamp to respond to in `handle_message`. This should never happen."
@@ -316,13 +316,14 @@ def handle_regular_answer(
             return True
 
     # Got an answer at this point, can remove reaction and give results
-    update_emote_react(
-        emoji=DANSWER_REACT_EMOJI,
-        channel=message_info.channel_to_respond,
-        message_ts=message_info.msg_to_respond,
-        remove=True,
-        client=client,
-    )
+    if not is_slash_command:  # Slash commands don't have reactions
+        update_emote_react(
+            emoji=DANSWER_REACT_EMOJI,
+            channel=message_info.channel_to_respond,
+            message_ts=message_info.msg_to_respond,
+            remove=True,
+            client=client,
+        )
 
     if answer.answer_valid is False:
         logger.notice(
