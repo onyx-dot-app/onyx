@@ -62,6 +62,10 @@ class Settings(BaseModel):
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
 
+    # Curator settings
+    curators_cannot_edit_non_owned_assistants: bool | None = False
+    curator_allowed_connector_list: str | None = None
+
 
 class UserSettings(Settings):
     notifications: list[Notification]
