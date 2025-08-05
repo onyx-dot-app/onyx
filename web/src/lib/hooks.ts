@@ -89,7 +89,7 @@ export const useObjectState = <T>(
 
 const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
 const INDEXING_STATUS_PAGINATED_URL =
-  "/api/manage/admin/connector/indexing-status-with-pagination";
+  "/api/manage/admin/connector/indexing-status-paginated";
 const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorIndexingStatusWithPagination = (

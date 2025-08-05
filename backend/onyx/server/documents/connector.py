@@ -904,8 +904,8 @@ def get_connector_indexing_status(
     return indexing_statuses
 
 
-@router.post("/admin/connector/indexing-status-with-pagination")
-def get_connector_indexing_status_with_pagination(
+@router.post("/admin/connector/indexing-status-paginated")
+def get_connector_indexing_status_paginated(
     request: IndexingStatusRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
@@ -936,12 +936,6 @@ def get_connector_indexing_status_with_pagination(
         # Get most recent finished index attempts
         (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
     ]
-
-    non_editable_cc_pairs: list[ConnectorCredentialPair]
-    editable_cc_pairs: list[ConnectorCredentialPair]
-    federated_connectors: list[FederatedConnector]
-    latest_index_attempts: list[IndexAttempt]
-    latest_finished_index_attempts: list[IndexAttempt]
 
     if user.role == UserRole.ADMIN:
         # For Admin users, we already got all the cc pair in editable_cc_pairs
@@ -1012,12 +1006,14 @@ def get_connector_indexing_status_with_pagination(
         for attempt in latest_finished_index_attempts
     }
 
-    # Process editable cc_pairs
-    editable_statuses: list[ConnectorIndexingStatusLite] = []
-    for cc_pair in editable_cc_pairs:
+    def build_connector_indexing_status(
+        cc_pair: ConnectorCredentialPair,
+        is_editable: bool,
+    ) -> ConnectorIndexingStatusLite | None:
         # TODO remove this to enable ingestion API
         if cc_pair.name == "DefaultCCPair":
-            continue
+            return None
+
         latest_attempt = cc_pair_to_latest_index_attempt.get(
             (cc_pair.connector_id, cc_pair.credential_id)
         )
@@ -1028,31 +1024,21 @@ def get_connector_indexing_status_with_pagination(
             (cc_pair.connector_id, cc_pair.credential_id), 0
         )
 
-        status = _get_connector_indexing_status_lite(
-            cc_pair, latest_attempt, latest_finished_attempt, True, doc_count
+        return _get_connector_indexing_status_lite(
+            cc_pair, latest_attempt, latest_finished_attempt, is_editable, doc_count
         )
+
+    # Process editable cc_pairs
+    editable_statuses: list[ConnectorIndexingStatusLite] = []
+    for cc_pair in editable_cc_pairs:
+        status = build_connector_indexing_status(cc_pair, True)
         if status:
             editable_statuses.append(status)
 
     # Process non-editable cc_pairs
     non_editable_statuses: list[ConnectorIndexingStatusLite] = []
     for cc_pair in non_editable_cc_pairs:
-        # TODO remove this to enable ingestion API
-        if cc_pair.name == "DefaultCCPair":
-            continue
-        latest_attempt = cc_pair_to_latest_index_attempt.get(
-            (cc_pair.connector_id, cc_pair.credential_id)
-        )
-        latest_finished_attempt = cc_pair_to_latest_finished_index_attempt.get(
-            (cc_pair.connector_id, cc_pair.credential_id)
-        )
-        doc_count = cc_pair_to_document_cnt.get(
-            (cc_pair.connector_id, cc_pair.credential_id), 0
-        )
-
-        status = _get_connector_indexing_status_lite(
-            cc_pair, latest_attempt, latest_finished_attempt, False, doc_count
-        )
+        status = build_connector_indexing_status(cc_pair, False)
         if status:
             non_editable_statuses.append(status)
 
@@ -1068,36 +1054,6 @@ def get_connector_indexing_status_with_pagination(
         federated_statuses.append(federated_status)
 
     source_to_summary: dict[DocumentSource, SourceSummary] = {}
-
-    # Calculate source summary
-    for connector_status in (
-        editable_statuses + non_editable_statuses + federated_statuses
-    ):
-        if isinstance(connector_status, FederatedConnectorStatus):
-            source = connector_status.source.to_non_federated_source()
-        else:
-            source = connector_status.source
-
-        # Skip if source is None (federated connectors without mapping)
-        if source is None:
-            continue
-
-        if source not in source_to_summary:
-            source_to_summary[source] = SourceSummary(
-                total_connectors=0,
-                active_connectors=0,
-                public_connectors=0,
-                total_docs_indexed=0,
-            )
-        source_to_summary[source].total_connectors += 1
-        if isinstance(connector_status, ConnectorIndexingStatusLite):
-            if connector_status.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE:
-                source_to_summary[source].active_connectors += 1
-            if connector_status.access_type == AccessType.PUBLIC:
-                source_to_summary[source].public_connectors += 1
-            source_to_summary[
-                source
-            ].total_docs_indexed += connector_status.docs_indexed
 
     # Apply filters only if any are provided
     has_filters = bool(
@@ -1131,6 +1087,36 @@ def get_connector_indexing_status_with_pagination(
             federated_statuses,
             request.name_filter,
         )
+
+    # Calculate source summary
+    for connector_status in (
+        editable_statuses + non_editable_statuses + federated_statuses
+    ):
+        if isinstance(connector_status, FederatedConnectorStatus):
+            source = connector_status.source.to_non_federated_source()
+        else:
+            source = connector_status.source
+
+        # Skip if source is None (federated connectors without mapping)
+        if source is None:
+            continue
+
+        if source not in source_to_summary:
+            source_to_summary[source] = SourceSummary(
+                total_connectors=0,
+                active_connectors=0,
+                public_connectors=0,
+                total_docs_indexed=0,
+            )
+        source_to_summary[source].total_connectors += 1
+        if isinstance(connector_status, ConnectorIndexingStatusLite):
+            if connector_status.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE:
+                source_to_summary[source].active_connectors += 1
+            if connector_status.access_type == AccessType.PUBLIC:
+                source_to_summary[source].public_connectors += 1
+            source_to_summary[
+                source
+            ].total_docs_indexed += connector_status.docs_indexed
 
     # Track admin page visit for analytics
     create_milestone_and_report(

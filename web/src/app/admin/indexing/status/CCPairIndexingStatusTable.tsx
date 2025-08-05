@@ -45,6 +45,8 @@ function isFederatedConnectorStatus(
   return status.name?.toLowerCase().includes("federated");
 }
 
+const NUMBER_OF_ROWS_PER_PAGE = 10;
+const NUMBER_OF_COLUMNS = 6;
 function SummaryRow({
   source,
   summary,
@@ -291,7 +293,6 @@ export function CCPairIndexingStatusTable({
 }) {
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
-  // Filter connectors based on search quer
   return (
     <Table className="-mt-8">
       <TableHeader>
@@ -364,14 +365,19 @@ export function CCPairIndexingStatusTable({
                       }
                     })}
                     {/* Add dummy rows to reach 10 total rows for cleaner UI */}
-                    {ccPairStatus.indexing_statuses.length < 10 &&
+                    {ccPairStatus.indexing_statuses.length <
+                      NUMBER_OF_ROWS_PER_PAGE &&
                       ccPairStatus.total_pages > 1 &&
                       Array.from({
-                        length: 10 - ccPairStatus.indexing_statuses.length,
+                        length:
+                          NUMBER_OF_ROWS_PER_PAGE -
+                          ccPairStatus.indexing_statuses.length,
                       }).map((_, index) => {
                         const isLastDummyRow =
                           index ===
-                          10 - ccPairStatus.indexing_statuses.length - 1;
+                          NUMBER_OF_ROWS_PER_PAGE -
+                            ccPairStatus.indexing_statuses.length -
+                            1;
                         return (
                           <TableRow
                             key={`dummy-${ccPairStatus.source}-${index}`}
@@ -393,7 +399,9 @@ export function CCPairIndexingStatusTable({
                             {isLastDummyRow ? (
                               <TableCell
                                 colSpan={
-                                  isPaidEnterpriseFeaturesEnabled ? 6 : 5
+                                  isPaidEnterpriseFeaturesEnabled
+                                    ? NUMBER_OF_COLUMNS
+                                    : NUMBER_OF_COLUMNS - 1
                                 }
                                 className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500 border-b border-r border-l border-border dark:border-neutral-700"
                               >
@@ -421,7 +429,11 @@ export function CCPairIndexingStatusTable({
                 {ccPairStatus.total_pages > 1 && (
                   <TableRow className="border-l border-r border-b border-border dark:border-neutral-700">
                     <TableCell
-                      colSpan={isPaidEnterpriseFeaturesEnabled ? 6 : 5}
+                      colSpan={
+                        isPaidEnterpriseFeaturesEnabled
+                          ? NUMBER_OF_COLUMNS
+                          : NUMBER_OF_COLUMNS - 1
+                      }
                     >
                       <div className="flex justify-center">
                         <PageSelector

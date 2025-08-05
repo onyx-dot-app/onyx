@@ -43,7 +43,7 @@ export function SearchAndFilterControls({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [localSearchValue, onSearchChange]);
+  }, [localSearchValue, onSearchChange, resetPagination]);
 
   // Sync with external searchQuery changes (e.g., when filters are cleared)
   useEffect(() => {

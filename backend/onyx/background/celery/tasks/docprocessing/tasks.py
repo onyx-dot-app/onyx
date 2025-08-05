@@ -33,7 +33,7 @@ from onyx.background.indexing.checkpointing_utils import (
     get_index_attempts_with_old_checkpoints,
 )
 from onyx.background.indexing.index_attempt_utils import cleanup_index_attempts
-from onyx.background.indexing.index_attempt_utils import get_index_attempts
+from onyx.background.indexing.index_attempt_utils import get_old_index_attempts
 from onyx.configs.app_configs import MANAGED_VESPA
 from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
 from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
@@ -111,6 +111,7 @@ DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+INDEX_ATTEMPT_BATCH_SIZE = 500
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -1013,9 +1014,9 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
 
     try:
         locked = True
-        batch_size = 500
+        batch_size = INDEX_ATTEMPT_BATCH_SIZE
         with get_session_with_current_tenant() as db_session:
-            old_attempts = get_index_attempts(db_session)
+            old_attempts = get_old_index_attempts(db_session)
             # We need to batch this because during the initial run, the system might have a large number
             # of index attempts since they were never deleted. After that, the number will be
             # significantly lower.
@@ -1023,6 +1024,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                 task_logger.info(
                     "check_for_index_attempt_cleanup - No index attempts to cleanup"
                 )
+                return
 
             for i in range(0, len(old_attempts), batch_size):
                 batch = old_attempts[i : i + batch_size]

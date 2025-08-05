@@ -31,7 +31,7 @@ export function ConnectorStaggeredSkeleton({
       }}
     >
       {/* Connector Name */}
-      <TableCell className="">
+      <TableCell>
         <div className="flex items-center gap-2">
           <div className="h-5 w-5 bg-neutral-200 dark:bg-neutral-700 rounded"></div>
           <div className="lg:w-[180px] xl:w-[350px] h-5 bg-neutral-200 dark:bg-neutral-700 rounded"></div>

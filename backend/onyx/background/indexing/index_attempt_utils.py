@@ -7,7 +7,7 @@ from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.models import IndexAttempt
 
 
-def get_index_attempts(
+def get_old_index_attempts(
     db_session: Session, days_to_keep: int = NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS
 ) -> list[IndexAttempt]:
     """Get all index attempts older than the specified number of days."""
@@ -20,8 +20,8 @@ def get_index_attempts(
 
 
 def cleanup_index_attempts(db_session: Session, index_attempt_ids: list[int]) -> None:
-    """Clean up an index attempt"""
+    """Clean up multiple index attempts"""
     db_session.query(IndexAttempt).filter(
         IndexAttempt.id.in_(index_attempt_ids)
-    ).delete()
+    ).delete(synchronize_session=False)
     db_session.commit()

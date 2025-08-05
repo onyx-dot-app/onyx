@@ -173,7 +173,7 @@ def get_index_attempts_with_old_checkpoints(
         days_to_keep: Number of days to keep checkpoints for (default: NUM_DAYS_TO_KEEP_CHECKPOINTS)
 
     Returns:
-        Number of checkpoints deleted
+        List of IndexAttempt objects with old checkpoints
     """
     cutoff_date = get_db_current_time(db_session) - timedelta(days=days_to_keep)
 
