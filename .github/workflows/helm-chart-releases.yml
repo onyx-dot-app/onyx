@@ -36,5 +36,7 @@ jobs:
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
+        with:
+          charts_dir: deployment/helm/charts/onyx
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
