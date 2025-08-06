@@ -14,6 +14,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -59,7 +60,7 @@ def _make_time_filter_for_sf_type(
     end: SecondsSinceUnixEpoch,
 ) -> str | None:
 
-    if "LastModifiedDate" in queryable_fields:
+    if MODIFIED_FIELD in queryable_fields:
         return _build_last_modified_time_filter_for_salesforce(start, end)
 
     if "CreatedDate" in queryable_fields:

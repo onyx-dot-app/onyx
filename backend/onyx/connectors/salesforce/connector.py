@@ -29,8 +29,12 @@ from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
+from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.connectors.salesforce.utils import get_sqlite_db_path
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD
+from onyx.connectors.salesforce.utils import NAME_FIELD
+from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -39,27 +43,27 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-_DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
+_DEFAULT_PARENT_OBJECT_TYPES = [ACCOUNT_OBJECT_TYPE]
 
 _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
     "Opportunity": {
-        "Account": "account",
+        ACCOUNT_OBJECT_TYPE: "account",
         "FiscalQuarter": "fiscal_quarter",
         "FiscalYear": "fiscal_year",
         "IsClosed": "is_closed",
-        "Name": "name",
+        NAME_FIELD: "name",
         "StageName": "stage_name",
         "Type": "type",
         "Amount": "amount",
         "CloseDate": "close_date",
         "Probability": "probability",
         "CreatedDate": "created_date",
-        "LastModifiedDate": "last_modified_date",
+        MODIFIED_FIELD: "last_modified_date",
     },
     "Contact": {
-        "Account": "account",
+        ACCOUNT_OBJECT_TYPE: "account",
         "CreatedDate": "created_date",
-        "LastModifiedDate": "last_modified_date",
+        MODIFIED_FIELD: "last_modified_date",
     },
 }
 
@@ -395,9 +399,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     #         all_types.update(child_types.keys())
 
     #     # Always want to make sure user is grabbed for permissioning purposes
-    #     all_types.add("User")
+    #     all_types.add(USER_OBJECT_TYPE)
     #     # Always want to make sure account is grabbed for reference purposes
-    #     all_types.add("Account")
+    #     all_types.add(ACCOUNT_OBJECT_TYPE)
 
     #     logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
@@ -421,7 +425,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     #         all_types.update(child_types)
 
     #     # Always want to make sure user is grabbed for permissioning purposes
-    #     all_types.add("User")
+    #     all_types.add(USER_OBJECT_TYPE)
 
     #     logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
@@ -747,7 +751,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     try:
                         last_modified_by_id = record["LastModifiedById"]
                         user_record = self.sf_client.query_object(
-                            "User", last_modified_by_id, ctx.type_to_queryable_fields
+                            USER_OBJECT_TYPE,
+                            last_modified_by_id,
+                            ctx.type_to_queryable_fields,
                         )
                         if user_record:
                             primary_owner = BasicExpertInfo.from_dict(user_record)
@@ -878,7 +884,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         full_sync = start is None and end is None
 
-        # Step 1 - make a list of all the types to download (parent + direct child + "User")
+        # Step 1 - make a list of all the types to download (parent + direct child + USER_OBJECT_TYPE)
         # prefixes = {}
 
         global_description = sf_client.describe()
@@ -915,8 +921,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 # Get custom fields for parent type
                 field_set = set(custom_fields)
                 # these are expected and used during doc conversion
-                field_set.add("Name")
-                field_set.add("LastModifiedDate")
+                field_set.add(NAME_FIELD)
+                field_set.add(MODIFIED_FIELD)
 
                 # Use only the specified fields
                 type_to_queryable_fields[parent_type] = field_set
@@ -963,8 +969,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 ):
                     field_set = set(config_fields)
                     # these are expected and used during doc conversion
-                    field_set.add("Name")
-                    field_set.add("LastModifiedDate")
+                    field_set.add(NAME_FIELD)
+                    field_set.add(MODIFIED_FIELD)
                     queryable_fields = field_set
                 else:
                     queryable_fields = sf_client.get_queryable_fields_by_type(
@@ -997,13 +1003,13 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         all_types.update(child_types)
 
         # NOTE(rkuo): should this be an implicit parent type?
-        all_types.add("User")  # Always add User for permissioning purposes
-        all_types.add("Account")  # Always add Account for reference purposes
+        all_types.add(USER_OBJECT_TYPE)  # Always add User for permissioning purposes
+        all_types.add(ACCOUNT_OBJECT_TYPE)  # Always add Account for reference purposes
 
         logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
         # Ensure User and Account have queryable fields if they weren't already processed
-        essential_types = ["User", "Account"]
+        essential_types = [USER_OBJECT_TYPE, ACCOUNT_OBJECT_TYPE]
         for essential_type in essential_types:
             if essential_type not in type_to_queryable_fields:
                 type_to_queryable_fields[essential_type] = (
@@ -1169,7 +1175,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
-    connector = SalesforceConnector(requested_objects=["Account"])
+    connector = SalesforceConnector(requested_objects=[ACCOUNT_OBJECT_TYPE])
 
     connector.load_credentials(
         {

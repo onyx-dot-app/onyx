@@ -11,6 +11,8 @@ from typing import Any
 
 from onyx.connectors.salesforce.connector import _validate_custom_query_config
 from onyx.connectors.salesforce.connector import SalesforceConnector
+from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 
 
 def test_custom_query_config() -> None:
@@ -19,8 +21,8 @@ def test_custom_query_config() -> None:
     # Example custom query configuration
     # This specifies exactly which fields and associations to retrieve
     custom_config = {
-        "Account": {
-            "fields": ["Id", "Name", "Industry", "CreatedDate", "LastModifiedDate"],
+        ACCOUNT_OBJECT_TYPE: {
+            "fields": ["Id", "Name", "Industry", "CreatedDate", MODIFIED_FIELD],
             "associations": {
                 "Contact": ["Id", "FirstName", "LastName", "Email"],
                 "Opportunity": ["Id", "Name", "StageName", "Amount", "CloseDate"],
@@ -42,7 +44,7 @@ def test_custom_query_config() -> None:
     print(f"Custom config keys: {list(custom_config.keys())}")
 
     # Test that the parent object list is derived from the custom config
-    assert connector.parent_object_list == ["Account", "Lead"]
+    assert connector.parent_object_list == [ACCOUNT_OBJECT_TYPE, "Lead"]
     assert connector.custom_query_config == custom_config
 
     print("✅ Basic validation passed")
@@ -53,14 +55,14 @@ def test_traditional_config() -> None:
 
     # Traditional approach
     connector = SalesforceConnector(
-        batch_size=50, requested_objects=["Account", "Contact"]
+        batch_size=50, requested_objects=[ACCOUNT_OBJECT_TYPE, "Contact"]
     )
 
     print("✅ SalesforceConnector created successfully with traditional config")
     print(f"Parent object list: {connector.parent_object_list}")
 
     # Test that it still works the old way
-    assert connector.parent_object_list == ["Account", "Contact"]
+    assert connector.parent_object_list == [ACCOUNT_OBJECT_TYPE, "Contact"]
     assert connector.custom_query_config is None
 
     print("✅ Traditional config validation passed")
@@ -72,11 +74,11 @@ def test_validation() -> None:
     # Test invalid config structure
     invalid_configs: list[Any] = [
         # Invalid fields type
-        {"Account": {"fields": "invalid"}},
+        {ACCOUNT_OBJECT_TYPE: {"fields": "invalid"}},
         # Invalid associations type
-        {"Account": {"associations": "invalid"}},
+        {ACCOUNT_OBJECT_TYPE: {"associations": "invalid"}},
         # Nested invalid structure
-        {"Account": {"associations": {"Contact": {"fields": "invalid"}}}},
+        {ACCOUNT_OBJECT_TYPE: {"associations": {"Contact": {"fields": "invalid"}}}},
     ]
 
     for i, invalid_config in enumerate(invalid_configs):
@@ -108,7 +110,7 @@ if __name__ == "__main__":
         """
 # Custom configuration approach
 custom_config = {
-    "Account": {
+    ACCOUNT_OBJECT_TYPE: {
         "fields": ["Id", "Name", "Industry"],
         "associations": {
             "Contact": {
@@ -122,6 +124,6 @@ custom_config = {
 connector = SalesforceConnector(custom_query_config=custom_config)
 
 # Traditional approach (still works)
-connector = SalesforceConnector(requested_objects=["Account", "Contact"])
+connector = SalesforceConnector(requested_objects=[ACCOUNT_OBJECT_TYPE, "Contact"])
 """
     )
