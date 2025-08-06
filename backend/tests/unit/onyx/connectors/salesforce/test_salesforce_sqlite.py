@@ -929,7 +929,7 @@ def _get_child_records_by_id_query(
     object_id: str,
     sf_type: str,
     child_relationships: list[str],
-    relationships_to_fields: dict[str, list[str]],
+    relationships_to_fields: dict[str, set[str]],
 ) -> str:
     """Returns a SOQL query given the object id, type and child relationships.
 
@@ -987,7 +987,7 @@ def test_salesforce_connector_single() -> None:
     child_to_parent_types: dict[str, set[str]] = (
         {}
     )  # reverse map from child to parent types
-    child_relationship_to_queryable_fields: dict[str, list[str]] = {}
+    child_relationship_to_queryable_fields: dict[str, set[str]] = {}
 
     # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
 

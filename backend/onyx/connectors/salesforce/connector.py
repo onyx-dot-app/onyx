@@ -75,13 +75,13 @@ class SalesforceConnectorContext:
     parent_to_child_types: dict[str, set[str]] = {}  # map from parent to child types
     child_to_parent_types: dict[str, set[str]] = {}  # map from child to parent types
     parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
-    type_to_queryable_fields: dict[str, list[str]] = {}
+    type_to_queryable_fields: dict[str, set[str]] = {}
     prefix_to_type: dict[str, str] = {}  # infer the object type of an id immediately
 
     parent_to_child_relationships: dict[str, set[str]] = (
         {}
     )  # map from parent to child relationships
-    parent_to_relationship_queryable_fields: dict[str, dict[str, list[str]]] = (
+    parent_to_relationship_queryable_fields: dict[str, dict[str, set[str]]] = (
         {}
     )  # map from relationship to queryable fields
 
@@ -109,49 +109,41 @@ def _extract_fields_and_associations_from_config(
     return fields, associations
 
 
-def _get_all_object_types_from_config(config: dict[str, Any]) -> set[str]:
-    """
-    Recursively extract all object types mentioned in the custom config.
-    This includes both top-level objects and nested associations.
-    """
-    all_types = set()
-
-    def _extract_types_recursive(obj_config: dict[str, Any]) -> None:
-        associations = obj_config.get("associations", {})
-        for assoc_name, assoc_config in associations.items():
-            all_types.add(assoc_name)
-            _extract_types_recursive(assoc_config)
-
-    for object_type, obj_config in config.items():
-        all_types.add(object_type)
-        _extract_types_recursive(obj_config)
-
-    return all_types
-
-
-def _validate_custom_query_config(config: dict[str, Any]) -> bool:
+def _validate_custom_query_config(config: dict[str, Any]) -> None:
     """
     Validate the structure of the custom query configuration.
     """
 
     for object_type, obj_config in config.items():
         if not isinstance(obj_config, dict):
-            return False
+            raise ValueError(
+                f"top level object {object_type} must be mapped to a dictionary"
+            )
 
         # Check if fields is a list when present
         if "fields" in obj_config:
             if not isinstance(obj_config["fields"], list):
-                return False
+                raise ValueError("if fields key exists, value must be a list")
+            for v in obj_config["fields"]:
+                if not isinstance(v, str):
+                    raise ValueError(f"if fields list value {v} is not a string")
 
         # Check if associations is a dict when present
         if "associations" in obj_config:
             if not isinstance(obj_config["associations"], dict):
-                return False
+                raise ValueError(
+                    "if associations key exists, value must be a dictionary"
+                )
             for assoc_name, assoc_fields in obj_config["associations"].items():
                 if not isinstance(assoc_fields, list):
-                    return False
-
-    return True
+                    raise ValueError(
+                        f"associations list value {assoc_fields} for key {assoc_name} is not a list"
+                    )
+                for v in assoc_fields:
+                    if not isinstance(v, str):
+                        raise ValueError(
+                            f"if associations list value {v} is not a string"
+                        )
 
 
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
@@ -265,7 +257,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     @staticmethod
     def _download_object_csvs(
         all_types_to_filter: dict[str, bool],
-        queryable_fields_by_type: dict[str, list[str]],
+        queryable_fields_by_type: dict[str, set[str]],
         directory: str,
         sf_client: OnyxSalesforce,
         start: SecondsSinceUnixEpoch | None = None,
@@ -870,7 +862,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = (
             {}
         )  # for a given object, the fields reference parent objects
-        type_to_queryable_fields: dict[str, list[str]] = {}
+        type_to_queryable_fields: dict[str, set[str]] = {}
         prefix_to_type: dict[str, str] = {}
 
         parent_to_child_relationships: dict[str, set[str]] = (
@@ -880,7 +872,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         # relationship keys are formatted as "parent__relationship"
         # we have to do this because relationship names are not unique!
         # values are a dict of relationship names to a list of queryable fields
-        parent_to_relationship_queryable_fields: dict[str, dict[str, list[str]]] = {}
+        parent_to_relationship_queryable_fields: dict[str, dict[str, set[str]]] = {}
 
         parent_child_names_to_relationships: dict[str, str] = {}
 
@@ -922,14 +914,13 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
                 # Get custom fields for parent type
                 field_set = set(custom_fields)
+                # these are expected and used during doc conversion
                 field_set.add("Name")
-                field_set.add(
-                    "LastModifiedDate"
-                )  # these are expected and used during doc conversion
-                field_list = list(field_set)
+                field_set.add("LastModifiedDate")
+
                 # Use only the specified fields
-                type_to_queryable_fields[parent_type] = field_list
-                logger.info(f"Using custom fields for {parent_type}: {field_list}")
+                type_to_queryable_fields[parent_type] = field_set
+                logger.info(f"Using custom fields for {parent_type}: {field_set}")
             else:
                 # Use all queryable fields
                 type_to_queryable_fields[parent_type] = (
@@ -974,8 +965,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     # these are expected and used during doc conversion
                     field_set.add("Name")
                     field_set.add("LastModifiedDate")
-                    field_list = list(field_set)
-                    queryable_fields = field_list
+                    queryable_fields = field_set
                 else:
                     queryable_fields = sf_client.get_queryable_fields_by_type(
                         child_type
@@ -1133,23 +1123,19 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         try:
             # Attempt to fetch a small batch of objects (arbitrary endpoint) to verify credentials
             self.sf_client.describe()
-        except Exception:
+        except Exception as e:
             raise ConnectorMissingCredentialError(
                 "Failed to validate Salesforce credentials. Please check your"
-                "credentials and try again. Error: {e}"
+                f"credentials and try again. Error: {e}"
             )
 
         if self.custom_query_config:
             try:
-                if not _validate_custom_query_config(self.custom_query_config):
-                    raise ValueError(
-                        "Failed to validate Salesforce credentials. Please check your"
-                        "credentials and try again. Error: {e}"
-                    )
-            except Exception:
+                _validate_custom_query_config(self.custom_query_config)
+            except Exception as e:
                 raise ConnectorMissingCredentialError(
-                    "Failed to validate Salesforce credentials. Please check your"
-                    "credentials and try again. Error: {e}"
+                    "Failed to validate Salesforce custom query config. Please check your"
+                    f"config and try again. Error: {e}"
                 )
 
         logger.info("Salesforce credentials validated successfully.")
