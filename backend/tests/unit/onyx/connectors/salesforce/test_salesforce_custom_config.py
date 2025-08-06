@@ -9,7 +9,7 @@ exactly which fields and associations (child objects) to retrieve for each objec
 import json
 from typing import Any
 
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.salesforce.connector import _validate_custom_query_config
 from onyx.connectors.salesforce.connector import SalesforceConnector
 
 
@@ -71,21 +71,19 @@ def test_validation() -> None:
 
     # Test invalid config structure
     invalid_configs: list[Any] = [
-        # Not a dict
-        "invalid",
         # Invalid fields type
-        '{"Account": {"fields": "invalid"}}',
+        {"Account": {"fields": "invalid"}},
         # Invalid associations type
-        '{"Account": {"associations": "invalid"}}',
+        {"Account": {"associations": "invalid"}},
         # Nested invalid structure
-        '{"Account": {"associations": {"Contact": {"fields": "invalid"}}}}',
+        {"Account": {"associations": {"Contact": {"fields": "invalid"}}}},
     ]
 
     for i, invalid_config in enumerate(invalid_configs):
         try:
-            SalesforceConnector(custom_query_config=invalid_config)
+            _validate_custom_query_config(invalid_config)
             assert False, f"Should have raised ValueError for invalid_config[{i}]"
-        except (ConnectorMissingCredentialError, TypeError):
+        except ValueError:
             print(f"✅ Correctly rejected invalid config {i}")
 
 
