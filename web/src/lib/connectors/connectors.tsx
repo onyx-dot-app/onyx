@@ -580,6 +580,20 @@ export const connectorConfigs: Record<
               },
             ],
           },
+          {
+            value: "jql",
+            label: "JQL Query",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the JQL query:",
+                label: "JQL Query",
+                name: "jql_query",
+                description:
+                  "A custom JQL query to filter Jira issues. See https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/ for more details.",
+              },
+            ],
+          },
         ],
         defaultTab: "everything",
       },
@@ -1526,6 +1540,7 @@ export interface JiraConfig {
   jira_project_url: string;
   project_key?: string;
   comment_email_blacklist?: string[];
+  jql_query?: string;
 }
 
 export interface SalesforceConfig {
