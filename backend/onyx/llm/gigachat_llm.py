@@ -155,7 +155,8 @@ class GigachatModelServer(LLM):
             "function_call": tool_choice,
             "functions": tools,
             "stream": False,
-            "repetition_penalty": 1
+            "repetition_penalty": 1,
+            "profanity_check": False,
         })
 
         @retry(10, 10)
@@ -188,7 +189,6 @@ class GigachatModelServer(LLM):
             model_name=self._model,
             temperature=0,
             api_key=self._api_key,
-            profanity_check=False,
         )
 
     def _invoke_implementation(
