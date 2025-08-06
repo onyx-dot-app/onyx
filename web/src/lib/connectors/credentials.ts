@@ -197,7 +197,6 @@ export interface SharepointCredentialJson {
   sp_directory_id: string;
   sp_certificate_password?: string;
   sp_private_key?: TypedFile;
-  sp_tenant_domain?: string;
 }
 
 export interface AsanaCredentialJson {
@@ -326,7 +325,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
           sp_directory_id: "",
           sp_certificate_password: "",
           sp_private_key: null,
-          sp_tenant_domain: "",
         },
         description:
           "If you select this mode, the SharePoint connector will use a certificate to authenticate. You will need to provide the client ID, directory ID, certificate password, and PFX data.",
@@ -556,7 +554,6 @@ export const credentialDisplayNames: Record<string, string> = {
   sp_directory_id: "SharePoint Directory ID",
   sp_certificate_password: "SharePoint Certificate Password",
   sp_private_key: "SharePoint Private Key",
-  sp_tenant_domain: "SharePoint Tenant Domain",
 
   // Asana
   asana_api_token_secret: "Asana API Token",

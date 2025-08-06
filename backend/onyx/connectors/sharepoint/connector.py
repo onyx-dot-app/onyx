@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
+from office365.intune.organizations.organization import Organization  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
 from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
@@ -897,7 +898,6 @@ class SharepointConnector(
         sp_directory_id = credentials.get("sp_directory_id")
         sp_private_key = credentials.get("sp_private_key")
         sp_certificate_password = credentials.get("sp_certificate_password")
-        sp_tenant_domain = credentials.get("sp_tenant_domain")
 
         authority_url = f"https://login.microsoftonline.com/{sp_directory_id}"
         self.msal_app = msal.ConfidentialClientApplication(
@@ -950,7 +950,19 @@ class SharepointConnector(
             return token
 
         self._graph_client = GraphClient(_acquire_token_for_graph)
-        self.sp_tenant_domain = sp_tenant_domain
+        org = self.graph_client.organization.get().execute_query()
+        if not org or len(org) == 0:
+            raise ConnectorValidationError("No organization found")
+
+        tenant_info: Organization = org[0]  # Access first item directly from collection
+        if not tenant_info.verified_domains:
+            raise ConnectorValidationError("No verified domains found for tenant")
+
+        sp_tenant_domain = tenant_info.verified_domains[0].name
+        if not sp_tenant_domain:
+            raise ConnectorValidationError("No verified domains found for tenant")
+        # remove the .onmicrosoft.com part
+        self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
         return None
 
     def _create_document_failure(
