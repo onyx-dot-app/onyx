@@ -912,7 +912,7 @@ def test_normalize_record() -> None:
 
     expected_str = (
         '{"Id": "001bm00000eu6n5AAA", '
-        'MODIFIED_FIELD: "2024-12-24T18:18:29.000Z", '
+        '"LastModifiedDate": "2024-12-24T18:18:29.000Z", '
         '"BillingStreet": "123 Nowhere Parkway", '
         '"CreatedDate": "2024-12-24T18:18:29.000Z", '
         '"IsDeleted": "false", '
