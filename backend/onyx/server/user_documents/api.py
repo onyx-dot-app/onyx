@@ -54,7 +54,7 @@ from typing import Dict, Any
 from sqlalchemy.orm import joinedload
 #from onyx.auth.dependenies import current_user   ### i alr see a curren_user function from onyx.auth.users sooo imma leave it out for nows
 from onyx.db.models import IndexAttempt
-from onyx.db.session import get_session
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.utils.progress_helpers import ( 
     calculate_progress_percentage, 
