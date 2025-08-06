@@ -49,6 +49,20 @@ from onyx.server.user_documents.models import UserFolderSnapshot
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
+        ################################################################3 added imports @####################
+from typing import Dict, Any
+from sqlalchemy.orm import joinedload
+#from onyx.auth.dependenies import current_user   ### i alr see a curren_user function from onyx.auth.users sooo imma leave it out for nows
+from onyx.db.models import IndexAttempt
+from onyx.db.session import get_session
+from onyx.db.indexing_coordination import IndexingCoordination
+from onyx.utils.progress_helpers import ( 
+    calculate_progress_percentage, 
+    estimate_completion_time, 
+    extract_ocr_info_from_logs, 
+    get_processing_logs
+)
+
 logger = setup_logger()
 
 router = APIRouter()
@@ -593,3 +607,91 @@ def bulk_cleanup_files(
     db_session.commit()
 
     return MessageResponse(message=f"Successfully deleted {delete_count} files")
+
+
+################################################################################################################ added below #############
+@router.get("/user/file/upload-progress")
+def get_file_upload_progress(
+    file_ids: List[int] = Query(...),
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> Dict[int, Dict[str, Any]]:
+    """Get detailed upload and indexing progress for files"""
+    status_dict = {}
+    
+    # Query UserFile with cc_pair join
+    files_with_pairs = (
+        db_session.query(UserFile)
+        .filter(UserFile.id.in_(file_ids))
+        .options(joinedload(UserFile.cc_pair))
+        .all()
+    )
+    
+    for file in files_with_pairs:
+        if file.cc_pair:
+            # Check for the most recent index attempt
+            latest_attempt = (
+                db_session.query(IndexAttempt)
+                .filter(IndexAttempt.connector_credential_pair_id == file.cc_pair.id)
+                .order_by(IndexAttempt.time_created.desc())
+                .first()
+            )
+            
+            if latest_attempt:
+                # Get coordination status to track progress
+                coordination_status = IndexingCoordination.get_coordination_status(
+                    db_session, latest_attempt.id
+                )
+                
+                # Get processing logs for OCR info if available
+                processing_logs = get_processing_logs(latest_attempt.id, db_session)
+                ocr_info = extract_ocr_info_from_logs(processing_logs)
+                
+                # Calculate progress percentage based on completed batches or OCR pages
+                progress_percentage = calculate_progress_percentage(coordination_status)
+                if ocr_info["is_ocr"] and ocr_info["current_page"] and ocr_info["total_pages"]:
+                    # For OCR files, calculate progress based on current page
+                    ocr_progress = (ocr_info["current_page"] / ocr_info["total_pages"]) * 100
+                    progress_percentage = min(99, int(ocr_progress))
+                
+                # Calculate estimated time remaining
+                estimated_time = estimate_completion_time(latest_attempt, coordination_status)
+                if ocr_info["is_ocr"] and ocr_info["avg_time_per_page"] and ocr_info["current_page"] and ocr_info["total_pages"]:
+                    # For OCR files, estimate based on average page processing time
+                    pages_remaining = ocr_info["total_pages"] - ocr_info["current_page"]
+                    seconds_remaining = pages_remaining * ocr_info["avg_time_per_page"]
+                    now = datetime.now(datetime.timezone.utc)
+                    estimated_time = now + timedelta(seconds=seconds_remaining)
+                
+                status = {
+                    "indexed": file.cc_pair.last_successful_index_time is not None,
+                    "status": latest_attempt.status,
+                    "completed_batches": coordination_status.completed_batches if coordination_status.found else 0,
+                    "total_batches": coordination_status.total_batches if coordination_status.found else None,
+                    "progress_percentage": progress_percentage,
+                    "time_started": latest_attempt.time_started,
+                    "estimated_completion_time": estimated_time,
+                    "is_ocr_processing": ocr_info["is_ocr"],
+                    "ocr_current_page": ocr_info["current_page"],
+                    "ocr_total_pages": ocr_info["total_pages"],
+                    "ocr_avg_page_time": ocr_info["avg_time_per_page"],
+                    "file_name": file.name,
+                }
+            else:
+                status = {
+                    "indexed": False, 
+                    "status": "pending", 
+                    "progress_percentage": 0,
+                    "file_name": file.name,
+                }
+        else:
+            status = {
+                "indexed": False, 
+                "status": "pending", 
+                "progress_percentage": 0,
+                "file_name": file.name,
+            }
+        
+        status_dict[file.id] = status
+    
+    return status_dict
