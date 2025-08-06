@@ -923,6 +923,14 @@ def get_connector_indexing_status_paginated(
     # sqlalchemy-method-connection-for-bind-is-already-in-progress
     # for why we can't pass in the current db_session to these functions
 
+    # TODO: We currently materialize all connectors in memory to calculate summary info
+    # and display them in descending order per source. This is acceptable for now since
+    # the number of connectors is relatively small, and load time is under 1s.
+    # However, this approach will likely become very slow if the query includes user files,
+    # such as "My Documents", where each file is its own connector. In large deployments,
+    # this could result in 100k+ connectors. Consider optimizing with pagination or
+    # reevaluating the need for the summary to improve performance in the future.
+
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs
         (
