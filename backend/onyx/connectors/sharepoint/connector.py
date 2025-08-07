@@ -1,6 +1,6 @@
-import html
 import base64
 import copy
+import html
 import io
 import os
 import re
@@ -14,10 +14,8 @@ from typing import Any
 from typing import cast
 from urllib.parse import unquote
 
-
-import requests
-from office365.runtime.client_request import ClientRequestException  # type: ignore
 import msal  # type: ignore[import-untyped]
+import requests
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
@@ -27,6 +25,7 @@ from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[im
 from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
 from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
+from office365.runtime.client_request import ClientRequestException  # type: ignore
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
@@ -47,9 +46,10 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
+from onyx.connectors.models import ExternalAccess
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
-from onyx.connectors.sharepoint.utils import get_sharepoint_external_access
+from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
@@ -75,6 +75,13 @@ class SiteDescriptor(BaseModel):
     url: str
     drive_name: str | None
     folder_path: str | None
+
+
+class CertificateData(BaseModel):
+    """Data class for storing certificate information loaded from PFX file."""
+
+    private_key: bytes
+    thumbprint: str
 
 
 def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> Any:
@@ -109,6 +116,8 @@ def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> 
                         f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
                     )
                 raise e
+
+
 class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     cached_site_descriptors: deque[SiteDescriptor] | None = None
     current_site_descriptor: SiteDescriptor | None = None
@@ -122,9 +131,7 @@ class SharepointAuthMethod(Enum):
     CERTIFICATE = "certificate"
 
 
-def load_certificate_from_pfx(
-    pfx_data: bytes, password: str
-) -> dict[str, bytes | str] | None:
+def load_certificate_from_pfx(pfx_data: bytes, password: str) -> CertificateData | None:
     """Load certificate from .pfx file for MSAL authentication"""
     try:
         # Load the certificate and private key
@@ -143,10 +150,10 @@ def load_certificate_from_pfx(
             encryption_algorithm=serialization.NoEncryption(),
         )
 
-        return {
-            "private_key": key_pem,
-            "thumbprint": certificate.fingerprint(hashes.SHA1()).hex(),
-        }
+        return CertificateData(
+            private_key=key_pem,
+            thumbprint=certificate.fingerprint(hashes.SHA1()).hex(),
+        )
     except Exception as e:
         logger.error(f"Error loading certificate: {e}")
         return None
@@ -173,7 +180,7 @@ def _convert_driveitem_to_document_with_permissions(
         raise ValueError("DriveItem name is required")
     if driveitem.id is None:
         raise ValueError("DriveItem ID is required")
-        
+
     try:
         size_value = getattr(driveitem, "size", None)
         if size_value is not None:
@@ -203,12 +210,10 @@ def _convert_driveitem_to_document_with_permissions(
         return None
 
     # Handle different content types
-    if isinstance(content, bytes):
-        content_bytes = content
-    elif isinstance(content, str):
-        content_bytes = content.encode("utf-8")
+    if isinstance(content.value, bytes):
+        content_bytes = content.value
     else:
-        raise ValueError(f"Unsupported content type: {type(content)}")
+        raise ValueError(f"Unsupported content type: {type(content.value)}")
 
     file_text = extract_file_text(
         file=io.BytesIO(content_bytes),
@@ -217,19 +222,11 @@ def _convert_driveitem_to_document_with_permissions(
     )
 
     if include_permissions and ctx is not None:
-        try:
-            external_access = get_sharepoint_external_access(
-                driveitem, drive_name, ctx, graph_client, True
-            )
-        except Exception as e:
-            logger.warning(
-                f"Failed to retrieve permissions for document {driveitem.name}: {e}"
-            )
-            # For permission failures, we can still return the document without permissions
-            # but we should log this as a warning since permissions are critical for security
-            external_access = None
+        external_access = get_sharepoint_external_access(
+            driveitem, drive_name, ctx, graph_client, True
+        )
     else:
-        external_access = None
+        external_access = ExternalAccess.empty()
 
     doc = Document(
         id=driveitem.id,
@@ -396,6 +393,7 @@ def _convert_sitepage_to_document(
         ),
     )
     return doc
+
 
 def _convert_driveitem_to_slim_document(
     driveitem: DriveItem,
@@ -781,64 +779,64 @@ class SharepointConnector(
 
         return all_pages
 
-    def _fetch_from_sharepoint(
-        self,
-        start: datetime | None = None,
-        end: datetime | None = None,
-    ) -> GenerateDocumentsOutput:
-        site_descriptors = self.site_descriptors or self.fetch_sites()
+    # def _fetch_from_sharepoint(
+    #     self,
+    #     start: datetime | None = None,
+    #     end: datetime | None = None,
+    # ) -> GenerateDocumentsOutput:
+    #     site_descriptors = self.site_descriptors or self.fetch_sites()
 
-        # goes over all urls, converts them into Document objects and then yields them in batches
-        doc_batch: list[Document] = []
-        for site_descriptor in site_descriptors:
-            # Fetch regular documents from document libraries
-            driveitems = self._fetch_driveitems(site_descriptor, start=start, end=end)
-            for driveitem, drive_name in driveitems:
-                logger.debug(f"Processing: {driveitem.web_url}")
+    #     # goes over all urls, converts them into Document objects and then yields them in batches
+    #     doc_batch: list[Document] = []
+    #     for site_descriptor in site_descriptors:
+    #         # Fetch regular documents from document libraries
+    #         driveitems = self._fetch_driveitems(site_descriptor, start=start, end=end)
+    #         for driveitem, drive_name in driveitems:
+    #             logger.debug(f"Processing: {driveitem.web_url}")
 
-                # Convert driveitem to document with size checking
-                doc = _convert_driveitem_to_document(driveitem, drive_name)
-                if doc is not None:
-                    doc_batch.append(doc)
-                try:
-                    logger.debug(f"Processing: {driveitem.web_url}")
-                    doc_batch.append(
-                        _convert_driveitem_to_document(driveitem, drive_name)
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to process driveitem: {str(e)}")
+    #             # Convert driveitem to document with size checking
+    #             doc = _convert_driveitem_to_document(driveitem, drive_name)
+    #             if doc is not None:
+    #                 doc_batch.append(doc)
+    #             try:
+    #                 logger.debug(f"Processing: {driveitem.web_url}")
+    #                 doc_batch.append(
+    #                     _convert_driveitem_to_document(driveitem, drive_name)
+    #                 )
+    #             except Exception as e:
+    #                 logger.warning(f"Failed to process driveitem: {str(e)}")
 
-                if len(doc_batch) >= self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+    #             if len(doc_batch) >= self.batch_size:
+    #                 yield doc_batch
+    #                 doc_batch = []
 
-            # Fetch SharePoint site pages (.aspx files)
-            # Only fetch site pages if a folder is not specified since this processing
-            # happens at a site-wide level + specifying a folder implies that the
-            # user probably isn't looking for site pages
-            specified_path = (
-                site_descriptor.folder_path is not None
-                or site_descriptor.drive_name is not None
-            )
-            if self.include_site_pages and not specified_path:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start, end=end
-                )
-                for site_page in site_pages:
-                    logger.debug(
-                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
-                    )
-                    doc_batch.append(
-                        _convert_sitepage_to_document(
-                            site_page, site_descriptor.drive_name
-                        )
-                    )
+    #         # Fetch SharePoint site pages (.aspx files)
+    #         # Only fetch site pages if a folder is not specified since this processing
+    #         # happens at a site-wide level + specifying a folder implies that the
+    #         # user probably isn't looking for site pages
+    #         specified_path = (
+    #             site_descriptor.folder_path is not None
+    #             or site_descriptor.drive_name is not None
+    #         )
+    #         if self.include_site_pages and not specified_path:
+    #             site_pages = self._fetch_site_pages(
+    #                 site_descriptor, start=start, end=end
+    #             )
+    #             for site_page in site_pages:
+    #                 logger.debug(
+    #                     f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+    #                 )
+    #                 doc_batch.append(
+    #                     _convert_sitepage_to_document(
+    #                         site_page, site_descriptor.drive_name
+    #                     )
+    #                 )
 
-                    if len(doc_batch) >= self.batch_size:
-                        yield doc_batch
-                        doc_batch = []
+    #                 if len(doc_batch) >= self.batch_size:
+    #                     yield doc_batch
+    #                     doc_batch = []
 
-        yield doc_batch
+    #     yield doc_batch
 
     def _acquire_token(self) -> dict[str, Any]:
         """
@@ -851,6 +849,7 @@ class SharepointConnector(
             scopes=["https://graph.microsoft.com/.default"]
         )
         return token
+
     def _fetch_slim_documents_from_sharepoint(self) -> GenerateSlimDocumentOutput:
         site_descriptors = self.site_descriptors or self.fetch_sites()
 
@@ -1008,6 +1007,7 @@ class SharepointConnector(
                 if drive.name is None:
                     continue
                 drive_names.append(drive.name)
+
             return drive_names
         except Exception as e:
             logger.warning(f"Failed to fetch drives for site '{site_url}': {e}")
@@ -1200,6 +1200,27 @@ class SharepointConnector(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
 
+            # Fetch SharePoint site pages (.aspx files)
+            # Only fetch site pages if a folder is not specified since this processing
+            # happens at a site-wide level + specifying a folder implies that the
+            # user probably isn't looking for site pages
+            specified_path = (
+                site_descriptor.folder_path is not None
+                or site_descriptor.drive_name is not None
+            )
+            if self.include_site_pages and not specified_path:
+                site_pages = self._fetch_site_pages(
+                    site_descriptor, start=start_dt, end=end_dt
+                )
+                for site_page in site_pages:
+                    logger.debug(
+                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                    )
+                    yield (
+                        _convert_sitepage_to_document(
+                            site_page, site_descriptor.drive_name
+                        )
+                    )
             # Clear current drive after processing
             checkpoint.current_drive_name = None
 

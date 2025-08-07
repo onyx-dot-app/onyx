@@ -25,7 +25,7 @@ def get_sharepoint_external_access(
         return ExternalAccess.empty()
 
     get_external_access_func = fetch_versioned_implementation_with_fallback(
-        "onyx.external_permissions.sharepoint.utils",
+        "onyx.external_permissions.sharepoint.permission_utils",
         "get_external_access_from_sharepoint",
         fallback=noop_fallback,
     )

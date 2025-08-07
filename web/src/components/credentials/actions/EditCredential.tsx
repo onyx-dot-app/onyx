@@ -40,7 +40,6 @@ const EditCredential = ({
   ) => {
     formikHelpers.setSubmitting(true);
     try {
-      console.log("values", values);
       await onUpdate(credential, values, onClose);
     } catch (error) {
       console.error("Error updating credential:", error);

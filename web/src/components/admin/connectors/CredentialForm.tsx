@@ -14,6 +14,8 @@ import {
   CredentialWithPrivateKey,
 } from "@/lib/connectors/credentials";
 
+const PRIVATE_KEY_FIELD_KEY = "private_key";
+
 export async function submitCredential<T>(
   credential: CredentialBase<T> | CredentialWithPrivateKey<T>
 ): Promise<{
@@ -24,7 +26,7 @@ export async function submitCredential<T>(
   let isSuccess = false;
   try {
     let response: Response;
-    if ("private_key" in credential && credential.private_key) {
+    if (PRIVATE_KEY_FIELD_KEY in credential && credential.private_key) {
       response = await createCredentialWithPrivateKey(
         credential as CredentialWithPrivateKey<T>
       );

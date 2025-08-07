@@ -3,7 +3,9 @@ from collections.abc import Generator
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.sharepoint.utils import get_sharepoint_external_groups
+from ee.onyx.external_permissions.sharepoint.permission_utils import (
+    get_sharepoint_external_groups,
+)
 from onyx.connectors.sharepoint.connector import acquire_token_for_rest
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
@@ -43,27 +45,19 @@ def sharepoint_group_sync(
     sp_tenant_domain = connector.sp_tenant_domain
     # Process each site
     for site_descriptor in site_descriptors:
-        try:
-            logger.debug(f"Processing site: {site_descriptor.url}")
+        logger.debug(f"Processing site: {site_descriptor.url}")
 
-            # Create client context for the site using connector's MSAL app
-            ctx = ClientContext(site_descriptor.url).with_access_token(
-                lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+        # Create client context for the site using connector's MSAL app
+        ctx = ClientContext(site_descriptor.url).with_access_token(
+            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+        )
+
+        # Get external groups for this site
+        external_groups = get_sharepoint_external_groups(ctx, connector.graph_client)
+
+        # Yield each group
+        for group in external_groups:
+            logger.debug(
+                f"Found group: {group.id} with {len(group.user_emails)} members"
             )
-
-            # Get external groups for this site
-            external_groups = get_sharepoint_external_groups(
-                ctx, connector.graph_client
-            )
-
-            # Yield each group
-            for group in external_groups:
-                logger.debug(
-                    f"Found group: {group.id} with {len(group.user_emails)} members"
-                )
-                yield group
-
-        except Exception as e:
-            msg = f"Failed to process site {site_descriptor.url}: {str(e)}"
-            logger.error(msg)
-            continue
+            yield group

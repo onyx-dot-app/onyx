@@ -6,6 +6,7 @@ from typing import Any
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
 from office365.runtime.client_request_exception import ClientRequestException  # type: ignore[import-untyped]
+from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection  # type: ignore[import-untyped]
 from pydantic import BaseModel
@@ -19,6 +20,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+# These values represent different types of SharePoint principals used in permission assignments
+USER_PRINCIPAL_TYPE = 1  # Individual user accounts
+ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public access)
+AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
+SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
+
+
 class SharepointGroup(BaseModel):
     model_config = {"frozen": True}
 
@@ -27,7 +35,9 @@ class SharepointGroup(BaseModel):
     principal_type: int
 
 
-def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> Any:
+def _sleep_and_retry(
+    query_obj: ClientQuery, method_name: str, max_retries: int = 3
+) -> Any:
     """
     Execute a SharePoint query with retry logic for rate limiting.
     """
@@ -227,12 +237,15 @@ def _is_public_site(client_context: ClientContext) -> bool:
         web = client_context.web
 
         # Patterns that indicate public access
+        # This list is derived from the below links
+        # https://learn.microsoft.com/en-us/answers/questions/349797/understanding-login-name-format-of-sharepoint
+        # for claims based
+        # https://learn.microsoft.com/en-us/answers/questions/4879990/nt-authorityauthenticated-users-in-sharepoint-onli
+        # for public groups
         public_login_patterns: list[str] = [
             "everyone except external users",
             "everyone",
-            "anonymous",
-            "nt authority\\authenticated users",
-            "c:0(.s|true",  # Claims-based anonymous
+            "c:0(.s|true",  # Claims-based
         ]
 
         # Flag to track if we found public access
@@ -248,7 +261,10 @@ def _is_public_site(client_context: ClientContext) -> bool:
                 member = assignment.member
 
                 # Check for anonymous users (principal_type 3)
-                if hasattr(member, "principal_type") and member.principal_type == 3:
+                if (
+                    hasattr(member, "principal_type")
+                    and member.principal_type == ANONYMOUS_USER_PRINCIPAL_TYPE
+                ):
                     logger.info("Site has anonymous user access (principal_type=3)")
                     is_public = True
                     return
@@ -293,43 +309,44 @@ def _get_sharepoint_groups(
     client_context: ClientContext, group_name: str
 ) -> tuple[set[SharepointGroup], set[str]]:
 
-    try:
-        groups: set[SharepointGroup] = set()
-        user_emails: set[str] = set()
+    groups: set[SharepointGroup] = set()
+    user_emails: set[str] = set()
 
-        def process_users(users: list[Any]) -> None:
-            nonlocal groups, user_emails
+    def process_users(users: list[Any]) -> None:
+        nonlocal groups, user_emails
 
-            for user in users:
-                logger.info(f"User: {user.to_json()}")
-                if user.principal_type == 1 and hasattr(user, "user_principal_name"):
-                    if user.user_principal_name:
-                        email = user.user_principal_name
-                        if ".onmicrosoft" in email:
-                            email = email.replace(".onmicrosoft", "")
-                        user_emails.add(email)
-                    else:
-                        logger.warning(
-                            f"User don't have a user principal name: {user.login_name}"
-                        )
-                elif user.principal_type in [4, 8]:
-                    groups.add(
-                        SharepointGroup(
-                            login_name=user.login_name,
-                            principal_type=user.principal_type,
-                            name=user.title,
-                        )
+        for user in users:
+            logger.info(f"User: {user.to_json()}")
+            if user.principal_type == USER_PRINCIPAL_TYPE and hasattr(
+                user, "user_principal_name"
+            ):
+                if user.user_principal_name:
+                    email = user.user_principal_name
+                    if ".onmicrosoft" in email:
+                        email = email.replace(".onmicrosoft", "")
+                    user_emails.add(email)
+                else:
+                    logger.warning(
+                        f"User don't have a user principal name: {user.login_name}"
                     )
+            elif user.principal_type in [
+                AZURE_AD_GROUP_PRINCIPAL_TYPE,
+                SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+            ]:
+                groups.add(
+                    SharepointGroup(
+                        login_name=user.login_name,
+                        principal_type=user.principal_type,
+                        name=user.title,
+                    )
+                )
 
-        group = client_context.web.site_groups.get_by_name(group_name)
-        _sleep_and_retry(
-            group.users.get_all(page_loaded=process_users), "get_sharepoint_groups"
-        )
+    group = client_context.web.site_groups.get_by_name(group_name)
+    _sleep_and_retry(
+        group.users.get_all(page_loaded=process_users), "get_sharepoint_groups"
+    )
 
-        return groups, user_emails
-    except Exception as e:
-        logger.error(f"Failed to get SharePoint group info for group {group_name}: {e}")
-        return set(), set()
+    return groups, user_emails
 
 
 def _get_azuread_groups(
@@ -339,96 +356,90 @@ def _get_azuread_groups(
     if not group_id:
         logger.error(f"Failed to get Azure AD group GUID for name {group_name}")
         return set(), set()
-    try:
-        group = graph_client.groups[group_id]
-        groups: set[SharepointGroup] = set()
-        user_emails: set[str] = set()
+    group = graph_client.groups[group_id]
+    groups: set[SharepointGroup] = set()
+    user_emails: set[str] = set()
 
-        def process_members(members: list[Any]) -> None:
-            nonlocal groups, user_emails
+    def process_members(members: list[Any]) -> None:
+        nonlocal groups, user_emails
 
-            for member in members:
-                member_data = member.to_json()
-                logger.info(f"Member: {member_data}")
+        for member in members:
+            member_data = member.to_json()
+            logger.info(f"Member: {member_data}")
 
-                # Check for user-specific attributes
-                user_principal_name = member_data.get(
-                    "userPrincipalName"
-                ) or member_data.get("user_principal_name")
-                mail = member_data.get("mail")
-                display_name = member_data.get("displayName") or member_data.get(
-                    "display_name"
-                )
+            # Check for user-specific attributes
+            user_principal_name = member_data.get(
+                "userPrincipalName"
+            ) or member_data.get("user_principal_name")
+            mail = member_data.get("mail")
+            display_name = member_data.get("displayName") or member_data.get(
+                "display_name"
+            )
 
-                # Check object attributes directly (if available)
-                is_user = False
-                is_group = False
+            # Check object attributes directly (if available)
+            is_user = False
+            is_group = False
 
-                # Users typically have userPrincipalName or mail
-                if user_principal_name or (mail and "@" in str(mail)):
+            # Users typically have userPrincipalName or mail
+            if user_principal_name or (mail and "@" in str(mail)):
+                is_user = True
+            # Groups typically have displayName but no userPrincipalName
+            elif display_name and not user_principal_name:
+                # Additional check: try to access group-specific properties
+                if (
+                    hasattr(member, "groupTypes")
+                    or member_data.get("groupTypes") is not None
+                ):
+                    is_group = True
+                # Or check if it has an 'id' field typical for groups
+                elif member_data.get("id") and not user_principal_name:
+                    is_group = True
+
+            # Check the object type name (fallback)
+            if not is_user and not is_group:
+                obj_type = type(member).__name__.lower()
+                if "user" in obj_type:
                     is_user = True
-                # Groups typically have displayName but no userPrincipalName
-                elif display_name and not user_principal_name:
-                    # Additional check: try to access group-specific properties
-                    if (
-                        hasattr(member, "groupTypes")
-                        or member_data.get("groupTypes") is not None
-                    ):
-                        is_group = True
-                    # Or check if it has an 'id' field typical for groups
-                    elif member_data.get("id") and not user_principal_name:
-                        is_group = True
+                elif "group" in obj_type:
+                    is_group = True
 
-                # Check the object type name (fallback)
-                if not is_user and not is_group:
-                    obj_type = type(member).__name__.lower()
-                    if "user" in obj_type:
-                        is_user = True
-                    elif "group" in obj_type:
-                        is_group = True
-
-                # Process based on identification
-                if is_user:
-                    if user_principal_name:
-                        email = user_principal_name
-                        if ".onmicrosoft" in email:
-                            email = email.replace(".onmicrosoft", "")
-                        user_emails.add(email)
-                    elif mail:
-                        email = mail
-                        if ".onmicrosoft" in email:
-                            email = email.replace(".onmicrosoft", "")
-                        user_emails.add(email)
-                    logger.info(f"Added user: {user_principal_name or mail}")
-                elif is_group:
-                    if not display_name:
-                        logger.error(
-                            f"No display name for group: {member_data.get('id')}"
-                        )
-                        continue
-                    groups.add(
-                        SharepointGroup(
-                            login_name=member_data.get("id", ""),  # Use ID for groups
-                            principal_type=4,
-                            name=display_name,
-                        )
+            # Process based on identification
+            if is_user:
+                if user_principal_name:
+                    email = user_principal_name
+                    if ".onmicrosoft" in email:
+                        email = email.replace(".onmicrosoft", "")
+                    user_emails.add(email)
+                elif mail:
+                    email = mail
+                    if ".onmicrosoft" in email:
+                        email = email.replace(".onmicrosoft", "")
+                    user_emails.add(email)
+                logger.info(f"Added user: {user_principal_name or mail}")
+            elif is_group:
+                if not display_name:
+                    logger.error(f"No display name for group: {member_data.get('id')}")
+                    continue
+                groups.add(
+                    SharepointGroup(
+                        login_name=member_data.get("id", ""),  # Use ID for groups
+                        principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
+                        name=display_name,
                     )
-                    logger.info(f"Added group: {display_name}")
-                else:
-                    # Log unidentified members for debugging
-                    logger.warning(f"Could not identify member type for: {member_data}")
+                )
+                logger.info(f"Added group: {display_name}")
+            else:
+                # Log unidentified members for debugging
+                logger.warning(f"Could not identify member type for: {member_data}")
 
-        _sleep_and_retry(
-            group.members.get_all(page_loaded=process_members), "get_azuread_groups"
-        )
+    _sleep_and_retry(
+        group.members.get_all(page_loaded=process_members), "get_azuread_groups"
+    )
 
-        owner_emails = _get_security_group_owners(graph_client, group_id)
-        user_emails.update(owner_emails)
+    owner_emails = _get_security_group_owners(graph_client, group_id)
+    user_emails.update(owner_emails)
 
-        return groups, user_emails
-    except Exception as e:
-        logger.error(f"Failed to get Azure AD group info for group {group_name}: {e}")
-        return set(), set()
+    return groups, user_emails
 
 
 def _get_groups_and_members_recursively(
@@ -442,32 +453,29 @@ def _get_groups_and_members_recursively(
     group_queue: deque[SharepointGroup] = deque(groups)
     visited_groups: set[str] = set()
     visited_group_name_to_emails: dict[str, set[str]] = {}
-    try:
-        while group_queue:
-            group = group_queue.popleft()
-            if group.login_name in visited_groups:
-                continue
-            visited_groups.add(group.login_name)
-            visited_group_name_to_emails[group.name] = set()
-            logger.info(
-                f"Processing group: {group.name} principal type: {group.principal_type}"
+    while group_queue:
+        group = group_queue.popleft()
+        if group.login_name in visited_groups:
+            continue
+        visited_groups.add(group.login_name)
+        visited_group_name_to_emails[group.name] = set()
+        logger.info(
+            f"Processing group: {group.name} principal type: {group.principal_type}"
+        )
+        if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+            group_info, user_emails = _get_sharepoint_groups(
+                client_context, group.login_name
             )
-            if group.principal_type == 8:
-                group_info, user_emails = _get_sharepoint_groups(
-                    client_context, group.login_name
-                )
-                visited_group_name_to_emails[group.name].update(user_emails)
-                if group_info:
-                    group_queue.extend(group_info)
-            if group.principal_type == 4:
-                group_info, user_emails = _get_azuread_groups(
-                    graph_client, group.login_name
-                )
-                visited_group_name_to_emails[group.name].update(user_emails)
-                if group_info:
-                    group_queue.extend(group_info)
-    except Exception as e:
-        logger.error(f"Failed to get groups and members recursively: {e}")
+            visited_group_name_to_emails[group.name].update(user_emails)
+            if group_info:
+                group_queue.extend(group_info)
+        if group.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+            group_info, user_emails = _get_azuread_groups(
+                graph_client, group.login_name
+            )
+            visited_group_name_to_emails[group.name].update(user_emails)
+            if group_info:
+                group_queue.extend(group_info)
 
     return visited_group_name_to_emails
 
@@ -528,25 +536,24 @@ def get_external_access_from_sharepoint(
                     continue
             if assignment.member:
                 member = assignment.member
-                if hasattr(member, "principal_type"):
-                    if member.principal_type == 1 and hasattr(
-                        member, "user_principal_name"
-                    ):
-                        email = member.user_principal_name
-                        if ".onmicrosoft" in email:
-                            email = email.replace(".onmicrosoft", "")
-                        user_emails.add(email)
-                    elif member.principal_type in [
-                        4,
-                        8,
-                    ]:  # Both Azure AD Groups and SharePoint Groups
-                        groups.add(
-                            SharepointGroup(
-                                login_name=member.login_name,
-                                principal_type=member.principal_type,
-                                name=member.title,
-                            )
+                if member.principal_type == USER_PRINCIPAL_TYPE and hasattr(
+                    member, "user_principal_name"
+                ):
+                    email = member.user_principal_name
+                    if ".onmicrosoft" in email:
+                        email = email.replace(".onmicrosoft", "")
+                    user_emails.add(email)
+                elif member.principal_type in [
+                    AZURE_AD_GROUP_PRINCIPAL_TYPE,
+                    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+                ]:  # Both Azure AD Groups and SharePoint Groups
+                    groups.add(
+                        SharepointGroup(
+                            login_name=member.login_name,
+                            principal_type=member.principal_type,
+                            name=member.title,
                         )
+                    )
 
     _sleep_and_retry(
         item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
@@ -600,18 +607,17 @@ def get_sharepoint_external_groups(
                     continue
             if assignment.member:
                 member = assignment.member
-                if hasattr(member, "principal_type"):
-                    if member.principal_type in [
-                        4,
-                        8,
-                    ]:  # Both Azure AD Groups and SharePoint Groups
-                        groups.add(
-                            SharepointGroup(
-                                login_name=member.login_name,
-                                principal_type=member.principal_type,
-                                name=member.title,
-                            )
+                if member.principal_type in [
+                    AZURE_AD_GROUP_PRINCIPAL_TYPE,
+                    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+                ]:  # Both Azure AD Groups and SharePoint Groups
+                    groups.add(
+                        SharepointGroup(
+                            login_name=member.login_name,
+                            principal_type=member.principal_type,
+                            name=member.title,
                         )
+                    )
 
     _sleep_and_retry(
         client_context.web.role_assignments.expand(

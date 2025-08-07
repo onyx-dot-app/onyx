@@ -5,7 +5,7 @@ from typing import Protocol
 from fastapi import HTTPException
 from fastapi import UploadFile
 
-from onyx.server.documents.utils import validate_pkcs12_content
+from onyx.server.documents.document_utils import validate_pkcs12_content
 
 
 class ProcessPrivateKeyFileProtocol(Protocol):
@@ -30,7 +30,7 @@ def process_sharepoint_private_key_file(file: UploadFile) -> str:
     Content validation prevents attacks that rely on file extension spoofing.
     """
     # First check file extension (basic filter)
-    if not (file.filename and file.filename.endswith(".pfx")):
+    if not (file.filename and file.filename.lower().endswith(".pfx")):
         raise HTTPException(
             status_code=400, detail="Invalid file type. Only .pfx files are supported."
         )

@@ -113,7 +113,6 @@ export default function CredentialSection({
     details: any,
     onSucces: () => void
   ) => {
-    console.log("details", details);
     let privateKey: TypedFile | null = null;
     Object.entries(details).forEach(([key, value]) => {
       if (isTypedFileField(key)) {
