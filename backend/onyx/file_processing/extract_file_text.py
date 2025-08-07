@@ -308,6 +308,10 @@ def read_pdf_file(
 
 
 def extract_docx_images(docx_bytes: IO[Any]) -> list[tuple[bytes, str]]:
+    """
+    Given the bytes of a docx file, extract all the images.
+    Returns a list of tuples (image_bytes, image_name).
+    """
     out = []
     try:
         with zipfile.ZipFile(docx_bytes) as z:
