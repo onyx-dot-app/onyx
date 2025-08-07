@@ -1,4 +1,5 @@
 import json
+import math
 import mimetypes
 import os
 import zipfile
@@ -89,18 +90,23 @@ from onyx.db.credentials import create_credential
 from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
+from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_document_counts_for_cc_pairs_parallel
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
+from onyx.db.federated import fetch_all_federated_connectors_parallel
 from onyx.db.index_attempt import get_index_attempts_for_cc_pair
 from onyx.db.index_attempt import get_latest_index_attempts_by_status
 from onyx.db.index_attempt import get_latest_index_attempts_parallel
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
 from onyx.db.models import UserGroup__ConnectorCredentialPair
+from onyx.db.models import UserRole
 from onyx.file_processing.extract_file_text import convert_docx_to_txt
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -108,11 +114,14 @@ from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorIndexingStatus
+from onyx.server.documents.models import ConnectorIndexingStatusLite
+from onyx.server.documents.models import ConnectorIndexingStatusLiteResponse
 from onyx.server.documents.models import ConnectorSnapshot
 from onyx.server.documents.models import ConnectorStatus
 from onyx.server.documents.models import ConnectorUpdateRequest
 from onyx.server.documents.models import CredentialBase
 from onyx.server.documents.models import CredentialSnapshot
+from onyx.server.documents.models import DocsCountOperator
 from onyx.server.documents.models import FailedConnectorIndexingStatus
 from onyx.server.documents.models import FileUploadResponse
 from onyx.server.documents.models import GDriveCallback
@@ -121,11 +130,15 @@ from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
 from onyx.server.documents.models import GoogleServiceAccountKey
 from onyx.server.documents.models import IndexAttemptSnapshot
+from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.documents.models import RunConnectorRequest
+from onyx.server.documents.models import SourceSummary
+from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.threadpool_concurrency import CallableProtocol
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
@@ -134,6 +147,7 @@ logger = setup_logger()
 
 _GMAIL_CREDENTIAL_ID_COOKIE_NAME = "gmail_credential_id"
 _GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id"
+_INDEXING_STATUS_PAGE_SIZE = 10
 
 SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
 use the ingestion APIs for multiple files"
@@ -877,6 +891,397 @@ def get_connector_indexing_status(
     )
 
     return indexing_statuses
+
+
+@router.post("/admin/connector/indexing-status-paginated")
+def get_connector_indexing_status_paginated(
+    request: IndexingStatusRequest,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[ConnectorIndexingStatusLiteResponse]:
+    tenant_id = get_current_tenant_id()
+
+    # NOTE: If the connector is deleting behind the scenes,
+    # accessing cc_pairs can be inconsistent and members like
+    # connector or credential may be None.
+    # Additional checks are done to make sure the connector and credential still exist.
+    # TODO: make this one query ... possibly eager load or wrap in a read transaction
+    # to avoid the complexity of trying to error check throughout the function
+
+    # see https://stackoverflow.com/questions/75758327/
+    # sqlalchemy-method-connection-for-bind-is-already-in-progress
+    # for why we can't pass in the current db_session to these functions
+
+    # TODO: We currently materialize all connectors in memory to calculate summary info
+    # and display them in descending order per source. This is acceptable for now since
+    # the number of connectors is relatively small, and load time is under 1s.
+    # However, this approach will likely become very slow if the query includes user files,
+    # such as "My Documents", where each file is its own connector. In large deployments,
+    # this could result in 100k+ connectors. Consider optimizing with pagination or
+    # reevaluating the need for the summary to improve performance in the future.
+
+    parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
+        # Get editable connector/credential pairs
+        (
+            get_connector_credential_pairs_for_user_parallel,
+            (user, True, None, True, True, True, True, request.source),
+        ),
+        # Get federated connectors
+        (fetch_all_federated_connectors_parallel, ()),
+        # Get most recent index attempts
+        (get_latest_index_attempts_parallel, (request.secondary_index, True, False)),
+        # Get most recent finished index attempts
+        (get_latest_index_attempts_parallel, (request.secondary_index, True, True)),
+    ]
+
+    if user.role == UserRole.ADMIN:
+        # For Admin users, we already got all the cc pair in editable_cc_pairs
+        # its not needed to get them again
+        (
+            editable_cc_pairs,
+            federated_connectors,
+            latest_index_attempts,
+            latest_finished_index_attempts,
+        ) = run_functions_tuples_in_parallel(parallel_functions)
+        non_editable_cc_pairs = []
+    else:
+        parallel_functions.append(
+            # Get non-editable connector/credential pairs
+            (
+                get_connector_credential_pairs_for_user_parallel,
+                (user, False, None, True, True, True, True, request.source),
+            ),
+        )
+
+        (
+            editable_cc_pairs,
+            federated_connectors,
+            latest_index_attempts,
+            latest_finished_index_attempts,
+            non_editable_cc_pairs,
+        ) = run_functions_tuples_in_parallel(parallel_functions)
+
+    # Cast results to proper types
+    non_editable_cc_pairs = cast(list[ConnectorCredentialPair], non_editable_cc_pairs)
+    editable_cc_pairs = cast(list[ConnectorCredentialPair], editable_cc_pairs)
+    federated_connectors = cast(list[FederatedConnector], federated_connectors)
+    latest_index_attempts = cast(list[IndexAttempt], latest_index_attempts)
+    latest_finished_index_attempts = cast(
+        list[IndexAttempt], latest_finished_index_attempts
+    )
+
+    document_count_info = get_document_counts_for_cc_pairs(
+        db_session=db_session,
+        cc_pairs=[
+            ConnectorCredentialPairIdentifier(
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+            )
+            for cc_pair in non_editable_cc_pairs + editable_cc_pairs
+        ],
+    )
+
+    # Create lookup dictionaries for efficient access
+    cc_pair_to_document_cnt: dict[tuple[int, int], int] = {
+        (connector_id, credential_id): cnt
+        for connector_id, credential_id, cnt in document_count_info
+    }
+
+    cc_pair_to_latest_index_attempt: dict[tuple[int, int], IndexAttempt] = {
+        (
+            attempt.connector_credential_pair.connector_id,
+            attempt.connector_credential_pair.credential_id,
+        ): attempt
+        for attempt in latest_index_attempts
+    }
+
+    cc_pair_to_latest_finished_index_attempt: dict[tuple[int, int], IndexAttempt] = {
+        (
+            attempt.connector_credential_pair.connector_id,
+            attempt.connector_credential_pair.credential_id,
+        ): attempt
+        for attempt in latest_finished_index_attempts
+    }
+
+    def build_connector_indexing_status(
+        cc_pair: ConnectorCredentialPair,
+        is_editable: bool,
+    ) -> ConnectorIndexingStatusLite | None:
+        # TODO remove this to enable ingestion API
+        if cc_pair.name == "DefaultCCPair":
+            return None
+
+        latest_attempt = cc_pair_to_latest_index_attempt.get(
+            (cc_pair.connector_id, cc_pair.credential_id)
+        )
+        latest_finished_attempt = cc_pair_to_latest_finished_index_attempt.get(
+            (cc_pair.connector_id, cc_pair.credential_id)
+        )
+        doc_count = cc_pair_to_document_cnt.get(
+            (cc_pair.connector_id, cc_pair.credential_id), 0
+        )
+
+        return _get_connector_indexing_status_lite(
+            cc_pair, latest_attempt, latest_finished_attempt, is_editable, doc_count
+        )
+
+    # Process editable cc_pairs
+    editable_statuses: list[ConnectorIndexingStatusLite] = []
+    for cc_pair in editable_cc_pairs:
+        status = build_connector_indexing_status(cc_pair, True)
+        if status:
+            editable_statuses.append(status)
+
+    # Process non-editable cc_pairs
+    non_editable_statuses: list[ConnectorIndexingStatusLite] = []
+    for cc_pair in non_editable_cc_pairs:
+        status = build_connector_indexing_status(cc_pair, False)
+        if status:
+            non_editable_statuses.append(status)
+
+    # Process federated connectors
+    federated_statuses: list[FederatedConnectorStatus] = []
+    for federated_connector in federated_connectors:
+        federated_status = FederatedConnectorStatus(
+            id=federated_connector.id,
+            source=federated_connector.source,
+            name=f"{federated_connector.source.replace('_', ' ').title()}",
+        )
+
+        federated_statuses.append(federated_status)
+
+    source_to_summary: dict[DocumentSource, SourceSummary] = {}
+
+    # Apply filters only if any are provided
+    has_filters = bool(
+        request.access_type_filters
+        or request.last_status_filters
+        or (
+            request.docs_count_operator is not None
+            and request.docs_count_value is not None
+        )
+        or request.name_filter
+    )
+
+    if has_filters:
+        editable_statuses = _apply_connector_status_filters(
+            editable_statuses,
+            request.access_type_filters,
+            request.last_status_filters,
+            request.docs_count_operator,
+            request.docs_count_value,
+            request.name_filter,
+        )
+        non_editable_statuses = _apply_connector_status_filters(
+            non_editable_statuses,
+            request.access_type_filters,
+            request.last_status_filters,
+            request.docs_count_operator,
+            request.docs_count_value,
+            request.name_filter,
+        )
+        federated_statuses = _apply_federated_connector_status_filters(
+            federated_statuses,
+            request.name_filter,
+        )
+
+    # Calculate source summary
+    for connector_status in (
+        editable_statuses + non_editable_statuses + federated_statuses
+    ):
+        if isinstance(connector_status, FederatedConnectorStatus):
+            source = connector_status.source.to_non_federated_source()
+        else:
+            source = connector_status.source
+
+        # Skip if source is None (federated connectors without mapping)
+        if source is None:
+            continue
+
+        if source not in source_to_summary:
+            source_to_summary[source] = SourceSummary(
+                total_connectors=0,
+                active_connectors=0,
+                public_connectors=0,
+                total_docs_indexed=0,
+            )
+        source_to_summary[source].total_connectors += 1
+        if isinstance(connector_status, ConnectorIndexingStatusLite):
+            if connector_status.cc_pair_status == ConnectorCredentialPairStatus.ACTIVE:
+                source_to_summary[source].active_connectors += 1
+            if connector_status.access_type == AccessType.PUBLIC:
+                source_to_summary[source].public_connectors += 1
+            source_to_summary[
+                source
+            ].total_docs_indexed += connector_status.docs_indexed
+
+    # Track admin page visit for analytics
+    create_milestone_and_report(
+        user=user,
+        distinct_id=user.email if user else tenant_id or "N/A",
+        event_type=MilestoneRecordType.VISITED_ADMIN_PAGE,
+        properties=None,
+        db_session=db_session,
+    )
+
+    # Group statuses by source for pagination
+    source_to_all_statuses: dict[
+        DocumentSource, list[ConnectorIndexingStatusLite | FederatedConnectorStatus]
+    ] = {}
+    # Group by source
+    for connector_status in (
+        editable_statuses + non_editable_statuses + federated_statuses
+    ):
+        if isinstance(connector_status, FederatedConnectorStatus):
+            source = connector_status.source.to_non_federated_source()
+        else:
+            source = connector_status.source
+
+        # Skip if source is None (federated connectors without mapping)
+        if source is None:
+            continue
+
+        if source not in source_to_all_statuses:
+            source_to_all_statuses[source] = []
+        source_to_all_statuses[source].append(connector_status)
+
+    # Create paginated response objects by source
+    response_list: list[ConnectorIndexingStatusLiteResponse] = []
+
+    source_list = list(source_to_all_statuses.keys())
+    source_list.sort()
+
+    for source in source_list:
+        statuses = source_to_all_statuses[source]
+        # Get current page for this source (default to page 1, 1-indexed)
+        current_page = request.source_to_page.get(source, 1)
+
+        # Calculate start and end indices for pagination (convert to 0-indexed)
+        start_idx = (current_page - 1) * _INDEXING_STATUS_PAGE_SIZE
+        end_idx = start_idx + _INDEXING_STATUS_PAGE_SIZE
+
+        # Get the page slice for this source
+        page_statuses = statuses[start_idx:end_idx]
+
+        # Create response object for this source
+        if page_statuses:  # Only include sources that have data on this page
+            response_list.append(
+                ConnectorIndexingStatusLiteResponse(
+                    source=source,
+                    summary=source_to_summary[source],
+                    current_page=current_page,
+                    total_pages=math.ceil(len(statuses) / _INDEXING_STATUS_PAGE_SIZE),
+                    indexing_statuses=page_statuses,
+                )
+            )
+
+    return response_list
+
+
+def _get_connector_indexing_status_lite(
+    cc_pair: ConnectorCredentialPair,
+    latest_index_attempt: IndexAttempt | None,
+    latest_finished_index_attempt: IndexAttempt | None,
+    is_editable: bool,
+    document_cnt: int,
+) -> ConnectorIndexingStatusLite | None:
+    # TODO remove this to enable ingestion API
+    if cc_pair.name == "DefaultCCPair":
+        return None
+
+    connector = cc_pair.connector
+    credential = cc_pair.credential
+    if not connector or not credential:
+        # This may happen if background deletion is happening
+        return None
+
+    in_progress = bool(
+        latest_index_attempt
+        and latest_index_attempt.status == IndexingStatus.IN_PROGRESS
+    )
+
+    return ConnectorIndexingStatusLite(
+        cc_pair_id=cc_pair.id,
+        name=cc_pair.name,
+        source=cc_pair.connector.source,
+        access_type=cc_pair.access_type,
+        cc_pair_status=cc_pair.status,
+        is_editable=is_editable,
+        in_progress=in_progress,
+        in_repeated_error_state=cc_pair.in_repeated_error_state,
+        last_finished_status=(
+            latest_finished_index_attempt.status
+            if latest_finished_index_attempt
+            else None
+        ),
+        last_status=latest_index_attempt.status if latest_index_attempt else None,
+        last_success=cc_pair.last_successful_index_time,
+        docs_indexed=document_cnt,
+    )
+
+
+def _apply_connector_status_filters(
+    statuses: list[ConnectorIndexingStatusLite],
+    access_type_filters: list[AccessType],
+    last_status_filters: list[IndexingStatus],
+    docs_count_operator: DocsCountOperator | None,
+    docs_count_value: int | None,
+    name_filter: str | None,
+) -> list[ConnectorIndexingStatusLite]:
+    """Apply filters to a list of ConnectorIndexingStatusLite objects"""
+    filtered_statuses: list[ConnectorIndexingStatusLite] = []
+
+    for status in statuses:
+        # Filter by access type
+        if access_type_filters and status.access_type not in access_type_filters:
+            continue
+
+        # Filter by last status
+        if last_status_filters and status.last_status not in last_status_filters:
+            continue
+
+        # Filter by document count
+        if docs_count_operator and docs_count_value is not None:
+            if docs_count_operator == DocsCountOperator.GREATER_THAN and not (
+                status.docs_indexed > docs_count_value
+            ):
+                continue
+            elif docs_count_operator == DocsCountOperator.LESS_THAN and not (
+                status.docs_indexed < docs_count_value
+            ):
+                continue
+            elif (
+                docs_count_operator == DocsCountOperator.EQUAL_TO
+                and status.docs_indexed != docs_count_value
+            ):
+                continue
+
+        # Filter by name
+        if status.name:
+            if name_filter and name_filter.lower() not in status.name.lower():
+                continue
+        else:
+            if name_filter:
+                continue
+
+        filtered_statuses.append(status)
+
+    return filtered_statuses
+
+
+def _apply_federated_connector_status_filters(
+    statuses: list[FederatedConnectorStatus],
+    name_filter: str | None,
+) -> list[FederatedConnectorStatus]:
+    filtered_statuses: list[FederatedConnectorStatus] = []
+
+    for status in statuses:
+        if name_filter and name_filter.lower() not in status.name.lower():
+            continue
+
+        filtered_statuses.append(status)
+
+    return filtered_statuses
 
 
 def _validate_connector_allowed(source: DocumentSource) -> None:
