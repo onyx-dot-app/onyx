@@ -1,0 +1,70 @@
+name: "🚀 Feature Request"
+description: Suggest an idea or enhancement for the Onyx project
+title: "[FEATURE] "
+labels: []
+type: Feature
+assignees: []
+
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: 📋 Prerequisites
+      description: Please check these boxes before submitting your feature request
+      options:
+        - label: I have searched the [existing issues](../../issues) to avoid creating a duplicate
+          required: true
+
+  - type: input
+    id: feature_summary
+    attributes:
+      label: 📝 Feature Summary
+      description: Provide a short, clear summary of the requested feature
+      placeholder: "Add support for XYZ..."
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: ❓ Problem Statement / Motivation
+      description: What problem does this feature solve? Why is it important? Who would benefit?
+      placeholder: |
+        - What is the current limitation or pain point?
+        - Who is affected?
+        - Why is this needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe your proposed solution or feature in detail
+      placeholder: |
+        - What should be added/changed?
+        - How should it work?
+        - Any specific requirements or constraints?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: |
+        - Alternative 1
+        - Alternative 2
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 📚 Additional Context
+      description: Add any other context, links to related issues, real world examples, or screenshots that may help
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🙋 Are you willing to contribute?
+      description: Let us know if you want to help implement this feature
+      options:
+        - label: I am willing to submit a PR for this feature

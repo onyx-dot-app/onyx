@@ -1,0 +1,122 @@
+name: "🐞 Bug"
+description: Report a bug or unexpected behavior in the Onyx project
+title: "[BUG] "
+labels: []
+type: Bug
+assignees: []
+
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: 📋 Prerequisites
+      description: Please check these boxes before submitting the issue
+      options:
+        - label: I have searched the [existing issues](../../issues) to avoid creating a duplicate
+          required: true
+        - label: I am using the latest version of the software
+        - label: I have tried to clear cache/cookies or used incognito mode (if UI-related)
+        - label: I can consistently reproduce this issue
+
+
+  - type: dropdown
+    id: impact_severity
+    attributes:
+      label: 🚦 Impact/Severity
+      description: How severe is this issue? Please select the most appropriate option
+      options:
+        - Blocker
+        - Minor inconvenience
+        - No impact (Default)
+      default: 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: 🐛 Bug Description
+      description: A clear and concise description of what the bug is
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: 🔄 Steps To Reproduce
+      description: Provide exact steps to reproduce the behavior
+      placeholder: |
+        1. 
+        2. 
+        3. 
+        4.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: 🤔 Expected Behavior
+      description: What did you expect to happen?
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: 📱 Actual Behavior
+      description: What actually happened? Include screenshots, error messages, logs where applicable
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 💻 Environment
+      description: Please complete the following information
+      placeholder: |
+        - OS and version: e.g., Windows 11, macOS 12.6, Ubuntu 22.04
+        - Browser (if applicable): e.g., Chrome 106.0.5249.119
+        - Application version: e.g., v1.2.3
+        - Device (if relevant): e.g., iPhone 13, Desktop PC
+
+  - type: textarea
+    id: cli_bug_report
+    attributes:
+      label: 🔧 CLI Bug Report
+      description: |
+        **To upload a bug report file:**
+        1. Run `onyx bug-report` in your terminal to generate a report
+        2. Click in the text area below and click the `Paste, drop, or click to add files` button that appears at the bottom, or simply drag and drop your file here
+
+        Alternatively, you can copy and paste the output directly.
+      placeholder: Upload your bug report file by clicking here or drag and drop it into this area
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: 🔍 Additional Context
+      description: |
+        Add any other context about the problem here
+        - Did this work before? When did it start failing?
+        - Any workarounds you've tried?
+        - Links to related issues or external resources
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 📋 Logs
+      description: If applicable, add logs to help explain your problem.
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 📷 Screenshots
+      description: If applicable, add screenshots to help explain your problem.
+      placeholder: |
+        Drag and drop screenshots here to help illustrate the issue.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 🙋 Are you willing to contribute?
+      description: Let us know if you want to help fix this bug
+      options:
+        - label: I am willing to submit a PR to fix this issue
