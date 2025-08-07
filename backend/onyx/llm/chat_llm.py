@@ -397,7 +397,11 @@ class DefaultMultiLLM(LLM):
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=self._temperature,
+                temperature=(
+                    1
+                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+                    else self._temperature
+                ),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
