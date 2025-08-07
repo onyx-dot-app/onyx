@@ -67,6 +67,7 @@ from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.index_attempt import mark_attempt_partially_succeeded
 from onyx.db.index_attempt import mark_attempt_succeeded
 from onyx.db.indexing_coordination import CoordinationStatus
+from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
 from onyx.db.search_settings import get_active_search_settings_list
@@ -103,6 +104,7 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 logger = setup_logger()
 
 USER_FILE_INDEXING_LIMIT = 100
+DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -380,9 +382,19 @@ def check_indexing_completion(
 
     # Update progress tracking and check for stalls
     with get_session_with_current_tenant() as db_session:
-        # Update progress tracking
+        stalled_timeout_hours = INDEXING_PROGRESS_TIMEOUT_HOURS
+        # Index attempts that are waiting between docfetching and
+        # docprocessing get a generous stalling timeout
+        if batches_total is not None and batches_processed == 0:
+            stalled_timeout_hours = (
+                stalled_timeout_hours * DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER
+            )
+
         timed_out = not IndexingCoordination.update_progress_tracking(
-            db_session, index_attempt_id, batches_processed
+            db_session,
+            index_attempt_id,
+            batches_processed,
+            timeout_hours=stalled_timeout_hours,
         )
 
         # Check for stalls (3-6 hour timeout). Only applies to in-progress attempts.
@@ -390,7 +402,8 @@ def check_indexing_completion(
         if attempt and timed_out:
             if attempt.status == IndexingStatus.IN_PROGRESS:
                 logger.error(
-                    f"Indexing attempt {index_attempt_id} has been indexing for 3-6 hours without progress. "
+                    f"Indexing attempt {index_attempt_id} has been indexing for "
+                    f"{stalled_timeout_hours//2}-{stalled_timeout_hours} hours without progress. "
                     f"Marking it as failed."
                 )
                 mark_attempt_failed(
