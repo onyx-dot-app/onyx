@@ -313,13 +313,13 @@ class DefaultMultiLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
-    def log_model_configs(self) -> None:
-        logger.debug(f"Config: {self.config}")
-
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
         dump["api_key"] = mask_string(dump.get("api_key", ""))
         return dump
+
+    def log_model_configs(self) -> None:
+        logger.debug(f"Config: {self._safe_model_config()}")
 
     def _record_call(self, prompt: LanguageModelInput) -> None:
         if self._long_term_logger:
