@@ -1,7 +1,7 @@
 "use client";
 
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
-import { FeedbackType } from "../types";
+import { FeedbackType } from "@/app/chat/interfaces";
 import React, {
   useCallback,
   useContext,
@@ -19,8 +19,8 @@ import {
   FileDescriptor,
   SubQuestionDetail,
   ToolCallMetadata,
-} from "../interfaces";
-import { SEARCH_TOOL_NAME } from "../tools/constants";
+} from "@/app/chat/interfaces";
+import { SEARCH_TOOL_NAME } from "@/app/chat/components/tools/constants";
 import { Hoverable, HoverableIcon } from "@/components/Hoverable";
 import { CodeBlock } from "./CodeBlock";
 import rehypePrism from "rehype-prism-plus";
@@ -37,7 +37,7 @@ import {
 } from "@/components/tooltip/CustomTooltip";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import RegenerateOption from "../RegenerateOption";
+import RegenerateOption from "../components/RegenerateOption";
 import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
@@ -49,7 +49,7 @@ import {
   extractThinkingContent,
   isThinkingComplete,
   removeThinkingTokens,
-} from "../utils/thinkingTokens";
+} from "../services/thinkingTokens";
 
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -58,6 +58,8 @@ import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { ErrorBanner } from "./Resubmit";
 import { transformLinkUri } from "@/lib/utils";
+import { useStreamingMessages } from "./StreamingMessages";
+import { MessageSwitcher } from "./MessageSwitcher";
 
 export const AgenticMessage = ({
   isStreamingQuestions,
@@ -365,10 +367,27 @@ export const AgenticMessage = ({
     otherMessagesCanSwitchTo &&
     otherMessagesCanSwitchTo.length > 1;
 
-  let otherMessage: number | undefined = undefined;
-  if (currentMessageInd && otherMessagesCanSwitchTo) {
-    otherMessage = otherMessagesCanSwitchTo[currentMessageInd - 1];
-  }
+  const getPreviousMessage = () => {
+    if (
+      currentMessageInd !== undefined &&
+      currentMessageInd > 0 &&
+      otherMessagesCanSwitchTo
+    ) {
+      return otherMessagesCanSwitchTo[currentMessageInd - 1];
+    }
+    return undefined;
+  };
+
+  const getNextMessage = () => {
+    if (
+      currentMessageInd !== undefined &&
+      currentMessageInd < (otherMessagesCanSwitchTo?.length || 0) - 1 &&
+      otherMessagesCanSwitchTo
+    ) {
+      return otherMessagesCanSwitchTo[currentMessageInd + 1];
+    }
+    return undefined;
+  };
 
   useEffect(() => {
     if (!allowStreaming) {
@@ -524,21 +543,26 @@ export const AgenticMessage = ({
                       >
                         <TooltipGroup>
                           <div className="flex justify-start w-full gap-x-0.5">
-                            {includeMessageSwitcher &&
-                              otherMessage !== undefined && (
-                                <div className="-mx-1 mr-auto">
-                                  <MessageSwitcher
-                                    currentPage={currentMessageInd + 1}
-                                    totalPages={otherMessagesCanSwitchTo.length}
-                                    handlePrevious={() => {
-                                      onMessageSelection(otherMessage!);
-                                    }}
-                                    handleNext={() => {
-                                      onMessageSelection(otherMessage!);
-                                    }}
-                                  />
-                                </div>
-                              )}
+                            {includeMessageSwitcher && (
+                              <div className="-mx-1 mr-auto">
+                                <MessageSwitcher
+                                  currentPage={currentMessageInd + 1}
+                                  totalPages={otherMessagesCanSwitchTo.length}
+                                  handlePrevious={() => {
+                                    const prevMessage = getPreviousMessage();
+                                    if (prevMessage !== undefined) {
+                                      onMessageSelection(prevMessage);
+                                    }
+                                  }}
+                                  handleNext={() => {
+                                    const nextMessage = getNextMessage();
+                                    if (nextMessage !== undefined) {
+                                      onMessageSelection(nextMessage);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
@@ -605,21 +629,26 @@ export const AgenticMessage = ({
                       >
                         <TooltipGroup>
                           <div className="flex justify-start w-full gap-x-0.5">
-                            {includeMessageSwitcher &&
-                              otherMessage !== undefined && (
-                                <div className="-mx-1 mr-auto">
-                                  <MessageSwitcher
-                                    currentPage={currentMessageInd + 1}
-                                    totalPages={otherMessagesCanSwitchTo.length}
-                                    handlePrevious={() => {
-                                      onMessageSelection(otherMessage!);
-                                    }}
-                                    handleNext={() => {
-                                      onMessageSelection(otherMessage!);
-                                    }}
-                                  />
-                                </div>
-                              )}
+                            {includeMessageSwitcher && (
+                              <div className="-mx-1 mr-auto">
+                                <MessageSwitcher
+                                  currentPage={currentMessageInd + 1}
+                                  totalPages={otherMessagesCanSwitchTo.length}
+                                  handlePrevious={() => {
+                                    const prevMessage = getPreviousMessage();
+                                    if (prevMessage !== undefined) {
+                                      onMessageSelection(prevMessage);
+                                    }
+                                  }}
+                                  handleNext={() => {
+                                    const nextMessage = getNextMessage();
+                                    if (nextMessage !== undefined) {
+                                      onMessageSelection(nextMessage);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
@@ -681,33 +710,3 @@ export const AgenticMessage = ({
     </div>
   );
 };
-
-function MessageSwitcher({
-  currentPage,
-  totalPages,
-  handlePrevious,
-  handleNext,
-}: {
-  currentPage: number;
-  totalPages: number;
-  handlePrevious: () => void;
-  handleNext: () => void;
-}) {
-  return (
-    <div className="flex items-center text-sm space-x-0.5">
-      <Hoverable
-        icon={FiChevronLeft}
-        onClick={currentPage === 1 ? undefined : handlePrevious}
-      />
-
-      <span className="text-text-darker select-none">
-        {currentPage} / {totalPages}
-      </span>
-
-      <Hoverable
-        icon={FiChevronRight}
-        onClick={currentPage === totalPages ? undefined : handleNext}
-      />
-    </div>
-  );
-}
