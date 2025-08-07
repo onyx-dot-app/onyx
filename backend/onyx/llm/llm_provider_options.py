@@ -76,7 +76,14 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-3.5-turbo-16k-0613",
     "gpt-3.5-turbo-0301",
 ]
-OPEN_AI_VISIBLE_MODEL_NAMES = ["gpt-5", "o1", "o3-mini", "gpt-4o", "gpt-4o-mini"]
+OPEN_AI_VISIBLE_MODEL_NAMES = [
+    "gpt-5",
+    "gpt-5-mini",
+    "o1",
+    "o3-mini",
+    "gpt-4o",
+    "gpt-4o-mini",
+]
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 # need to remove all the weird "bedrock/eu-central-1/anthropic.claude-v1" named
