@@ -110,6 +110,15 @@ beat_task_templates: list[dict] = [
             "queue": OnyxCeleryQueues.MONITORING,
         },
     },
+    {
+        "name": "update-recommended-selected-models",
+        "task": OnyxCeleryTask.UPDATE_RECOMMENDED_SELECTED_MODELS,
+        "schedule": timedelta(hours=1),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
 ]
 
 if ENTERPRISE_EDITION_ENABLED:
@@ -143,6 +152,19 @@ if LLM_MODEL_UPDATE_API_URL:
             "name": "check-for-llm-model-update",
             "task": OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE,
             "schedule": timedelta(hours=1),  # Check every hour
+            "options": {
+                "priority": OnyxCeleryPriority.LOW,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        }
+    )
+# Otherwise, we use our own curated list to check for model updates
+else:
+    beat_task_templates.append(
+        {
+            "name": "check-for-llm-model-update-onyx-curated",
+            "task": OnyxCeleryTask.CHECK_FOR_LLM_MODEL_UPDATE_ONYX_CURATED,
+            "schedule": timedelta(hours=1),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,
