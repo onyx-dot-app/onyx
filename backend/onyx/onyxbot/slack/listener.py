@@ -570,6 +570,16 @@ class SlackbotHandler:
         sys.exit(0)
 
 
+def sanitize_slack_payload(payload: dict) -> dict:
+    """Remove message content from Slack payload for logging"""
+    sanitized = {k: v for k, v in payload.items() if k not in {"text", "blocks"}}
+    if "event" in sanitized and isinstance(sanitized["event"], dict):
+        sanitized["event"] = {
+            k: v for k, v in sanitized["event"].items() if k not in {"text", "blocks"}
+        }
+    return sanitized
+
+
 def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -> bool:
     """True to keep going, False to ignore this Slack request"""
 
@@ -762,7 +772,10 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
     if not check_message_limit():
         return False
 
-    logger.debug(f"Handling Slack request: {client.bot_name=} '{req.payload=}'")
+    # Don't log Slack message content
+    logger.debug(
+        f"Handling Slack request: {client.bot_name=} '{sanitize_slack_payload(req.payload)=}'"
+    )
     return True
 
 
@@ -929,10 +942,9 @@ def process_message(
     if req.type == "events_api":
         event = cast(dict[str, Any], req.payload["event"])
         event_type = event.get("type")
-        msg = cast(str, event.get("text", ""))
         logger.info(
             f"process_message start: {tenant_id=} {req.type=} {req.envelope_id=} "
-            f"{event_type=} {msg=}"
+            f"{event_type=}"
         )
     else:
         logger.info(
