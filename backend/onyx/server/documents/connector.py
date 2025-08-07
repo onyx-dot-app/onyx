@@ -441,7 +441,9 @@ def is_zip_file(file: UploadFile) -> bool:
     )
 
 
-def upload_files(files: list[UploadFile]) -> FileUploadResponse:
+def upload_files(
+    files: list[UploadFile], file_origin: FileOrigin = FileOrigin.CONNECTOR
+) -> FileUploadResponse:
     for file in files:
         if not file.filename:
             raise HTTPException(status_code=400, detail="File name cannot be empty")
@@ -497,7 +499,7 @@ def upload_files(files: list[UploadFile]) -> FileUploadResponse:
                 text_file_id = file_store.save_file(
                     content=io.BytesIO(extracted_text.encode()),
                     display_name=file.filename,
-                    file_origin=FileOrigin.CHAT_UPLOAD,
+                    file_origin=file_origin,
                     file_type="text/plain",
                 )
                 deduped_file_paths.append(text_file_id)
@@ -528,7 +530,7 @@ def upload_files_api(
     files: list[UploadFile],
     _: User = Depends(current_curator_or_admin_user),
 ) -> FileUploadResponse:
-    return upload_files(files)
+    return upload_files(files, FileOrigin.OTHER)
 
 
 @router.get("/admin/connector")

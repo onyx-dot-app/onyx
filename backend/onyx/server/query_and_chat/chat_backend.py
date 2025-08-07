@@ -716,51 +716,6 @@ def upload_files_for_chat(
                 detail="Images must be less than 20MB",
             )
 
-    # file_store = get_default_file_store()
-
-    # file_info: list[tuple[str, str | None, ChatFileType]] = []
-    # for file in files:
-    # file_type = mime_type_to_chat_file_type(file.content_type)
-
-    # file_content = file.file.read()  # Read the file content
-
-    # # NOTE: Image conversion to JPEG used to be enforced here.
-    # # This was removed to:
-    # # 1. Preserve original file content for downloads
-    # # 2. Maintain transparency in formats like PNG
-    # # 3. Ameliorate issue with file conversion
-    # file_content_io = io.BytesIO(file_content)
-
-    # new_content_type = file.content_type
-
-    # # Store the file normally
-    # file_id = file_store.save_file(
-    #     content=file_content_io,
-    #     display_name=file.filename,
-    #     file_origin=FileOrigin.CHAT_UPLOAD,
-    #     file_type=new_content_type or file_type.value,
-    # )
-
-    # # 4) If the file is a doc, extract text and store that separately
-    # if file_type == ChatFileType.DOC:
-    #     # Re-wrap bytes in a fresh BytesIO so we start at position 0
-    #     extracted_text_io = io.BytesIO(file_content)
-    #     extracted_text = extract_file_text(
-    #         file=extracted_text_io,  # use the bytes we already read
-    #         file_name=file.filename or "",
-    #     )
-
-    #     text_file_id = file_store.save_file(
-    #         content=io.BytesIO(extracted_text.encode()),
-    #         display_name=file.filename,
-    #         file_origin=FileOrigin.CHAT_UPLOAD,
-    #         file_type="text/plain",
-    #     )
-    #     # Return the text file as the "main" file descriptor for doc types
-    #     file_info.append((text_file_id, file.filename, ChatFileType.PLAIN_TEXT))
-    # else:
-    #     file_info.append((file_id, file.filename, file_type))
-
     # 5) Create a user file for each uploaded file
     user_files = create_user_files(files, RECENT_DOCS_FOLDER_ID, user, db_session)
     for user_file in user_files:

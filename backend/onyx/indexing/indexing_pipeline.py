@@ -867,13 +867,8 @@ def index_doc_batch(
         user_file_id_to_raw_text: dict[int, str] = {}
         for document_id in updatable_ids:
             # Only calculate token counts for documents that have a user file ID
-            if (
-                document_id not in doc_id_to_user_file_id
-                or doc_id_to_user_file_id[document_id] is None
-            ):
-                continue
 
-            user_file_id = doc_id_to_user_file_id[document_id]
+            user_file_id = doc_id_to_user_file_id.get(document_id)
             if user_file_id is None:
                 continue
 
