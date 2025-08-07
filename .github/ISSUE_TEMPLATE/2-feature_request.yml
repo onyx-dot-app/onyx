@@ -2,7 +2,6 @@ name: "🚀 Feature Request"
 description: Suggest an idea or enhancement for the Onyx project
 title: "[FEATURE] "
 labels: []
-type: Feature
 assignees: []
 
 body:
