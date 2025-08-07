@@ -832,7 +832,7 @@ def _run_indexing(
                 )
 
 
-def run_indexing_entrypoint(
+def run_docfetching_entrypoint(
     app: Celery,
     index_attempt_id: int,
     tenant_id: str,
@@ -1350,6 +1350,9 @@ def reissue_old_batches(
         )
         path_info = batch_storage.extract_path_info(batch_id)
         if path_info is None:
+            logger.warning(
+                f"Could not extract path info from batch {batch_id}, skipping"
+            )
             continue
         if path_info.cc_pair_id != cc_pair_id:
             raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")
