@@ -40,7 +40,7 @@ jobs:
           done
 
       - name: Publish Helm charts to gh-pages
-        uses: stefanprodan/helm-gh-pages@master
+        uses: stefanprodan/helm-gh-pages@v1.7.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: deployment/helm/charts
@@ -48,5 +48,3 @@ jobs:
           helm_version: v3.12.1
           commit_username: ${{ github.actor }}
           commit_email: ${{ github.actor }}@users.noreply.github.com
-          dependencies: |
-            bitnami,https://charts.bitnami.com/bitnami;onyx-vespa,https://onyx-dot-app.github.io/vespa-helm-charts
