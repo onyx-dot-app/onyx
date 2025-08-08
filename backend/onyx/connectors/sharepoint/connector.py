@@ -971,19 +971,22 @@ class SharepointConnector(
             return token
 
         self._graph_client = GraphClient(_acquire_token_for_graph)
-        org = self.graph_client.organization.get().execute_query()
-        if not org or len(org) == 0:
-            raise ConnectorValidationError("No organization found")
+        if auth_method == SharepointAuthMethod.CERTIFICATE.value:
+            org = self.graph_client.organization.get().execute_query()
+            if not org or len(org) == 0:
+                raise ConnectorValidationError("No organization found")
 
-        tenant_info: Organization = org[0]  # Access first item directly from collection
-        if not tenant_info.verified_domains:
-            raise ConnectorValidationError("No verified domains found for tenant")
+            tenant_info: Organization = org[
+                0
+            ]  # Access first item directly from collection
+            if not tenant_info.verified_domains:
+                raise ConnectorValidationError("No verified domains found for tenant")
 
-        sp_tenant_domain = tenant_info.verified_domains[0].name
-        if not sp_tenant_domain:
-            raise ConnectorValidationError("No verified domains found for tenant")
-        # remove the .onmicrosoft.com part
-        self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
+            sp_tenant_domain = tenant_info.verified_domains[0].name
+            if not sp_tenant_domain:
+                raise ConnectorValidationError("No verified domains found for tenant")
+            # remove the .onmicrosoft.com part
+            self.sp_tenant_domain = sp_tenant_domain.split(".")[0]
         return None
 
     def _create_document_failure(
