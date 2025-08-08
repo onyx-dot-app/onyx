@@ -158,6 +158,7 @@ class SearchPipeline:
         # These chunks do not include large chunks and have been deduped
         self._retrieved_chunks = retrieve_chunks(
             query=self.search_query,
+            user_id=self.user.id if self.user else None,
             document_index=self.document_index,
             db_session=self.db_session,
             retrieval_metrics_callback=self.retrieval_metrics_callback,

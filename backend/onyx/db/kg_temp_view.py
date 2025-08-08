@@ -1,3 +1,5 @@
+import random
+
 from sqlalchemy import text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
@@ -17,10 +19,11 @@ def get_user_view_names(user_email: str, tenant_id: str) -> KGViewNames:
     user_email_cleaned = (
         user_email.replace("@", "__").replace(".", "_").replace("+", "_")
     )
+    random_suffix_str = str(random.randint(1000000, 9999999))
     return KGViewNames(
-        allowed_docs_view_name=f'"{tenant_id}".{KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX}_{user_email_cleaned}',
-        kg_relationships_view_name=f'"{tenant_id}".{KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX}_{user_email_cleaned}',
-        kg_entity_view_name=f'"{tenant_id}".{KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX}_{user_email_cleaned}',
+        allowed_docs_view_name=f'"{tenant_id}".{KG_TEMP_ALLOWED_DOCS_VIEW_NAME_PREFIX}_{user_email_cleaned}_{random_suffix_str}',
+        kg_relationships_view_name=f'"{tenant_id}".{KG_TEMP_KG_RELATIONSHIPS_VIEW_NAME_PREFIX}_{user_email_cleaned}_{random_suffix_str}',
+        kg_entity_view_name=f'"{tenant_id}".{KG_TEMP_KG_ENTITIES_VIEW_NAME_PREFIX}_{user_email_cleaned}_{random_suffix_str}',
     )
 
 

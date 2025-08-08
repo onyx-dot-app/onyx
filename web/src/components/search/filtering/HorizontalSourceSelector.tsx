@@ -150,7 +150,10 @@ export function HorizontalSourceSelector({
             .filter((source) => existingSources.includes(source.internalName))
             .map((source) => ({
               icon: (
-                <SourceIcon sourceType={source.internalName} iconSize={14} />
+                <SourceIcon
+                  sourceType={source.baseSourceType || source.internalName}
+                  iconSize={14}
+                />
               ),
               key: source.internalName,
               display: (

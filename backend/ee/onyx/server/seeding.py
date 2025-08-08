@@ -200,10 +200,10 @@ def _seed_enterprise_settings(seed_config: SeedConfiguration) -> None:
         store_ee_settings(final_enterprise_settings)
 
 
-def _seed_logo(db_session: Session, logo_path: str | None) -> None:
+def _seed_logo(logo_path: str | None) -> None:
     if logo_path:
         logger.notice("Uploading logo")
-        upload_logo(db_session=db_session, file=logo_path)
+        upload_logo(file=logo_path)
 
 
 def _seed_analytics_script(seed_config: SeedConfiguration) -> None:
@@ -245,7 +245,7 @@ def seed_db() -> None:
         if seed_config.custom_tools is not None:
             _seed_custom_tools(db_session, seed_config.custom_tools)
 
-        _seed_logo(db_session, seed_config.seeded_logo_path)
+        _seed_logo(seed_config.seeded_logo_path)
         _seed_enterprise_settings(seed_config)
         _seed_analytics_script(seed_config)
 

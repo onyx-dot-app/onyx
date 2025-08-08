@@ -25,8 +25,9 @@ from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
 from onyx.db.persona import get_assistant_labels
+from onyx.db.persona import get_minimal_persona_snapshots_for_user
 from onyx.db.persona import get_persona_by_id
-from onyx.db.persona import get_personas_for_user
+from onyx.db.persona import get_persona_snapshots_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_all_personas_display_priority
@@ -45,6 +46,7 @@ from onyx.secondary_llm_flows.starter_message_creation import (
 from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import ImageGenerationToolStatus
+from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSharedNotificationData
@@ -52,12 +54,33 @@ from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.persona.models import PromptSnapshot
 from onyx.server.models import DisplayPriorityRequest
+from onyx.server.settings.store import load_settings
+from onyx.tools.tool_implementations.images.image_generation_tool import (
+    ImageGenerationTool,
+)
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _validate_user_knowledge_enabled(
+    persona_upsert_request: PersonaUpsertRequest, action: str
+) -> None:
+    """Check if user knowledge is enabled when user files/folders are provided."""
+    settings = load_settings()
+    if not settings.user_knowledge_enabled:
+        if (
+            persona_upsert_request.user_file_ids
+            or persona_upsert_request.user_folder_ids
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or folders.",
+            )
+
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
@@ -147,16 +170,12 @@ def list_personas_admin(
     include_deleted: bool = False,
     get_editable: bool = Query(False, description="If true, return editable personas"),
 ) -> list[PersonaSnapshot]:
-    return [
-        PersonaSnapshot.from_model(persona)
-        for persona in get_personas_for_user(
-            db_session=db_session,
-            user=user,
-            get_editable=get_editable,
-            include_deleted=include_deleted,
-            joinedload_all=True,
-        )
-    ]
+    return get_persona_snapshots_for_user(
+        user=user,
+        db_session=db_session,
+        get_editable=get_editable,
+        include_deleted=include_deleted,
+    )
 
 
 @admin_router.patch("/{persona_id}/undelete")
@@ -176,10 +195,9 @@ def undelete_persona(
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,
-    db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> dict[str, str]:
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_type = ChatFileType.IMAGE
     file_id = file_store.save_file(
         content=file.file,
@@ -200,6 +218,8 @@ def create_persona(
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
     tenant_id = get_current_tenant_id()
+
+    _validate_user_knowledge_enabled(persona_upsert_request, "create")
 
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
@@ -248,6 +268,7 @@ def update_persona(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
+    _validate_user_knowledge_enabled(persona_upsert_request, "update")
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
@@ -393,14 +414,12 @@ def list_personas(
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
-) -> list[PersonaSnapshot]:
-    personas = get_personas_for_user(
+) -> list[MinimalPersonaSnapshot]:
+    personas = get_minimal_persona_snapshots_for_user(
         user=user,
         include_deleted=include_deleted,
         db_session=db_session,
         get_editable=False,
-        joinedload_all=True,
-        include_prompt=False,
     )
 
     if persona_ids:
@@ -411,12 +430,14 @@ def list_personas(
         p
         for p in personas
         if not (
-            any(tool.in_code_tool_id == "ImageGenerationTool" for tool in p.tools)
+            any(
+                tool.in_code_tool_id == ImageGenerationTool.__name__ for tool in p.tools
+            )
             and not is_image_generation_available(db_session=db_session)
         )
     ]
 
-    return [PersonaSnapshot.from_model(p) for p in personas]
+    return personas
 
 
 @basic_router.get("/{persona_id}")

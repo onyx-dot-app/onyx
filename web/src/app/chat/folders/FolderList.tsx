@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Folder } from "./interfaces";
-import { ChatSessionDisplay } from "../sessionSidebar/ChatSessionDisplay"; // Ensure this is correctly imported
+import { ChatSessionDisplay } from "@/components/sidebar/ChatSessionDisplay"; // Ensure this is correctly imported
 import {
   FiChevronDown,
   FiChevronRight,

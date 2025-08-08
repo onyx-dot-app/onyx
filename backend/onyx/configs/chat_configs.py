@@ -91,6 +91,10 @@ HARD_DELETE_CHATS = os.environ.get("HARD_DELETE_CHATS", "").lower() == "true"
 
 # Internet Search
 BING_API_KEY = os.environ.get("BING_API_KEY") or None
+EXA_API_KEY = os.environ.get("EXA_API_KEY") or None
+
+NUM_INTERNET_SEARCH_RESULTS = int(os.environ.get("NUM_INTERNET_SEARCH_RESULTS") or 10)
+NUM_INTERNET_SEARCH_CHUNKS = int(os.environ.get("NUM_INTERNET_SEARCH_CHUNKS") or 50)
 
 # Enable in-house model for detecting connector-based filtering in queries
 ENABLE_CONNECTOR_CLASSIFIER = os.environ.get("ENABLE_CONNECTOR_CLASSIFIER", False)

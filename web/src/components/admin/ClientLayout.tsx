@@ -40,9 +40,8 @@ import {
 } from "@/app/admin/settings/interfaces";
 import Link from "next/link";
 import { Button } from "../ui/button";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useIsKGExposed } from "@/app/admin/kg/utils";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 
 const connectors_items = () => [
   {
@@ -427,8 +426,14 @@ export function ClientLayout({
   const toggleUserSettings = () => {
     setUserSettingsOpen(!userSettingsOpen);
   };
-  const { llmProviders } = useChatContext();
+  const { llmProviders, ccPairs } = useChatContext();
   const { popup, setPopup } = usePopup();
+
+  // Fetch federated-connector info so the modal can list/refresh them
+  const {
+    connectors: federatedConnectors,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
 
   if (isLoading) {
     return <></>;
@@ -451,6 +456,9 @@ export function ClientLayout({
           setPopup={setPopup}
           onClose={() => setUserSettingsOpen(false)}
           defaultModel={user?.preferences?.default_model!}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectors}
+          refetchFederatedConnectors={refetchFederatedConnectors}
         />
       )}
 

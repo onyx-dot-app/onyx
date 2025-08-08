@@ -343,8 +343,6 @@ def test_mock_connector_checkpoint_recovery(
     """Test that checkpointing works correctly when an unhandled exception occurs
     and that subsequent runs pick up from the last successful checkpoint."""
     # Create test documents
-    # Create 100 docs for first batch, this is needed to get past the
-    # `_NUM_DOCS_INDEXED_TO_BE_VALID_CHECKPOINT` logic in `get_latest_valid_checkpoint`.
     docs_batch_1 = [create_test_document() for _ in range(100)]
     doc2 = create_test_document()
     doc3 = create_test_document()
@@ -421,10 +419,13 @@ def test_mock_connector_checkpoint_recovery(
             db_session=db_session,
             vespa_client=vespa_client,
         )
-    assert len(documents) == 101  # 100 docs from first batch + doc2
-    document_ids = {doc.id for doc in documents}
-    assert doc2.id in document_ids
-    assert all(doc.id in document_ids for doc in docs_batch_1)
+    # This is no longer guaranteed because docfetching and docprocessing are decoupled!
+    # Some batches may not be processed when docfetching fails, but they should still stick around
+    # in the filestore and be ready for the next run.
+    # assert len(documents) == 101  # 100 docs from first batch + doc2
+    # document_ids = {doc.id for doc in documents}
+    # assert doc2.id in document_ids
+    # assert all(doc.id in document_ids for doc in docs_batch_1)
 
     # Get the checkpoints that were sent to the mock server
     response = mock_server_client.get("/get-checkpoints")

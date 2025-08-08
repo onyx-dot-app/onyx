@@ -1,13 +1,10 @@
 from datetime import datetime
-from typing import Any
 from typing import cast
-from uuid import uuid4
 
 import redis
 from pydantic import BaseModel
 
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
-from onyx.configs.constants import OnyxRedisConstants
 
 
 class RedisConnectorIndexPayload(BaseModel):
@@ -31,7 +28,10 @@ class RedisConnectorIndex:
         PREFIX + "_generator_complete"
     )  # connectorindexing_generator_complete
 
-    GENERATOR_LOCK_PREFIX = "da_lock:indexing"
+    GENERATOR_LOCK_PREFIX = "da_lock:indexing:docfetching"
+    FILESTORE_LOCK_PREFIX = "da_lock:indexing:filestore"
+    DB_LOCK_PREFIX = "da_lock:indexing:db"
+    PER_WORKER_LOCK_PREFIX = "da_lock:indexing:per_worker"
 
     TERMINATE_PREFIX = PREFIX + "_terminate"  # connectorindexing_terminate
     TERMINATE_TTL = 600
@@ -53,130 +53,31 @@ class RedisConnectorIndex:
     def __init__(
         self,
         tenant_id: str,
-        id: int,
+        cc_pair_id: int,
         search_settings_id: int,
         redis: redis.Redis,
     ) -> None:
         self.tenant_id: str = tenant_id
-        self.id = id
+        self.cc_pair_id = cc_pair_id
         self.search_settings_id = search_settings_id
         self.redis = redis
 
-        self.fence_key: str = f"{self.FENCE_PREFIX}_{id}/{search_settings_id}"
-        self.generator_progress_key = (
-            f"{self.GENERATOR_PROGRESS_PREFIX}_{id}/{search_settings_id}"
-        )
         self.generator_complete_key = (
-            f"{self.GENERATOR_COMPLETE_PREFIX}_{id}/{search_settings_id}"
+            f"{self.GENERATOR_COMPLETE_PREFIX}_{cc_pair_id}/{search_settings_id}"
+        )
+        self.filestore_lock_key = (
+            f"{self.FILESTORE_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
         self.generator_lock_key = (
-            f"{self.GENERATOR_LOCK_PREFIX}_{id}/{search_settings_id}"
+            f"{self.GENERATOR_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
-        self.terminate_key = f"{self.TERMINATE_PREFIX}_{id}/{search_settings_id}"
-        self.watchdog_key = f"{self.WATCHDOG_PREFIX}_{id}/{search_settings_id}"
-
-        self.active_key = f"{self.ACTIVE_PREFIX}_{id}/{search_settings_id}"
-        self.connector_active_key = (
-            f"{self.CONNECTOR_ACTIVE_PREFIX}_{id}/{search_settings_id}"
+        self.per_worker_lock_key = (
+            f"{self.PER_WORKER_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
-
-    @classmethod
-    def fence_key_with_ids(cls, cc_pair_id: int, search_settings_id: int) -> str:
-        return f"{cls.FENCE_PREFIX}_{cc_pair_id}/{search_settings_id}"
-
-    def generate_generator_task_id(self) -> str:
-        # celery's default task id format is "dd32ded3-00aa-4884-8b21-42f8332e7fac"
-        # we prefix the task id so it's easier to keep track of who created the task
-        # aka "connectorindexing+generator_1_6dd32ded3-00aa-4884-8b21-42f8332e7fac"
-
-        return f"{self.GENERATOR_TASK_PREFIX}_{self.id}/{self.search_settings_id}_{uuid4()}"
-
-    @property
-    def fenced(self) -> bool:
-        return bool(self.redis.exists(self.fence_key))
-
-    @property
-    def payload(self) -> RedisConnectorIndexPayload | None:
-        # read related data and evaluate/print task progress
-        fence_bytes = cast(Any, self.redis.get(self.fence_key))
-        if fence_bytes is None:
-            return None
-
-        fence_str = fence_bytes.decode("utf-8")
-        return RedisConnectorIndexPayload.model_validate_json(cast(str, fence_str))
-
-    def set_fence(
-        self,
-        payload: RedisConnectorIndexPayload | None,
-    ) -> None:
-        if not payload:
-            self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
-            self.redis.delete(self.fence_key)
-            return
-
-        self.redis.set(self.fence_key, payload.model_dump_json())
-        self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
-
-    def terminating(self, celery_task_id: str) -> bool:
-        return bool(self.redis.exists(f"{self.terminate_key}_{celery_task_id}"))
-
-    def set_terminate(self, celery_task_id: str) -> None:
-        """This sets a signal. It does not block!"""
-        # We shouldn't need very long to terminate the spawned task.
-        # 10 minute TTL is good.
-        self.redis.set(
-            f"{self.terminate_key}_{celery_task_id}", 0, ex=self.TERMINATE_TTL
+        self.db_lock_key = f"{self.DB_LOCK_PREFIX}_{cc_pair_id}/{search_settings_id}"
+        self.terminate_key = (
+            f"{self.TERMINATE_PREFIX}_{cc_pair_id}/{search_settings_id}"
         )
-
-    def set_watchdog(self, value: bool) -> None:
-        """Signal the state of the watchdog."""
-        if not value:
-            self.redis.delete(self.watchdog_key)
-            return
-
-        self.redis.set(self.watchdog_key, 0, ex=self.WATCHDOG_TTL)
-
-    def watchdog_signaled(self) -> bool:
-        """Check the state of the watchdog."""
-        return bool(self.redis.exists(self.watchdog_key))
-
-    def set_active(self) -> None:
-        """This sets a signal to keep the indexing flow from getting cleaned up within
-        the expiration time.
-
-        The slack in timing is needed to avoid race conditions where simply checking
-        the celery queue and task status could result in race conditions."""
-        self.redis.set(self.active_key, 0, ex=self.ACTIVE_TTL)
-
-    def active(self) -> bool:
-        return bool(self.redis.exists(self.active_key))
-
-    def set_connector_active(self) -> None:
-        """This sets a signal to keep the indexing flow from getting cleaned up within
-        the expiration time.
-
-        The slack in timing is needed to avoid race conditions where simply checking
-        the celery queue and task status could result in race conditions."""
-        self.redis.set(self.connector_active_key, 0, ex=self.CONNECTOR_ACTIVE_TTL)
-
-    def connector_active(self) -> bool:
-        if self.redis.exists(self.connector_active_key):
-            return True
-
-        return False
-
-    def connector_active_ttl(self) -> int:
-        """Refer to https://redis.io/docs/latest/commands/ttl/
-
-        -2 means the key does not exist
-        -1 means the key exists but has no associated expire
-        Otherwise, returns the actual TTL of the key
-        """
-        ttl = cast(int, self.redis.ttl(self.connector_active_key))
-        return ttl
-
-    def generator_locked(self) -> bool:
-        return bool(self.redis.exists(self.generator_lock_key))
 
     def set_generator_complete(self, payload: int | None) -> None:
         if not payload:
@@ -186,21 +87,9 @@ class RedisConnectorIndex:
         self.redis.set(self.generator_complete_key, payload)
 
     def generator_clear(self) -> None:
-        self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
 
-    def get_progress(self) -> int | None:
-        """Returns None if the key doesn't exist. The"""
-        # TODO: move into fence?
-        bytes = self.redis.get(self.generator_progress_key)
-        if bytes is None:
-            return None
-
-        progress = int(cast(int, bytes))
-        return progress
-
     def get_completion(self) -> int | None:
-        # TODO: move into fence?
         bytes = self.redis.get(self.generator_complete_key)
         if bytes is None:
             return None
@@ -209,24 +98,22 @@ class RedisConnectorIndex:
         return status
 
     def reset(self) -> None:
-        self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
-        self.redis.delete(self.connector_active_key)
-        self.redis.delete(self.active_key)
+        self.redis.delete(self.filestore_lock_key)
+        self.redis.delete(self.db_lock_key)
         self.redis.delete(self.generator_lock_key)
-        self.redis.delete(self.generator_progress_key)
         self.redis.delete(self.generator_complete_key)
-        self.redis.delete(self.fence_key)
 
     @staticmethod
     def reset_all(r: redis.Redis) -> None:
         """Deletes all redis values for all connectors"""
+        # leaving these temporarily for backwards compat, TODO: remove
         for key in r.scan_iter(RedisConnectorIndex.CONNECTOR_ACTIVE_PREFIX + "*"):
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorIndex.ACTIVE_PREFIX + "*"):
             r.delete(key)
 
-        for key in r.scan_iter(RedisConnectorIndex.GENERATOR_LOCK_PREFIX + "*"):
+        for key in r.scan_iter(RedisConnectorIndex.FILESTORE_LOCK_PREFIX + "*"):
             r.delete(key)
 
         for key in r.scan_iter(RedisConnectorIndex.GENERATOR_COMPLETE_PREFIX + "*"):

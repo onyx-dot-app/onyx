@@ -722,7 +722,7 @@ def upload_files_for_chat(
                 detail="File size must be less than 20MB",
             )
 
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
@@ -825,10 +825,9 @@ def upload_files_for_chat(
 @router.get("/file/{file_id:path}")
 def fetch_chat_file(
     file_id: str,
-    db_session: Session = Depends(get_session),
     _: User | None = Depends(current_user),
 ) -> Response:
-    file_store = get_default_file_store(db_session)
+    file_store = get_default_file_store()
     file_record = file_store.read_file_record(file_id)
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")

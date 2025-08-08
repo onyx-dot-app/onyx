@@ -1,3 +1,5 @@
+from pydantic import BaseModel
+
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 
@@ -53,7 +55,23 @@ CHAT_USER_CONTEXT_FREE_PROMPT = f"""
 SKIP_SEARCH = "Skip Search"
 YES_SEARCH = "Yes Search"
 
-AGGRESSIVE_SEARCH_TEMPLATE = f"""
+
+class AggressiveSearchTemplateParams(BaseModel):
+    chat_history: str
+    final_query: str
+
+
+def build_aggressive_search_template(params: AggressiveSearchTemplateParams) -> str:
+    """
+    Build the aggressive search template with type-safe parameters.
+
+    Args:
+        params: Pydantic model containing chat_history and final_query
+
+    Returns:
+        Formatted template string
+    """
+    return f"""
 Given the conversation history and a follow up query, determine if the system should call \
 an external search tool to better answer the latest user input.
 Your default response is {YES_SEARCH}.
@@ -65,14 +83,14 @@ additional information or details would provide little or no value.
 
 Conversation History:
 {GENERAL_SEP_PAT}
-{{chat_history}}
+{params.chat_history}
 {GENERAL_SEP_PAT}
 
 If you are at all unsure, respond with {YES_SEARCH}.
 Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
 
 Follow Up Input:
-{{final_query}}
+{params.final_query}
 """.strip()
 
 
@@ -253,7 +271,7 @@ Please rephrase the following user question/query as a semantic query that would
 search engine.
 
 Note:
- - do not change the meaning of the question! Specifically, if the query is a an instruction, keep it \
+ - do not change the meaning of the question! Specifically, if the query is an instruction, keep it \
 as an instruction!
 
 Here is the user question/query:

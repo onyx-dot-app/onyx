@@ -19,6 +19,7 @@ from onyx.document_index.vespa.shared_utils.utils import (
 )
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.utils.logger import setup_logger
+import os
 
 logger = setup_logger()
 
@@ -27,6 +28,8 @@ revision = "12635f6655b7"
 down_revision = "58c50ef19f08"
 branch_labels = None
 depends_on = None
+
+SKIP_CANON_DRIVE_IDS = os.environ.get("SKIP_CANON_DRIVE_IDS", "true").lower() == "true"
 
 
 def active_search_settings() -> tuple[SearchSettings, SearchSettings | None]:
@@ -93,7 +96,7 @@ def get_google_drive_documents_from_database() -> list[dict]:
     result = bind.execute(
         sa.text(
             """
-            SELECT d.id, cc.id as cc_pair_id
+            SELECT d.id
             FROM document d
             JOIN document_by_connector_credential_pair dcc ON d.id = dcc.id
             JOIN connector_credential_pair cc ON dcc.connector_id = cc.connector_id
@@ -106,7 +109,7 @@ def get_google_drive_documents_from_database() -> list[dict]:
 
     documents = []
     for row in result:
-        documents.append({"document_id": row.id, "cc_pair_id": row.cc_pair_id})
+        documents.append({"document_id": row.id})
 
     return documents
 
@@ -514,6 +517,8 @@ def delete_document_from_db(current_doc_id: str, index_name: str) -> None:
 
 
 def upgrade() -> None:
+    if SKIP_CANON_DRIVE_IDS:
+        return
     current_search_settings, future_search_settings = active_search_settings()
     document_index = get_default_document_index(
         current_search_settings,

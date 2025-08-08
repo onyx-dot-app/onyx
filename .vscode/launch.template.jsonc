@@ -24,8 +24,8 @@
           "Celery primary",
           "Celery light",
           "Celery heavy",
-          "Celery indexing",
-          "Celery user files indexing",
+          "Celery docfetching",
+          "Celery docprocessing",
           "Celery beat",
           "Celery monitoring"
         ],
@@ -46,8 +46,8 @@
           "Celery primary",
           "Celery light",
           "Celery heavy",
-          "Celery indexing",
-          "Celery user files indexing",
+          "Celery docfetching",
+          "Celery docprocessing",
           "Celery beat",
           "Celery monitoring"
         ],
@@ -226,35 +226,66 @@
         "consoleTitle": "Celery heavy Console"
       },
       {
-        "name": "Celery indexing",
+        "name": "Celery docfetching",
         "type": "debugpy",
         "request": "launch",
         "module": "celery",
         "cwd": "${workspaceFolder}/backend",
         "envFile": "${workspaceFolder}/.vscode/.env",
         "env": {
-          "ENABLE_MULTIPASS_INDEXING": "false",
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
+            "LOG_LEVEL": "DEBUG",
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONPATH": "."
         },
         "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.indexing",
-          "worker",
-          "--pool=threads",
-          "--concurrency=1",
-          "--prefetch-multiplier=1",
-          "--loglevel=INFO",
-          "--hostname=indexing@%n",
-          "-Q",
-          "connector_indexing"
+            "-A",
+            "onyx.background.celery.versioned_apps.docfetching",
+            "worker",
+            "--pool=threads",
+            "--concurrency=1",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=docfetching@%n",
+            "-Q",
+            "connector_doc_fetching,user_files_indexing"
         ],
         "presentation": {
-          "group": "2"
+            "group": "2"
         },
-        "consoleTitle": "Celery indexing Console"
-      },
+        "consoleTitle": "Celery docfetching Console",
+        "justMyCode": false
+    },
+    {
+        "name": "Celery docprocessing",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "celery",
+        "cwd": "${workspaceFolder}/backend",
+        "envFile": "${workspaceFolder}/.vscode/.env",
+        "env": {
+            "ENABLE_MULTIPASS_INDEXING": "false",
+            "LOG_LEVEL": "DEBUG",
+            "PYTHONUNBUFFERED": "1",
+            "PYTHONPATH": "."
+        },
+        "args": [
+            "-A",
+            "onyx.background.celery.versioned_apps.docprocessing",
+            "worker",
+            "--pool=threads",
+            "--concurrency=6",
+            "--prefetch-multiplier=1",
+            "--loglevel=INFO",
+            "--hostname=docprocessing@%n",
+            "-Q",
+            "docprocessing"
+        ],
+        "presentation": {
+            "group": "2"
+        },
+        "consoleTitle": "Celery docprocessing Console",
+        "justMyCode": false
+    },
       {
         "name": "Celery monitoring",
         "type": "debugpy",
@@ -302,35 +333,6 @@
           "group": "2"
         },
         "consoleTitle": "Celery beat Console"
-      },
-      {
-        "name": "Celery user files indexing",
-        "type": "debugpy",
-        "request": "launch",
-        "module": "celery",
-        "cwd": "${workspaceFolder}/backend",
-        "envFile": "${workspaceFolder}/.vscode/.env",
-        "env": {
-          "LOG_LEVEL": "DEBUG",
-          "PYTHONUNBUFFERED": "1",
-          "PYTHONPATH": "."
-        },
-        "args": [
-          "-A",
-          "onyx.background.celery.versioned_apps.indexing",
-          "worker",
-          "--pool=threads",
-          "--concurrency=1",
-          "--prefetch-multiplier=1",
-          "--loglevel=INFO",
-          "--hostname=user_files_indexing@%n",
-          "-Q",
-          "user_files_indexing"
-        ],
-        "presentation": {
-          "group": "2"
-        },
-        "consoleTitle": "Celery user files indexing Console"
       },
       {
         "name": "Pytest",
@@ -426,7 +428,7 @@
       },
       "args": [
         "--filename",
-        "generated/openapi.json",
+        "generated/openapi.json"
       ]
     },
     {

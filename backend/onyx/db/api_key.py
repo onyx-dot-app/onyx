@@ -148,7 +148,10 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
     if api_key_user is None:
         raise RuntimeError("API Key does not have associated user.")
 
-    new_api_key = generate_api_key()
+    # Get tenant_id from context var (will be default schema for single tenant)
+    tenant_id = get_current_tenant_id()
+
+    new_api_key = generate_api_key(tenant_id)
     existing_api_key.hashed_api_key = hash_api_key(new_api_key)
     existing_api_key.api_key_display = build_displayable_api_key(new_api_key)
     db_session.commit()

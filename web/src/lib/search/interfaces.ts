@@ -180,6 +180,10 @@ export interface SourceMetadata {
   internalName: ValidSources;
   adminUrl: string;
   oauthSupported?: boolean;
+  federated?: boolean;
+  federatedTooltip?: string;
+  // For federated connectors, this stores the base source type for the icon
+  baseSourceType?: ValidSources;
 }
 
 export interface SearchDefaultOverrides {

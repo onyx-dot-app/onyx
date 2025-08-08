@@ -26,7 +26,7 @@ def celery_get_unacked_length(r: Redis) -> int:
 def celery_get_unacked_task_ids(queue: str, r: Redis) -> set[str]:
     """Gets the set of task id's matching the given queue in the unacked hash.
 
-    Unacked entries belonging to the indexing queue are "prefetched", so this gives
+    Unacked entries belonging to the indexing queues are "prefetched", so this gives
     us crucial visibility as to what tasks are in that state.
     """
     tasks: set[str] = set()

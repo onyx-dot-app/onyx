@@ -9,6 +9,7 @@ pydantic==2.8.2
 retry==0.9.2
 safetensors==0.5.3
 sentence-transformers==4.0.2
+sentencepiece==0.2.0
 setfit==1.1.1
 torch==2.6.0
 transformers==4.49.0

@@ -44,7 +44,11 @@ from sqlalchemy import PrimaryKeyConstraint
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
-from onyx.configs.constants import DEFAULT_BOOST, MilestoneRecordType
+from onyx.configs.constants import (
+    DEFAULT_BOOST,
+    FederatedConnectorSource,
+    MilestoneRecordType,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
@@ -1355,14 +1359,14 @@ class Connector(Base):
         if self.refresh_freq is not None:
             if self.refresh_freq < 60:
                 raise ValueError(
-                    "refresh_freq must be greater than or equal to 60 seconds."
+                    "refresh_freq must be greater than or equal to 1 minute."
                 )
 
     def validate_prune_freq(self) -> None:
         if self.prune_freq is not None:
-            if self.prune_freq < 86400:
+            if self.prune_freq < 300:
                 raise ValueError(
-                    "prune_freq must be greater than or equal to 86400 seconds."
+                    "prune_freq must be greater than or equal to 5 minutes."
                 )
 
 
@@ -1405,6 +1409,80 @@ class Credential(Base):
     )
 
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
+
+
+class FederatedConnector(Base):
+    __tablename__ = "federated_connector"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[FederatedConnectorSource] = mapped_column(
+        Enum(FederatedConnectorSource, native_enum=False)
+    )
+    credentials: Mapped[dict[str, str]] = mapped_column(EncryptedJson(), nullable=False)
+
+    oauth_tokens: Mapped[list["FederatedConnectorOAuthToken"]] = relationship(
+        "FederatedConnectorOAuthToken",
+        back_populates="federated_connector",
+        cascade="all, delete-orphan",
+    )
+    document_sets: Mapped[list["FederatedConnector__DocumentSet"]] = relationship(
+        "FederatedConnector__DocumentSet",
+        back_populates="federated_connector",
+        cascade="all, delete-orphan",
+    )
+
+
+class FederatedConnectorOAuthToken(Base):
+    """NOTE: in the future, can be made more general to support OAuth tokens
+    for actions."""
+
+    __tablename__ = "federated_connector_oauth_token"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    federated_connector_id: Mapped[int] = mapped_column(
+        ForeignKey("federated_connector.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(EncryptedString(), nullable=False)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+
+    federated_connector: Mapped["FederatedConnector"] = relationship(
+        "FederatedConnector", back_populates="oauth_tokens"
+    )
+    user: Mapped["User"] = relationship("User")
+
+
+class FederatedConnector__DocumentSet(Base):
+    __tablename__ = "federated_connector__document_set"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    federated_connector_id: Mapped[int] = mapped_column(
+        ForeignKey("federated_connector.id", ondelete="CASCADE"), nullable=False
+    )
+    document_set_id: Mapped[int] = mapped_column(
+        ForeignKey("document_set.id", ondelete="CASCADE"), nullable=False
+    )
+    # unique per source type. Validated before insertion.
+    entities: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB(), nullable=False)
+
+    federated_connector: Mapped["FederatedConnector"] = relationship(
+        "FederatedConnector", back_populates="document_sets"
+    )
+    document_set: Mapped["DocumentSet"] = relationship(
+        "DocumentSet", back_populates="federated_connectors"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "federated_connector_id",
+            "document_set_id",
+            name="uq_federated_connector_document_set",
+        ),
+    )
 
 
 class SearchSettings(Base):
@@ -1534,9 +1612,7 @@ class SearchSettings(Base):
 
     @property
     def final_embedding_dim(self) -> int:
-        if self.reduced_dimension:
-            return self.reduced_dimension
-        return self.model_dim
+        return self.reduced_dimension or self.model_dim
 
     @staticmethod
     def can_use_large_chunks(
@@ -1557,7 +1633,7 @@ class SearchSettings(Base):
 
 class IndexAttempt(Base):
     """
-    Represents an attempt to index a group of 1 or more documents from a
+    Represents an attempt to index a group of 0 or more documents from a
     source. For example, a single pull from Google Drive, a single event from
     slack event API, or a single website crawl.
     """
@@ -1604,6 +1680,30 @@ class IndexAttempt(Base):
     # Points to the last checkpoint that was saved for this run. The pointer here
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # NEW: Database-based coordination fields (replacing Redis fencing)
+    celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    cancellation_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # NEW: Batch coordination fields (replacing FileStore state)
+    total_batches: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completed_batches: Mapped[int] = mapped_column(Integer, default=0)
+    # TODO: unused, remove this column
+    total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
+    total_chunks: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Progress tracking for stall detection
+    last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_batches_completed_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # NEW: Heartbeat tracking for worker liveness detection
+    heartbeat_counter: Mapped[int] = mapped_column(Integer, default=0)
+    last_heartbeat_value: Mapped[int] = mapped_column(Integer, default=0)
+    last_heartbeat_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -1655,6 +1755,13 @@ class IndexAttempt(Base):
             "status",
             desc("time_updated"),
         ),
+        # NEW: Index for coordination queries
+        Index(
+            "ix_index_attempt_active_coordination",
+            "connector_credential_pair_id",
+            "search_settings_id",
+            "status",
+        ),
     )
 
     def __repr__(self) -> str:
@@ -1668,6 +1775,13 @@ class IndexAttempt(Base):
 
     def is_finished(self) -> bool:
         return self.status.is_terminal()
+
+    def is_coordination_complete(self) -> bool:
+        """Check if all batches have been processed"""
+        return (
+            self.total_batches is not None
+            and self.completed_batches >= self.total_batches
+        )
 
 
 class IndexAttemptError(Base):
@@ -2311,6 +2425,13 @@ class DocumentSet(Base):
         "UserGroup",
         secondary="document_set__user_group",
         viewonly=True,
+    )
+    federated_connectors: Mapped[list["FederatedConnector__DocumentSet"]] = (
+        relationship(
+            "FederatedConnector__DocumentSet",
+            back_populates="document_set",
+            cascade="all, delete-orphan",
+        )
     )
 
 
@@ -3066,7 +3187,7 @@ class PublicExternalUserGroup(Base):
 
 class UsageReport(Base):
     """This stores metadata about usage reports generated by admin including user who generated
-    them as well las the period they cover. The actual zip file of the report is stored as a lo
+    them as well as the period they cover. The actual zip file of the report is stored as a lo
     using the FileRecord
     """
 

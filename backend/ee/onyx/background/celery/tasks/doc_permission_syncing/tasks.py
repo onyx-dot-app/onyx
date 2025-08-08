@@ -422,7 +422,7 @@ def connector_permission_sync_generator_task(
 
     lock: RedisLock = r.lock(
         OnyxRedisLocks.CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX
-        + f"_{redis_connector.id}",
+        + f"_{redis_connector.cc_pair_id}",
         timeout=CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
         thread_local=False,
     )

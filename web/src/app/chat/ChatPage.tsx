@@ -28,8 +28,8 @@ import {
 
 import Prism from "prismjs";
 import Cookies from "js-cookie";
-import { HistorySidebar } from "./sessionSidebar/HistorySidebar";
-import { Persona } from "../admin/assistants/interfaces";
+import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
+import { MinimalPersonaSnapshot } from "../admin/assistants/interfaces";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
   buildChatUrl,
@@ -49,7 +49,6 @@ import {
   setMessageAsLatest,
   updateLlmOverrideForChatSession,
   updateParentChildren,
-  uploadFilesForChat,
   useScrollonStream,
 } from "./lib";
 import {
@@ -98,6 +97,8 @@ import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
+import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
+import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
@@ -127,7 +128,7 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import { ValidSources, FederatedConnectorDetail } from "@/lib/types";
 import {
   FileResponse,
   FolderResponse,
@@ -137,6 +138,8 @@ import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
+import { useFederatedConnectors } from "@/lib/hooks";
+import { Button } from "@/components/ui/button";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -147,6 +150,29 @@ export enum UploadIntent {
   ADD_TO_DOCUMENTS, // For files uploaded via FilePickerModal or similar (just add to repo)
 }
 
+type ChatPageProps = {
+  toggle: (toggled?: boolean) => void;
+  documentSidebarInitialWidth?: number;
+  sidebarVisible: boolean;
+  firstMessage?: string;
+  initialFolders?: any;
+  initialFiles?: any;
+};
+
+// ---
+// File Attachment Behavior in ChatPage
+//
+// When a user attaches a file to a message:
+// - If the file is small enough, it will be directly embedded into the query and sent with the message.
+//   These files are transient and only persist for the current message.
+// - If the file is too large to embed, it will be uploaded to the backend, processed (chunked),
+//   and then used for retrieval-augmented generation (RAG) instead. These files may persist across messages
+//   and can be referenced in future queries.
+//
+// As a result, depending on the size of the attached file, it could either persist only for the current message
+// or be available for retrieval in subsequent messages.
+// ---
+
 export function ChatPage({
   toggle,
   documentSidebarInitialWidth,
@@ -154,14 +180,7 @@ export function ChatPage({
   firstMessage,
   initialFolders,
   initialFiles,
-}: {
-  toggle: (toggled?: boolean) => void;
-  documentSidebarInitialWidth?: number;
-  sidebarVisible: boolean;
-  firstMessage?: string;
-  initialFolders?: any;
-  initialFiles?: any;
-}) {
+}: ChatPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -190,6 +209,110 @@ export function ChatPage({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
+
+  // Federated OAuth status
+  const {
+    connectors: federatedConnectors,
+    hasUnauthenticatedConnectors,
+    loading: oauthLoading,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
+
+  // This state is needed to avoid a UI flicker for the source-chip above the message input.
+  // When a message is submitted, the state transitions to "loading" and the source-chip (which shows attached files)
+  // would disappear if we only relied on the files in the streamed-back answer. By keeping a local copy of the files
+  // in messageFiles, we ensure the chip remains visible during loading, preventing a flicker before the server response
+  // (which re-includes the files in the streamed answer and re-renders the chip). This provides a smoother user experience.
+  const [messageFiles, setMessageFiles] = useState<FileDescriptor[]>([]);
+
+  // Also fetch federated connectors for the sources list
+  const { data: federatedConnectorsData } = useFederatedConnectors();
+
+  const MAX_SKIP_COUNT = 1;
+
+  // Check localStorage for previous skip preference and count
+  const [oAuthModalState, setOAuthModalState] = useState<{
+    hidden: boolean;
+    skipCount: number;
+  }>(() => {
+    if (typeof window !== "undefined") {
+      const skipData = localStorage.getItem("federatedOAuthModalSkipData");
+      if (skipData) {
+        try {
+          const parsed = JSON.parse(skipData);
+          // Check if we're still within the hide duration (1 hour)
+          const now = Date.now();
+          const hideUntil = parsed.hideUntil || 0;
+          const isWithinHideDuration = now < hideUntil;
+
+          return {
+            hidden: parsed.permanentlyHidden || isWithinHideDuration,
+            skipCount: parsed.skipCount || 0,
+          };
+        } catch {
+          return { hidden: false, skipCount: 0 };
+        }
+      }
+    }
+    return { hidden: false, skipCount: 0 };
+  });
+
+  const handleOAuthModalSkip = () => {
+    if (typeof window !== "undefined") {
+      const newSkipCount = oAuthModalState.skipCount + 1;
+
+      // If we've reached the max skip count, show the "No problem!" modal first
+      if (newSkipCount >= MAX_SKIP_COUNT) {
+        // Don't hide immediately - let the "No problem!" modal show
+        setOAuthModalState({
+          hidden: false,
+          skipCount: newSkipCount,
+        });
+      } else {
+        // For first skip, hide after a delay to show "No problem!" modal
+        const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+
+        const skipData = {
+          skipCount: newSkipCount,
+          hideUntil: oneHourFromNow,
+          permanentlyHidden: false,
+        };
+
+        localStorage.setItem(
+          "federatedOAuthModalSkipData",
+          JSON.stringify(skipData)
+        );
+
+        setOAuthModalState({
+          hidden: true,
+          skipCount: newSkipCount,
+        });
+      }
+    }
+  };
+
+  // Handle the final dismissal of the "No problem!" modal
+  const handleOAuthModalFinalDismiss = () => {
+    if (typeof window !== "undefined") {
+      const oneHourFromNow = Date.now() + 60 * 60 * 1000; // 1 hour in milliseconds
+
+      const skipData = {
+        skipCount: oAuthModalState.skipCount,
+        hideUntil: oneHourFromNow,
+        permanentlyHidden: false,
+      };
+
+      localStorage.setItem(
+        "federatedOAuthModalSkipData",
+        JSON.stringify(skipData)
+      );
+
+      setOAuthModalState({
+        hidden: true,
+        skipCount: oAuthModalState.skipCount,
+      });
+    }
+  };
 
   const defaultAssistantIdRaw = searchParams?.get(
     SEARCH_PARAM_NAMES.PERSONA_ID
@@ -275,7 +398,7 @@ export function ChatPage({
 
     filterManager.buildFiltersFromQueryString(
       newSearchParams.toString(),
-      availableSources,
+      sources,
       documentSets.map((ds) => ds.name),
       tags
     );
@@ -304,7 +427,7 @@ export function ChatPage({
 
   const existingChatSessionAssistantId = selectedChatSession?.persona_id;
   const [selectedAssistant, setSelectedAssistant] = useState<
-    Persona | undefined
+    MinimalPersonaSnapshot | undefined
   >(
     // NOTE: look through available assistants here, so that even if the user
     // has hidden this assistant it still shows the correct assistant when
@@ -334,7 +457,7 @@ export function ChatPage({
   };
 
   const [alternativeAssistant, setAlternativeAssistant] =
-    useState<Persona | null>(null);
+    useState<MinimalPersonaSnapshot | null>(null);
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
@@ -345,7 +468,7 @@ export function ChatPage({
   // 3. First pinned assistants (ordered list of pinned assistants)
   // 4. Available assistants (ordered list of available assistants)
   // Relevant test: `live_assistant.spec.ts`
-  const liveAssistant: Persona | undefined = useMemo(
+  const liveAssistant: MinimalPersonaSnapshot | undefined = useMemo(
     () =>
       alternativeAssistant ||
       selectedAssistant ||
@@ -373,8 +496,28 @@ export function ChatPage({
 
   const sources: SourceMetadata[] = useMemo(() => {
     const uniqueSources = Array.from(new Set(availableSources));
-    return uniqueSources.map((source) => getSourceMetadata(source));
-  }, [availableSources]);
+    const regularSources = uniqueSources.map((source) =>
+      getSourceMetadata(source)
+    );
+
+    // Add federated connectors as sources
+    const federatedSources =
+      federatedConnectorsData?.map((connector: FederatedConnectorDetail) => {
+        return getSourceMetadata(connector.source);
+      }) || [];
+
+    // Combine sources and deduplicate based on internalName
+    const allSources = [...regularSources, ...federatedSources];
+    const deduplicatedSources = allSources.reduce((acc, source) => {
+      const existing = acc.find((s) => s.internalName === source.internalName);
+      if (!existing) {
+        acc.push(source);
+      }
+      return acc;
+    }, [] as SourceMetadata[]);
+
+    return deduplicatedSources;
+  }, [availableSources, federatedConnectorsData]);
 
   const stopGenerating = () => {
     const currentSession = currentSessionId();
@@ -414,7 +557,7 @@ export function ChatPage({
   // 2. we "@"ed the `GPT` assistant and sent a message
   // 3. while the `GPT` assistant message is generating, we "@" the `Paraphrase` assistant
   const [alternativeGeneratingAssistant, setAlternativeGeneratingAssistant] =
-    useState<Persona | null>(null);
+    useState<MinimalPersonaSnapshot | null>(null);
 
   // used to track whether or not the initial "submit on load" has been performed
   // this only applies if `?submit-on-load=true` or `?submit-on-load=1` is in the URL
@@ -1117,6 +1260,17 @@ export function ChatPage({
     // If under the context limit, the files will be included in the chat history
     // so we don't need to keep them around.
     if (selectedDocumentTokens < maxTokens) {
+      // Persist the selected files in `messageFiles` before clearing them below.
+      // This ensures that the files remain visible in the UI during the loading state,
+      // even though `setSelectedFiles([])` below will clear the `selectedFiles` state.
+      // Without this, the source-chip would disappear before the server response arrives.
+      setMessageFiles(
+        selectedFiles.map((selectedFile) => ({
+          id: selectedFile.id.toString(),
+          type: selectedFile.chat_file_type,
+          name: selectedFile.name,
+        }))
+      );
       setSelectedFiles([]);
     }
 
@@ -1206,7 +1360,7 @@ export function ChatPage({
     queryOverride?: string;
     forceSearch?: boolean;
     isSeededChat?: boolean;
-    alternativeAssistantOverride?: Persona | null;
+    alternativeAssistantOverride?: MinimalPersonaSnapshot | null;
     modelOverride?: LlmDescriptor;
     regenerationRequest?: RegenerationRequest | null;
     overrideFileDescriptors?: FileDescriptor[];
@@ -2039,11 +2193,7 @@ export function ChatPage({
     Cookies.set(
       SIDEBAR_TOGGLED_COOKIE_NAME,
       String(!sidebarVisible).toLocaleLowerCase()
-    ),
-      {
-        path: "/",
-      };
-
+    );
     toggle();
   };
   const removeToggle = () => {
@@ -2080,10 +2230,7 @@ export function ChatPage({
   useEffect(() => {
     if (liveAssistant) {
       const hasSearchTool = liveAssistant.tools.some(
-        (tool) =>
-          tool.in_code_tool_id === SEARCH_TOOL_ID &&
-          liveAssistant.user_file_ids?.length == 0 &&
-          liveAssistant.user_folder_ids?.length == 0
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
       );
       setRetrievalEnabled(hasSearchTool);
       if (!hasSearchTool) {
@@ -2095,10 +2242,7 @@ export function ChatPage({
   const [retrievalEnabled, setRetrievalEnabled] = useState(() => {
     if (liveAssistant) {
       return liveAssistant.tools.some(
-        (tool) =>
-          tool.in_code_tool_id === SEARCH_TOOL_ID &&
-          liveAssistant.user_file_ids?.length == 0 &&
-          liveAssistant.user_folder_ids?.length == 0
+        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
       );
     }
     return false;
@@ -2330,6 +2474,18 @@ export function ChatPage({
 
       {shouldShowWelcomeModal && <WelcomeModal user={user} />}
 
+      {isReady && !oAuthModalState.hidden && hasUnauthenticatedConnectors && (
+        <FederatedOAuthModal
+          connectors={federatedConnectors}
+          onSkip={
+            oAuthModalState.skipCount >= MAX_SKIP_COUNT
+              ? handleOAuthModalFinalDismiss
+              : handleOAuthModalSkip
+          }
+          skipCount={oAuthModalState.skipCount}
+        />
+      )}
+
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
       Only used in the EE version of the app. */}
       {popup}
@@ -2358,6 +2514,9 @@ export function ChatPage({
           setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
+          ccPairs={ccPairs}
+          federatedConnectors={federatedConnectors}
+          refetchFederatedConnectors={refetchFederatedConnectors}
           onClose={() => {
             setUserSettingsToggled(false);
             setSettingsToggled(false);
@@ -3224,6 +3383,7 @@ export function ChatPage({
                                 key={-2}
                                 messageId={-1}
                                 content={submittedMessage}
+                                files={messageFiles}
                               />
                             )}
 

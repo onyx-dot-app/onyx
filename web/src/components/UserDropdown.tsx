@@ -11,7 +11,7 @@ import { LOGOUT_DISABLED } from "@/lib/constants";
 import { SettingsContext } from "./settings/SettingsProvider";
 import { FileIcon } from "./icons/icons";
 import { BellIcon, LightSettingsIcon, UserIcon } from "./icons/icons";
-import { pageType } from "@/app/chat/sessionSidebar/types";
+import { pageType } from "@/components/sidebar/types";
 import { NavigationItem, Notification } from "@/app/admin/settings/interfaces";
 import DynamicFaIcon, { preloadIcons } from "./icons/DynamicFaIcon";
 import { useUser } from "./user/UserProvider";

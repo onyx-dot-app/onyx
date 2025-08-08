@@ -1,0 +1,38 @@
+name: PR Labeler
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate_pr_title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title for Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "PR Title: $PR_TITLE"
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|test|ci|refactor|perf|chore|revert|build)(\(.+\))?:\ .+ ]]; then
+            echo "::error::❌ Your PR title does not follow the Conventional Commits format.
+              This check ensures that all pull requests use clear, consistent titles that help automate changelogs and improve project history.
+
+              Please update your PR title to follow the Conventional Commits style.  
+              Here is a link to a blog explaining the reason why we've included the Conventional Commits style into our PR titles: https://xfuture-blog.com/working-with-conventional-commits
+
+              **Here are some examples of valid PR titles:**
+              - feat: add user authentication
+              - fix(login): handle null password error
+              - docs(readme): update installation instructions"
+            exit 1
+          fi

@@ -13,6 +13,7 @@ services:
       - index
       - cache
       - inference_model_server
+      - minio
     restart: unless-stopped
     env_file:
       - .env

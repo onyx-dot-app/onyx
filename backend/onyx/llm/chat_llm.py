@@ -36,7 +36,6 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.llm_provider_options import CREDENTIALS_FILE_CUSTOM_CONFIG_KEY
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -52,7 +51,8 @@ litellm.telemetry = False
 litellm.enable_preview_features = True
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
-VERTEX_CREDENTIALS_KWARG = "vertex_credentials"
+VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
+VERTEX_LOCATION_KWARG = "vertex_location"
 
 
 class LLMTimeoutError(Exception):
@@ -295,13 +295,12 @@ class DefaultMultiLLM(LLM):
             # Specifically pass in "vertex_credentials" / "vertex_location" as a
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
-            vertex_location_key = "vertex_location"
             for k, v in custom_config.items():
                 if model_provider == "vertex_ai":
-                    if k == VERTEX_CREDENTIALS_KWARG:
+                    if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
                         continue
-                    elif k == vertex_location_key:
+                    elif k == VERTEX_LOCATION_KWARG:
                         model_kwargs[k] = v
                         continue
 
@@ -379,13 +378,6 @@ class DefaultMultiLLM(LLM):
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
 
-        final_model_kwargs = {**self._model_kwargs}
-        if (
-            VERTEX_CREDENTIALS_KWARG not in final_model_kwargs
-            and self.config.credentials_file
-        ):
-            final_model_kwargs[VERTEX_CREDENTIALS_KWARG] = self.config.credentials_file
-
         try:
             return litellm.completion(
                 guardrails=["EEA-pre-guard_noerror"],
@@ -432,7 +424,7 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **final_model_kwargs,
+                **self._model_kwargs,
             )
         except Exception as e:
             self._record_error(processed_prompt, e)
@@ -448,7 +440,7 @@ class DefaultMultiLLM(LLM):
     @property
     def config(self) -> LLMConfig:
         credentials_file: str | None = (
-            self._custom_config.get(CREDENTIALS_FILE_CUSTOM_CONFIG_KEY, None)
+            self._custom_config.get(VERTEX_CREDENTIALS_FILE_KWARG, None)
             if self._custom_config
             else None
         )

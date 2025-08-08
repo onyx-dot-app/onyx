@@ -20,14 +20,19 @@ from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocument
 from onyx.background.celery.tasks.shared.tasks import LIGHT_SOFT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import LIGHT_TIME_LIMIT
 from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
+from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_FENCE_KEY
+from onyx.background.celery.tasks.vespa.document_sync import get_document_sync_payload
+from onyx.background.celery.tasks.vespa.document_sync import get_document_sync_remaining
+from onyx.background.celery.tasks.vespa.document_sync import reset_document_sync
+from onyx.background.celery.tasks.vespa.document_sync import (
+    try_generate_stale_document_sync_tasks,
+)
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import VESPA_SYNC_MAX_TASKS
 from onyx.configs.constants import CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.connector_credential_pair import get_connector_credential_pairs
-from onyx.db.document import count_documents_by_needs_sync
 from onyx.db.document import get_document
 from onyx.db.document import mark_document_as_synced
 from onyx.db.document_set import delete_document_set
@@ -47,10 +52,6 @@ from onyx.db.sync_record import update_sync_record_status
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaDocumentFields
 from onyx.httpx.httpx_pool import HttpxPool
-from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
-from onyx.redis.redis_connector_credential_pair import (
-    RedisGlobalConnectorCredentialPair,
-)
 from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
@@ -166,8 +167,11 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
                 continue
 
             key_str = key_bytes.decode("utf-8")
-            if key_str == RedisGlobalConnectorCredentialPair.FENCE_KEY:
-                monitor_connector_taskset(r)
+            # NOTE: removing the "Redis*" classes, prefer to just have functions to
+            # do these things going forward. In short, things should generally be like the doc
+            # sync task rather than the others
+            if key_str == DOCUMENT_SYNC_FENCE_KEY:
+                monitor_document_sync_taskset(r)
             elif key_str.startswith(RedisDocumentSet.FENCE_PREFIX):
                 with get_session_with_current_tenant() as db_session:
                     monitor_document_set_taskset(tenant_id, key_bytes, r, db_session)
@@ -201,82 +205,6 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
     time_elapsed = time.monotonic() - time_start
     task_logger.debug(f"check_for_vespa_sync_task finished: elapsed={time_elapsed:.2f}")
     return True
-
-
-def try_generate_stale_document_sync_tasks(
-    celery_app: Celery,
-    max_tasks: int,
-    db_session: Session,
-    r: Redis,
-    lock_beat: RedisLock,
-    tenant_id: str,
-) -> int | None:
-    # the fence is up, do nothing
-
-    redis_global_ccpair = RedisGlobalConnectorCredentialPair(r)
-    if redis_global_ccpair.fenced:
-        return None
-
-    redis_global_ccpair.delete_taskset()
-
-    # add tasks to celery and build up the task set to monitor in redis
-    stale_doc_count = count_documents_by_needs_sync(db_session)
-    if stale_doc_count == 0:
-        return None
-
-    task_logger.info(
-        f"Stale documents found (at least {stale_doc_count}). Generating sync tasks by cc pair."
-    )
-
-    task_logger.info(
-        "RedisConnector.generate_tasks starting by cc_pair. "
-        "Documents spanning multiple cc_pairs will only be synced once."
-    )
-
-    docs_to_skip: set[str] = set()
-
-    # rkuo: we could technically sync all stale docs in one big pass.
-    # but I feel it's more understandable to group the docs by cc_pair
-    total_tasks_generated = 0
-    tasks_remaining = max_tasks
-    cc_pairs = get_connector_credential_pairs(db_session)
-    for cc_pair in cc_pairs:
-        lock_beat.reacquire()
-
-        rc = RedisConnectorCredentialPair(tenant_id, cc_pair.id)
-        rc.set_skip_docs(docs_to_skip)
-        result = rc.generate_tasks(
-            tasks_remaining, celery_app, db_session, r, lock_beat, tenant_id
-        )
-
-        if result is None:
-            continue
-
-        if result[1] == 0:
-            continue
-
-        task_logger.info(
-            f"RedisConnector.generate_tasks finished for single cc_pair. "
-            f"cc_pair={cc_pair.id} tasks_generated={result[0]} tasks_possible={result[1]}"
-        )
-
-        total_tasks_generated += result[0]
-        tasks_remaining -= result[0]
-        if tasks_remaining <= 0:
-            break
-
-    if tasks_remaining <= 0:
-        task_logger.info(
-            f"RedisConnector.generate_tasks reached the task generation limit: "
-            f"total_tasks_generated={total_tasks_generated} max_tasks={max_tasks}"
-        )
-    else:
-        task_logger.info(
-            f"RedisConnector.generate_tasks finished for all cc_pairs. total_tasks_generated={total_tasks_generated}"
-        )
-
-    redis_global_ccpair.set_fence(total_tasks_generated)
-    return total_tasks_generated
 
 
 def try_generate_document_set_sync_tasks(
@@ -433,19 +361,18 @@ def try_generate_user_group_sync_tasks(
     return tasks_generated
 
 
-def monitor_connector_taskset(r: Redis) -> None:
-    redis_global_ccpair = RedisGlobalConnectorCredentialPair(r)
-    initial_count = redis_global_ccpair.payload
+def monitor_document_sync_taskset(r: Redis) -> None:
+    initial_count = get_document_sync_payload(r)
     if initial_count is None:
         return
 
-    remaining = redis_global_ccpair.get_remaining()
+    remaining = get_document_sync_remaining(r)
     task_logger.info(
-        f"Stale document sync progress: remaining={remaining} initial={initial_count}"
+        f"Document sync progress: remaining={remaining} initial={initial_count}"
     )
     if remaining == 0:
-        redis_global_ccpair.reset()
-        task_logger.info(f"Successfully synced stale documents. count={initial_count}")
+        reset_document_sync(r)
+        task_logger.info(f"Successfully synced all documents. count={initial_count}")
 
 
 def monitor_document_set_taskset(

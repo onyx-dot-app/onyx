@@ -9,7 +9,7 @@ Create Date: 2025-06-22 17:33:25.833733
 from alembic import op
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 # revision identifiers, used by Alembic.
 revision = "36e9220ab794"
@@ -66,7 +66,7 @@ def upgrade() -> None:
 
                 -- Set name and name trigrams
                 NEW.name = name;
-                NEW.name_trigrams = {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.show_trgm(cleaned_name);
+                NEW.name_trigrams = {POSTGRES_DEFAULT_SCHEMA}.show_trgm(cleaned_name);
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
@@ -111,7 +111,7 @@ def upgrade() -> None:
                 UPDATE "{tenant_id}".kg_entity
                 SET
                     name = doc_name,
-                    name_trigrams = {POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE}.show_trgm(cleaned_name)
+                    name_trigrams = {POSTGRES_DEFAULT_SCHEMA}.show_trgm(cleaned_name)
                 WHERE document_id = NEW.id;
                 RETURN NEW;
             END;

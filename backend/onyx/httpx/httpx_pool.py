@@ -4,6 +4,13 @@ from typing import Any
 import httpx
 
 
+def make_default_kwargs() -> dict[str, Any]:
+    return {
+        "http2": True,
+        "limits": httpx.Limits(),
+    }
+
+
 class HttpxPool:
     """Class to manage a global httpx Client instance"""
 
@@ -11,10 +18,6 @@ class HttpxPool:
     _lock: threading.Lock = threading.Lock()
 
     # Default parameters for creation
-    DEFAULT_KWARGS = {
-        "http2": True,
-        "limits": lambda: httpx.Limits(),
-    }
 
     def __init__(self) -> None:
         pass
@@ -22,7 +25,7 @@ class HttpxPool:
     @classmethod
     def _init_client(cls, **kwargs: Any) -> httpx.Client:
         """Private helper method to create and return an httpx.Client."""
-        merged_kwargs = {**cls.DEFAULT_KWARGS, **kwargs}
+        merged_kwargs = {**(make_default_kwargs()), **kwargs}
         return httpx.Client(**merged_kwargs)
 
     @classmethod

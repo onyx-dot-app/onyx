@@ -27,7 +27,7 @@ import rehypePrism from "rehype-prism-plus";
 
 import "prismjs/themes/prism-tomorrow.css";
 import "./custom-code-styles.css";
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 
 import { LikeFeedback, DislikeFeedback } from "@/components/icons/icons";
@@ -107,8 +107,8 @@ export const AgenticMessage = ({
   onMessageSelection?: (messageId: number) => void;
   toggleDocumentSelection?: (second: boolean) => void;
   docs?: OnyxDocument[] | null;
-  alternativeAssistant?: Persona | null;
-  currentPersona: Persona;
+  alternativeAssistant?: MinimalPersonaSnapshot | null;
+  currentPersona: MinimalPersonaSnapshot;
   messageId: number | null;
   content: string | JSX.Element;
   files?: FileDescriptor[];

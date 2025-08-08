@@ -1,6 +1,10 @@
 import copy
+import json
+import os
+import sys
 import threading
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from datetime import datetime
 from enum import Enum
@@ -1374,3 +1378,139 @@ class GoogleDriveConnector(
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> GoogleDriveCheckpoint:
         return GoogleDriveCheckpoint.model_validate_json(checkpoint_json)
+
+
+def get_credentials_from_env(email: str, oauth: bool) -> dict:
+    if oauth:
+        raw_credential_string = os.environ["GOOGLE_DRIVE_OAUTH_CREDENTIALS_JSON_STR"]
+    else:
+        raw_credential_string = os.environ["GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR"]
+
+    refried_credential_string = json.dumps(json.loads(raw_credential_string))
+
+    # This is the Oauth token
+    DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"
+    # This is the service account key
+    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY = "google_service_account_key"
+    # The email saved for both auth types
+    DB_CREDENTIALS_PRIMARY_ADMIN_KEY = "google_primary_admin"
+    DB_CREDENTIALS_AUTHENTICATION_METHOD = "authentication_method"
+    cred_key = (
+        DB_CREDENTIALS_DICT_TOKEN_KEY
+        if oauth
+        else DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+    )
+    return {
+        cred_key: refried_credential_string,
+        DB_CREDENTIALS_PRIMARY_ADMIN_KEY: email,
+        DB_CREDENTIALS_AUTHENTICATION_METHOD: "uploaded",
+    }
+
+
+class CheckpointOutputWrapper:
+    """
+    Wraps a CheckpointOutput generator to give things back in a more digestible format.
+    The connector format is easier for the connector implementor (e.g. it enforces exactly
+    one new checkpoint is returned AND that the checkpoint is at the end), thus the different
+    formats.
+    """
+
+    def __init__(self) -> None:
+        self.next_checkpoint: GoogleDriveCheckpoint | None = None
+
+    def __call__(
+        self,
+        checkpoint_connector_generator: CheckpointOutput[GoogleDriveCheckpoint],
+    ) -> Generator[
+        tuple[Document | None, ConnectorFailure | None, GoogleDriveCheckpoint | None],
+        None,
+        None,
+    ]:
+        # grabs the final return value and stores it in the `next_checkpoint` variable
+        def _inner_wrapper(
+            checkpoint_connector_generator: CheckpointOutput[GoogleDriveCheckpoint],
+        ) -> CheckpointOutput[GoogleDriveCheckpoint]:
+            self.next_checkpoint = yield from checkpoint_connector_generator
+            return self.next_checkpoint  # not used
+
+        for document_or_failure in _inner_wrapper(checkpoint_connector_generator):
+            if isinstance(document_or_failure, Document):
+                yield document_or_failure, None, None
+            elif isinstance(document_or_failure, ConnectorFailure):
+                yield None, document_or_failure, None
+            else:
+                raise ValueError(
+                    f"Invalid document_or_failure type: {type(document_or_failure)}"
+                )
+
+        if self.next_checkpoint is None:
+            raise RuntimeError(
+                "Checkpoint is None. This should never happen - the connector should always return a checkpoint."
+            )
+
+        yield None, None, self.next_checkpoint
+
+
+def yield_all_docs_from_checkpoint_connector(
+    connector: GoogleDriveConnector,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> Iterator[Document | ConnectorFailure]:
+    num_iterations = 0
+
+    checkpoint = connector.build_dummy_checkpoint()
+    while checkpoint.has_more:
+        doc_batch_generator = CheckpointOutputWrapper()(
+            connector.load_from_checkpoint(start, end, checkpoint)
+        )
+        for document, failure, next_checkpoint in doc_batch_generator:
+            if failure is not None:
+                yield failure
+            if document is not None:
+                yield document
+            if next_checkpoint is not None:
+                checkpoint = next_checkpoint
+
+        num_iterations += 1
+        if num_iterations > 100_000:
+            raise RuntimeError("Too many iterations. Infinite loop?")
+
+
+if __name__ == "__main__":
+    import time
+
+    creds = get_credentials_from_env(
+        os.environ["GOOGLE_DRIVE_PRIMARY_ADMIN_EMAIL"], False
+    )
+    connector = GoogleDriveConnector(
+        include_shared_drives=True,
+        shared_drive_urls=None,
+        include_my_drives=True,
+        my_drive_emails=None,
+        shared_folder_urls=None,
+        include_files_shared_with_me=True,
+        specific_user_emails=None,
+    )
+    connector.load_credentials(creds)
+    max_fsize = 0
+    biggest_fsize = 0
+    num_errors = 0
+    start_time = time.time()
+    with open("stats.txt", "w") as f:
+        for num, doc_or_failure in enumerate(
+            yield_all_docs_from_checkpoint_connector(connector, 0, time.time())
+        ):
+            if num % 200 == 0:
+                f.write(f"Processed {num} files\n")
+                f.write(f"Max file size: {max_fsize/1000_000:.2f} MB\n")
+                f.write(f"Time so far: {time.time() - start_time:.2f} seconds\n")
+                f.write(f"Docs per minute: {num/(time.time() - start_time)*60:.2f}\n")
+                biggest_fsize = max(biggest_fsize, max_fsize)
+                max_fsize = 0
+            if isinstance(doc_or_failure, Document):
+                max_fsize = max(max_fsize, sys.getsizeof(doc_or_failure))
+            elif isinstance(doc_or_failure, ConnectorFailure):
+                num_errors += 1
+        print(f"Num errors: {num_errors}")
+        print(f"Biggest file size: {biggest_fsize/1000_000:.2f} MB")
+        print(f"Time taken: {time.time() - start_time:.2f} seconds")
