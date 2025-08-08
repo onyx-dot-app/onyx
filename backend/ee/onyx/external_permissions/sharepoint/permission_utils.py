@@ -1,12 +1,9 @@
 import re
-import time
 from collections import deque
 from typing import Any
 
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
-from office365.runtime.client_request_exception import ClientRequestException  # type: ignore[import-untyped]
-from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection  # type: ignore[import-untyped]
 from pydantic import BaseModel
@@ -15,6 +12,7 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.sharepoint.connector import sleep_and_retry
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -25,6 +23,7 @@ USER_PRINCIPAL_TYPE = 1  # Individual user accounts
 ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public access)
 AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
+MICROSOFT_DOMAIN = ".onmicrosoft"
 
 
 class SharepointGroup(BaseModel):
@@ -35,48 +34,17 @@ class SharepointGroup(BaseModel):
     principal_type: int
 
 
-def _sleep_and_retry(
-    query_obj: ClientQuery, method_name: str, max_retries: int = 3
-) -> Any:
-    """
-    Execute a SharePoint query with retry logic for rate limiting.
-    """
-    for attempt in range(max_retries + 1):
-        try:
-            return query_obj.execute_query()
-        except ClientRequestException as e:
-            if e.response and e.response.status_code == 429 and attempt < max_retries:
-                logger.warning(
-                    f"Rate limit exceeded on {method_name}, attempt {attempt + 1}/{max_retries + 1}, sleeping and retrying"
-                )
-                retry_after = e.response.headers.get("Retry-After")
-                if retry_after:
-                    sleep_time = int(retry_after)
-                else:
-                    # Exponential backoff: 2^attempt * 5 seconds
-                    sleep_time = min(30, (2**attempt) * 5)
-
-                logger.info(f"Sleeping for {sleep_time} seconds before retry")
-                time.sleep(sleep_time)
-            else:
-                # Either not a rate limit error, or we've exhausted retries
-                if e.response and e.response.status_code == 429:
-                    logger.error(
-                        f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
-                    )
-                raise e
-
-    # This should never be reached, but included for completeness
-    raise RuntimeError(f"Unexpected end of retry loop for {method_name}")
+class GroupsResult(BaseModel):
+    groups_to_emails: dict[str, set[str]]
+    found_public_group: bool
 
 
 def _get_azuread_group_guid_by_name(
     graph_client: GraphClient, group_name: str
 ) -> str | None:
-
     try:
         # Search for groups by display name
-        groups = _sleep_and_retry(
+        groups = sleep_and_retry(
             graph_client.groups.filter(f"displayName eq '{group_name}'").get(),
             "get_azuread_group_guid_by_name",
         )
@@ -137,7 +105,7 @@ def _get_security_group_owners(graph_client: GraphClient, group_id: str) -> list
     try:
         # Get group owners using Graph API
         group = graph_client.groups[group_id]
-        owners = _sleep_and_retry(
+        owners = sleep_and_retry(
             group.owners.get_all(page_loaded=lambda _: None),
             "get_security_group_owners",
         )
@@ -147,7 +115,6 @@ def _get_security_group_owners(graph_client: GraphClient, group_id: str) -> list
 
         for owner in owners:
             owner_data = owner.to_json()
-            logger.info(f"Owner: {owner_data}")
 
             # Extract email from the JSON data
             mail: str | None = owner_data.get("mail")
@@ -155,13 +122,13 @@ def _get_security_group_owners(graph_client: GraphClient, group_id: str) -> list
 
             # Check if owner is a user and has an email
             if mail:
-                if ".onmicrosoft" in mail:
-                    mail = mail.replace(".onmicrosoft", "")
+                if MICROSOFT_DOMAIN in mail:
+                    mail = mail.replace(MICROSOFT_DOMAIN, "")
                 owner_emails.append(mail)
             elif user_principal_name:
-                if ".onmicrosoft" in user_principal_name:
+                if MICROSOFT_DOMAIN in user_principal_name:
                     user_principal_name = user_principal_name.replace(
-                        ".onmicrosoft", ""
+                        MICROSOFT_DOMAIN, ""
                     )
                 owner_emails.append(user_principal_name)
 
@@ -183,7 +150,7 @@ def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
             list_item = drive_item.listItem
             if list_item:
                 # Load the list item properties to get the ID
-                _sleep_and_retry(list_item.get(), "get_sharepoint_list_item_id")
+                sleep_and_retry(list_item.get(), "get_sharepoint_list_item_id")
                 if hasattr(list_item, "id") and list_item.id:
                     return str(list_item.id)
 
@@ -211,7 +178,7 @@ def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
 def _is_public_item(drive_item: DriveItem) -> bool:
     is_public = False
     try:
-        permissions = _sleep_and_retry(
+        permissions = sleep_and_retry(
             drive_item.permissions.get_all(page_loaded=lambda _: None), "is_public_item"
         )
         for permission in permissions:
@@ -227,86 +194,31 @@ def _is_public_item(drive_item: DriveItem) -> bool:
         return False
 
 
-def _is_public_site(client_context: ClientContext) -> bool:
-    """
-    Check if a SharePoint site is public by examining site-level permissions.
-    Detects various patterns of public access including anonymous users and public groups.
-    """
-    try:
-        # Get site role assignments to check for public access
-        web = client_context.web
+def _is_public_login_name(login_name: str) -> bool:
+    # Patterns that indicate public access
+    # This list is derived from the below link
+    # https://learn.microsoft.com/en-us/answers/questions/2085339/guid-in-the-loginname-of-site-user-everyone-except
+    public_login_patterns: list[str] = [
+        "c:0-.f|rolemanager|spo-grid-all-users/",
+        "c:0(.s|true",
+    ]
+    for pattern in public_login_patterns:
+        if pattern in login_name:
+            logger.info(f"Login name {login_name} is public")
+            return True
+    return False
 
-        # Patterns that indicate public access
-        # This list is derived from the below links
-        # https://learn.microsoft.com/en-us/answers/questions/349797/understanding-login-name-format-of-sharepoint
-        # for claims based
-        # https://learn.microsoft.com/en-us/answers/questions/4879990/nt-authorityauthenticated-users-in-sharepoint-onli
-        # for public groups
-        public_login_patterns: list[str] = [
-            "everyone except external users",
-            "everyone",
-            "c:0(.s|true",  # Claims-based
-        ]
 
-        # Flag to track if we found public access
-        is_public = False
-
-        def check_for_public_access(role_assignments: RoleAssignmentCollection) -> None:
-            nonlocal is_public
-
-            for assignment in role_assignments:
-                if not assignment.member:
-                    continue
-
-                member = assignment.member
-
-                # Check for anonymous users (principal_type 3)
-                if (
-                    hasattr(member, "principal_type")
-                    and member.principal_type == ANONYMOUS_USER_PRINCIPAL_TYPE
-                ):
-                    logger.info("Site has anonymous user access (principal_type=3)")
-                    is_public = True
-                    return
-
-                # Check login_name for public patterns
-                if hasattr(member, "login_name") and member.login_name:
-                    login_name = member.login_name.lower()
-                    for pattern in public_login_patterns:
-                        if pattern in login_name:
-                            logger.info(
-                                f"Site has public group access: {member.login_name}"
-                            )
-                            is_public = True
-                            return
-
-                # Check title for public patterns as fallback
-                if hasattr(member, "title") and member.title:
-                    title = member.title.lower()
-                    for pattern in public_login_patterns:
-                        if pattern in title:
-                            logger.info(
-                                f"Site has public group access via title: {member.title}"
-                            )
-                            is_public = True
-                            return
-
-        _sleep_and_retry(
-            web.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_loaded=check_for_public_access
-            ),
-            "is_public_site",
-        )
-
-        return is_public
-
-    except Exception as e:
-        logger.error(f"Failed to check if site is public: {e}")
-        return False
+# AD groups allows same display name for multiple groups, so we need to add the GUID to the name
+def _get_group_name_with_suffix(
+    login_name: str, group_name: str, graph_client: GraphClient
+) -> str:
+    ad_group_suffix = _get_group_guid_from_identifier(graph_client, login_name)
+    return f"{group_name}_{ad_group_suffix}"
 
 
 def _get_sharepoint_groups(
-    client_context: ClientContext, group_name: str
+    client_context: ClientContext, group_name: str, graph_client: GraphClient
 ) -> tuple[set[SharepointGroup], set[str]]:
 
     groups: set[SharepointGroup] = set()
@@ -316,14 +228,13 @@ def _get_sharepoint_groups(
         nonlocal groups, user_emails
 
         for user in users:
-            logger.info(f"User: {user.to_json()}")
             if user.principal_type == USER_PRINCIPAL_TYPE and hasattr(
                 user, "user_principal_name"
             ):
                 if user.user_principal_name:
                     email = user.user_principal_name
-                    if ".onmicrosoft" in email:
-                        email = email.replace(".onmicrosoft", "")
+                    if MICROSOFT_DOMAIN in email:
+                        email = email.replace(MICROSOFT_DOMAIN, "")
                     user_emails.add(email)
                 else:
                     logger.warning(
@@ -333,16 +244,21 @@ def _get_sharepoint_groups(
                 AZURE_AD_GROUP_PRINCIPAL_TYPE,
                 SHAREPOINT_GROUP_PRINCIPAL_TYPE,
             ]:
+                name = user.title
+                if user.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+                    name = _get_group_name_with_suffix(
+                        user.login_name, name, graph_client
+                    )
                 groups.add(
                     SharepointGroup(
                         login_name=user.login_name,
                         principal_type=user.principal_type,
-                        name=user.title,
+                        name=name,
                     )
                 )
 
     group = client_context.web.site_groups.get_by_name(group_name)
-    _sleep_and_retry(
+    sleep_and_retry(
         group.users.get_all(page_loaded=process_users), "get_sharepoint_groups"
     )
 
@@ -352,6 +268,7 @@ def _get_sharepoint_groups(
 def _get_azuread_groups(
     graph_client: GraphClient, group_name: str
 ) -> tuple[set[SharepointGroup], set[str]]:
+
     group_id = _get_group_guid_from_identifier(graph_client, group_name)
     if not group_id:
         logger.error(f"Failed to get Azure AD group GUID for name {group_name}")
@@ -365,12 +282,9 @@ def _get_azuread_groups(
 
         for member in members:
             member_data = member.to_json()
-            logger.info(f"Member: {member_data}")
 
             # Check for user-specific attributes
-            user_principal_name = member_data.get(
-                "userPrincipalName"
-            ) or member_data.get("user_principal_name")
+            user_principal_name = member_data.get("userPrincipalName")
             mail = member_data.get("mail")
             display_name = member_data.get("displayName") or member_data.get(
                 "display_name"
@@ -407,32 +321,35 @@ def _get_azuread_groups(
             if is_user:
                 if user_principal_name:
                     email = user_principal_name
-                    if ".onmicrosoft" in email:
-                        email = email.replace(".onmicrosoft", "")
+                    if MICROSOFT_DOMAIN in email:
+                        email = email.replace(MICROSOFT_DOMAIN, "")
                     user_emails.add(email)
                 elif mail:
                     email = mail
-                    if ".onmicrosoft" in email:
-                        email = email.replace(".onmicrosoft", "")
+                    if MICROSOFT_DOMAIN in email:
+                        email = email.replace(MICROSOFT_DOMAIN, "")
                     user_emails.add(email)
                 logger.info(f"Added user: {user_principal_name or mail}")
             elif is_group:
                 if not display_name:
                     logger.error(f"No display name for group: {member_data.get('id')}")
                     continue
+                name = _get_group_name_with_suffix(
+                    member_data.get("id", ""), display_name, graph_client
+                )
                 groups.add(
                     SharepointGroup(
                         login_name=member_data.get("id", ""),  # Use ID for groups
                         principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
-                        name=display_name,
+                        name=name,
                     )
                 )
-                logger.info(f"Added group: {display_name}")
+                logger.info(f"Added group: {name}")
             else:
                 # Log unidentified members for debugging
                 logger.warning(f"Could not identify member type for: {member_data}")
 
-    _sleep_and_retry(
+    sleep_and_retry(
         group.members.get_all(page_loaded=process_members), "get_azuread_groups"
     )
 
@@ -446,7 +363,7 @@ def _get_groups_and_members_recursively(
     client_context: ClientContext,
     graph_client: GraphClient,
     groups: set[SharepointGroup],
-) -> dict[str, set[str]]:
+) -> GroupsResult:
     """
     Get all groups and their members recursively.
     """
@@ -464,12 +381,16 @@ def _get_groups_and_members_recursively(
         )
         if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
             group_info, user_emails = _get_sharepoint_groups(
-                client_context, group.login_name
+                client_context, group.login_name, graph_client
             )
             visited_group_name_to_emails[group.name].update(user_emails)
             if group_info:
                 group_queue.extend(group_info)
         if group.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+            # if the site is public, we have default groups assigned to it, so we return early
+            if _is_public_login_name(group.login_name):
+                return GroupsResult(groups_to_emails={}, found_public_group=True)
+
             group_info, user_emails = _get_azuread_groups(
                 graph_client, group.login_name
             )
@@ -477,43 +398,25 @@ def _get_groups_and_members_recursively(
             if group_info:
                 group_queue.extend(group_info)
 
-    return visited_group_name_to_emails
+    return GroupsResult(
+        groups_to_emails=visited_group_name_to_emails, found_public_group=False
+    )
 
 
 def get_external_access_from_sharepoint(
     client_context: ClientContext,
     graph_client: GraphClient,
-    drive_name: str,
-    drive_item: DriveItem,
+    drive_name: str | None,
+    drive_item: DriveItem | None,
+    site_page: dict[str, Any] | None,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Get external access information from SharePoint.
     """
-
-    is_public = _is_public_item(drive_item)
-    if is_public:
-        logger.info(f"Item {drive_item.id} is public")
-        return ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=is_public,
-        )
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
     group_ids: set[str] = set()
-
-    item_id = _get_sharepoint_list_item_id(drive_item)
-
-    if not item_id:
-        raise RuntimeError(
-            f"Failed to get SharePoint list item ID for item {drive_item.id}"
-        )
-
-    if drive_name == "Shared Documents":
-        drive_name = "Documents"
-
-    item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(item_id)
 
     # Add all members to a processing set first
     def add_user_and_group_to_sets(
@@ -521,15 +424,21 @@ def get_external_access_from_sharepoint(
     ) -> None:
         nonlocal user_emails, groups
         for assignment in role_assignments:
-            logger.info(f"Assignment: {assignment.to_json()}")
             if assignment.role_definition_bindings:
-                role_names = [
-                    role_definition_binding.name
-                    for role_definition_binding in assignment.role_definition_bindings
-                ]
+                is_limited_access = True
+                for role_definition_binding in assignment.role_definition_bindings:
+                    if role_definition_binding.role_type_kind not in [
+                        1,
+                        9,
+                    ] or role_definition_binding.name not in [
+                        "Limited Access",
+                        "Web-Only Limited Access",
+                    ]:
+                        is_limited_access = False
+                        break
 
                 # Skip if the role is only Limited Access, because this is not a actual permission its a travel through permission
-                if role_names == ["Limited Access"]:
+                if is_limited_access:
                     logger.info(
                         "Skipping assignment because it has only Limited Access role"
                     )
@@ -540,41 +449,94 @@ def get_external_access_from_sharepoint(
                     member, "user_principal_name"
                 ):
                     email = member.user_principal_name
-                    if ".onmicrosoft" in email:
-                        email = email.replace(".onmicrosoft", "")
+                    if MICROSOFT_DOMAIN in email:
+                        email = email.replace(MICROSOFT_DOMAIN, "")
                     user_emails.add(email)
                 elif member.principal_type in [
                     AZURE_AD_GROUP_PRINCIPAL_TYPE,
                     SHAREPOINT_GROUP_PRINCIPAL_TYPE,
-                ]:  # Both Azure AD Groups and SharePoint Groups
+                ]:
+                    name = member.title
+                    if member.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+                        name = _get_group_name_with_suffix(
+                            member.login_name, name, graph_client
+                        )
                     groups.add(
                         SharepointGroup(
                             login_name=member.login_name,
                             principal_type=member.principal_type,
-                            name=member.title,
+                            name=name,
                         )
                     )
 
-    _sleep_and_retry(
-        item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-            page_loaded=add_user_and_group_to_sets
-        ),
-        "get_external_access_from_sharepoint",
-    )
-    groups_and_members: dict[str, set[str]] = _get_groups_and_members_recursively(
+    if drive_item and drive_name:
+        # Here we check if the item have have any public links, if so we return early
+        is_public = _is_public_item(drive_item)
+        if is_public:
+            logger.info(f"Item {drive_item.id} is public")
+            return ExternalAccess(
+                external_user_emails=set(),
+                external_user_group_ids=set(),
+                is_public=True,
+            )
+
+        item_id = _get_sharepoint_list_item_id(drive_item)
+
+        if not item_id:
+            raise RuntimeError(
+                f"Failed to get SharePoint list item ID for item {drive_item.id}"
+            )
+
+        if drive_name == "Shared Documents":
+            drive_name = "Documents"
+
+        item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
+            item_id
+        )
+
+        sleep_and_retry(
+            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
+                page_loaded=add_user_and_group_to_sets,
+            ),
+            "get_external_access_from_sharepoint",
+        )
+    elif site_page:
+        site_url = site_page.get("webUrl")
+        site_pages = client_context.web.lists.get_by_title("Site Pages")
+        client_context.load(site_pages)
+        client_context.execute_query()
+        site_pages.items.get_by_url(site_url).role_assignments.expand(
+            ["Member", "RoleDefinitionBindings"]
+        ).get_all(page_loaded=add_user_and_group_to_sets).execute_query()
+    else:
+        raise RuntimeError("No drive item or site page provided")
+
+    groups_and_members: GroupsResult = _get_groups_and_members_recursively(
         client_context, graph_client, groups
     )
-    for group_name, _ in groups_and_members.items():
+
+    # If the site is public, w have default groups assigned to it, so we return early
+    if groups_and_members.found_public_group:
+        return ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        )
+
+    for group_name, _ in groups_and_members.groups_to_emails.items():
         if add_prefix:
             group_name = build_ext_group_name_for_onyx(
                 group_name, DocumentSource.SHAREPOINT
             )
         group_ids.add(group_name.lower())
 
+    logger.info(f"User emails: {len(user_emails)}")
+    logger.info(f"Group IDs: {len(group_ids)}")
+
     return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_ids,
-        is_public=is_public,
+        is_public=False,
     )
 
 
@@ -582,25 +544,27 @@ def get_sharepoint_external_groups(
     client_context: ClientContext, graph_client: GraphClient
 ) -> list[ExternalUserGroup]:
 
-    # Check if site is public first
-    if _is_public_site(client_context):
-        logger.info("Site is public, returning empty external groups list")
-        return []
-
     groups: set[SharepointGroup] = set()
 
     def add_group_to_sets(role_assignments: RoleAssignmentCollection) -> None:
         nonlocal groups
         for assignment in role_assignments:
-            logger.info(f"Assignment: {assignment.to_json()}")
             if assignment.role_definition_bindings:
-                role_names = [
-                    role_definition_binding.name
-                    for role_definition_binding in assignment.role_definition_bindings
-                ]
+                is_limited_access = True
+                for role_definition_binding in assignment.role_definition_bindings:
+                    if role_definition_binding.role_type_kind not in [
+                        1,
+                        9,
+                    ] or role_definition_binding.name not in [
+                        "Limited Access",
+                        "Web-Only Limited Access",
+                    ]:
+                        is_limited_access = False
+                        break
 
-                # Skip if the role is only Limited Access, because this is not a actual permission its a travel through permission
-                if role_names == ["Limited Access"]:
+                # Skip if the role assignment is only Limited Access, because this is not a actual permission its
+                #  a travel through permission
+                if is_limited_access:
                     logger.info(
                         "Skipping assignment because it has only Limited Access role"
                     )
@@ -610,29 +574,86 @@ def get_sharepoint_external_groups(
                 if member.principal_type in [
                     AZURE_AD_GROUP_PRINCIPAL_TYPE,
                     SHAREPOINT_GROUP_PRINCIPAL_TYPE,
-                ]:  # Both Azure AD Groups and SharePoint Groups
+                ]:
+                    name = member.title
+                    if member.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+                        name = _get_group_name_with_suffix(
+                            member.login_name, name, graph_client
+                        )
+
                     groups.add(
                         SharepointGroup(
                             login_name=member.login_name,
                             principal_type=member.principal_type,
-                            name=member.title,
+                            name=name,
                         )
                     )
 
-    _sleep_and_retry(
+    sleep_and_retry(
         client_context.web.role_assignments.expand(
             ["Member", "RoleDefinitionBindings"]
         ).get_all(page_loaded=add_group_to_sets),
         "get_sharepoint_external_groups",
     )
-    groups_and_members: dict[str, set[str]] = _get_groups_and_members_recursively(
+    groups_and_members: GroupsResult = _get_groups_and_members_recursively(
         client_context, graph_client, groups
     )
+
+    # We don't have any direct way to check if the site is public, so we check if any public group is present
+    if groups_and_members.found_public_group:
+        return []
+
+    # get all Azure AD groups because if any group is assigned to the drive item, we don't want to miss them
+    # We can't assign sharepoint groups to drive items or drives, so we don't need to get all sharepoint groups
+    azure_ad_groups = sleep_and_retry(
+        graph_client.groups.get_all(page_loaded=lambda _: None),
+        "get_sharepoint_external_groups:get_azure_ad_groups",
+    )
+    logger.info(f"Azure AD Groups: {len(azure_ad_groups)}")
+    identified_groups: set[str] = groups_and_members.groups_to_emails.keys()
+    ad_groups_to_emails: dict[str, set[str]] = {}
+    for group in azure_ad_groups:
+        # If the group is already identified, we don't need to get the members
+        if group.display_name in identified_groups:
+            continue
+        # AD groups allows same display name for multiple groups, so we need to add the GUID to the name
+        name = group.display_name
+        name = _get_group_name_with_suffix(group.id, name, graph_client)
+
+        members = sleep_and_retry(
+            group.members.get_all(page_loaded=lambda _: None),
+            "get_sharepoint_external_groups:get_azure_ad_groups:get_members",
+        )
+        for member in members:
+            member_data = member.to_json()
+            user_principal_name = member_data.get("userPrincipalName")
+            mail = member_data.get("mail")
+            if not ad_groups_to_emails.get(name):
+                ad_groups_to_emails[name] = set()
+            if user_principal_name:
+                if MICROSOFT_DOMAIN in user_principal_name:
+                    user_principal_name = user_principal_name.replace(
+                        MICROSOFT_DOMAIN, ""
+                    )
+                ad_groups_to_emails[name].add(user_principal_name)
+            elif mail:
+                if MICROSOFT_DOMAIN in mail:
+                    mail = mail.replace(MICROSOFT_DOMAIN, "")
+                ad_groups_to_emails[name].add(mail)
+
     external_user_groups: list[ExternalUserGroup] = []
-    for group_name, emails in groups_and_members.items():
+    for group_name, emails in groups_and_members.groups_to_emails.items():
         external_user_group = ExternalUserGroup(
             id=group_name,
             user_emails=list(emails),
         )
         external_user_groups.append(external_user_group)
+
+    for group_name, emails in ad_groups_to_emails.items():
+        external_user_group = ExternalUserGroup(
+            id=group_name,
+            user_emails=list(emails),
+        )
+        external_user_groups.append(external_user_group)
+
     return external_user_groups

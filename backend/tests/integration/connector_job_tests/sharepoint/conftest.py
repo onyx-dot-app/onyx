@@ -35,17 +35,19 @@ def sharepoint_test_env_setup() -> Generator[SharepointTestEnvSetupTuple]:
     # Reset all data before running the test
     reset_all()
     # Required environment variables for SharePoint certificate authentication
-    sp_client_id = os.environ["PERM_SYNC_SHAREPOINT_CLIENT_ID"]
-    sp_private_key = os.environ[
-        "PERM_SYNC_SHAREPOINT_PRIVATE_KEY"
-    ]  # Base64 encoded PFX data
-    sp_certificate_password = os.environ["PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD"]
-    sp_directory_id = os.environ["PERM_SYNC_SHAREPOINT_DIRECTORY_ID"]
-    sp_tenant_domain = os.environ["PERM_SYNC_SHAREPOINT_TENANT_DOMAIN"]
+    sp_client_id = os.environ.get("PERM_SYNC_SHAREPOINT_CLIENT_ID")
+    sp_private_key = os.environ.get("PERM_SYNC_SHAREPOINT_PRIVATE_KEY")
+    sp_certificate_password = os.environ.get(
+        "PERM_SYNC_SHAREPOINT_CERTIFICATE_PASSWORD"
+    )
+    sp_directory_id = os.environ.get("PERM_SYNC_SHAREPOINT_DIRECTORY_ID")
     sharepoint_sites = "https://danswerai.sharepoint.com/sites/Permisisonsync"
     admin_email = "admin@onyx.app"
     user1_email = "subash@onyx.app"
     user2_email = "raunak@onyx.app"
+
+    if not sp_private_key or not sp_certificate_password or not sp_directory_id:
+        pytest.skip("Skipping test because required environment variables are not set")
 
     # Certificate-based credentials
     credentials = {
@@ -54,7 +56,6 @@ def sharepoint_test_env_setup() -> Generator[SharepointTestEnvSetupTuple]:
         "sp_private_key": sp_private_key,
         "sp_certificate_password": sp_certificate_password,
         "sp_directory_id": sp_directory_id,
-        "sp_tenant_domain": sp_tenant_domain,
     }
 
     # Create users

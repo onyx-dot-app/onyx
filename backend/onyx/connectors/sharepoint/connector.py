@@ -26,12 +26,14 @@ from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
 from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
 from office365.runtime.client_request import ClientRequestException  # type: ignore
+from office365.runtime.queries.client_query import ClientQuery
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FileOrigin
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
@@ -47,10 +49,13 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import ExternalAccess
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
+from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,7 +89,9 @@ class CertificateData(BaseModel):
     thumbprint: str
 
 
-def _sleep_and_retry(query_obj: Any, method_name: str, max_retries: int = 3) -> Any:
+def sleep_and_retry(
+    query_obj: ClientQuery, method_name: str, max_retries: int = 3
+) -> Any:
     """
     Execute a SharePoint query with retry logic for rate limiting.
     """
@@ -124,6 +131,8 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 
     cached_drive_names: deque[str] | None = None
     current_drive_name: str | None = None
+
+    process_site_pages: bool = False
 
 
 class SharepointAuthMethod(Enum):
@@ -182,7 +191,9 @@ def _convert_driveitem_to_document_with_permissions(
         raise ValueError("DriveItem ID is required")
 
     try:
-        size_value = getattr(driveitem, "size", None)
+        # Access size from the JSON representation since it's not exposed as a direct attribute
+        driveitem_json = driveitem.to_json()
+        size_value = driveitem_json.get("size")
         if size_value is not None:
             file_size = int(size_value)
             if file_size > SHAREPOINT_CONNECTOR_SIZE_THRESHOLD:
@@ -195,7 +206,7 @@ def _convert_driveitem_to_document_with_permissions(
             logger.warning(
                 f"Could not access file size for '{driveitem.name}' Proceeding with download."
             )
-    except (ValueError, TypeError, AttributeError) as e:
+    except (ValueError, TypeError, AttributeError, KeyError) as e:
         logger.info(
             f"Could not access file size for '{driveitem.name}': {e}. Proceeding with download."
         )
@@ -203,7 +214,7 @@ def _convert_driveitem_to_document_with_permissions(
         raise ValueError("ClientContext is required for permissions")
 
     # Proceed with download if size is acceptable or not available
-    content = _sleep_and_retry(driveitem.get_content(), "get_content")
+    content = sleep_and_retry(driveitem.get_content(), "get_content")
 
     if content is None:
         logger.warning(f"Could not access content for '{driveitem.name}'")
@@ -215,22 +226,40 @@ def _convert_driveitem_to_document_with_permissions(
     else:
         raise ValueError(f"Unsupported content type: {type(content.value)}")
 
-    file_text = extract_file_text(
-        file=io.BytesIO(content_bytes),
-        file_name=driveitem.name,
-        break_on_unprocessable=False,
-    )
+    sections: list[TextSection | ImageSection] = []
+    file_ext = driveitem.name.split(".")[-1]
+
+    if "." + file_ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+        image_section, _ = store_image_and_create_section(
+            image_data=content_bytes,
+            file_id=driveitem.id,
+            display_name=driveitem.name,
+            file_origin=FileOrigin.CONNECTOR,
+        )
+        image_section.link = driveitem.web_url
+        sections.append(image_section)
+    else:
+        file_text = extract_file_text(
+            file=io.BytesIO(content_bytes),
+            file_name=driveitem.name,
+            break_on_unprocessable=True,
+        )
+        sections.append(TextSection(link=driveitem.web_url, text=file_text))
 
     if include_permissions and ctx is not None:
+        logger.info(f"Getting external access for {driveitem.name}")
         external_access = get_sharepoint_external_access(
-            driveitem, drive_name, ctx, graph_client, True
+            ctx=ctx,
+            graph_client=graph_client,
+            drive_item=driveitem,
+            drive_name=drive_name,
         )
     else:
         external_access = ExternalAccess.empty()
 
     doc = Document(
         id=driveitem.id,
-        sections=[TextSection(link=driveitem.web_url, text=file_text)],
+        sections=sections,
         source=DocumentSource.SHAREPOINT,
         semantic_identifier=driveitem.name,
         external_access=external_access,
@@ -252,12 +281,15 @@ def _convert_driveitem_to_document_with_permissions(
 
 
 def _convert_sitepage_to_document(
-    site_page: dict[str, Any], site_name: str | None
+    site_page: dict[str, Any],
+    site_name: str | None,
+    ctx: ClientContext | None,
+    graph_client: GraphClient,
+    include_permissions: bool = False,
 ) -> Document:
     """Convert a SharePoint site page to a Document object."""
     # Extract text content from the site page
     page_text = ""
-
     # Get title and description
     title = cast(str, site_page.get("title", ""))
     description = cast(str, site_page.get("description", ""))
@@ -377,10 +409,20 @@ def _convert_sitepage_to_document(
     if semantic_identifier.endswith(ASPX_EXTENSION):
         semantic_identifier = semantic_identifier[: -len(ASPX_EXTENSION)]
 
+    if include_permissions:
+        external_access = get_sharepoint_external_access(
+            ctx=ctx,
+            graph_client=graph_client,
+            site_page=site_page,
+        )
+    else:
+        external_access = ExternalAccess.empty()
+
     doc = Document(
         id=site_page["id"],
         sections=[TextSection(link=web_url, text=page_text)],
         source=DocumentSource.SHAREPOINT,
+        external_access=external_access,
         semantic_identifier=semantic_identifier,
         doc_updated_at=last_modified_datetime or created_datetime,
         primary_owners=primary_owners,
@@ -405,11 +447,32 @@ def _convert_driveitem_to_slim_document(
         raise ValueError("DriveItem ID is required")
 
     external_access = get_sharepoint_external_access(
-        driveitem, drive_name, ctx, graph_client
+        ctx=ctx,
+        graph_client=graph_client,
+        drive_item=driveitem,
+        drive_name=drive_name,
     )
 
     return SlimDocument(
         id=driveitem.id,
+        external_access=external_access,
+    )
+
+
+def _convert_sitepage_to_slim_document(
+    site_page: dict[str, Any], ctx: ClientContext | None, graph_client: GraphClient
+) -> SlimDocument:
+    """Convert a SharePoint site page to a SlimDocument object."""
+    if site_page.get("id") is None:
+        raise ValueError("Site page ID is required")
+
+    external_access = get_sharepoint_external_access(
+        ctx=ctx,
+        graph_client=graph_client,
+        site_page=site_page,
+    )
+    return SlimDocument(
+        id=site_page.get("id"),
         external_access=external_access,
     )
 
@@ -779,65 +842,6 @@ class SharepointConnector(
 
         return all_pages
 
-    # def _fetch_from_sharepoint(
-    #     self,
-    #     start: datetime | None = None,
-    #     end: datetime | None = None,
-    # ) -> GenerateDocumentsOutput:
-    #     site_descriptors = self.site_descriptors or self.fetch_sites()
-
-    #     # goes over all urls, converts them into Document objects and then yields them in batches
-    #     doc_batch: list[Document] = []
-    #     for site_descriptor in site_descriptors:
-    #         # Fetch regular documents from document libraries
-    #         driveitems = self._fetch_driveitems(site_descriptor, start=start, end=end)
-    #         for driveitem, drive_name in driveitems:
-    #             logger.debug(f"Processing: {driveitem.web_url}")
-
-    #             # Convert driveitem to document with size checking
-    #             doc = _convert_driveitem_to_document(driveitem, drive_name)
-    #             if doc is not None:
-    #                 doc_batch.append(doc)
-    #             try:
-    #                 logger.debug(f"Processing: {driveitem.web_url}")
-    #                 doc_batch.append(
-    #                     _convert_driveitem_to_document(driveitem, drive_name)
-    #                 )
-    #             except Exception as e:
-    #                 logger.warning(f"Failed to process driveitem: {str(e)}")
-
-    #             if len(doc_batch) >= self.batch_size:
-    #                 yield doc_batch
-    #                 doc_batch = []
-
-    #         # Fetch SharePoint site pages (.aspx files)
-    #         # Only fetch site pages if a folder is not specified since this processing
-    #         # happens at a site-wide level + specifying a folder implies that the
-    #         # user probably isn't looking for site pages
-    #         specified_path = (
-    #             site_descriptor.folder_path is not None
-    #             or site_descriptor.drive_name is not None
-    #         )
-    #         if self.include_site_pages and not specified_path:
-    #             site_pages = self._fetch_site_pages(
-    #                 site_descriptor, start=start, end=end
-    #             )
-    #             for site_page in site_pages:
-    #                 logger.debug(
-    #                     f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
-    #                 )
-    #                 doc_batch.append(
-    #                     _convert_sitepage_to_document(
-    #                         site_page, site_descriptor.drive_name
-    #                     )
-    #                 )
-
-    #                 if len(doc_batch) >= self.batch_size:
-    #                     yield doc_batch
-    #                     doc_batch = []
-
-    #     yield doc_batch
-
     def _acquire_token(self) -> dict[str, Any]:
         """
         Acquire token via MSAL
@@ -886,6 +890,21 @@ class SharepointConnector(
                 if len(doc_batch) >= SLIM_BATCH_SIZE:
                     yield doc_batch
                     doc_batch = []
+
+            # Fetch site pages
+            site_pages = self._fetch_site_pages(site_descriptor)
+            for site_page in site_pages:
+                logger.debug(
+                    f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                )
+                doc_batch.append(
+                    _convert_sitepage_to_slim_document(
+                        site_page, ctx, self.graph_client
+                    )
+                )
+                if len(doc_batch) >= SLIM_BATCH_SIZE:
+                    yield doc_batch
+                    doc_batch = []
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -899,13 +918,9 @@ class SharepointConnector(
         sp_certificate_password = credentials.get("sp_certificate_password")
 
         authority_url = f"https://login.microsoftonline.com/{sp_directory_id}"
-        self.msal_app = msal.ConfidentialClientApplication(
-            authority=authority_url,
-            client_id=sp_client_id,
-            client_credential=sp_client_secret,
-        )
-        self._graph_client = GraphClient(self._acquire_token)
+
         if auth_method == SharepointAuthMethod.CERTIFICATE.value:
+            logger.info("Using certificate authentication")
             if not sp_private_key or not sp_certificate_password:
                 raise ConnectorValidationError(
                     "Private key and certificate password are required for certificate authentication"
@@ -921,9 +936,10 @@ class SharepointConnector(
             self.msal_app = msal.ConfidentialClientApplication(
                 authority=authority_url,
                 client_id=sp_client_id,
-                client_credential=certificate_data,
+                client_credential=certificate_data.model_dump(),
             )
         elif auth_method == SharepointAuthMethod.CLIENT_SECRET.value:
+            logger.info("Using client secret authentication")
             self.msal_app = msal.ConfidentialClientApplication(
                 authority=authority_url,
                 client_id=sp_client_id,
@@ -1027,7 +1043,11 @@ class SharepointConnector(
         checkpoint = copy.deepcopy(checkpoint)
 
         # Phase 1: Initialize cached_site_descriptors if needed
-        if checkpoint.has_more and checkpoint.cached_site_descriptors is None:
+        if (
+            checkpoint.has_more
+            and checkpoint.cached_site_descriptors is None
+            and not checkpoint.process_site_pages
+        ):
             logger.info("Initializing SharePoint sites for processing")
             site_descs = self.site_descriptors or self.fetch_sites()
             checkpoint.cached_site_descriptors = deque(site_descs)
@@ -1200,27 +1220,6 @@ class SharepointConnector(
                         driveitem, f"Failed to process: {str(e)}", e
                     )
 
-            # Fetch SharePoint site pages (.aspx files)
-            # Only fetch site pages if a folder is not specified since this processing
-            # happens at a site-wide level + specifying a folder implies that the
-            # user probably isn't looking for site pages
-            specified_path = (
-                site_descriptor.folder_path is not None
-                or site_descriptor.drive_name is not None
-            )
-            if self.include_site_pages and not specified_path:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start_dt, end=end_dt
-                )
-                for site_page in site_pages:
-                    logger.debug(
-                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
-                    )
-                    yield (
-                        _convert_sitepage_to_document(
-                            site_page, site_descriptor.drive_name
-                        )
-                    )
             # Clear current drive after processing
             checkpoint.current_drive_name = None
 
@@ -1231,6 +1230,57 @@ class SharepointConnector(
                 f"Continuing with {len(checkpoint.cached_drive_names)} remaining drives in current site"
             )
             return checkpoint
+
+        if self.include_site_pages and not checkpoint.process_site_pages:
+            logger.info(
+                f"Processing site pages for site: {checkpoint.current_site_descriptor.url}"
+            )
+            checkpoint.process_site_pages = True
+            return checkpoint
+
+        # Phase 5: Process site pages
+        if checkpoint.process_site_pages:
+            # Fetch SharePoint site pages (.aspx files)
+            # Only fetch site pages if a folder is not specified since this processing
+            # happens at a site-wide level + specifying a folder implies that the
+            # user probably isn't looking for site pages
+            site_descriptor = checkpoint.current_site_descriptor
+            specified_path = (
+                site_descriptor.folder_path is not None
+                or site_descriptor.drive_name is not None
+            )
+            start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+            end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+            if not specified_path:
+                site_pages = self._fetch_site_pages(
+                    site_descriptor, start=start_dt, end=end_dt
+                )
+                ctx: ClientContext | None = None
+                if include_permissions:
+                    if self.msal_app and self.sp_tenant_domain:
+                        msal_app = self.msal_app
+                        sp_tenant_domain = self.sp_tenant_domain
+                        ctx = ClientContext(site_descriptor.url).with_access_token(
+                            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+                        )
+                    else:
+                        raise RuntimeError("MSAL app or tenant domain is not set")
+                for site_page in site_pages:
+                    logger.debug(
+                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                    )
+                    yield (
+                        _convert_sitepage_to_document(
+                            site_page,
+                            site_descriptor.drive_name,
+                            ctx,
+                            self.graph_client,
+                            include_permissions=include_permissions,
+                        )
+                    )
+            logger.info(
+                f"Finished processing site pages for site: {site_descriptor.url}"
+            )
 
         # If no more drives, move to next site if available
         if (
@@ -1246,6 +1296,7 @@ class SharepointConnector(
                 checkpoint.cached_site_descriptors.popleft()
             )
             checkpoint.cached_drive_names = None  # Reset for new site
+            checkpoint.process_site_pages = False
             logger.info(
                 f"Finished site '{current_site}', moving to next site: {checkpoint.current_site_descriptor.url}"
             )

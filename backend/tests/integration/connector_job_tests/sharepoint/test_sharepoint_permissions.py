@@ -141,7 +141,7 @@ def test_public_documents_accessible_by_all_users(
         logger.info(f"User 2 has access to {len(accessible_docs_user2)} documents")
 
         # For public documents, both users should have access to at least some docs
-        assert len(accessible_docs_user1) == 5, (
+        assert len(accessible_docs_user1) == 8, (
             f"User 1 should have access to documents. Found "
             f"{len(accessible_docs_user1)} accessible docs out of "
             f"{len(all_document_ids)} total"
