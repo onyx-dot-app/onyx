@@ -494,6 +494,7 @@ class SharepointConnector(
         batch_size: int = INDEX_BATCH_SIZE,
         sites: list[str] = [],
         include_site_pages: bool = True,
+        include_site_documents: bool = True,
     ) -> None:
         self.batch_size = batch_size
         self._graph_client: GraphClient | None = None
@@ -502,6 +503,7 @@ class SharepointConnector(
         )
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.include_site_pages = include_site_pages
+        self.include_site_documents = include_site_documents
         self.sp_tenant_domain: str | None = None
 
     @property
@@ -883,36 +885,39 @@ class SharepointConnector(
                 logger.warning("ClientContext is not set, skipping permissions")
                 continue
 
-            driveitems = self._fetch_driveitems(site_descriptor=site_descriptor)
-            for driveitem, drive_name in driveitems:
-                try:
-                    logger.debug(f"Processing: {driveitem.web_url}")
+            # Process site documents if flag is True
+            if self.include_site_documents:
+                driveitems = self._fetch_driveitems(site_descriptor=site_descriptor)
+                for driveitem, drive_name in driveitems:
+                    try:
+                        logger.debug(f"Processing: {driveitem.web_url}")
+                        doc_batch.append(
+                            _convert_driveitem_to_slim_document(
+                                driveitem, drive_name, ctx, self.graph_client
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to process driveitem: {str(e)}")
+
+                    if len(doc_batch) >= SLIM_BATCH_SIZE:
+                        yield doc_batch
+                        doc_batch = []
+
+            # Process site pages if flag is True
+            if self.include_site_pages:
+                site_pages = self._fetch_site_pages(site_descriptor)
+                for site_page in site_pages:
+                    logger.debug(
+                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                    )
                     doc_batch.append(
-                        _convert_driveitem_to_slim_document(
-                            driveitem, drive_name, ctx, self.graph_client
+                        _convert_sitepage_to_slim_document(
+                            site_page, ctx, self.graph_client
                         )
                     )
-                except Exception as e:
-                    logger.warning(f"Failed to process driveitem: {str(e)}")
-
-                if len(doc_batch) >= SLIM_BATCH_SIZE:
-                    yield doc_batch
-                    doc_batch = []
-
-            # Fetch site pages
-            site_pages = self._fetch_site_pages(site_descriptor)
-            for site_page in site_pages:
-                logger.debug(
-                    f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
-                )
-                doc_batch.append(
-                    _convert_sitepage_to_slim_document(
-                        site_page, ctx, self.graph_client
-                    )
-                )
-                if len(doc_batch) >= SLIM_BATCH_SIZE:
-                    yield doc_batch
-                    doc_batch = []
+                    if len(doc_batch) >= SLIM_BATCH_SIZE:
+                        yield doc_batch
+                        doc_batch = []
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -1084,7 +1089,13 @@ class SharepointConnector(
                 return checkpoint
 
         # Phase 2: Initialize cached_drive_names for current site if needed
-        if checkpoint.current_site_descriptor and checkpoint.cached_drive_names is None:
+        if (checkpoint.current_site_descriptor and checkpoint.cached_drive_names is None):
+            # If site documents flag is False, set empty drive list to skip document processing
+            if not self.include_site_documents:
+                logger.debug("Documents disabled, skipping drive initialization")
+                checkpoint.cached_drive_names = deque()
+                return checkpoint
+            
             logger.info(
                 f"Initializing drives for site: {checkpoint.current_site_descriptor.url}"
             )
@@ -1259,9 +1270,9 @@ class SharepointConnector(
             and checkpoint.current_site_descriptor is not None
         ):
             # Fetch SharePoint site pages (.aspx files)
-            # Only fetch site pages if a folder is not specified since this processing
-            # happens at a site-wide level + specifying a folder implies that the
-            # user probably isn't looking for site pages
+            # Only fetch site pages if a folder or drive is not specified since this
+            # processing happens at a site-wide level + specifying a folder implies 
+            # that the user probably isn't looking for site pages
             site_descriptor = checkpoint.current_site_descriptor
             specified_path = (
                 site_descriptor.folder_path is not None
