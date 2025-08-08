@@ -294,6 +294,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         sites: list[str] = [],
         include_site_pages: bool = True,
+        include_site_documents: bool = True,
     ) -> None:
         self.batch_size = batch_size
         self._graph_client: GraphClient | None = None
@@ -302,6 +303,7 @@ class SharepointConnector(LoadConnector, PollConnector):
         )
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.include_site_pages = include_site_pages
+        self.include_site_documents = include_site_documents
 
     @property
     def graph_client(self) -> GraphClient:
@@ -558,18 +560,21 @@ class SharepointConnector(LoadConnector, PollConnector):
         doc_batch: list[Document] = []
         for site_descriptor in site_descriptors:
             # Fetch regular documents from document libraries
-            driveitems = self._fetch_driveitems(site_descriptor, start=start, end=end)
-            for driveitem, drive_name in driveitems:
-                logger.debug(f"Processing: {driveitem.web_url}")
+            if self.include_site_documents:
+                driveitems = self._fetch_driveitems(
+                    site_descriptor, start=start, end=end
+                )
+                for driveitem, drive_name in driveitems:
+                    logger.debug(f"Processing: {driveitem.web_url}")
 
-                # Convert driveitem to document with size checking
-                doc = _convert_driveitem_to_document(driveitem, drive_name)
-                if doc is not None:
-                    doc_batch.append(doc)
+                    # Convert driveitem to document with size checking
+                    doc = _convert_driveitem_to_document(driveitem, drive_name)
+                    if doc is not None:
+                        doc_batch.append(doc)
 
-                if len(doc_batch) >= self.batch_size:
-                    yield doc_batch
-                    doc_batch = []
+                    if len(doc_batch) >= self.batch_size:
+                        yield doc_batch
+                        doc_batch = []
 
             # Fetch SharePoint site pages (.aspx files)
             # Only fetch site pages if a folder is not specified since this processing
