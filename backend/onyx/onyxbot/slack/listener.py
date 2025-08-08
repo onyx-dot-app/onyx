@@ -130,6 +130,10 @@ _SLACK_GREETINGS_TO_IGNORE = {
 # This is always (currently) the user id of Slack's official slackbot
 _OFFICIAL_SLACKBOT_USER_ID = "USLACKBOT"
 
+# Fields to exclude from Slack payload logging
+# Intention is to not log slack message content
+_EXCLUDED_SLACK_PAYLOAD_FIELDS = {"text", "blocks"}
+
 
 class SlackbotHandler:
     def __init__(self) -> None:
@@ -572,10 +576,14 @@ class SlackbotHandler:
 
 def sanitize_slack_payload(payload: dict) -> dict:
     """Remove message content from Slack payload for logging"""
-    sanitized = {k: v for k, v in payload.items() if k not in {"text", "blocks"}}
+    sanitized = {
+        k: v for k, v in payload.items() if k not in _EXCLUDED_SLACK_PAYLOAD_FIELDS
+    }
     if "event" in sanitized and isinstance(sanitized["event"], dict):
         sanitized["event"] = {
-            k: v for k, v in sanitized["event"].items() if k not in {"text", "blocks"}
+            k: v
+            for k, v in sanitized["event"].items()
+            if k not in _EXCLUDED_SLACK_PAYLOAD_FIELDS
         }
     return sanitized
 
