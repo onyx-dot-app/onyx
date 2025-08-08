@@ -252,10 +252,11 @@ def test_sharepoint_connector_pages(
     connector.load_credentials(sharepoint_credentials)
 
     # Get documents within the time window
-    document_batches = list(connector.load_from_state())
-    found_documents: list[Document] = [
-        doc for batch in document_batches for doc in batch
-    ]
+    found_documents = load_all_docs_from_checkpoint_connector(
+        connector=connector,
+        start=0,
+        end=time.time(),
+    )
 
     # Should only find CollabHome
     assert len(found_documents) == 1, "Should only find one page"

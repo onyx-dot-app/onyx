@@ -24,6 +24,9 @@ ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public acc
 AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 MICROSOFT_DOMAIN = ".onmicrosoft"
+# Limited Access role type, limited access is a travel through permission not a actual permission
+LIMITED_ACCESS_ROLE_TYPES = [1, 9]
+LIMITED_ACCESS_ROLE_NAMES = ["Limited Access", "Web-Only Limited Access"]
 
 
 class SharepointGroup(BaseModel):
@@ -427,13 +430,11 @@ def get_external_access_from_sharepoint(
             if assignment.role_definition_bindings:
                 is_limited_access = True
                 for role_definition_binding in assignment.role_definition_bindings:
-                    if role_definition_binding.role_type_kind not in [
-                        1,
-                        9,
-                    ] or role_definition_binding.name not in [
-                        "Limited Access",
-                        "Web-Only Limited Access",
-                    ]:
+                    if (
+                        role_definition_binding.role_type_kind
+                        not in LIMITED_ACCESS_ROLE_TYPES
+                        or role_definition_binding.name not in LIMITED_ACCESS_ROLE_NAMES
+                    ):
                         is_limited_access = False
                         break
 
@@ -552,13 +553,11 @@ def get_sharepoint_external_groups(
             if assignment.role_definition_bindings:
                 is_limited_access = True
                 for role_definition_binding in assignment.role_definition_bindings:
-                    if role_definition_binding.role_type_kind not in [
-                        1,
-                        9,
-                    ] or role_definition_binding.name not in [
-                        "Limited Access",
-                        "Web-Only Limited Access",
-                    ]:
+                    if (
+                        role_definition_binding.role_type_kind
+                        not in LIMITED_ACCESS_ROLE_TYPES
+                        or role_definition_binding.name not in LIMITED_ACCESS_ROLE_NAMES
+                    ):
                         is_limited_access = False
                         break
 
@@ -610,7 +609,7 @@ def get_sharepoint_external_groups(
         "get_sharepoint_external_groups:get_azure_ad_groups",
     )
     logger.info(f"Azure AD Groups: {len(azure_ad_groups)}")
-    identified_groups: set[str] = groups_and_members.groups_to_emails.keys()
+    identified_groups: set[str] = set(groups_and_members.groups_to_emails.keys())
     ad_groups_to_emails: dict[str, set[str]] = {}
     for group in azure_ad_groups:
         # If the group is already identified, we don't need to get the members

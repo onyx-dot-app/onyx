@@ -26,7 +26,7 @@ from office365.onedrive.sites.site import Site  # type: ignore[import-untyped]
 from office365.onedrive.sites.sites_with_root import SitesWithRoot  # type: ignore[import-untyped]
 from office365.runtime.auth.token_response import TokenResponse  # type: ignore[import-untyped]
 from office365.runtime.client_request import ClientRequestException  # type: ignore
-from office365.runtime.queries.client_query import ClientQuery
+from office365.runtime.queries.client_query import ClientQuery  # type: ignore[import-untyped]
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from pydantic import BaseModel
 
@@ -201,7 +201,10 @@ def _convert_driveitem_to_document_with_permissions(
                     f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
                     f"File size: {file_size} bytes. Skipping."
                 )
-                return None
+                raise ValueError(
+                    f"File '{driveitem.name}' exceeds size threshold of {SHAREPOINT_CONNECTOR_SIZE_THRESHOLD} bytes. "
+                    f"File size: {file_size} bytes."
+                )
         else:
             logger.warning(
                 f"Could not access file size for '{driveitem.name}' Proceeding with download."
@@ -218,7 +221,7 @@ def _convert_driveitem_to_document_with_permissions(
 
     if content is None:
         logger.warning(f"Could not access content for '{driveitem.name}'")
-        return None
+        raise ValueError(f"Could not access content for '{driveitem.name}'")
 
     # Handle different content types
     if isinstance(content.value, bytes):
@@ -471,8 +474,11 @@ def _convert_sitepage_to_slim_document(
         graph_client=graph_client,
         site_page=site_page,
     )
+    id = site_page.get("id")
+    if id is None:
+        raise ValueError("Site page ID is required")
     return SlimDocument(
-        id=site_page.get("id"),
+        id=id,
         external_access=external_access,
     )
 
@@ -1231,7 +1237,11 @@ class SharepointConnector(
             )
             return checkpoint
 
-        if self.include_site_pages and not checkpoint.process_site_pages:
+        if (
+            self.include_site_pages
+            and not checkpoint.process_site_pages
+            and checkpoint.current_site_descriptor is not None
+        ):
             logger.info(
                 f"Processing site pages for site: {checkpoint.current_site_descriptor.url}"
             )
@@ -1239,7 +1249,10 @@ class SharepointConnector(
             return checkpoint
 
         # Phase 5: Process site pages
-        if checkpoint.process_site_pages:
+        if (
+            checkpoint.process_site_pages
+            and checkpoint.current_site_descriptor is not None
+        ):
             # Fetch SharePoint site pages (.aspx files)
             # Only fetch site pages if a folder is not specified since this processing
             # happens at a site-wide level + specifying a folder implies that the
@@ -1255,12 +1268,14 @@ class SharepointConnector(
                 site_pages = self._fetch_site_pages(
                     site_descriptor, start=start_dt, end=end_dt
                 )
-                ctx: ClientContext | None = None
+                client_ctx: ClientContext | None = None
                 if include_permissions:
                     if self.msal_app and self.sp_tenant_domain:
                         msal_app = self.msal_app
                         sp_tenant_domain = self.sp_tenant_domain
-                        ctx = ClientContext(site_descriptor.url).with_access_token(
+                        client_ctx = ClientContext(
+                            site_descriptor.url
+                        ).with_access_token(
                             lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
                         )
                     else:
@@ -1273,7 +1288,7 @@ class SharepointConnector(
                         _convert_sitepage_to_document(
                             site_page,
                             site_descriptor.drive_name,
-                            ctx,
+                            client_ctx,
                             self.graph_client,
                             include_permissions=include_permissions,
                         )
