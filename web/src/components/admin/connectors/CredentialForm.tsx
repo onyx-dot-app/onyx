@@ -4,11 +4,20 @@ import * as Yup from "yup";
 import { Popup } from "./Popup";
 import { ValidSources } from "@/lib/types";
 
-import { createCredential } from "@/lib/credential";
-import { CredentialBase, Credential } from "@/lib/connectors/credentials";
+import {
+  createCredential,
+  createCredentialWithPrivateKey,
+} from "@/lib/credential";
+import {
+  CredentialBase,
+  Credential,
+  CredentialWithPrivateKey,
+} from "@/lib/connectors/credentials";
+
+const PRIVATE_KEY_FIELD_KEY = "private_key";
 
 export async function submitCredential<T>(
-  credential: CredentialBase<T>
+  credential: CredentialBase<T> | CredentialWithPrivateKey<T>
 ): Promise<{
   credential?: Credential<any>;
   message: string;
@@ -16,8 +25,14 @@ export async function submitCredential<T>(
 }> {
   let isSuccess = false;
   try {
-    const response = await createCredential(credential);
-
+    let response: Response;
+    if (PRIVATE_KEY_FIELD_KEY in credential && credential.private_key) {
+      response = await createCredentialWithPrivateKey(
+        credential as CredentialWithPrivateKey<T>
+      );
+    } else {
+      response = await createCredential(credential as CredentialBase<T>);
+    }
     if (response.ok) {
       const parsed_response = await response.json();
       const credential = parsed_response.credential;
