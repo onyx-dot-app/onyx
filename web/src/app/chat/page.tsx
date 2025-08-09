@@ -1,6 +1,6 @@
 import { DocumentsProvider } from "./my-documents/DocumentsContext";
 import { SEARCH_PARAMS } from "@/lib/extension/constants";
-import WrappedChat from "./WrappedChat";
+import { ChatPage } from "./ChatPage";
 
 export default async function Page(props: {
   searchParams: Promise<{ [key: string]: string }>;
@@ -12,10 +12,7 @@ export default async function Page(props: {
 
   return (
     <DocumentsProvider>
-      <WrappedChat
-        firstMessage={firstMessage}
-        defaultSidebarOff={defaultSidebarOff}
-      />
+      <ChatPage firstMessage={firstMessage} />
     </DocumentsProvider>
   );
 }

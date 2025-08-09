@@ -57,11 +57,7 @@ export function Logo({
   );
 }
 
-export function LogoType({
-  size = "default",
-}: {
-  size?: "small" | "default" | "large";
-}) {
+export function LogoType() {
   return (
     <OnyxLogoTypeIcon
       size={115}
