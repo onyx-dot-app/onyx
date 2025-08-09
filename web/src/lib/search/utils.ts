@@ -15,6 +15,7 @@ export const buildFilters = (
       sources.length > 0 ? sources.map((source) => source.internalName) : null,
     document_set: documentSets.length > 0 ? documentSets : null,
     time_cutoff: timeRange?.from ? timeRange.from : null,
+    time_cutoff_end: timeRange?.to ? timeRange.to : null,
     tags: tags,
     user_file_ids: userFileIds || null,
     // user_folder_ids: userFolderIds || null,

@@ -195,6 +195,7 @@ export interface Filters {
   source_type: string[] | null;
   document_set: string[] | null;
   time_cutoff: Date | null;
+  time_cutoff_end: Date | null;
   user_file_ids: number[] | null;
   // user_folder_ids: number[] | null;
 }
