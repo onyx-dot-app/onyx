@@ -36,6 +36,7 @@ export enum NotificationType {
   PERSONA_SHARED = "persona_shared",
   REINDEX_NEEDED = "reindex_needed",
   TRIAL_ENDS_TWO_DAYS = "two_day_trial_ending",
+  GROUP_SYNC_WARNING = "group_sync_warning",
 }
 
 export interface Notification {

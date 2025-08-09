@@ -10,6 +10,7 @@ import { useUser } from "../user/UserProvider";
 import { XIcon } from "../icons/icons";
 import { Spinner } from "@phosphor-icons/react";
 import { useRouter } from "next/navigation";
+import { GroupSyncWarningNotification } from "./GroupSyncWarningNotification";
 
 export const Notifications = ({
   notifications,
@@ -97,12 +98,20 @@ export const Notifications = ({
   const sortedNotifications = notifications
     ? notifications
         .filter((notification) => {
-          const personaId = notification.additional_data?.persona_id;
-          return (
-            personaId !== undefined &&
-            personas &&
-            personas[personaId] !== undefined
-          );
+          // Include persona shared notifications that have valid personas
+          if (notification.notif_type === NotificationType.PERSONA_SHARED) {
+            const personaId = notification.additional_data?.persona_id;
+            return (
+              personaId !== undefined &&
+              personas &&
+              personas[personaId] !== undefined
+            );
+          }
+          // Include group sync warning notifications
+          if (notification.notif_type === NotificationType.GROUP_SYNC_WARNING) {
+            return true;
+          }
+          return false;
         })
         .sort(
           (a, b) =>
@@ -137,16 +146,28 @@ export const Notifications = ({
       </button>
 
       {notifications && notifications.length > 0 ? (
-        sortedNotifications.length > 0 && personas ? (
-          sortedNotifications
-            .filter(
-              (notification) =>
-                notification.notif_type === NotificationType.PERSONA_SHARED
-            )
-            .map((notification) => {
+        sortedNotifications.length > 0 ? (
+          sortedNotifications.map((notification) => {
+            // Render Group Sync Warning Notifications
+            if (
+              notification.notif_type === NotificationType.GROUP_SYNC_WARNING
+            ) {
+              return (
+                <GroupSyncWarningNotification
+                  key={notification.id}
+                  notification={notification}
+                  onDismiss={dismissNotification}
+                />
+              );
+            }
+
+            // Render Persona Shared Notifications
+            if (notification.notif_type === NotificationType.PERSONA_SHARED) {
               const persona = notification.additional_data?.persona_id
-                ? personas[notification.additional_data.persona_id]
+                ? personas?.[notification.additional_data.persona_id]
                 : null;
+
+              if (!persona) return null;
 
               return (
                 <div
@@ -154,11 +175,9 @@ export const Notifications = ({
                   className="w-72 px-4 py-3 border-b last:border-b-0 hover:bg-background-50 transition duration-150 ease-in-out"
                 >
                   <div className="flex items-start">
-                    {persona && (
-                      <div className="mt-2 flex-shrink-0 mr-3">
-                        <AssistantIcon assistant={persona} size="small" />
-                      </div>
-                    )}
+                    <div className="mt-2 flex-shrink-0 mr-3">
+                      <AssistantIcon assistant={persona} size="small" />
+                    </div>
                     <div className="flex-grow">
                       <p className="font-semibold text-sm text-text-800">
                         New Assistant Shared: {persona?.name}
@@ -213,10 +232,20 @@ export const Notifications = ({
                   </div>
                 </div>
               );
-            })
-        ) : (
+            }
+
+            return null;
+          })
+        ) : // Show loading spinner only if we have persona notifications but personas aren't loaded yet
+        notifications.some(
+            (n) => n.notif_type === NotificationType.PERSONA_SHARED
+          ) && !personas ? (
           <div className="flex h-20 justify-center items-center w-72">
             <Spinner size={20} />
+          </div>
+        ) : (
+          <div className="px-4 py-3 text-center text-text-600">
+            No new notifications
           </div>
         )
       ) : (

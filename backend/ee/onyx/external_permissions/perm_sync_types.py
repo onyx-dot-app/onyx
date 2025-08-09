@@ -1,8 +1,12 @@
 from collections.abc import Callable
 from collections.abc import Generator
+from typing import Any
 from typing import Optional
 from typing import Protocol
 from typing import TYPE_CHECKING
+from uuid import UUID
+
+from pydantic import BaseModel
 
 from onyx.context.search.models import InferenceChunk
 from onyx.db.utils import DocumentRow
@@ -65,8 +69,18 @@ GroupSyncFuncType = Callable[
         str,  # tenant_id
         "ConnectorCredentialPair",  # cc_pair
     ],
-    Generator["ExternalUserGroup", None, None],
+    Generator["ExternalUserGroup | SyncWarning", None, None],
 ]
 
 # list of chunks to be censored and the user email. returns censored chunks
 CensoringFuncType = Callable[[list[InferenceChunk], str], list[InferenceChunk]]
+
+
+class SyncWarning(BaseModel):
+    """Represents a sync warning with connector information and warning messages."""
+
+    cc_pair_id: int
+    connector_name: str
+    cc_pair_owner: UUID | None
+    source: str
+    warnings: dict[str, Any]
