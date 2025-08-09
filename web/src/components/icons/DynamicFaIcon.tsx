@@ -24,8 +24,9 @@ export async function preloadIcons(iconNames: string[]): Promise<void> {
   const promises = iconNames.map(async (name) => {
     try {
       const iconModule = await import("react-icons/fa");
-      const iconName =
-        `Fa${name.charAt(0).toUpperCase() + name.slice(1)}` as keyof typeof iconModule;
+      const iconName = `Fa${
+        name.charAt(0).toUpperCase() + name.slice(1)
+      }` as keyof typeof iconModule;
       iconCache[name] = (iconModule[iconName] as IconType) || FaQuestion;
     } catch (error) {
       console.error(`Failed to load icon: ${name}`, error);
