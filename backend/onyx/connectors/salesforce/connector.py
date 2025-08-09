@@ -941,7 +941,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             child_types_working = child_types_all.copy()
             if associations_config is not None:
                 child_types_working = {
-                    k: v for k, v in child_types_all.items() if v in associations_config
+                    k: v for k, v in child_types_all.items() if k in associations_config
                 }
                 any_not_found = False
                 for k in associations_config:
@@ -954,8 +954,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     )
                     raise RuntimeError(
                         f"Associations {associations_config} not found in {parent_type} "
-                        f"with child objects {child_types_all}"
-                        f" and fields {queryable_fields}"
+                        "make sure your parent-child associations are in the right order"
+                        # f"with child objects {child_types_all}"
+                        # f" and fields {queryable_fields}"
                     )
 
             parent_to_child_relationships[parent_type] = set()
