@@ -88,6 +88,7 @@ class ImageGenerationTool(Tool[None]):
 
     def __init__(
         self,
+        id: int,
         api_key: str,
         api_base: str | None,
         api_version: str | None,
@@ -105,12 +106,17 @@ class ImageGenerationTool(Tool[None]):
         self.api_key = api_key
         self.api_base = api_base
         self.api_version = api_version
+        self._id = id
 
         self.model = model
         self.num_imgs = num_imgs
 
         self.additional_headers = additional_headers
         self.output_format = output_format
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

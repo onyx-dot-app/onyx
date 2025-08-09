@@ -19,6 +19,7 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
@@ -401,7 +402,7 @@ def process_kg_commands(
 ) -> None:
     # Temporarily, until we have a draft UI for the KG Operations/Management
     # TODO: move to api endpoint once we get frontend
-    if not persona_name.startswith("KG Beta"):
+    if not persona_name.startswith(TMP_DRALPHA_PERSONA_NAME):
         return
 
     kg_config_settings = get_kg_config_settings()

@@ -4,9 +4,11 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
+    stream_kg_search_close_step_answer,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_answer_explicit,
 )
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResultsDataUpdate
@@ -66,28 +68,26 @@ def process_kg_only_answers(
 
     # we use this stream write explicitly
 
-    write_custom_event(
-        "subqueries",
-        SubQueryPiece(
-            sub_query="Formatted References",
-            level=0,
-            level_question_num=_KG_STEP_NR,
-            query_id=1,
-        ),
-        writer,
-    )
-
-    query_results_list = []
+    if state.individual_flow:
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query="Formatted References",
+                level=0,
+                level_question_num=_KG_STEP_NR,
+                query_id=1,
+            ),
+            writer,
+        )
 
     if query_results:
-        for query_result in query_results:
-            query_results_list.append(
-                str(query_result).replace("::", ":: ").capitalize()
-            )
+        query_results_data_str = "\n".join(
+            str(query_result).replace("::", ":: ").capitalize()
+            for query_result in query_results
+        )
     else:
-        raise ValueError("No query results were found")
-
-    query_results_data_str = "\n".join(query_results_list)
+        logger.warning("No query results were found")
+        query_results_data_str = "(No query results were found)"
 
     source_reference_result_str = _get_formated_source_reference_results(
         source_document_results
@@ -99,9 +99,12 @@ def process_kg_only_answers(
         "No further research is needed, the answer is derived from the knowledge graph."
     )
 
-    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
+    if state.individual_flow:
+        stream_write_kg_search_answer_explicit(
+            writer, step_nr=_KG_STEP_NR, answer=step_answer
+        )
 
-    stream_close_step_answer(writer, _KG_STEP_NR)
+        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     return ResultsDataUpdate(
         query_results_data_str=query_results_data_str,

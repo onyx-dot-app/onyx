@@ -17,6 +17,9 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.internet_search.providers import (
     get_available_providers,
 )
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
@@ -62,6 +65,15 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         ]
         if (bool(get_available_providers()))
         else []
+    ),
+    InCodeToolInfo(
+        cls=KnowledgeGraphTool,
+        description=(
+            "The Knowledge Graph Search Action allows the assistant to search the knowledge graph for information."
+            "This tool should only be used by the Deep Research Agent, not via tool calling."
+        ),
+        in_code_tool_id=KnowledgeGraphTool.__name__,
+        display_name=KnowledgeGraphTool._DISPLAY_NAME,
     ),
 ]
 
@@ -127,6 +139,29 @@ def get_search_tool(db_session: Session) -> ToolDBModel | None:
     ).scalar_one_or_none()
 
     return search_tool
+
+
+def get_kg_tool(db_session: Session) -> ToolDBModel | None:
+    """
+    Retrieves for the KnowledgeGraphTool from the BUILT_IN_TOOLS list.
+    """
+    kg_tool_id = next(
+        (
+            tool["in_code_tool_id"]
+            for tool in BUILT_IN_TOOLS
+            if tool["cls"].__name__ == KnowledgeGraphTool.__name__
+        ),
+        None,
+    )
+
+    if not kg_tool_id:
+        raise RuntimeError("KnowledgeGraphTool not found in the BUILT_IN_TOOLS list.")
+
+    kg_tool = db_session.execute(
+        select(ToolDBModel).where(ToolDBModel.in_code_tool_id == kg_tool_id)
+    ).scalar_one_or_none()
+
+    return kg_tool
 
 
 def auto_add_search_tool_to_personas(db_session: Session) -> None:

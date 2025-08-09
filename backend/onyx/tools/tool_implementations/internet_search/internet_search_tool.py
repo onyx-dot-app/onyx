@@ -89,6 +89,7 @@ class InternetSearchTool(Tool[None]):
 
     def __init__(
         self,
+        id: int,
         db_session: Session,
         persona: Persona,
         prompt_config: PromptConfig,
@@ -104,6 +105,7 @@ class InternetSearchTool(Tool[None]):
         self.prompt_config = prompt_config
         self.llm = llm
         self.max_chunks = max_chunks
+        self._id = id
 
         self.chunks_above = (
             persona.chunks_above
@@ -144,6 +146,10 @@ class InternetSearchTool(Tool[None]):
         )
 
     """For explicit tool calling"""
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

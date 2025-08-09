@@ -22,6 +22,11 @@ OVERRIDE_T = TypeVar("OVERRIDE_T")
 class Tool(abc.ABC, Generic[OVERRIDE_T]):
     @property
     @abc.abstractmethod
+    def id(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
     def name(self) -> str:
         raise NotImplementedError
 

@@ -59,6 +59,7 @@ from onyx.context.search.models import SearchRequest
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import Persona
+from onyx.db.tools import get_tools
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.llm.interfaces import LLM
@@ -189,7 +190,18 @@ def get_test_config(
 
     prompt_config = PromptConfig.from_model(persona.prompts[0])
 
+    search_tool_id = None
+    tools = get_tools(db_session)
+    for tool in tools:
+        if tool.name == "run_search":
+            search_tool_id = tool.id
+            break
+
+    if search_tool_id is None:
+        raise ValueError("Search tool not found. This should never happen.")
+
     search_tool = SearchTool(
+        id=search_tool_id,
         db_session=db_session,
         user=None,
         persona=persona,

@@ -87,6 +87,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     def __init__(
         self,
+        id: int,
         db_session: Session,
         user: User | None,
         persona: Persona,
@@ -106,6 +107,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         bypass_acl: bool = False,
         rerank_settings: RerankingDetails | None = None,
     ) -> None:
+        self._id = id
         self.user = user
         self.persona = persona
         self.retrieval_options = retrieval_options
@@ -161,6 +163,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 doc_pruning_config=document_pruning_config,
             )
         )
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:
