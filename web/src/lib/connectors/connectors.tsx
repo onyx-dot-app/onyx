@@ -638,15 +638,12 @@ Example:
   "Account": {
     "fields": ["Id", "Name", "Industry"],
     "associations": {
-      "Contact": {
-        "fields": ["Id", "FirstName", "LastName", "Email"],
-        "associations": {}
-      }
+      "Contact": ["Id", "FirstName", "LastName", "Email"]
     }
   }
 }
 
-See our docs for more details.`,
+[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.`,
               },
             ],
           },
