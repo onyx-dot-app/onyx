@@ -125,7 +125,7 @@ services:
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - inference_model_cache_huggingface:/root/.cache/huggingface/
+      - inference_model_cache_huggingface:/app/.cache/huggingface/
     logging:
       driver: json-file
       options:
@@ -149,7 +149,7 @@ services:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - index_model_cache_huggingface:/root/.cache/huggingface/
+      - index_model_cache_huggingface:/app/.cache/huggingface/
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
     logging:
       driver: json-file

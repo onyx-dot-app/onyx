@@ -354,7 +354,7 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - model_cache_huggingface:/root/.cache/huggingface/
+      - model_cache_huggingface:/app/.cache/huggingface/
       # optional, only for debugging purposes
       - inference_model_server_logs:/var/log
     logging:
@@ -388,7 +388,7 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      - indexing_huggingface_model_cache:/app/.cache/huggingface/
       # optional, only for debugging purposes
       - indexing_model_server_logs:/var/log
     logging:

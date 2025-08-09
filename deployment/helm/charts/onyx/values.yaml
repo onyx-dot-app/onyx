@@ -96,6 +96,10 @@ inferenceCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 
 indexCapability:
   service:
@@ -125,6 +129,10 @@ indexCapability:
     limits:
       cpu: 4000m
       memory: 10Gi
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 config:
   envConfigMapName: env-configmap
 
@@ -318,6 +326,10 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
+  podSecurityContext: {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
 
 celery_beat:
   replicaCount: 1
