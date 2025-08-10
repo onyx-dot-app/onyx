@@ -249,6 +249,11 @@ export interface ImapCredentialJson {
   imap_password: string;
 }
 
+export interface OutlineCredentialJson {
+  outline_base_url: string;
+  outline_api_token: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -409,6 +414,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
     imap_username: "",
     imap_password: "",
   } as ImapCredentialJson,
+  outline: {
+    outline_base_url: "",
+    outline_api_token: "",
+  } as OutlineCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -555,6 +564,10 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  // Outline
+  outline_base_url: "Outline Base URL",
+  outline_api_token: "Outline API Token",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

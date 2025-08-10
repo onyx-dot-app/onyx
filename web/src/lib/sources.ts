@@ -45,6 +45,7 @@ import {
   GitbookIcon,
   HighspotIcon,
   EmailIcon,
+  OutlineIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -350,6 +351,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: EmailIcon,
     displayName: "Email",
     category: SourceCategory.Messaging,
+  },
+  outline: {
+    icon: OutlineIcon,
+    displayName: "Outline",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/outline",
   },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
