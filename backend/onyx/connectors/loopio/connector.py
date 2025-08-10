@@ -119,7 +119,20 @@ class LoopioConnector(LoadConnector, PollConnector):
                     part["name"] for part in entry["location"].values() if part
                 )
 
-                answer = parse_html_page_basic(entry.get("answer", {}).get("text", ""))
+                if entry.get("answer", {}).get("text", "") == "":
+                    logger.warning(
+                        f"The Library entry {entry['id']} has no answer text"
+                    )
+                    continue
+
+                try:
+                    answer = parse_html_page_basic(
+                        entry.get("answer", {}).get("text", "")
+                    )
+                except Exception as e:
+                    logger.error(f"Error parsing HTML for entry {entry['id']}: {e}")
+                    answer = ""
+
                 questions = [
                     question.get("text").replace("\xa0", " ")
                     for question in entry["questions"]
