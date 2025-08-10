@@ -54,5 +54,7 @@ def source_to_github_img_link(source: DocumentSource) -> str | None:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
     if source == DocumentSource.INGESTION_API.value:
         return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
+    if source == DocumentSource.OUTLINE.value:
+        return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/Outline.png"
 
     return "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/slackbot_images/File.png"
