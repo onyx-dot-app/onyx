@@ -22,6 +22,8 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 
+RECENT_FOLDER_ID = -1
+
 
 def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
     """Generate a consistent file name for storing plaintext content of a user file."""
@@ -248,7 +250,14 @@ def get_user_files_as_user(
     for user_file in user_files:
         # Note: if user_id is None, then all files should be None as well
         # (since auth must be disabled in this case)
-        if user_file.user_id == user_id:
+        if user_file.folder_id == RECENT_FOLDER_ID:
+            if user_file.user_id == user_id:
+                current_user_files.append(user_file)
+        else:
+            if user_file.user_id != user_id:
+                raise ValueError(
+                    f"User {user_id} does not have access to file {user_file.id}"
+                )
             current_user_files.append(user_file)
 
     return current_user_files
