@@ -50,6 +50,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import TagType
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
@@ -1292,6 +1293,9 @@ class Tag(Base):
     tag_value: Mapped[str] = mapped_column(String)
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False)
+    )
+    tag_type: Mapped[TagType] = mapped_column(
+        Enum(TagType, native_enum=False), nullable=True
     )
 
     documents = relationship(
