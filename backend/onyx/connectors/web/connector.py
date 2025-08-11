@@ -337,7 +337,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         urls = [_ensure_absolute_url(sitemap_url, loc_tag.text)
                 for loc_tag in soup.find_all("loc")]
 
-        if sitemap_url.endswith("protected=true"):
+        if "protected=true" in sitemap_url:
             eea_auth = soer_login()
             eea_global_auth["login"] = eea_auth
             urls = list_pages_for_protected_site_eea(sitemap_url, eea_auth)
@@ -445,6 +445,13 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
         logger.exception(
             f"Unexpected error while handling cookies for Web Connector with URL {url}")
 
+def set_auth_cookies():
+    cookies = {}
+    if eea_global_auth.get("login") is not None:
+        cookies["__ac__eea"] = eea_global_auth["login"]["__ac__eea"]
+        cookies["auth_token"] =eea_global_auth["login"]["auth_token"]
+
+    return cookies
 
 class WebConnector(LoadConnector):
     MAX_RETRIES = 3
@@ -514,13 +521,17 @@ class WebConnector(LoadConnector):
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
         # First do a HEAD request to check content type without downloading the entire content
+        auth_cookies = set_auth_cookies()
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True)
+            initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True)
+        if eea_global_auth.get("login") is not None and "@@download/file" in initial_url:
+            head_response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True, stream=True)
+
         is_pdf = is_pdf_content(head_response)
 
         if is_pdf or initial_url.lower().endswith(".pdf"):
             # PDF files are not checked for links
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+            response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies)
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content))
             last_modified = response.headers.get("Last-Modified")
