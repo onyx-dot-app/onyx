@@ -1,7 +1,6 @@
 import json
 from collections.abc import Generator
 from typing import Any
-from typing import cast
 from urllib.parse import urlparse
 
 import requests
@@ -9,6 +8,7 @@ from pydantic import BaseModel
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.llm.utils import message_to_string
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import ToolResponse
@@ -28,21 +28,6 @@ class OIDCConfig(BaseModel):
     userinfo_endpoint: str | None = None
     introspection_endpoint: str | None = None
     token_endpoint: str | None = None
-
-
-class OktaUserProfile(BaseModel):
-    id: str | None = None
-    status: str | None = None
-    created: str | None = None
-    activated: str | None = None
-    statusChanged: str | None = None
-    lastLogin: str | None = None
-    lastUpdated: str | None = None
-    passwordChanged: str | None = None
-    type: dict[str, Any] | None = None
-    profile: dict[str, Any] | None = None
-    credentials: dict[str, Any] | None = None
-    _links: dict[str, Any] | None = None
 
 
 class OktaProfileTool(BaseTool):
@@ -190,7 +175,6 @@ class OktaProfileTool(BaseTool):
         llm: LLM,
         force_run: bool = False,
     ) -> dict[str, Any] | None:
-        # Let the LLM evaluate if we should run this tool
         if force_run:
             return {}
 
@@ -213,19 +197,9 @@ Conversation history:
 
 Should the Okta profile tool be called for this query? Respond with only "YES" or "NO".
 """.strip()
-
-        try:
-            response = llm.invoke(prompt)
-            if response and "YES" in cast(str, response.content[0]).upper():
-                return {}
-        except Exception:
-            # If LLM call fails, fall back to keyword matching
-            lowered = query.lower()
-            trigger = "okta" in lowered and (
-                "profile" in lowered or "userinfo" in lowered or "who am" in lowered
-            )
-            if trigger:
-                return {}
+        response = llm.invoke(prompt)
+        if response and "YES" in message_to_string(response).upper():
+            return {}
 
         return None
 
