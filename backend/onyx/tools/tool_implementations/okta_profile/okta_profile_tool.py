@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.tools.base_tool import BaseTool
 from onyx.tools.models import ToolResponse
 from onyx.utils.logger import setup_logger
@@ -203,7 +204,12 @@ The Okta profile tool can retrieve user profile information from Okta including:
 - Authentication and credential information
 - Account status and activity
 
-Query: "{query}"
+Query: {query}
+
+Conversation history:
+{GENERAL_SEP_PAT}
+{history}
+{GENERAL_SEP_PAT}
 
 Should the Okta profile tool be called for this query? Respond with only "YES" or "NO".
 """.strip()
