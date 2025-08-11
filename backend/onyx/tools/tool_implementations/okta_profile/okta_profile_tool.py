@@ -247,23 +247,9 @@ Should the Okta profile tool be called for this query? Respond with only "YES" o
         # Call Users API to get full profile - this is now required
         users_api_data = self._call_users_api(uid_candidate)
 
-        # Create profile model from the full Users API response
-        profile = OktaUserProfile(
-            id=users_api_data.get("id"),
-            status=users_api_data.get("status"),
-            created=users_api_data.get("created"),
-            activated=users_api_data.get("activated"),
-            statusChanged=users_api_data.get("statusChanged"),
-            lastLogin=users_api_data.get("lastLogin"),
-            lastUpdated=users_api_data.get("lastUpdated"),
-            passwordChanged=users_api_data.get("passwordChanged"),
-            type=users_api_data.get("type"),
-            profile=users_api_data.get("profile"),
-            credentials=users_api_data.get("credentials"),
-            _links=users_api_data.get("_links"),
+        yield ToolResponse(
+            id=OKTA_PROFILE_RESPONSE_ID, response=users_api_data["profile"]
         )
-
-        yield ToolResponse(id=OKTA_PROFILE_RESPONSE_ID, response=profile.model_dump())
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         # Return the single aggregated profile packet
