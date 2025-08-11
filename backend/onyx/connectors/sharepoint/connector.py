@@ -245,7 +245,7 @@ def _convert_driveitem_to_document_with_permissions(
         file_text = extract_file_text(
             file=io.BytesIO(content_bytes),
             file_name=driveitem.name,
-            break_on_unprocessable=True,
+            break_on_unprocessable=False,
         )
         sections.append(TextSection(link=driveitem.web_url, text=file_text))
 
