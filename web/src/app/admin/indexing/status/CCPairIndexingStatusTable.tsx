@@ -311,6 +311,7 @@ export function CCPairIndexingStatusTable({
             is_editable: false,
             in_repeated_error_state: false,
             in_progress: false,
+            latest_index_attempt_docs_indexed: 0,
           }}
           isEditable={false}
         />
