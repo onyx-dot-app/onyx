@@ -4,6 +4,14 @@ import {
 } from "./connectors/credentials";
 import { AccessType } from "@/lib/types";
 import { TypedFile } from "./connectors/fileTypes";
+import {
+  CREDENTIAL_NAME,
+  CREDENTIAL_SOURCE,
+  CREDENTIAL_UPLOADED_FILE,
+  CREDENTIAL_FIELD_KEY,
+  CREDENTIAL_TYPE_DEFINITION_KEY,
+  CREDENTIAL_JSON,
+} from "./constants";
 
 export async function createCredential(credential: CredentialBase<any>) {
   return await fetch(`/api/manage/credential`, {
@@ -19,10 +27,7 @@ export async function createCredentialWithPrivateKey(
   credential: CredentialWithPrivateKey<any>
 ) {
   const formData = new FormData();
-  formData.append(
-    "credential_json",
-    JSON.stringify(credential.credential_json)
-  );
+  formData.append(CREDENTIAL_JSON, JSON.stringify(credential.credential_json));
   formData.append("admin_public", credential.admin_public.toString());
   formData.append(
     "curator_public",
@@ -33,13 +38,13 @@ export async function createCredentialWithPrivateKey(
       formData.append("groups", String(group));
     });
   }
-  formData.append("name", credential.name || "");
-  formData.append("source", credential.source);
+  formData.append(CREDENTIAL_NAME, credential.name || "");
+  formData.append(CREDENTIAL_SOURCE, credential.source);
   if (credential.private_key) {
-    formData.append("uploaded_file", credential.private_key.file);
-    formData.append("field_key", credential.private_key.fieldKey);
+    formData.append(CREDENTIAL_UPLOADED_FILE, credential.private_key.file);
+    formData.append(CREDENTIAL_FIELD_KEY, credential.private_key.fieldKey);
     formData.append(
-      "type_definition_key",
+      CREDENTIAL_TYPE_DEFINITION_KEY,
       credential.private_key.typeDefinition.category
     );
   }
@@ -108,7 +113,7 @@ export function updateCredential(credentialId: number, newDetails: any) {
   const name = newDetails.name;
   const details = Object.fromEntries(
     Object.entries(newDetails).filter(
-      ([key, value]) => key !== "name" && value !== ""
+      ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
     )
   );
   return fetch(`/api/manage/admin/credential/${credentialId}`, {
@@ -131,15 +136,18 @@ export function updateCredentialWithPrivateKey(
   const name = newDetails.name;
   const details = Object.fromEntries(
     Object.entries(newDetails).filter(
-      ([key, value]) => key !== "name" && value !== ""
+      ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
     )
   );
   const formData = new FormData();
-  formData.append("name", name);
-  formData.append("credential_json", JSON.stringify(details));
-  formData.append("uploaded_file", privateKey.file);
-  formData.append("field_key", privateKey.fieldKey);
-  formData.append("type_definition_key", privateKey.typeDefinition.category);
+  formData.append(CREDENTIAL_NAME, name);
+  formData.append(CREDENTIAL_JSON, JSON.stringify(details));
+  formData.append(CREDENTIAL_UPLOADED_FILE, privateKey.file);
+  formData.append(CREDENTIAL_FIELD_KEY, privateKey.fieldKey);
+  formData.append(
+    CREDENTIAL_TYPE_DEFINITION_KEY,
+    privateKey.typeDefinition.category
+  );
   return fetch(`/api/manage/admin/credential/private-key/${credentialId}`, {
     method: "PUT",
     body: formData,

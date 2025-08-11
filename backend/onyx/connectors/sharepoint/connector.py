@@ -256,6 +256,7 @@ def _convert_driveitem_to_document_with_permissions(
             graph_client=graph_client,
             drive_item=driveitem,
             drive_name=drive_name,
+            add_prefix=True,
         )
     else:
         external_access = ExternalAccess.empty()
@@ -417,6 +418,7 @@ def _convert_sitepage_to_document(
             ctx=ctx,
             graph_client=graph_client,
             site_page=site_page,
+            add_prefix=True,
         )
     else:
         external_access = ExternalAccess.empty()
