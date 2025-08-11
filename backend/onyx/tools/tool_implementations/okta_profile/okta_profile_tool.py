@@ -76,7 +76,7 @@ class OktaProfileTool(BaseTool):
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": {},
+                "parameters": {"type": "object", "properties": {}, "required": []},
             },
         }
 
@@ -222,7 +222,10 @@ Should the Okta profile tool be called for this query? Respond with only "YES" o
             uid_candidate = introspection_data.get("uid")
 
         if not uid_candidate:
-            raise ValueError("Unable to determine user ID from OAuth token")
+            raise ValueError(
+                "Unable to fetch user profile from Okta. This likely means your Okta "
+                "token has expired. Please logout, log back in, and try again."
+            )
 
         # Call Users API to get full profile - this is now required
         users_api_data = self._call_users_api(uid_candidate)
