@@ -549,3 +549,4 @@ class IndexingStatusRequest(BaseModel):
     docs_count_value: int | None = None
     name_filter: str | None = None
     source_to_page: dict[DocumentSource, int] = Field(default_factory=dict)
+    get_all_connectors: bool = False

@@ -1171,8 +1171,11 @@ def get_connector_indexing_status_paginated(
         start_idx = (current_page - 1) * _INDEXING_STATUS_PAGE_SIZE
         end_idx = start_idx + _INDEXING_STATUS_PAGE_SIZE
 
-        # Get the page slice for this source
-        page_statuses = statuses[start_idx:end_idx]
+        if request.get_all_connectors:
+            page_statuses = statuses
+        else:
+            # Get the page slice for this source
+            page_statuses = statuses[start_idx:end_idx]
 
         # Create response object for this source
         if page_statuses:  # Only include sources that have data on this page
