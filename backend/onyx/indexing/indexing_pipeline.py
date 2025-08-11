@@ -867,31 +867,27 @@ def index_doc_batch(
         user_file_id_to_raw_text: dict[int, str] = {}
         for document_id in updatable_ids:
             # Only calculate token counts for documents that have a user file ID
-            if (
-                document_id in doc_id_to_user_file_id
-                and doc_id_to_user_file_id[document_id] is not None
-            ):
-                user_file_id = doc_id_to_user_file_id[document_id]
-                if not user_file_id:
-                    continue
-                document_chunks = [
-                    chunk
-                    for chunk in chunks_with_embeddings
-                    if chunk.source_document.id == document_id
-                ]
-                if document_chunks:
-                    combined_content = " ".join(
-                        [chunk.content for chunk in document_chunks]
-                    )
-                    token_count = (
-                        len(llm_tokenizer.encode(combined_content))
-                        if llm_tokenizer
-                        else 0
-                    )
-                    user_file_id_to_token_count[user_file_id] = token_count
-                    user_file_id_to_raw_text[user_file_id] = combined_content
-                else:
-                    user_file_id_to_token_count[user_file_id] = None
+
+            user_file_id = doc_id_to_user_file_id.get(document_id)
+            if user_file_id is None:
+                continue
+
+            document_chunks = [
+                chunk
+                for chunk in chunks_with_embeddings
+                if chunk.source_document.id == document_id
+            ]
+            if document_chunks:
+                combined_content = " ".join(
+                    [chunk.content for chunk in document_chunks]
+                )
+                token_count = (
+                    len(llm_tokenizer.encode(combined_content)) if llm_tokenizer else 0
+                )
+                user_file_id_to_token_count[user_file_id] = token_count
+                user_file_id_to_raw_text[user_file_id] = combined_content
+            else:
+                user_file_id_to_token_count[user_file_id] = None
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.

@@ -267,6 +267,7 @@ class IndexingCoordination:
         index_attempt_id: int,
         current_batches_completed: int,
         timeout_hours: int = INDEXING_PROGRESS_TIMEOUT_HOURS,
+        force_update_progress: bool = False,
     ) -> bool:
         """
         Update progress tracking for stall detection.
@@ -281,7 +282,8 @@ class IndexingCoordination:
         current_time = get_db_current_time(db_session)
 
         # No progress - check if this is the first time tracking
-        if attempt.last_progress_time is None:
+        # or if the caller wants to simulate guaranteed progress
+        if attempt.last_progress_time is None or force_update_progress:
             # First time tracking - initialize
             attempt.last_progress_time = current_time
             attempt.last_batches_completed_count = current_batches_completed

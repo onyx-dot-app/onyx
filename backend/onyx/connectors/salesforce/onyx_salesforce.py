@@ -60,7 +60,7 @@ class OnyxSalesforce(Salesforce):
                 return True
 
         for suffix in SALESFORCE_BLACKLISTED_SUFFIXES:
-            if object_type_lower.endswith(prefix):
+            if object_type_lower.endswith(suffix):
                 return True
 
         return False
@@ -112,7 +112,7 @@ class OnyxSalesforce(Salesforce):
         object_id: str,
         sf_type: str,
         child_relationships: list[str],
-        relationships_to_fields: dict[str, list[str]],
+        relationships_to_fields: dict[str, set[str]],
     ) -> str:
         """Returns a SOQL query given the object id, type and child relationships.
 
@@ -148,7 +148,7 @@ class OnyxSalesforce(Salesforce):
         self,
         object_type: str,
         object_id: str,
-        type_to_queryable_fields: dict[str, list[str]],
+        type_to_queryable_fields: dict[str, set[str]],
     ) -> dict[str, Any] | None:
         record: dict[str, Any] = {}
 
@@ -172,7 +172,7 @@ class OnyxSalesforce(Salesforce):
         object_id: str,
         sf_type: str,
         child_relationships: list[str],
-        relationships_to_fields: dict[str, list[str]],
+        relationships_to_fields: dict[str, set[str]],
     ) -> dict[str, dict[str, Any]]:
         """There's a limit on the number of subqueries we can put in a single query."""
         child_records: dict[str, dict[str, Any]] = {}
@@ -264,10 +264,10 @@ class OnyxSalesforce(Salesforce):
                 time.sleep(3)
             raise
 
-    def get_queryable_fields_by_type(self, name: str) -> list[str]:
+    def get_queryable_fields_by_type(self, name: str) -> set[str]:
         object_description = self.describe_type(name)
         if object_description is None:
-            return []
+            return set()
 
         fields: list[dict[str, Any]] = object_description["fields"]
         valid_fields: set[str] = set()
@@ -286,7 +286,7 @@ class OnyxSalesforce(Salesforce):
             if field_name:
                 valid_fields.add(field_name)
 
-        return list(valid_fields - field_names_to_remove)
+        return valid_fields - field_names_to_remove
 
     def get_children_of_sf_type(self, sf_type: str) -> dict[str, str]:
         """Returns a dict of child object names to relationship names.

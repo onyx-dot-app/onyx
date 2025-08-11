@@ -8,10 +8,14 @@ from pathlib import Path
 from typing import Any
 
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
+from onyx.connectors.salesforce.utils import NAME_FIELD
 from onyx.connectors.salesforce.utils import SalesforceObject
+from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.connectors.salesforce.utils import validate_salesforce_id
 from onyx.utils.logger import setup_logger
 from shared_configs.utils import batch_list
+
 
 logger = setup_logger()
 
@@ -567,7 +571,7 @@ class OnyxSalesforceSQLite:
                         uncommitted_rows = 0
 
             # If we're updating User objects, update the email map
-            if object_type == "User":
+            if object_type == USER_OBJECT_TYPE:
                 OnyxSalesforceSQLite._update_user_email_map(cursor)
 
         return updated_ids
@@ -619,7 +623,7 @@ class OnyxSalesforceSQLite:
         with self._conn:
             cursor = self._conn.cursor()
             # Get the object data and account data
-            if object_type == "Account" or isChild:
+            if object_type == ACCOUNT_OBJECT_TYPE or isChild:
                 cursor.execute(
                     "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
                 )
@@ -638,7 +642,7 @@ class OnyxSalesforceSQLite:
 
             data = json.loads(result[0][0])
 
-            if object_type != "Account":
+            if object_type != ACCOUNT_OBJECT_TYPE:
 
                 # convert any account ids of the relationships back into data fields, with name
                 for row in result:
@@ -647,14 +651,14 @@ class OnyxSalesforceSQLite:
                     if len(row) < 3:
                         continue
 
-                    if row[1] and row[2] and row[2] == "Account":
+                    if row[1] and row[2] and row[2] == ACCOUNT_OBJECT_TYPE:
                         data["AccountId"] = row[1]
                         cursor.execute(
                             "SELECT data FROM salesforce_objects WHERE id = ?",
                             (row[1],),
                         )
                         account_data = json.loads(cursor.fetchone()[0])
-                        data["Account"] = account_data.get("Name", "")
+                        data[ACCOUNT_OBJECT_TYPE] = account_data.get(NAME_FIELD, "")
 
             return SalesforceObject(id=object_id, type=object_type, data=data)
 

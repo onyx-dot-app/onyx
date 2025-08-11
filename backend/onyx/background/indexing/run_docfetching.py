@@ -226,8 +226,12 @@ def _check_connector_and_attempt_status(
         raise ConnectorStopSignal(f"Index attempt {index_attempt_id} was canceled")
 
     if index_attempt_loop.status != IndexingStatus.IN_PROGRESS:
+        error_str = ""
+        if index_attempt_loop.error_msg:
+            error_str = f" Original error: {index_attempt_loop.error_msg}"
+
         raise RuntimeError(
-            f"Index Attempt is not running, status is {index_attempt_loop.status}"
+            f"Index Attempt is not running, status is {index_attempt_loop.status}.{error_str}"
         )
 
     if index_attempt_loop.celery_task_id is None:
@@ -832,7 +836,7 @@ def _run_indexing(
                 )
 
 
-def run_indexing_entrypoint(
+def run_docfetching_entrypoint(
     app: Celery,
     index_attempt_id: int,
     tenant_id: str,
@@ -1350,6 +1354,9 @@ def reissue_old_batches(
         )
         path_info = batch_storage.extract_path_info(batch_id)
         if path_info is None:
+            logger.warning(
+                f"Could not extract path info from batch {batch_id}, skipping"
+            )
             continue
         if path_info.cc_pair_id != cc_pair_id:
             raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")

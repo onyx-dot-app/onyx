@@ -82,8 +82,13 @@ export function LabelWithTooltip({
 }
 
 export function SubLabel({ children }: { children: string | JSX.Element }) {
+  // Add whitespace-pre-wrap for multiline descriptions (when children is a string with newlines)
+  const hasNewlines = typeof children === "string" && children.includes("\n");
+
   return (
-    <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+    <div
+      className={`text-sm text-neutral-600 dark:text-neutral-300 mb-2 ${hasNewlines ? "whitespace-pre-wrap" : ""}`}
+    >
       {children}
     </div>
   );
