@@ -403,6 +403,7 @@ class ConnectorIndexingStatusLite(BaseModel):
     last_success: datetime | None
     is_editable: bool
     docs_indexed: int
+    latest_index_attempt_docs_indexed: int | None
 
 
 class SourceSummary(BaseModel):

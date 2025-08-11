@@ -72,9 +72,13 @@ def get_answer_from_query(
 
 @retry(tries=10, delay=10)
 def check_indexing_status(env_name: str) -> tuple[int, bool]:
-    url = _api_url_builder(env_name, "/manage/admin/connector/indexing-status/")
+    url = _api_url_builder(
+        env_name, "/manage/admin/connector/indexing-status-paginated/"
+    )
     try:
-        indexing_status_dict = requests.get(url, headers=GENERAL_HEADERS).json()
+        indexing_status_dict = requests.post(
+            url, headers=GENERAL_HEADERS, json={"get_all_connectors": True}
+        ).json()
     except Exception as e:
         print("Failed to check indexing status, API server is likely starting up:")
         print(f"\t {str(e)}")
@@ -83,13 +87,15 @@ def check_indexing_status(env_name: str) -> tuple[int, bool]:
 
     ongoing_index_attempts = False
     doc_count = 0
-    for index_attempt in indexing_status_dict:
-        status = index_attempt["last_status"]
+    for connectors_by_source in indexing_status_dict:
+        connectors = connectors_by_source["indexing_statuses"]
+        for connector in connectors:
+            status = connector["last_status"]
         if status == IndexingStatus.IN_PROGRESS or status == IndexingStatus.NOT_STARTED:
             ongoing_index_attempts = True
         elif status == IndexingStatus.SUCCESS:
             doc_count += 16
-        doc_count += index_attempt["docs_indexed"]
+        doc_count += connector["docs_indexed"]
         doc_count -= 16
 
     # all the +16 and -16 are to account for the fact that the indexing status

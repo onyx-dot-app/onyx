@@ -25,7 +25,6 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
-from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
@@ -79,7 +78,6 @@ from onyx.db.connector_credential_pair import (
     fetch_connector_credential_pair_for_connector,
 )
 from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids
-from onyx.db.connector_credential_pair import get_cc_pair_groups_for_ids_parallel
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
 from onyx.db.connector_credential_pair import (
@@ -92,7 +90,6 @@ from onyx.db.credentials import delete_service_account_credentials
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.deletion_attempt import check_deletion_attempt_is_allowed
 from onyx.db.document import get_document_counts_for_cc_pairs
-from onyx.db.document import get_document_counts_for_cc_pairs_parallel
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -116,7 +113,6 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.documents.models import AuthStatus
 from onyx.server.documents.models import AuthUrl
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-from onyx.server.documents.models import ConnectorIndexingStatus
 from onyx.server.documents.models import ConnectorIndexingStatusLite
 from onyx.server.documents.models import ConnectorIndexingStatusLiteResponse
 from onyx.server.documents.models import ConnectorSnapshot
@@ -132,7 +128,6 @@ from onyx.server.documents.models import GmailCallback
 from onyx.server.documents.models import GoogleAppCredentials
 from onyx.server.documents.models import GoogleServiceAccountCredentialRequest
 from onyx.server.documents.models import GoogleServiceAccountKey
-from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import IndexingStatusRequest
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.documents.models import RunConnectorRequest
@@ -708,202 +703,6 @@ def get_connector_status(
     ]
 
 
-@router.get("/admin/connector/indexing-status")
-def get_connector_indexing_status(
-    secondary_index: bool = False,
-    user: User = Depends(current_curator_or_admin_user),
-    db_session: Session = Depends(get_session),
-    get_editable: bool = Query(
-        False, description="If true, return editable document sets"
-    ),
-) -> list[ConnectorIndexingStatus]:
-    tenant_id = get_current_tenant_id()
-    indexing_statuses: list[ConnectorIndexingStatus] = []
-
-    if MOCK_CONNECTOR_FILE_PATH:
-        import json
-
-        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
-            raw_data = json.load(f)
-            connector_indexing_statuses = [
-                ConnectorIndexingStatus(**status) for status in raw_data
-            ]
-        return connector_indexing_statuses
-
-    # NOTE: If the connector is deleting behind the scenes,
-    # accessing cc_pairs can be inconsistent and members like
-    # connector or credential may be None.
-    # Additional checks are done to make sure the connector and credential still exist.
-    # TODO: make this one query ... possibly eager load or wrap in a read transaction
-    # to avoid the complexity of trying to error check throughout the function
-
-    # see https://stackoverflow.com/questions/75758327/
-    # sqlalchemy-method-connection-for-bind-is-already-in-progress
-    # for why we can't pass in the current db_session to these functions
-    (
-        cc_pairs,
-        latest_index_attempts,
-        latest_finished_index_attempts,
-    ) = run_functions_tuples_in_parallel(
-        [
-            (
-                # Gets the connector/credential pairs for the user
-                get_connector_credential_pairs_for_user_parallel,
-                (user, get_editable, None, True, True, True),
-            ),
-            (
-                # Gets the most recent index attempt for each connector/credential pair
-                get_latest_index_attempts_parallel,
-                (secondary_index, True, False),
-            ),
-            (
-                # Gets the most recent FINISHED index attempt for each connector/credential pair
-                get_latest_index_attempts_parallel,
-                (secondary_index, True, True),
-            ),
-        ]
-    )
-    cc_pairs = cast(list[ConnectorCredentialPair], cc_pairs)
-    latest_index_attempts = cast(list[IndexAttempt], latest_index_attempts)
-    latest_finished_index_attempts = cast(
-        list[IndexAttempt], latest_finished_index_attempts
-    )
-
-    cc_pair_to_latest_index_attempt = {
-        (
-            index_attempt.connector_credential_pair.connector_id,
-            index_attempt.connector_credential_pair.credential_id,
-        ): index_attempt
-        for index_attempt in latest_index_attempts
-    }
-
-    cc_pair_to_latest_finished_index_attempt = {
-        (
-            index_attempt.connector_credential_pair.connector_id,
-            index_attempt.connector_credential_pair.credential_id,
-        ): index_attempt
-        for index_attempt in latest_finished_index_attempts
-    }
-
-    document_count_info, group_cc_pair_relationships = run_functions_tuples_in_parallel(
-        [
-            (
-                get_document_counts_for_cc_pairs_parallel,
-                (
-                    [
-                        ConnectorCredentialPairIdentifier(
-                            connector_id=cc_pair.connector_id,
-                            credential_id=cc_pair.credential_id,
-                        )
-                        for cc_pair in cc_pairs
-                    ],
-                ),
-            ),
-            (
-                get_cc_pair_groups_for_ids_parallel,
-                ([cc_pair.id for cc_pair in cc_pairs],),
-            ),
-        ]
-    )
-    document_count_info = cast(list[tuple[int, int, int]], document_count_info)
-    group_cc_pair_relationships = cast(
-        list[UserGroup__ConnectorCredentialPair], group_cc_pair_relationships
-    )
-
-    cc_pair_to_document_cnt = {
-        (connector_id, credential_id): cnt
-        for connector_id, credential_id, cnt in document_count_info
-    }
-
-    group_cc_pair_relationships_dict: dict[int, list[int]] = {}
-    for relationship in group_cc_pair_relationships:
-        group_cc_pair_relationships_dict.setdefault(relationship.cc_pair_id, []).append(
-            relationship.user_group_id
-        )
-
-    connector_to_cc_pair_ids: dict[int, list[int]] = {}
-    for cc_pair in cc_pairs:
-        connector_to_cc_pair_ids.setdefault(cc_pair.connector_id, []).append(cc_pair.id)
-
-    for cc_pair in cc_pairs:
-        # TODO remove this to enable ingestion API
-        if cc_pair.name == "DefaultCCPair":
-            continue
-
-        connector = cc_pair.connector
-        credential = cc_pair.credential
-        if not connector or not credential:
-            # This may happen if background deletion is happening
-            continue
-
-        latest_index_attempt = cc_pair_to_latest_index_attempt.get(
-            (connector.id, credential.id)
-        )
-        in_progress = bool(
-            latest_index_attempt
-            and latest_index_attempt.status == IndexingStatus.IN_PROGRESS
-        )
-
-        latest_finished_attempt = cc_pair_to_latest_finished_index_attempt.get(
-            (connector.id, credential.id)
-        )
-
-        # Safely get the owner email, handling detached instances
-        owner_email = ""
-        try:
-            if credential.user:
-                owner_email = credential.user.email
-        except Exception:
-            # If there's any error accessing the user (like DetachedInstanceError),
-            # we'll just use an empty string for the owner email
-            pass
-
-        indexing_statuses.append(
-            ConnectorIndexingStatus(
-                cc_pair_id=cc_pair.id,
-                name=cc_pair.name,
-                in_progress=in_progress,
-                cc_pair_status=cc_pair.status,
-                in_repeated_error_state=cc_pair.in_repeated_error_state,
-                connector=ConnectorSnapshot.from_connector_db_model(
-                    connector, connector_to_cc_pair_ids.get(connector.id, [])
-                ),
-                credential=CredentialSnapshot.from_credential_db_model(credential),
-                access_type=cc_pair.access_type,
-                owner=owner_email,
-                groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
-                last_finished_status=(
-                    latest_finished_attempt.status if latest_finished_attempt else None
-                ),
-                last_status=(
-                    latest_index_attempt.status if latest_index_attempt else None
-                ),
-                last_success=cc_pair.last_successful_index_time,
-                docs_indexed=cc_pair_to_document_cnt.get(
-                    (connector.id, credential.id), 0
-                ),
-                latest_index_attempt=(
-                    IndexAttemptSnapshot.from_index_attempt_db_model(
-                        latest_index_attempt
-                    )
-                    if latest_index_attempt
-                    else None
-                ),
-            )
-        )
-
-    # Visiting admin page brings the user to the current connectors page which calls this endpoint
-    create_milestone_and_report(
-        user=user,
-        distinct_id=user.email if user else tenant_id or "N/A",
-        event_type=MilestoneRecordType.VISITED_ADMIN_PAGE,
-        properties=None,
-        db_session=db_session,
-    )
-
-    return indexing_statuses
-
-
 @router.post("/admin/connector/indexing-status-paginated")
 def get_connector_indexing_status_paginated(
     request: IndexingStatusRequest,
@@ -1231,6 +1030,9 @@ def _get_connector_indexing_status_lite(
         last_status=latest_index_attempt.status if latest_index_attempt else None,
         last_success=cc_pair.last_successful_index_time,
         docs_indexed=document_cnt,
+        latest_index_attempt_docs_indexed=(
+            latest_index_attempt.total_docs_indexed if latest_index_attempt else None
+        ),
     )
 
 
