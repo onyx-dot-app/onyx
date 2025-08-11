@@ -446,12 +446,6 @@ class OnyxCeleryTask:
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
-<<<<<<< HEAD
-    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = "connector_permission_sync_generator_task"
-    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = "update_external_document_permissions_task"
-    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = "connector_external_group_sync_generator_task"
-    CONNECTOR_INDEXING_PROXY_TASK = "connector_indexing_proxy_task"
-=======
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
     )
@@ -466,7 +460,6 @@ class OnyxCeleryTask:
     CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
     DOCPROCESSING_TASK = "docprocessing_task"
 
->>>>>>> v1.2.0
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
