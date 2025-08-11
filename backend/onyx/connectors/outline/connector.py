@@ -359,7 +359,9 @@ class OutlineConnector(LoadConnector, PollConnector):
             text_content += f"\n\n{description}"
 
         # Build URL
-        url = f"{getattr(self.outline_client, 'base_url', '')}/collection/{collection.get('slug', collection_id)}"
+        if not self.outline_client:
+            raise ConnectorMissingCredentialError("Outline client not initialized")
+        url = f"{self.outline_client.base_url}/collection/{collection.get('slug', collection_id)}"
 
         # Parse update time
         updated_at_str = collection.get("updatedAt")
@@ -419,7 +421,9 @@ class OutlineConnector(LoadConnector, PollConnector):
         text_content = document.get("text", "")
 
         # Build document URL
-        url = getattr(self.outline_client, "base_url", "") + f"/doc/{doc_id}"
+        if not self.outline_client:
+            raise ConnectorMissingCredentialError("Outline client not initialized")
+        url = f"{self.outline_client.base_url}/doc/{doc_id}"
 
         # Parse update time
         updated_at_str = document.get("updatedAt")

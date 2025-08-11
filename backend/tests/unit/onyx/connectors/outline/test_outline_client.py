@@ -200,7 +200,9 @@ class TestOutlineApiClient:
         # Mock response with invalid JSON
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.side_effect = ValueError("No JSON object could be decoded")
+        mock_response.json.side_effect = requests.exceptions.JSONDecodeError(
+            "No JSON object could be decoded", "", 0
+        )
         mock_post.return_value = mock_response
 
         client = OutlineApiClient("https://example.com", "token")

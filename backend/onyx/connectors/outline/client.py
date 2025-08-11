@@ -82,6 +82,7 @@ class OutlineApiClient:
         - Adds https:// prefix if no protocol is specified
         - Removes trailing slashes to ensure consistent URL building
         - Validates that the URL has a valid netloc (domain)
+        - Ensures the domain contains at least one dot or is localhost
 
         Args:
             url: The raw URL input from the user
@@ -90,14 +91,24 @@ class OutlineApiClient:
             Normalized URL in the format: "https://domain.com/path" (no trailing slash)
 
         Raises:
-            ValueError: If the URL is empty or lacks a valid domain
+            ValueError: If the URL is empty or lacks a valid domain structure
         """
+        if not url.strip():
+            raise ValueError("Invalid Outline base URL: URL cannot be empty")
+
         if not url.startswith(("http://", "https://")):
             url = "https://" + url
 
         parsed = urlparse(url)
         if not parsed.netloc:
             raise ValueError(f"Invalid Outline base URL: {url}")
+
+        # Validate domain structure - must contain a dot (like example.com) or be localhost
+        netloc = parsed.netloc.split(":")[0]  # Remove port if present
+        if netloc != "localhost" and "." not in netloc:
+            raise ValueError(
+                f"Invalid Outline base URL: {url} - domain must contain a dot or be localhost"
+            )
 
         # Ensure URL ends without trailing slash
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
@@ -198,7 +209,7 @@ class OutlineApiClient:
         """
         try:
             json_data = response.json()
-        except ValueError:
+        except requests.exceptions.JSONDecodeError:
             json_data = {}
 
         if response.status_code == 401:

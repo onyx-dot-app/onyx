@@ -139,11 +139,13 @@ def test_outline_connector_invalid_url() -> None:
 
     connector = OutlineConnector()
 
-    # Test with completely invalid URL format
-    with pytest.raises(ConnectorValidationError, match="Invalid Outline base URL"):
+    # Test with invalid domain structure (no dots, not localhost)
+    with pytest.raises(
+        ConnectorValidationError, match="domain must contain a dot or be localhost"
+    ):
         connector.load_credentials(
             {
-                "outline_base_url": "http://",  # Invalid URL with no netloc
+                "outline_base_url": "invalid-domain",  # Invalid domain - no dots
                 "outline_api_token": "some-token",
             }
         )
