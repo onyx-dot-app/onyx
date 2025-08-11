@@ -293,7 +293,6 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
             ],
             tools=tools,
             tool_choice=None,
-            max_tokens=None,
             stream=True,
             temperature=0.0,  # Default value from GEN_AI_TEMPERATURE
             timeout=30,
