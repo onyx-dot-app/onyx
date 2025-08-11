@@ -281,7 +281,7 @@ const AssistantCard: React.FC<{
 
           <div className="flex flex-col ">
             <div className="my-1.5">
-              <p className="flex items-center text-neutral-800 dark:text-neutral-200 text-xs opacity-50">
+              <p className="flex flex-wrap items-center text-neutral-800 dark:text-neutral-200 text-xs opacity-50">
                 {persona.owner?.email || persona.builtin_persona ? (
                   <>
                     <span className="truncate">
@@ -304,15 +304,15 @@ const AssistantCard: React.FC<{
                 </span>
                 <span className="mx-2">{i18n.t(k._11)}</span>
                 {persona.is_public ? (
-                  <>
+                  <div>
                     <FiUnlock size={12} className="inline mr-1" />
                     {i18n.t(k.PUBLIC)}
-                  </>
+                  </div>
                 ) : (
-                  <>
+                  <div>
                     <FiLock size={12} className="inline mr-1" />
                     {i18n.t(k.PRIVATE1)}
-                  </>
+                  </div>
                 )}
               </p>
             </div>
@@ -352,7 +352,7 @@ const AssistantCard: React.FC<{
                   >
                     <PinnedIcon size={12} />
                     {!pinned ? (
-                      <p className="absolute w-full left-0 group-hover:text-neutral-900 dark:group-hover:text-neutral-100 w-full text-center transform text-xs">
+                      <p className="w-full left-0 group-hover:text-neutral-900 dark:group-hover:text-neutral-100 w-full text-center transform text-xs">
                         {i18n.t(k.PIN)}
                       </p>
                     ) : (

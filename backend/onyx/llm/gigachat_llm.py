@@ -3,6 +3,7 @@ import os
 import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta
+from random import randint
 
 import requests
 import uuid
@@ -32,6 +33,28 @@ GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_TOKEN_DELTA = 5
 GIGACHAT_MAX_OUTPUT_TOKENS = 1200
 GIGACHAT_TIMEOUT = 120
+
+
+def retry(max_retries, max_wait_time):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                logger.info(f"retry: {retries} start")
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                except Exception as e:
+                    retries += 1
+                    time.sleep(randint(1, max_wait_time))
+                logger.info(f"retry: {retries} end")
+            langfuse_context.update_current_observation(
+                level="ERROR",
+                status_message=f"Max retries of function {func} exceeded"
+            )
+            raise Exception(f"Max retries of function {func} exceeded")
+        return wrapper
+    return decorator
 
 
 
@@ -77,7 +100,7 @@ class GigachatModelServer(LLM):
         self,
         api_key: str | None,
         endpoint: str | None,
-        custom_config: dict[str, str] | None = None,
+        custom_config: str | None = None,
         timeout: int = GIGACHAT_TIMEOUT,
         max_output_tokens: int = GIGACHAT_MAX_OUTPUT_TOKENS,
         model: str | None = None
@@ -132,43 +155,29 @@ class GigachatModelServer(LLM):
             "function_call": tool_choice,
             "functions": tools,
             "stream": False,
-            "repetition_penalty": 1
+            "repetition_penalty": 1,
+            "profanity_check": False,
         })
-        try:
-            max_retries = 10
-            base_delay = 2
-            response_content_request: dict | None = None
-            for attempt in range(max_retries):
+
+        @retry(10, 10)
+        def get_answer() -> str:
+            try:
                 response = requests.request("POST", self._endpoint, headers=headers, data=data, verify=False)
                 response_content_request = json.loads(response.text)
-                logger.info(response_content_request)
-                if response.status_code != 429:
-                    break
-                retry_after = response.headers.get('Retry-After')
-
-                if retry_after:
-                    try:
-                        wait_time = int(retry_after)
-                    except ValueError:
-                        wait_time = base_delay * (2 ** attempt)
-                else:
-                    wait_time = base_delay * (2 ** attempt)
-                time.sleep(wait_time)
-            if response_content_request:
-                response_content = response_content_request["choices"][0]["message"]["content"]
                 langfuse_context.update_current_observation(
-                    output=response_content
+                    output=response_content_request
                 )
-                return AIMessage(content=response_content)
-            else:
-                raise Timeout()
-        except Timeout as error:
-            langfuse_context.update_current_observation(
-                level="ERROR",
-                status_message=f"Model inference to {self._endpoint} timed out"
-            )
+                response_content = response_content_request["choices"][0]["message"]["content"]
+                return response_content
+            except Timeout as error:
+                raise Timeout(f"Model inference to {self._endpoint} timed out") from error
 
-            raise Timeout(f"Model inference to {self._endpoint} timed out") from error
+        response_content = get_answer()
+
+        return AIMessage(content=response_content)
+
+
+
 
     def log_model_configs(self) -> None:
         logger.debug(f"Custom model at: {self._endpoint}")

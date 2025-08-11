@@ -228,6 +228,8 @@ def get_default_llms(
     return _create_llm(model_name), _create_llm(fast_model_name)
 
 
+_gigachat_instances: dict[tuple[str, str], GigachatModelServer] = {}
+
 def get_llm(
     provider: str,
     model: str,
@@ -244,12 +246,15 @@ def get_llm(
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
     if provider == "gigachat":
-        return GigachatModelServer(
-            api_key=api_key,
-            endpoint=api_base,
-            model=model,
-            custom_config=custom_config
-        )
+        key = (api_key, api_base)
+        if key not in _gigachat_instances:
+            _gigachat_instances[key] = GigachatModelServer(
+                api_key=api_key,
+                endpoint=api_base,
+                model=model,
+                custom_config=custom_config
+            )
+        return _gigachat_instances[key]
     elif provider == "yandexgpt":
         return YandexGPTModelServer(
             api_key=api_key,
