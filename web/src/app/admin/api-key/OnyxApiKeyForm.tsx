@@ -8,12 +8,17 @@ import {
   TextFormField,
 } from "@/components/admin/connectors/Field";
 import { createApiKey, updateApiKey } from "./lib";
+import { FiPlus, FiX } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import Text from "@/components/ui/text";
 import { USER_ROLE_LABELS, UserRole } from "@/lib/types";
 import { APIKey } from "./types";
+import { SearchMultiSelectDropdown } from "@/components/Dropdown";
+import { useUsers } from "@/lib/hooks";
+import { UsersIcon } from "@/components/icons/icons";
+import { useState } from "react";
 
 interface OnyxApiKeyFormProps {
   onClose: () => void;
@@ -28,7 +33,15 @@ export const OnyxApiKeyForm = ({
   onCreateApiKey,
   apiKey,
 }: OnyxApiKeyFormProps) => {
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+
   const isUpdate = apiKey !== undefined;
+
+  const {
+    data: users,
+    isLoading: userIsLoading,
+    error: usersError,
+  } = useUsers({ includeApiKeys: true });
 
   return (
     <Modal onOutsideClick={onClose} width="w-2/6">
@@ -51,6 +64,7 @@ export const OnyxApiKeyForm = ({
             const payload = {
               ...values,
               role: values.role as UserRole, // Assign the role directly as a UserRole type
+              user_id: selectedUserIds[0],
             };
 
             let response;
@@ -115,6 +129,37 @@ export const OnyxApiKeyForm = ({
                     value: UserRole.ADMIN.toString(),
                   },
                 ]}
+              />
+
+              <SearchMultiSelectDropdown
+                options={
+                  !userIsLoading && users
+                    ? users.accepted
+                        .filter((user) => !selectedUserIds.includes(user.id))
+                        .map((user) => {
+                          return {
+                            name: user.email,
+                            value: user.id,
+                          };
+                        })
+                    : []
+                }
+                onSelect={(option) => {
+                  setSelectedUserIds([
+                    ...Array.from(
+                      new Set([...selectedUserIds, option.value as string])
+                    ),
+                  ]);
+                }}
+                itemComponent={({ option }) => (
+                  <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
+                    <UsersIcon className="mr-2 my-auto" />
+                    {option.name}
+                    <div className="ml-auto my-auto">
+                      <FiPlus />
+                    </div>
+                  </div>
+                )}
               />
 
               <Button
