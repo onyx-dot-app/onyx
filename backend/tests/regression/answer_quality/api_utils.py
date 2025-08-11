@@ -91,12 +91,15 @@ def check_indexing_status(env_name: str) -> tuple[int, bool]:
         connectors = connectors_by_source["indexing_statuses"]
         for connector in connectors:
             status = connector["last_status"]
-        if status == IndexingStatus.IN_PROGRESS or status == IndexingStatus.NOT_STARTED:
-            ongoing_index_attempts = True
-        elif status == IndexingStatus.SUCCESS:
-            doc_count += 16
-        doc_count += connector["docs_indexed"]
-        doc_count -= 16
+            if (
+                status == IndexingStatus.IN_PROGRESS
+                or status == IndexingStatus.NOT_STARTED
+            ):
+                ongoing_index_attempts = True
+            elif status == IndexingStatus.SUCCESS:
+                doc_count += 16
+            doc_count += connector["docs_indexed"]
+            doc_count -= 16
 
     # all the +16 and -16 are to account for the fact that the indexing status
     # is only updated every 16 documents and will tells us how many are
