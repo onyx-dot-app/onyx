@@ -25,6 +25,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import ENABLED_CONNECTOR_TYPES
+from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
@@ -103,10 +104,8 @@ from onyx.db.models import FederatedConnector
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import User
-from onyx.db.models import UserGroup__ConnectorCredentialPair
-from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.db.models import UserRole
-from onyx.file_processing.extract_file_text import convert_docx_to_txt
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -729,6 +728,29 @@ def get_connector_indexing_status_paginated(
     # such as "My Documents", where each file is its own connector. In large deployments,
     # this could result in 100k+ connectors. Consider optimizing with pagination or
     # reevaluating the need for the summary to improve performance in the future.
+
+    if MOCK_CONNECTOR_FILE_PATH:
+        import json
+
+        with open(MOCK_CONNECTOR_FILE_PATH, "r") as f:
+            raw_data = json.load(f)
+            connector_indexing_statuses = [
+                ConnectorIndexingStatusLite(**status) for status in raw_data
+            ]
+        return [
+            ConnectorIndexingStatusLiteResponse(
+                source=DocumentSource.FILE,
+                summary=SourceSummary(
+                    total_connectors=100,
+                    active_connectors=100,
+                    public_connectors=100,
+                    total_docs_indexed=100000,
+                ),
+                current_page=1,
+                total_pages=1,
+                indexing_statuses=connector_indexing_statuses,
+            )
+        ]
 
     parallel_functions: list[tuple[CallableProtocol, tuple[Any, ...]]] = [
         # Get editable connector/credential pairs

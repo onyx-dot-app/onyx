@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
 from datetime import UTC
@@ -418,7 +419,7 @@ class ConnectorIndexingStatusLiteResponse(BaseModel):
     summary: SourceSummary
     current_page: int
     total_pages: int
-    indexing_statuses: list[ConnectorIndexingStatusLite | FederatedConnectorStatus]
+    indexing_statuses: Sequence[ConnectorIndexingStatusLite | FederatedConnectorStatus]
 
 
 class ConnectorCredentialPairIdentifier(BaseModel):
