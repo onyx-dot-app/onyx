@@ -35,30 +35,6 @@ class LoggerContextVars:
         doc_permission_sync_ctx.set(dict())
 
 
-class TaskAttemptSingleton:
-    """Used to tell if this process is an indexing job, and if so what is the
-    unique identifier for this indexing attempt. For things like the API server,
-    main background job (scheduler), etc. this will not be used."""
-
-    _INDEX_ATTEMPT_ID: None | int = None
-    _CONNECTOR_CREDENTIAL_PAIR_ID: None | int = None
-
-    @classmethod
-    def get_index_attempt_id(cls) -> None | int:
-        return cls._INDEX_ATTEMPT_ID
-
-    @classmethod
-    def get_connector_credential_pair_id(cls) -> None | int:
-        return cls._CONNECTOR_CREDENTIAL_PAIR_ID
-
-    @classmethod
-    def set_cc_and_index_id(
-        cls, index_attempt_id: int, connector_credential_pair_id: int
-    ) -> None:
-        cls._INDEX_ATTEMPT_ID = index_attempt_id
-        cls._CONNECTOR_CREDENTIAL_PAIR_ID = connector_credential_pair_id
-
-
 def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     log_level_dict = {
         "CRITICAL": logging.CRITICAL,
@@ -105,18 +81,10 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
 
             index_attempt_info = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
             if index_attempt_info:
-                cc_pair_id: int | None = index_attempt_info[0]
-                index_attempt_id: int | None = index_attempt_info[1]
-
-            else:
-                index_attempt_id = TaskAttemptSingleton.get_index_attempt_id()
-                cc_pair_id = TaskAttemptSingleton.get_connector_credential_pair_id()
-
-            if index_attempt_id is not None:
-                msg = f"[Index Attempt: {index_attempt_id}] {msg}"
-
-            if cc_pair_id is not None:
-                msg = f"[CC Pair: {cc_pair_id}] {msg}"
+                cc_pair_id, index_attempt_id = index_attempt_info
+                msg = (
+                    f"[Index Attempt: {index_attempt_id}] [CC Pair: {cc_pair_id}] {msg}"
+                )
 
             break
 

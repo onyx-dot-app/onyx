@@ -1087,7 +1087,6 @@ def _docprocessing_task(
 
     # Cannot use the TaskSingleton approach here because the worker is multithreaded
     INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
-    task_logger
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
