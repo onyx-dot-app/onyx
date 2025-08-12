@@ -34,7 +34,7 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const [selectedUser, setSelectedUser] = useState<
-    { email: string; id: string }[]
+    { name: string; id: string }[]
   >([]);
 
   const isUpdate = apiKey !== undefined;
@@ -141,6 +141,7 @@ export const OnyxApiKeyForm = ({
                           (user) =>
                             !selectedUser.some((sUser) => sUser.id === user.id)
                         )
+                        .filter((user) => !user.email.includes("api_key"))
                         .map((user) => {
                           return {
                             name: user.email,
@@ -180,7 +181,7 @@ export const OnyxApiKeyForm = ({
                         }}
                         className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
                       >
-                        {sUser.email}
+                        {sUser.name}
                         <FiX className="ml-2 text-blue-500" />
                       </div>
                     ))}
