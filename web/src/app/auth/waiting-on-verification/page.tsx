@@ -29,9 +29,10 @@ export default async function Page({
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
-  const nextUrl = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0] || "/"
-    : searchParams?.next || "/";
+  const nextUrl =
+    (Array.isArray(searchParams?.next)
+      ? searchParams?.next[0]
+      : searchParams?.next) || "/";
 
   if (!currentUser) {
     if (authTypeMetadata?.authType === "disabled") {
