@@ -48,7 +48,7 @@ const Page = async (props: {
     });
 
     if (authTypeMetadata?.requiresVerification && !currentUser.is_verified) {
-      return redirect(`/auth/waiting-on-verification?next=${nextUrl}`);
+      return redirect("/auth/waiting-on-verification");
     }
 
     // Add a query parameter to indicate this is a redirect from login
