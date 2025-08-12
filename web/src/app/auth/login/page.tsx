@@ -15,9 +15,10 @@ const Page = async (props: {
 }) => {
   const searchParams = await props.searchParams;
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
-  const nextUrl = Array.isArray(searchParams?.next)
-    ? searchParams?.next[0] || "/"
-    : searchParams?.next || "/";
+  const nextUrl =
+    (Array.isArray(searchParams?.next)
+      ? searchParams?.next[0]
+      : searchParams?.next) || "/";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
