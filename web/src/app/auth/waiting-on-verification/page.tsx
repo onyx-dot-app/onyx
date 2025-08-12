@@ -10,7 +10,11 @@ import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
 import { Logo } from "@/components/logo/Logo";
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
   // will not render
@@ -25,15 +29,19 @@ export default async function Page() {
     console.log(`Some fetch failed for the login page - ${e}`);
   }
 
+  const nextUrl = Array.isArray(searchParams?.next)
+    ? searchParams?.next[0] || "/"
+    : searchParams?.next || "/";
+
   if (!currentUser) {
     if (authTypeMetadata?.authType === "disabled") {
-      return redirect("/chat");
+      return redirect(nextUrl);
     }
-    return redirect("/auth/login");
+    return redirect(`/auth/login?next=${nextUrl}`);
   }
 
   if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
-    return redirect("/chat");
+    return redirect(nextUrl);
   }
 
   return (
