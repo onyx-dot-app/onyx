@@ -1149,17 +1149,20 @@ export function AssistantEditor({
                         />
 
                         {langflowToolEnabled() && (
-                          <div className="pl-4 border-l-2 ml-4 border-border">
+                          <div className="pl-4 border-l-2 ml-4 border-border flex flex-col gap-4 mb-4">
                             {ccPairs.length > 0 && (
                               <>
                                 <TextFormField
                                   name="pipeline_id"
                                   label="Id пайплайна"
+                                  placeholder="Введите идентификатор пайплайна"
+                                  subtext="Идентификатор пайплайна Langflow"
                                 />
 
                                 <BooleanFormField
                                   name="use_default"
-                                  label="Использовать по умолчанию"
+                                  label="Использовать инструмент для всех запросов"
+                                  subtext="Если включено, все запросы после ввода будут отправляться в инструмент без предварительной проверки необходимости его использования"
                                 />
                               </>
                             )}
