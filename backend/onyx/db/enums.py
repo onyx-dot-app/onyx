@@ -72,6 +72,9 @@ class IndexModelStatus(str, PyEnum):
     def is_current(self) -> bool:
         return self == IndexModelStatus.PRESENT
 
+    def is_future(self) -> bool:
+        return self == IndexModelStatus.FUTURE
+
 
 class ChatSessionSharedStatus(str, PyEnum):
     PUBLIC = "public"
