@@ -851,7 +851,9 @@ def run_docfetching_entrypoint(
 
     # set the indexing attempt ID so that all log messages from this process
     # will have it added as a prefix
-    INDEX_ATTEMPT_INFO_CONTEXTVAR.set((connector_credential_pair_id, index_attempt_id))
+    token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set(
+        (connector_credential_pair_id, index_attempt_id)
+    )
     with get_session_with_current_tenant() as db_session:
         attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
 
@@ -887,6 +889,8 @@ def run_docfetching_entrypoint(
         f"config='{connector_config}' "
         f"credentials='{credential_id}'"
     )
+
+    INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
 def connector_document_extraction(

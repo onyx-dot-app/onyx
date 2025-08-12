@@ -1072,9 +1072,12 @@ def docprocessing_task(
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
     try:
+        # Cannot use the TaskSingleton approach here because the worker is multithreaded
+        token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
         _docprocessing_task(index_attempt_id, cc_pair_id, tenant_id, batch_num)
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
+        INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
 def _docprocessing_task(
@@ -1085,8 +1088,6 @@ def _docprocessing_task(
 ) -> None:
     start_time = time.monotonic()
 
-    # Cannot use the TaskSingleton approach here because the worker is multithreaded
-    INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
