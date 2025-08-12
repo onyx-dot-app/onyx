@@ -34,8 +34,12 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const [selectedUser, setSelectedUser] = useState<
-    { name: string; value: string }[]
-  >([]);
+    | {
+        name: string;
+        value: string;
+      }
+    | undefined
+  >();
 
   const isUpdate = apiKey !== undefined;
 
@@ -66,7 +70,7 @@ export const OnyxApiKeyForm = ({
             const payload = {
               ...values,
               role: values.role as UserRole, // Assign the role directly as a UserRole type
-              user_id: selectedUser[0].value,
+              user_id: selectedUser?.value,
             };
 
             console.log("TEST API_KEY", payload, selectedUser);
@@ -139,12 +143,7 @@ export const OnyxApiKeyForm = ({
                 options={
                   !userIsLoading && users
                     ? users.accepted
-                        .filter(
-                          (user) =>
-                            !selectedUser.some(
-                              (sUser) => sUser.value === user.id
-                            )
-                        )
+                        .filter((user) => selectedUser?.value !== user.id)
                         .filter((user) => !user.email.includes("api_key"))
                         .map((user) => {
                           return {
@@ -156,7 +155,7 @@ export const OnyxApiKeyForm = ({
                 }
                 onSelect={(option) => {
                   // @ts-ignore
-                  setSelectedUser([...selectedUser, option]);
+                  setSelectedUser(option);
                 }}
                 itemComponent={({ option }) => (
                   <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
@@ -169,28 +168,22 @@ export const OnyxApiKeyForm = ({
                 )}
               />
 
-              {selectedUser.length > 0 && (
+              {selectedUser?.name && (
                 <div className="mb-6">
                   <h4 className="text-sm font-medium text-text-700 mb-2">
                     {i18n.t(k.SELECTED_USERS)}
                   </h4>
                   <div className="flex flex-wrap gap-2">
-                    {selectedUser.map((sUser) => (
-                      <div
-                        key={sUser.value}
-                        onClick={() => {
-                          setSelectedUser(
-                            selectedUser.filter(
-                              (user) => user.value !== sUser.value
-                            )
-                          );
-                        }}
-                        className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
-                      >
-                        {sUser.name}
-                        <FiX className="ml-2 text-blue-500" />
-                      </div>
-                    ))}
+                    <div
+                      key={selectedUser?.value}
+                      onClick={() => {
+                        setSelectedUser(undefined);
+                      }}
+                      className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
+                    >
+                      {selectedUser?.name}
+                      <FiX className="ml-2 text-blue-500" />
+                    </div>
                   </div>
                 </div>
               )}
