@@ -62,6 +62,9 @@ class Settings(BaseModel):
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True
 
+    # Connector settings
+    show_extra_connectors: bool | None = True
+
 
 class UserSettings(Settings):
     notifications: list[Notification]

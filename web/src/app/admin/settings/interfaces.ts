@@ -30,6 +30,9 @@ export interface Settings {
 
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
+
+  // Connector settings
+  show_extra_connectors?: boolean;
 }
 
 export enum NotificationType {
