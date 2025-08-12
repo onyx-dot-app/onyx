@@ -34,7 +34,7 @@ export const OnyxApiKeyForm = ({
   apiKey,
 }: OnyxApiKeyFormProps) => {
   const [selectedUser, setSelectedUser] = useState<
-    { name: string; id: string }[]
+    { name: string; value: string }[]
   >([]);
 
   const isUpdate = apiKey !== undefined;
@@ -66,7 +66,7 @@ export const OnyxApiKeyForm = ({
             const payload = {
               ...values,
               role: values.role as UserRole, // Assign the role directly as a UserRole type
-              user_id: selectedUser[0].id,
+              user_id: selectedUser[0].value,
             };
 
             let response;
@@ -139,7 +139,9 @@ export const OnyxApiKeyForm = ({
                     ? users.accepted
                         .filter(
                           (user) =>
-                            !selectedUser.some((sUser) => sUser.id === user.id)
+                            !selectedUser.some(
+                              (sUser) => sUser.value === user.id
+                            )
                         )
                         .filter((user) => !user.email.includes("api_key"))
                         .map((user) => {
@@ -173,10 +175,12 @@ export const OnyxApiKeyForm = ({
                   <div className="flex flex-wrap gap-2">
                     {selectedUser.map((sUser) => (
                       <div
-                        key={sUser.id}
+                        key={sUser.value}
                         onClick={() => {
                           setSelectedUser(
-                            selectedUser.filter((user) => user.id !== sUser.id)
+                            selectedUser.filter(
+                              (user) => user.value !== sUser.value
+                            )
                           );
                         }}
                         className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
