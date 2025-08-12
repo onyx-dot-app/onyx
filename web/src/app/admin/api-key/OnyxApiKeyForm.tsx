@@ -33,7 +33,9 @@ export const OnyxApiKeyForm = ({
   onCreateApiKey,
   apiKey,
 }: OnyxApiKeyFormProps) => {
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [selectedUser, setSelectedUser] = useState<
+    { email: string; id: string }[]
+  >([]);
 
   const isUpdate = apiKey !== undefined;
 
@@ -64,7 +66,7 @@ export const OnyxApiKeyForm = ({
             const payload = {
               ...values,
               role: values.role as UserRole, // Assign the role directly as a UserRole type
-              user_id: selectedUserIds[0],
+              user_id: selectedUser[0].id,
             };
 
             let response;
@@ -135,7 +137,10 @@ export const OnyxApiKeyForm = ({
                 options={
                   !userIsLoading && users
                     ? users.accepted
-                        .filter((user) => !selectedUserIds.includes(user.id))
+                        .filter(
+                          (user) =>
+                            !selectedUser.some((sUser) => sUser.id === user.id)
+                        )
                         .map((user) => {
                           return {
                             name: user.email,
@@ -145,11 +150,8 @@ export const OnyxApiKeyForm = ({
                     : []
                 }
                 onSelect={(option) => {
-                  setSelectedUserIds([
-                    ...Array.from(
-                      new Set([...selectedUserIds, option.value as string])
-                    ),
-                  ]);
+                  // @ts-ignore
+                  setSelectedUser([...selectedUser, option]);
                 }}
                 itemComponent={({ option }) => (
                   <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">
@@ -161,6 +163,30 @@ export const OnyxApiKeyForm = ({
                   </div>
                 )}
               />
+
+              {selectedUser.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-text-700 mb-2">
+                    {i18n.t(k.SELECTED_USERS)}
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedUser.map((sUser) => (
+                      <div
+                        key={sUser.id}
+                        onClick={() => {
+                          setSelectedUser(
+                            selectedUser.filter((user) => user.id !== sUser.id)
+                          );
+                        }}
+                        className="flex items-center bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-sm hover:bg-blue-100 transition-colors duration-200 cursor-pointer"
+                      >
+                        {sUser.email}
+                        <FiX className="ml-2 text-blue-500" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <Button
                 type="submit"

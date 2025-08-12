@@ -114,6 +114,10 @@ function findImageGenerationTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
 }
 
+function findLanglfowTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "Langflow");
+}
+
 function findInternetSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "InternetSearchTool");
 }
@@ -1099,36 +1103,6 @@ export function AssistantEditor({
                             )}
                           </div>
                         )}
-                      {langflowTool && (
-                        <>
-                          <BooleanFormField
-                            name={`enabled_tools_map.${langflowTool.id}`}
-                            label="Инструмент Langflow"
-                            subtext="Инструмент Langflow."
-                            onChange={() => {
-                              toggleToolInValues(langflowTool.id);
-                            }}
-                          />
-
-                          {langflowToolEnabled() && (
-                            <div className="pl-4 border-l-2 ml-4 border-border">
-                              {ccPairs.length > 0 && (
-                                <>
-                                  <TextFormField
-                                    name="pipeline_id"
-                                    label="Id пайплайна"
-                                  />
-
-                                  <BooleanFormField
-                                    name="use_default"
-                                    label="Использовать по умолчанию"
-                                  />
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
                     </div>
                   )}
 
@@ -1156,6 +1130,37 @@ export function AssistantEditor({
                             }
                           />
                         </div>
+                      </>
+                    )}
+
+                    {langflowTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${langflowTool.id}`}
+                          label="Инструмент Langflow"
+                          subtext="Инструмент Langflow."
+                          onChange={() => {
+                            toggleToolInValues(langflowTool.id);
+                          }}
+                        />
+
+                        {langflowToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border">
+                            {ccPairs.length > 0 && (
+                              <>
+                                <TextFormField
+                                  name="pipeline_id"
+                                  label="Id пайплайна"
+                                />
+
+                                <BooleanFormField
+                                  name="use_default"
+                                  label="Использовать по умолчанию"
+                                />
+                              </>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
 
