@@ -695,6 +695,8 @@ export function AssistantEditor({
               : false;
           }
 
+          console.log("TEST LANGFLOW", langflowTool, langflowToolEnabled());
+
           function knowledgeMapToolEnabled() {
             return knowledgeMapTool &&
               values.enabled_tools_map[knowledgeMapTool.id]
@@ -1138,7 +1140,7 @@ export function AssistantEditor({
                         <BooleanFormField
                           name={`enabled_tools_map.${langflowTool.id}`}
                           label="Инструмент Langflow"
-                          subtext="Инструмент Langflow."
+                          subtext="Инструмент интеграции с визуальным нодовым редаактором."
                           onChange={() => {
                             toggleToolInValues(langflowTool.id);
                           }}
