@@ -249,13 +249,6 @@ def seed_initial_documents(
         ),
     )
 
-    mark_document_as_indexed_for_cc_pair__no_commit(
-        connector_id=connector_id,
-        credential_id=PUBLIC_CREDENTIAL_ID,
-        document_ids=[doc.id for doc in docs],
-        db_session=db_session,
-    )
-
     # Mock a run for the UI even though it did not actually call out to anything
     mock_successful_index_attempt(
         connector_credential_pair_id=cc_pair_id,
@@ -271,6 +264,14 @@ def seed_initial_documents(
             .where(DbDocument.id == doc.id)
             .values(chunk_count=doc.chunk_count)
         )
+
+    # Since we bypass the indexing flow, we need to manually mark the document as indexed
+    mark_document_as_indexed_for_cc_pair__no_commit(
+        connector_id=connector_id,
+        credential_id=PUBLIC_CREDENTIAL_ID,
+        document_ids=[doc.id for doc in docs],
+        db_session=db_session,
+    )
 
     db_session.commit()
     kv_store.store(KV_DOCUMENTS_SEEDED_KEY, True)
