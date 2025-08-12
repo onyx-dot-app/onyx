@@ -643,25 +643,37 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         embedding_model=embedding_model,
                     )
 
-        # gather cc_pair_ids + current search settings
+        # determine if embedding swap is in progress
         lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
-            standard_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
-                db_session, connector_type=ConnectorType.STANDARD
-            )
-            # only index 50 user files at a time. This makes sense since user files are
-            # indexed only once, and then they are done. In practice, we would rarely
-            # have more than `USER_FILE_INDEXING_LIMIT` user files to index.
-            user_file_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
-                db_session,
-                connector_type=ConnectorType.USER_FILE,
-                limit=USER_FILE_INDEXING_LIMIT,
-            )
-            cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
-
+            # comment copied from elohn & rkuo for search_settings_list
             # NOTE: some potential race conditions here, but the worse case is
             # kicking off some "invalid" indexing tasks which will just fail
             search_settings_list = get_active_search_settings_list(db_session)
+
+            embedding_swap_in_progress = any(
+                search_settings.status.is_future()
+                for search_settings in search_settings_list
+            )
+
+        # gather cc_pair_ids
+        with get_session_with_current_tenant() as db_session:
+            if embedding_swap_in_progress:
+                # If a swap is in progress, we need to collect all cc pairs for re-indexing
+                cc_pair_ids = fetch_indexable_connector_credential_pair_ids(db_session)
+            else:
+                standard_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
+                    db_session, connector_type=ConnectorType.STANDARD
+                )
+                # only index 50 user files at a time. This makes sense since user files are
+                # indexed only once, and then they are done. In practice, we would rarely
+                # have more than `USER_FILE_INDEXING_LIMIT` user files to index.
+                user_file_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
+                    db_session,
+                    connector_type=ConnectorType.USER_FILE,
+                    limit=USER_FILE_INDEXING_LIMIT,
+                )
+                cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
 
         current_search_settings = next(
             search_settings_instance
