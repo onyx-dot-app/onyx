@@ -24,12 +24,16 @@ export const GET = async (request: NextRequest) => {
   }
 
   let destination = "/";
-  let state = request.nextUrl.searchParams.get('state');
+  let state = request.nextUrl.searchParams.get("state");
 
-  if(state) { 
-    const decodedState = jwtDecode(state)
+  if (state) {
+    try {
+      const decodedState = jwtDecode(state);
 
-    destination = (decodedState as any).next_url || '/'
+      destination = (decodedState as any).next_url || "/";
+    } catch (e) {
+      console.error("Failed to decode JWT state", e);
+    }
   }
 
   // Get the redirect URL from the backend's 'Location' header, or default to '/'
