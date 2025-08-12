@@ -73,20 +73,23 @@ def insert_api_key(
     tenant_id = get_current_tenant_id()
 
     api_key = generate_api_key(tenant_id)
-    api_key_user_id = uuid.uuid4()
+    if user_id is None:
+        api_key_user_id = uuid.uuid4()
 
-    display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
-    api_key_user_row = User(
-        id=api_key_user_id,
-        email=get_api_key_fake_email(display_name, str(api_key_user_id)),
-        # a random password for the "user"
-        hashed_password=std_password_helper.hash(std_password_helper.generate()),
-        is_active=True,
-        is_superuser=False,
-        is_verified=True,
-        role=api_key_args.role,
-    )
-    db_session.add(api_key_user_row)
+        display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
+        api_key_user_row = User(
+            id=api_key_user_id,
+            email=get_api_key_fake_email(display_name, str(api_key_user_id)),
+            # a random password for the "user"
+            hashed_password=std_password_helper.hash(std_password_helper.generate()),
+            is_active=True,
+            is_superuser=False,
+            is_verified=True,
+            role=api_key_args.role,
+        )
+        db_session.add(api_key_user_row)
+    else:
+        api_key_user_id = user_id
 
     api_key_row = ApiKey(
         name=api_key_args.name,
@@ -100,7 +103,7 @@ def insert_api_key(
     db_session.commit()
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=api_key_user_row.role,
+        api_key_role=api_key_args.role,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
