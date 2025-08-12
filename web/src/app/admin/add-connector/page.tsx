@@ -270,7 +270,7 @@ export default function Page() {
         className="ml-1 w-96 h-9  flex-none rounded-md border border-border bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
 
-      {popularSources.length > 0 && (
+      {popularSources.length > 0 && !searchTerm && (
         <div className="mb-8">
           <div className="flex mt-8">
             <Title>Popular</Title>
@@ -278,7 +278,7 @@ export default function Page() {
           <div className="flex flex-wrap gap-4 p-4">
             {popularSources.map((source, sourceInd) => (
               <SourceTileTooltipWrapper
-                preSelect={searchTerm.length > 0 && sourceInd == 0}
+                preSelect={false}
                 key={source.internalName}
                 sourceMetadata={source}
                 federatedConnectors={federatedConnectors}

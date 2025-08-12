@@ -120,6 +120,9 @@ services:
       # Chat Configs
       - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
 
+      # Show extra/uncommon connectors
+      - SHOW_EXTRA_CONNECTORS=${SHOW_EXTRA_CONNECTORS:-true}
+
       # Enables the use of bedrock models or IAM Auth
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
