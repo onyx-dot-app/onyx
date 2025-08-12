@@ -276,7 +276,7 @@ export default function Page() {
             <Title>Popular</Title>
           </div>
           <div className="flex flex-wrap gap-4 p-4">
-            {popularSources.map((source, sourceInd) => (
+            {popularSources.map((source) => (
               <SourceTileTooltipWrapper
                 preSelect={false}
                 key={source.internalName}
