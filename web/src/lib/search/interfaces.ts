@@ -164,10 +164,10 @@ export interface SearchResponse {
 export enum SourceCategory {
   Storage = "Cloud Storage",
   Wiki = "Knowledge Base & Wiki",
-  CustomerSupport = "Customer Support",
-  SalesAndMarketing = "Sales & Marketing",
   Messaging = "Messaging",
   ProjectManagement = "Project Management",
+  SalesAndMarketing = "Sales & Marketing",
+  CustomerSupport = "Customer Support",
   CodeRepository = "Code Repository",
   Other = "Other",
 }

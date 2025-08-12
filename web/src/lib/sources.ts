@@ -83,41 +83,7 @@ const slackMetadata = {
 };
 
 export const SOURCE_METADATA_MAP: SourceMap = {
-  // Keep web and file at the top
-  web: {
-    icon: GlobeIcon2,
-    displayName: "Web",
-    category: SourceCategory.Other,
-    docs: "https://docs.onyx.app/connectors/web",
-    isPopular: true,
-  },
-  file: {
-    icon: FileIcon2,
-    displayName: "File",
-    category: SourceCategory.Other,
-    docs: "https://docs.onyx.app/connectors/file",
-    isPopular: true,
-  },
-
   // Cloud Storage
-  dropbox: {
-    icon: DropboxIcon,
-    displayName: "Dropbox",
-    category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/dropbox",
-  },
-  egnyte: {
-    icon: EgnyteIcon,
-    displayName: "Egnyte",
-    category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/egnyte",
-  },
-  google_cloud_storage: {
-    icon: GoogleStorageIcon,
-    displayName: "Google Storage",
-    category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/google_storage",
-  },
   google_drive: {
     icon: GoogleDriveIcon,
     displayName: "Google Drive",
@@ -126,23 +92,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     oauthSupported: true,
     isPopular: true,
   },
-  oci_storage: {
-    icon: OCIStorageIcon,
-    displayName: "Oracle Storage",
+  google_cloud_storage: {
+    icon: GoogleStorageIcon,
+    displayName: "Google Storage",
     category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/oci_storage",
-  },
-  r2: {
-    icon: R2Icon,
-    displayName: "R2",
-    category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/r2",
-  },
-  s3: {
-    icon: S3Icon,
-    displayName: "S3",
-    category: SourceCategory.Storage,
-    docs: "https://docs.onyx.app/connectors/s3",
+    docs: "https://docs.onyx.app/connectors/google_storage",
   },
   sharepoint: {
     icon: SharepointIcon,
@@ -150,6 +104,243 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Storage,
     docs: "https://docs.onyx.app/connectors/sharepoint",
     isPopular: true,
+  },
+  s3: {
+    icon: S3Icon,
+    displayName: "S3",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/s3",
+  },
+  r2: {
+    icon: R2Icon,
+    displayName: "R2",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/r2",
+  },
+  egnyte: {
+    icon: EgnyteIcon,
+    displayName: "Egnyte",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/egnyte",
+  },
+  dropbox: {
+    icon: DropboxIcon,
+    displayName: "Dropbox",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/dropbox",
+  },
+  oci_storage: {
+    icon: OCIStorageIcon,
+    displayName: "Oracle Storage",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/oci_storage",
+  },
+
+  // Knowledge Base & Wiki
+  confluence: {
+    icon: ConfluenceIcon,
+    displayName: "Confluence",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/confluence",
+    oauthSupported: true,
+    isPopular: true,
+  },
+  notion: {
+    icon: NotionIcon,
+    displayName: "Notion",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/notion",
+  },
+  google_sites: {
+    icon: GoogleSitesIcon,
+    displayName: "Google Sites",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/google_sites",
+  },
+  mediawiki: {
+    icon: MediaWikiIcon,
+    displayName: "MediaWiki",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/mediawiki",
+  },
+  gitbook: {
+    icon: GitbookIcon,
+    displayName: "GitBook",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/gitbook",
+  },
+  highspot: {
+    icon: HighspotIcon,
+    displayName: "Highspot",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/highspot",
+  },
+  guru: {
+    icon: GuruIcon,
+    displayName: "Guru",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/guru",
+  },
+  slab: {
+    icon: SlabIcon,
+    displayName: "Slab",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/slab",
+  },
+  document360: {
+    icon: Document360Icon,
+    displayName: "Document360",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/document360",
+  },
+  bookstack: {
+    icon: BookstackIcon,
+    displayName: "BookStack",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/bookstack",
+  },
+  axero: {
+    icon: AxeroIcon,
+    displayName: "Axero",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/axero",
+  },
+  wikipedia: {
+    icon: WikipediaIcon,
+    displayName: "Wikipedia",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/wikipedia",
+  },
+
+  // Messaging
+  gmail: {
+    icon: GmailIcon,
+    displayName: "Gmail",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/gmail/overview",
+  },
+  teams: {
+    icon: TeamsIcon,
+    displayName: "Teams",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/teams",
+  },
+  slack: slackMetadata,
+  federated_slack: slackMetadata,
+  discord: {
+    icon: ColorDiscordIcon,
+    displayName: "Discord",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/discord",
+  },
+  imap: {
+    icon: EmailIcon,
+    displayName: "Email",
+    category: SourceCategory.Messaging,
+  },
+  discourse: {
+    icon: DiscourseIcon,
+    displayName: "Discourse",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/discourse",
+  },
+  xenforo: {
+    icon: XenforoIcon,
+    displayName: "Xenforo",
+    category: SourceCategory.Messaging,
+  },
+  zulip: {
+    icon: ZulipIcon,
+    displayName: "Zulip",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/zulip",
+  },
+
+  // Project Management
+  jira: {
+    icon: JiraIcon,
+    displayName: "Jira",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/jira",
+    isPopular: true,
+  },
+  linear: {
+    icon: LinearIcon,
+    displayName: "Linear",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/linear",
+  },
+  asana: {
+    icon: AsanaIcon,
+    displayName: "Asana",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/asana",
+  },
+  clickup: {
+    icon: ClickupIcon,
+    displayName: "Clickup",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/clickup",
+  },
+  airtable: {
+    icon: AirtableIcon,
+    displayName: "Airtable",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/airtable",
+  },
+  productboard: {
+    icon: ProductboardIcon,
+    displayName: "Productboard",
+    category: SourceCategory.ProjectManagement,
+    docs: "https://docs.onyx.app/connectors/productboard",
+  },
+
+  // Sales & Marketing
+  salesforce: {
+    icon: SalesforceIcon,
+    displayName: "Salesforce",
+    category: SourceCategory.SalesAndMarketing,
+    docs: "https://docs.onyx.app/connectors/salesforce",
+    isPopular: true,
+  },
+  hubspot: {
+    icon: HubSpotIcon,
+    displayName: "HubSpot",
+    category: SourceCategory.SalesAndMarketing,
+    docs: "https://docs.onyx.app/connectors/hubspot",
+  },
+  gong: {
+    icon: GongIcon,
+    displayName: "Gong",
+    category: SourceCategory.SalesAndMarketing,
+    docs: "https://docs.onyx.app/connectors/gong",
+    isPopular: true,
+  },
+  fireflies: {
+    icon: FirefliesIcon,
+    displayName: "Fireflies",
+    category: SourceCategory.SalesAndMarketing,
+    docs: "https://docs.onyx.app/connectors/fireflies",
+  },
+  loopio: {
+    icon: LoopioIcon,
+    displayName: "Loopio",
+    category: SourceCategory.SalesAndMarketing,
+  },
+
+  // Customer Support
+  zendesk: {
+    icon: ZendeskIcon,
+    displayName: "Zendesk",
+    category: SourceCategory.CustomerSupport,
+    docs: "https://docs.onyx.app/connectors/zendesk",
+    isPopular: true,
+  },
+  freshdesk: {
+    icon: FreshdeskIcon,
+    displayName: "Freshdesk",
+    category: SourceCategory.CustomerSupport,
+    docs: "https://docs.onyx.app/connectors/freshdesk",
   },
 
   // Code Repository
@@ -167,210 +358,18 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: "https://docs.onyx.app/connectors/gitlab",
   },
 
-  // Customer Support
-  freshdesk: {
-    icon: FreshdeskIcon,
-    displayName: "Freshdesk",
-    category: SourceCategory.CustomerSupport,
-    docs: "https://docs.onyx.app/connectors/freshdesk",
-  },
-  zendesk: {
-    icon: ZendeskIcon,
-    displayName: "Zendesk",
-    category: SourceCategory.CustomerSupport,
-    docs: "https://docs.onyx.app/connectors/zendesk",
+  file: {
+    icon: FileIcon2,
+    displayName: "File",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/connectors/file",
     isPopular: true,
   },
-
-  // Knowledge Base & Wiki
-  axero: {
-    icon: AxeroIcon,
-    displayName: "Axero",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/axero",
-  },
-  bookstack: {
-    icon: BookstackIcon,
-    displayName: "BookStack",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/bookstack",
-  },
-  confluence: {
-    icon: ConfluenceIcon,
-    displayName: "Confluence",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/confluence",
-    oauthSupported: true,
-    isPopular: true,
-  },
-  document360: {
-    icon: Document360Icon,
-    displayName: "Document360",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/document360",
-  },
-  gitbook: {
-    icon: GitbookIcon,
-    displayName: "GitBook",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/gitbook",
-  },
-  google_sites: {
-    icon: GoogleSitesIcon,
-    displayName: "Google Sites",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/google_sites",
-  },
-  guru: {
-    icon: GuruIcon,
-    displayName: "Guru",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/guru",
-  },
-  highspot: {
-    icon: HighspotIcon,
-    displayName: "Highspot",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/highspot",
-  },
-  mediawiki: {
-    icon: MediaWikiIcon,
-    displayName: "MediaWiki",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/mediawiki",
-  },
-  notion: {
-    icon: NotionIcon,
-    displayName: "Notion",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/notion",
-  },
-  slab: {
-    icon: SlabIcon,
-    displayName: "Slab",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/slab",
-  },
-  wikipedia: {
-    icon: WikipediaIcon,
-    displayName: "Wikipedia",
-    category: SourceCategory.Wiki,
-    docs: "https://docs.onyx.app/connectors/wikipedia",
-  },
-
-  // Messaging
-  discord: {
-    icon: ColorDiscordIcon,
-    displayName: "Discord",
-    category: SourceCategory.Messaging,
-    docs: "https://docs.onyx.app/connectors/discord",
-  },
-  discourse: {
-    icon: DiscourseIcon,
-    displayName: "Discourse",
-    category: SourceCategory.Messaging,
-    docs: "https://docs.onyx.app/connectors/discourse",
-  },
-  gmail: {
-    icon: GmailIcon,
-    displayName: "Gmail",
-    category: SourceCategory.Messaging,
-    docs: "https://docs.onyx.app/connectors/gmail/overview",
-  },
-  imap: {
-    icon: EmailIcon,
-    displayName: "Email",
-    category: SourceCategory.Messaging,
-  },
-  slack: slackMetadata,
-  federated_slack: slackMetadata,
-  teams: {
-    icon: TeamsIcon,
-    displayName: "Teams",
-    category: SourceCategory.Messaging,
-    docs: "https://docs.onyx.app/connectors/teams",
-  },
-  xenforo: {
-    icon: XenforoIcon,
-    displayName: "Xenforo",
-    category: SourceCategory.Messaging,
-  },
-  zulip: {
-    icon: ZulipIcon,
-    displayName: "Zulip",
-    category: SourceCategory.Messaging,
-    docs: "https://docs.onyx.app/connectors/zulip",
-  },
-
-  // Project Management
-  airtable: {
-    icon: AirtableIcon,
-    displayName: "Airtable",
-    category: SourceCategory.ProjectManagement,
-    docs: "https://docs.onyx.app/connectors/airtable",
-  },
-  asana: {
-    icon: AsanaIcon,
-    displayName: "Asana",
-    category: SourceCategory.ProjectManagement,
-    docs: "https://docs.onyx.app/connectors/asana",
-  },
-  clickup: {
-    icon: ClickupIcon,
-    displayName: "Clickup",
-    category: SourceCategory.ProjectManagement,
-    docs: "https://docs.onyx.app/connectors/clickup",
-  },
-  jira: {
-    icon: JiraIcon,
-    displayName: "Jira",
-    category: SourceCategory.ProjectManagement,
-    docs: "https://docs.onyx.app/connectors/jira",
-    isPopular: true,
-  },
-  linear: {
-    icon: LinearIcon,
-    displayName: "Linear",
-    category: SourceCategory.ProjectManagement,
-    docs: "https://docs.onyx.app/connectors/linear",
-  },
-  productboard: {
-    icon: ProductboardIcon,
-    displayName: "Productboard",
-    category: SourceCategory.ProjectManagement,
-    docs: "https://docs.onyx.app/connectors/productboard",
-  },
-
-  // Sales & Marketing
-  fireflies: {
-    icon: FirefliesIcon,
-    displayName: "Fireflies",
-    category: SourceCategory.SalesAndMarketing,
-    docs: "https://docs.onyx.app/connectors/fireflies",
-  },
-  gong: {
-    icon: GongIcon,
-    displayName: "Gong",
-    category: SourceCategory.SalesAndMarketing,
-    docs: "https://docs.onyx.app/connectors/gong",
-    isPopular: true,
-  },
-  hubspot: {
-    icon: HubSpotIcon,
-    displayName: "HubSpot",
-    category: SourceCategory.SalesAndMarketing,
-    docs: "https://docs.onyx.app/connectors/hubspot",
-  },
-  loopio: {
-    icon: LoopioIcon,
-    displayName: "Loopio",
-    category: SourceCategory.SalesAndMarketing,
-  },
-  salesforce: {
-    icon: SalesforceIcon,
-    displayName: "Salesforce",
-    category: SourceCategory.SalesAndMarketing,
-    docs: "https://docs.onyx.app/connectors/salesforce",
+  web: {
+    icon: GlobeIcon2,
+    displayName: "Web",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/connectors/web",
     isPopular: true,
   },
 
