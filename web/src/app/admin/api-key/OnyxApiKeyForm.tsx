@@ -69,6 +69,8 @@ export const OnyxApiKeyForm = ({
               user_id: selectedUser[0].value,
             };
 
+            console.log("TEST API_KEY", payload, selectedUser);
+
             let response;
             if (isUpdate) {
               response = await updateApiKey(apiKey.api_key_id, payload);

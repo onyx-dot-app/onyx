@@ -238,6 +238,8 @@ export function AssistantEditor({
   const internetSearchTool = findInternetSearchTool(tools);
   const knowledgeMapTool = findKnowledgeMapTool(tools);
 
+  console.log("TEST LANGFLOW", tools);
+
   const customTools = tools.filter(
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
