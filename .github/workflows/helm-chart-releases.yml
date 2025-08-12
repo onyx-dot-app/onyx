@@ -1,0 +1,49 @@
+name: Release Onyx Helm Charts
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: write-all
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm CLI
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.12.1
+
+      - name: Add required Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add onyx-vespa https://onyx-dot-app.github.io/vespa-helm-charts
+          helm repo update
+
+      - name: Build chart dependencies
+        run: |
+          set -euo pipefail
+          for chart_dir in deployment/helm/charts/*; do
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              echo "Building dependencies for $chart_dir"
+              helm dependency build "$chart_dir"
+            fi
+          done
+
+      - name: Publish Helm charts to gh-pages
+        uses: stefanprodan/helm-gh-pages@v1.7.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          charts_dir: deployment/helm/charts
+          branch: gh-pages
+          commit_username: ${{ github.actor }}
+          commit_email: ${{ github.actor }}@users.noreply.github.com

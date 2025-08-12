@@ -183,6 +183,7 @@ class DocumentBase(BaseModel):
 
     # only filled in EE for connectors w/ permission sync enabled
     external_access: ExternalAccess | None = None
+    doc_metadata: dict[str, Any] | None = None
 
     def get_title_for_document_index(
         self,

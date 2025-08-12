@@ -1,12 +1,17 @@
 import React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFormikContext } from "formik";
-import { BooleanFormField, TextFormField } from "@/components/Field";
+import {
+  BooleanFormField,
+  TextFormField,
+  TypedFileUploadFormField,
+} from "@/components/Field";
 import {
   getDisplayNameForCredentialKey,
   CredentialTemplateWithAuth,
 } from "@/lib/connectors/credentials";
 import { dictionaryType } from "../types";
+import { isTypedFileField } from "@/lib/connectors/fileTypes";
 
 interface CredentialFieldsRendererProps {
   credentialTemplate: dictionaryType;
@@ -90,6 +95,16 @@ export function CredentialFieldsRenderer({
                 )}
 
               {Object.entries(method.fields).map(([key, val]) => {
+                if (isTypedFileField(key)) {
+                  return (
+                    <TypedFileUploadFormField
+                      key={key}
+                      name={key}
+                      label={getDisplayNameForCredentialKey(key)}
+                    />
+                  );
+                }
+
                 if (typeof val === "boolean") {
                   return (
                     <BooleanFormField
@@ -130,6 +145,15 @@ export function CredentialFieldsRenderer({
         if (key === "authentication_method" || key === "authMethods") {
           return null;
         }
+        if (isTypedFileField(key)) {
+          return (
+            <TypedFileUploadFormField
+              key={key}
+              name={key}
+              label={getDisplayNameForCredentialKey(key)}
+            />
+          );
+        }
 
         if (typeof val === "boolean") {
           return (
@@ -144,7 +168,7 @@ export function CredentialFieldsRenderer({
           <TextFormField
             key={key}
             name={key}
-            placeholder={val}
+            placeholder={val as string}
             label={getDisplayNameForCredentialKey(key)}
             type={
               key.toLowerCase().includes("token") ||

@@ -71,13 +71,13 @@ from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger(propagate=False)
 
@@ -226,8 +226,12 @@ def _check_connector_and_attempt_status(
         raise ConnectorStopSignal(f"Index attempt {index_attempt_id} was canceled")
 
     if index_attempt_loop.status != IndexingStatus.IN_PROGRESS:
+        error_str = ""
+        if index_attempt_loop.error_msg:
+            error_str = f" Original error: {index_attempt_loop.error_msg}"
+
         raise RuntimeError(
-            f"Index Attempt is not running, status is {index_attempt_loop.status}"
+            f"Index Attempt is not running, status is {index_attempt_loop.status}.{error_str}"
         )
 
     if index_attempt_loop.celery_task_id is None:
@@ -832,7 +836,7 @@ def _run_indexing(
                 )
 
 
-def run_indexing_entrypoint(
+def run_docfetching_entrypoint(
     app: Celery,
     index_attempt_id: int,
     tenant_id: str,
@@ -847,8 +851,8 @@ def run_indexing_entrypoint(
 
     # set the indexing attempt ID so that all log messages from this process
     # will have it added as a prefix
-    TaskAttemptSingleton.set_cc_and_index_id(
-        index_attempt_id, connector_credential_pair_id
+    token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set(
+        (connector_credential_pair_id, index_attempt_id)
     )
     with get_session_with_current_tenant() as db_session:
         attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
@@ -885,6 +889,8 @@ def run_indexing_entrypoint(
         f"config='{connector_config}' "
         f"credentials='{credential_id}'"
     )
+
+    INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
 def connector_document_extraction(
@@ -1350,6 +1356,9 @@ def reissue_old_batches(
         )
         path_info = batch_storage.extract_path_info(batch_id)
         if path_info is None:
+            logger.warning(
+                f"Could not extract path info from batch {batch_id}, skipping"
+            )
             continue
         if path_info.cc_pair_id != cc_pair_id:
             raise RuntimeError(f"Batch {batch_id} is not for cc pair {cc_pair_id}")

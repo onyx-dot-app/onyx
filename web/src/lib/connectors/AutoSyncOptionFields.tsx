@@ -14,6 +14,8 @@ export const autoSyncConfigBySource: Record<
   confluence: {},
   google_drive: {},
   gmail: {},
+  github: {},
   slack: {},
   salesforce: {},
+  sharepoint: {},
 };

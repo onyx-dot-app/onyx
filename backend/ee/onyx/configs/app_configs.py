@@ -72,6 +72,19 @@ GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 
 
 #####
+# GitHub
+#####
+# In seconds, default is 5 minutes
+GITHUB_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("GITHUB_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 5 minutes
+GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+
+#####
 # Slack
 #####
 SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
@@ -87,6 +100,19 @@ NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
 # In seconds, default is 5 minutes
 TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# SharePoint
+#####
+# In seconds, default is 30 minutes
+SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+# In seconds, default is 5 minutes
+SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
 )
 
 

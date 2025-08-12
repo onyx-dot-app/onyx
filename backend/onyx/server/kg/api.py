@@ -179,15 +179,19 @@ def get_kg_entity_types(
 ) -> SourceAndEntityTypeView:
     # when using for the first time, populate with default entity types
     entity_types = {
-        key: [EntityType.from_model(et) for et in ets]
-        for key, ets in get_configured_entity_types(db_session=db_session).items()
+        source_name: [EntityType.from_model(et) for et in ets]
+        for source_name, ets in get_configured_entity_types(
+            db_session=db_session
+        ).items()
     }
 
     source_statistics = {
-        key: SourceStatistics(
-            source_name=key, last_updated=last_updated, entities_count=entities_count
+        source_name: SourceStatistics(
+            source_name=source_name,
+            last_updated=last_updated,
+            entities_count=entities_count,
         )
-        for key, (
+        for source_name, (
             last_updated,
             entities_count,
         ) in get_entity_stats_by_grounded_source_name(db_session=db_session).items()

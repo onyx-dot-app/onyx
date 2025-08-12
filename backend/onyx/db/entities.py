@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 import onyx.db.document as dbdocument
+from onyx.db.entity_type import UNGROUNDED_SOURCE_NAME
 from onyx.db.models import Document
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
@@ -328,7 +329,13 @@ def get_entity_stats_by_grounded_source_name(
         .group_by(KGEntityType.grounded_source_name)
         .all()
     )
+
+    # `row.grounded_source_name` is NULLABLE in the database schema.
+    # Thus, for all "ungrounded" entity-types, we use a default name.
     return {
-        row.grounded_source_name: (row.last_updated, row.entities_count)
+        (row.grounded_source_name or UNGROUNDED_SOURCE_NAME): (
+            row.last_updated,
+            row.entities_count,
+        )
         for row in results
     }

@@ -1,4 +1,3 @@
-import { getNameFromPath } from "@/lib/fileUtils";
 import { ValidSources } from "@/lib/types";
 import { EditIcon } from "@/components/icons/icons";
 
@@ -29,11 +28,14 @@ export function buildConfigEntries(
   sourceType: ValidSources
 ): { [key: string]: string } {
   if (sourceType === ValidSources.File) {
-    return obj.file_locations
+    return obj.file_names
       ? {
-          file_names: obj.file_locations.map(getNameFromPath),
+          file_names: obj.file_names,
         }
-      : {};
+      : {
+          // For deployments that don't run file_names migration
+          file_locations: obj.file_locations,
+        };
   } else if (sourceType === ValidSources.GoogleSites) {
     return {
       base_url: obj.base_url,

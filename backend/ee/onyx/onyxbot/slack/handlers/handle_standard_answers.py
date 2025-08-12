@@ -206,7 +206,7 @@ def _handle_standard_answers(
 
         restate_question_blocks = get_restate_blocks(
             msg=query_msg.message,
-            is_bot_msg=message_info.is_bot_msg,
+            is_slash_command=message_info.is_slash_command,
         )
 
         answer_blocks = build_standard_answer_blocks(

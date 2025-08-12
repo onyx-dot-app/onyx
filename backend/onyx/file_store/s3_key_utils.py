@@ -49,11 +49,10 @@ def sanitize_s3_key_name(file_name: str) -> str:
 
     # Characters to avoid completely (replace with underscore)
     # These are characters that AWS recommends avoiding
-    avoid_chars = r'[\\{}^%`\[\]"<>#|~]'
+    avoid_chars = r'[\\{}^%`\[\]"<>#|~/]'
 
     # Replace avoided characters with underscore
     sanitized = re.sub(avoid_chars, "_", file_name)
-
     # Characters that might require special handling but are allowed
     # We'll URL encode these to be safe
     special_chars = r"[&$@=;:+,?\s]"
@@ -80,6 +79,9 @@ def sanitize_s3_key_name(file_name: str) -> str:
 
     # Remove any trailing periods to avoid download issues
     sanitized = sanitized.rstrip(".")
+
+    # Remove multiple separators
+    sanitized = re.sub(r"[-_]{2,}", "-", sanitized)
 
     # If sanitization resulted in empty string, use a default
     if not sanitized:
