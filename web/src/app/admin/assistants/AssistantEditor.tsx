@@ -107,7 +107,7 @@ function findSearchTool(tools: ToolSnapshot[]) {
 }
 
 function findLangflowTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "Langflow");
+  return tools.find((tool) => tool.in_code_tool_id === "LangflowTool");
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
