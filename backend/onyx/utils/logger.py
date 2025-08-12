@@ -13,6 +13,7 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 
@@ -102,8 +103,14 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
                     msg = f"[Doc Permissions Sync: {doc_permission_sync_ctx_dict['request_id']}] {msg}"
                 break
 
-            index_attempt_id = TaskAttemptSingleton.get_index_attempt_id()
-            cc_pair_id = TaskAttemptSingleton.get_connector_credential_pair_id()
+            index_attempt_info = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+            if index_attempt_info:
+                cc_pair_id: int | None = index_attempt_info[0]
+                index_attempt_id: int | None = index_attempt_info[1]
+
+            else:
+                index_attempt_id = TaskAttemptSingleton.get_index_attempt_id()
+                cc_pair_id = TaskAttemptSingleton.get_connector_credential_pair_id()
 
             if index_attempt_id is not None:
                 msg = f"[Index Attempt: {index_attempt_id}] {msg}"

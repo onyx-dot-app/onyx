@@ -92,7 +92,6 @@ from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
-from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -100,6 +99,7 @@ from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -1085,9 +1085,9 @@ def _docprocessing_task(
 ) -> None:
     start_time = time.monotonic()
 
-    # set the indexing attempt ID so that all log messages from this process
-    # will have it added as a prefix
-    TaskAttemptSingleton.set_cc_and_index_id(index_attempt_id, cc_pair_id)
+    # Cannot use the TaskSingleton approach here because the worker is multithreaded
+    INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
+    task_logger
     if tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
