@@ -14,7 +14,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
-from onyx.tools.tool_implementations.internet_search.providers import (
+from backend.onyx.tools.tool_implementations.internet_search.providersold import (
     get_available_providers,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
