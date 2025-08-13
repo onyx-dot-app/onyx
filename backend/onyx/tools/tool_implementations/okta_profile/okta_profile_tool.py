@@ -21,6 +21,13 @@ logger = setup_logger()
 
 OKTA_PROFILE_RESPONSE_ID = "okta_profile"
 
+OKTA_TOOL_DESCRIPTION = """
+The Okta profile tool can retrieve user profile information from Okta including:
+- User ID, status, creation date
+- Profile details like name, email, department, location, title, manager, and more
+- Account status and activity
+"""
+
 
 class OIDCConfig(BaseModel):
     issuer: str
@@ -182,11 +189,7 @@ class OktaProfileTool(BaseTool):
         prompt = f"""
 You are helping to determine if an Okta profile lookup tool should be called based on a user's query.
 
-The Okta profile tool can retrieve user profile information from Okta including:
-- User ID, status, creation date
-- Profile details like name, email, department, title
-- Authentication and credential information
-- Account status and activity
+{OKTA_TOOL_DESCRIPTION}
 
 Query: {query}
 
@@ -206,20 +209,19 @@ Should the Okta profile tool be called for this query? Respond with only "YES" o
     def run(
         self, override_kwargs: None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
-        # Get user info to extract the UID
-        userinfo_data = self._call_userinfo(self.access_token)
-        introspection_data = self._call_introspection(self.access_token)
-
-        # Extract UID from userinfo or introspection
+        # Try to get UID from userinfo first, then fallback to introspection
         uid_candidate = None
+
+        # Try userinfo endpoint first
+        userinfo_data = self._call_userinfo(self.access_token)
         if userinfo_data and isinstance(userinfo_data, dict):
             uid_candidate = userinfo_data.get("uid")
-        if (
-            not uid_candidate
-            and introspection_data
-            and isinstance(introspection_data, dict)
-        ):
-            uid_candidate = introspection_data.get("uid")
+
+        # Only try introspection if userinfo didn't provide a UID
+        if not uid_candidate:
+            introspection_data = self._call_introspection(self.access_token)
+            if introspection_data and isinstance(introspection_data, dict):
+                uid_candidate = introspection_data.get("uid")
 
         if not uid_candidate:
             raise ValueError(
