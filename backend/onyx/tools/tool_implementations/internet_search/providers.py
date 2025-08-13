@@ -31,7 +31,6 @@ PROVIDER_CONFIGS = {
             "title": "title",
             "link": "link",
             "full_content": "snippet",
-            "published_date": None,
         },
     ),
     ProviderType.EXA.value: ProviderConfig(
