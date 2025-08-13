@@ -18,7 +18,7 @@ logger = setup_logger()
 PROVIDER_CONFIGS = {
     ProviderType.BING.value: ProviderConfig(
         api_key=BING_API_KEY or "",
-        api_base="https://api.bing.microsoft.com/v7.0/search",
+        api_base="https://httpx://serpapi.com/search",
         headers={
             "Ocp-Apim-Subscription-Key": BING_API_KEY or "",
             "Content-Type": "application/json",
@@ -36,8 +36,8 @@ PROVIDER_CONFIGS = {
         },
     ),
     ProviderType.EXA.value: ProviderConfig(
-        api_key=EXA_API_KEY or "9c5ba340cba088ad3c93ef0f6759c4f1b82b67496c8d07571c827ba1282b85ae",
-        api_base="https://serpapi.com/search",
+        api_key=EXA_API_KEY or "",
+        api_base="https://api.exa.ai/search",
         headers={
             "x-api-key": EXA_API_KEY or "",
             "Content-Type": "application/json",
