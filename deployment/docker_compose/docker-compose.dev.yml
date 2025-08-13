@@ -416,6 +416,7 @@ services:
   index:
     image: vespaengine/vespa:8.526.15
     restart: unless-stopped
+    pids_limit: 65535
     environment:
       - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
