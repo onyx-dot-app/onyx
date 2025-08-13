@@ -21,15 +21,17 @@ PROVIDER_CONFIGS = {
         api_base="https://serpapi.com/search",
         headers={},
         query_param_name="q",
-        num_results_param="count",
-        search_params={},
+        num_results_param="num",
+        search_params={
+            "engine": "bing",
+        },
         request_method="GET",
-        results_path=["webPages", "value"],
+        results_path=["organic_results"],
         result_mapping={
-            "title": "name",
-            "link": "url",
+            "title": "title",
+            "link": "link",
             "full_content": "snippet",
-            "published_date": "datePublished",
+            "published_date": None,
         },
     ),
     ProviderType.EXA.value: ProviderConfig(
