@@ -21,7 +21,7 @@ PROVIDER_CONFIGS = {
         api_base="https://serpapi.com/search",
         headers={},
         query_param_name="q",
-        num_results_param="num",
+        num_results_param="count",
         search_params={},
         request_method="GET",
         results_path=["webPages", "value"],
@@ -29,7 +29,7 @@ PROVIDER_CONFIGS = {
             "title": "name",
             "link": "url",
             "full_content": "snippet",
-            "published_date": None,
+            "published_date": "datePublished",
         },
     ),
     ProviderType.EXA.value: ProviderConfig(
