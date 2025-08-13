@@ -136,7 +136,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.internet_search.models import (
     InternetSearchResponseSummary,
 )
-from backend.onyx.tools.tool_implementations.internet_search.utilsold import (
+from backend.onyx.tools.tool_implementations.internet_search.utils import (
     internet_search_response_to_search_docs,
 )
 from onyx.tools.tool_implementations.search.search_tool import (
