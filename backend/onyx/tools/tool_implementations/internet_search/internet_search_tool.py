@@ -118,7 +118,7 @@ class InternetSearchTool(Tool[None]):
         )
 
         self.provider = (
-            get_provider_by_name(provider) if provider else get_default_provider()
+            get_provider_by_name("bing")
         )
 
         if not self.provider:

@@ -254,7 +254,7 @@ def construct_tools(
                             llm=llm,
                             document_pruning_config=internet_search_tool_config.document_pruning_config,
                             answer_style_config=internet_search_tool_config.answer_style_config,
-                            provider="bing",  # Will use default provider
+                            provider=None,  # Will use default provider
                             num_results=NUM_INTERNET_SEARCH_RESULTS,
                             max_chunks=NUM_INTERNET_SEARCH_CHUNKS,
                         )
