@@ -295,7 +295,11 @@ def process_job_result(
         if result.exit_code is not None:
             result.status = IndexingWatchdogTerminalStatus.from_code(result.exit_code)
 
-        result.exception_str = job.exception()
+        job_level_exception = job.exception()
+        result.exception_str = (
+            f"Internal docfetching error (if any): {result.exception_str}"
+            f">> Job level exception: {job_level_exception}"
+        )
 
     return result
 
