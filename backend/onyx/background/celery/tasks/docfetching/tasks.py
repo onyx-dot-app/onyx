@@ -297,8 +297,8 @@ def process_job_result(
 
         job_level_exception = job.exception()
         result.exception_str = (
-            f"Internal docfetching error (if any): {result.exception_str}"
-            f">> Job level exception: {job_level_exception}"
+            f"Docfetching returned exit code {result.exit_code} "
+            f"with exception: {job_level_exception}"
         )
 
     return result

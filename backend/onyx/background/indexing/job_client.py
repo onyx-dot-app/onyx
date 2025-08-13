@@ -153,10 +153,9 @@ class SimpleJob:
         if self._exception is None and self.queue and not self.queue.empty():
             self._exception = self.queue.get()  # Get exception from queue
 
-        if self._exception:
-            return self._exception
-
-        return f"Job with ID '{self.id}' did not report an exception."
+        return (
+            self._exception or f"Job with ID '{self.id}' did not report an exception."
+        )
 
 
 class SimpleJobClient:
