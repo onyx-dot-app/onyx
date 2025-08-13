@@ -125,6 +125,7 @@ services:
     environment:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - LOG_LEVEL=${LOG_LEVEL:-debug}
+    volumes:
       - inference_model_cache_huggingface:/app/.cache/huggingface/
     logging:
       driver: json-file
@@ -149,8 +150,9 @@ services:
       - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
       - INDEXING_ONLY=True
       - LOG_LEVEL=${LOG_LEVEL:-debug}
-      - index_model_cache_huggingface:/app/.cache/huggingface/
       - VESPA_SEARCHER_THREADS=${VESPA_SEARCHER_THREADS:-1}
+    volumes:
+      - inference_model_cache_huggingface:/app/.cache/huggingface/
     logging:
       driver: json-file
       options:
@@ -246,6 +248,7 @@ services:
     command: redis-server --save "" --appendonly no
 
 volumes:
+  inference_model_cache_huggingface:
   db_volume:
     driver: local
     driver_opts:

@@ -38,7 +38,7 @@ snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 
-# In case the user has volumes mounted to /.cache/huggingface that they've downloaded while
+# In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
 # running Onyx, move the current contents of the cache folder to a temporary location to ensure 
 # it's preserved in order to combine with the user's cache contents
 RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface
@@ -47,8 +47,9 @@ RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface
 RUN groupadd -g 1001 onyx && \
     useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
     chown -R onyx:onyx /app && \
-    chmod 775 /var/log && \
-    chown onyx:onyx /var/log
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
 
 WORKDIR /app
 
