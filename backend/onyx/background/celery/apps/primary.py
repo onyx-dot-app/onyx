@@ -32,7 +32,6 @@ from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
-from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
@@ -161,7 +160,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     RedisUserGroup.reset_all(r)
     RedisConnectorDelete.reset_all(r)
     RedisConnectorPrune.reset_all(r)
-    RedisConnectorIndex.reset_all(r)
     RedisConnectorStop.reset_all(r)
     RedisConnectorPermissionSync.reset_all(r)
     RedisConnectorExternalGroupSync.reset_all(r)

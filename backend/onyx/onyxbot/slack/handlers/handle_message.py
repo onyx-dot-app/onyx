@@ -28,7 +28,7 @@ logger_base = setup_logger()
 
 
 def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
-    if details.is_bot_msg and details.sender_id:
+    if details.is_slash_command and details.sender_id:
         respond_in_thread_or_channel(
             client=client,
             channel=details.channel_to_respond,
@@ -124,11 +124,11 @@ def handle_message(
     messages = message_info.thread_messages
     sender_id = message_info.sender_id
     bypass_filters = message_info.bypass_filters
-    is_bot_msg = message_info.is_bot_msg
+    is_slash_command = message_info.is_slash_command
     is_bot_dm = message_info.is_bot_dm
 
     action = "slack_message"
-    if is_bot_msg:
+    if is_slash_command:
         action = "slack_slash_message"
     elif bypass_filters:
         action = "slack_tag_message"
@@ -197,7 +197,7 @@ def handle_message(
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
     # which would just respond to the sender
-    if send_to and is_bot_msg:
+    if send_to and is_slash_command:
         if sender_id:
             respond_in_thread_or_channel(
                 client=client,

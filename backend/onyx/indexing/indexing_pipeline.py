@@ -44,8 +44,7 @@ from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.models import Document as DBDocument
 from onyx.db.models import IndexModelStatus
 from onyx.db.search_settings import get_active_search_settings
-from onyx.db.tag import create_or_add_document_tag
-from onyx.db.tag import create_or_add_document_tag_list
+from onyx.db.tag import upsert_document_tags
 from onyx.db.user_documents import fetch_user_files_for_documents
 from onyx.db.user_documents import fetch_user_folders_for_documents
 from onyx.db.user_documents import update_user_file_token_count__no_commit
@@ -150,24 +149,12 @@ def _upsert_documents_in_db(
 
     # Insert document content metadata
     for doc in documents:
-        for k, v in doc.metadata.items():
-            if isinstance(v, list):
-                create_or_add_document_tag_list(
-                    tag_key=k,
-                    tag_values=v,
-                    source=doc.source,
-                    document_id=doc.id,
-                    db_session=db_session,
-                )
-                continue
-
-            create_or_add_document_tag(
-                tag_key=k,
-                tag_value=v,
-                source=doc.source,
-                document_id=doc.id,
-                db_session=db_session,
-            )
+        upsert_document_tags(
+            document_id=doc.id,
+            source=doc.source,
+            metadata=doc.metadata,
+            db_session=db_session,
+        )
 
 
 def _get_aggregated_chunk_boost_factor(
@@ -867,31 +854,27 @@ def index_doc_batch(
         user_file_id_to_raw_text: dict[int, str] = {}
         for document_id in updatable_ids:
             # Only calculate token counts for documents that have a user file ID
-            if (
-                document_id in doc_id_to_user_file_id
-                and doc_id_to_user_file_id[document_id] is not None
-            ):
-                user_file_id = doc_id_to_user_file_id[document_id]
-                if not user_file_id:
-                    continue
-                document_chunks = [
-                    chunk
-                    for chunk in chunks_with_embeddings
-                    if chunk.source_document.id == document_id
-                ]
-                if document_chunks:
-                    combined_content = " ".join(
-                        [chunk.content for chunk in document_chunks]
-                    )
-                    token_count = (
-                        len(llm_tokenizer.encode(combined_content))
-                        if llm_tokenizer
-                        else 0
-                    )
-                    user_file_id_to_token_count[user_file_id] = token_count
-                    user_file_id_to_raw_text[user_file_id] = combined_content
-                else:
-                    user_file_id_to_token_count[user_file_id] = None
+
+            user_file_id = doc_id_to_user_file_id.get(document_id)
+            if user_file_id is None:
+                continue
+
+            document_chunks = [
+                chunk
+                for chunk in chunks_with_embeddings
+                if chunk.source_document.id == document_id
+            ]
+            if document_chunks:
+                combined_content = " ".join(
+                    [chunk.content for chunk in document_chunks]
+                )
+                token_count = (
+                    len(llm_tokenizer.encode(combined_content)) if llm_tokenizer else 0
+                )
+                user_file_id_to_token_count[user_file_id] = token_count
+                user_file_id_to_raw_text[user_file_id] = combined_content
+            else:
+                user_file_id_to_token_count[user_file_id] = None
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.

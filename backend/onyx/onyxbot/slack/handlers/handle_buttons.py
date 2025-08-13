@@ -177,7 +177,7 @@ def handle_generate_answer_button(
                 sender_id=user_id or None,
                 email=email or None,
                 bypass_filters=True,
-                is_bot_msg=False,
+                is_slash_command=False,
                 is_bot_dm=False,
             ),
             slack_channel_config=slack_channel_config,

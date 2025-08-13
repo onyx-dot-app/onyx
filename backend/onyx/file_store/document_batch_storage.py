@@ -196,6 +196,9 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         for batch_file_name in batch_names:
             path_info = self.extract_path_info(batch_file_name)
             if path_info is None:
+                logger.warning(
+                    f"Could not extract path info from batch file: {batch_file_name}"
+                )
                 continue
             new_batch_file_name = self._get_batch_file_name(path_info.batch_num)
             self.file_store.change_file_id(batch_file_name, new_batch_file_name)

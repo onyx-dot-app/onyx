@@ -14,6 +14,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     rate_limit_builder,
 )
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -54,12 +55,12 @@ def _build_created_date_time_filter_for_salesforce(
 
 
 def _make_time_filter_for_sf_type(
-    queryable_fields: list[str],
+    queryable_fields: set[str],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> str | None:
 
-    if "LastModifiedDate" in queryable_fields:
+    if MODIFIED_FIELD in queryable_fields:
         return _build_last_modified_time_filter_for_salesforce(start, end)
 
     if "CreatedDate" in queryable_fields:
@@ -69,14 +70,14 @@ def _make_time_filter_for_sf_type(
 
 
 def _make_time_filtered_query(
-    queryable_fields: list[str], sf_type: str, time_filter: str
+    queryable_fields: set[str], sf_type: str, time_filter: str
 ) -> str:
     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
     return query
 
 
 def get_object_by_id_query(
-    object_id: str, sf_type: str, queryable_fields: list[str]
+    object_id: str, sf_type: str, queryable_fields: set[str]
 ) -> str:
     query = (
         f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"
@@ -193,7 +194,7 @@ def _bulk_retrieve_from_salesforce(
 def fetch_all_csvs_in_parallel(
     sf_client: Salesforce,
     all_types_to_filter: dict[str, bool],
-    queryable_fields_by_type: dict[str, list[str]],
+    queryable_fields_by_type: dict[str, set[str]],
     start: SecondsSinceUnixEpoch | None,
     end: SecondsSinceUnixEpoch | None,
     target_dir: str,

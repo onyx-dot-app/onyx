@@ -7,6 +7,7 @@ import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import {
   Tooltip,
   TooltipContent,
@@ -136,6 +137,7 @@ function SourceTileTooltipWrapper({
 
 export default function Page() {
   const sources = useMemo(() => listSourceMetadata(), []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const { data: federatedConnectors } = useFederatedConnectors();
 

@@ -359,6 +359,12 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
 
+# If set to true, curators can only access and edit assistants that they created
+CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
+    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
+    == "true"
+)
+
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
 # for some connectors
