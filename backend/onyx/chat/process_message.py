@@ -128,7 +128,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationResponse,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
+    INTERNET_SEARCH_RESPONSE_ID,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
@@ -491,7 +491,7 @@ def _process_tool_response(
             ]
         )
         yield FileChatDisplay(file_ids=[str(file_id) for file_id in file_ids])
-    elif packet.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
+    elif packet.id == INTERNET_SEARCH_RESPONSE_ID:
         (
             info.qa_docs_response,
             info.reference_db_search_docs,
