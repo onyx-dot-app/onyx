@@ -18,7 +18,7 @@ logger = setup_logger()
 PROVIDER_CONFIGS = {
     ProviderType.BING.value: ProviderConfig(
         api_key=BING_API_KEY or "",
-        api_base="https://httpx://serpapi.com/search",
+        api_base="https://serpapi.com/search",
         headers={
             "Ocp-Apim-Subscription-Key": BING_API_KEY or "",
             "Content-Type": "application/json",
