@@ -73,7 +73,7 @@ Create env vars from secrets
 */}}
 {{- define "onyx-stack.envSecrets" -}}
     {{- range $secretSuffix, $secretContent := .Values.auth }}
-    {{- if $secretContent.secretKeys }}
+    {{- if and (ne $secretContent.enabled false) ($secretContent.secretKeys) }}
     {{- range $name, $key := $secretContent.secretKeys }}
 - name: {{ $name | upper | replace "-" "_" | quote }}
   valueFrom:
