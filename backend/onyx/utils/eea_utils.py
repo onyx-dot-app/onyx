@@ -227,7 +227,7 @@ def remove_by_selector(soup, selector):
         page_selector = [tag["content"].strip()]
     else:
         page_selector = []
-    
+
     for sel in (selector + page_selector):
         sel = sel.strip()
         if not sel:
