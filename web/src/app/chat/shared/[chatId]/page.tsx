@@ -51,7 +51,7 @@ export default async function Page(props: {
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
-    return redirect(`/auth/waiting-on-verification?next=/chat/shared/${params.chatId}`);
+    return redirect("/auth/waiting-on-verification");
   }
 
   const persona: Persona = constructMiniFiedPersona(
