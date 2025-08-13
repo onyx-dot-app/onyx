@@ -17,14 +17,11 @@ logger = setup_logger()
 
 PROVIDER_CONFIGS = {
     ProviderType.BING.value: ProviderConfig(
-        api_key=BING_API_KEY or "",
+        api_key="9c5ba340cba088ad3c93ef0f6759c4f1b82b67496c8d07571c827ba1282b85ae",
         api_base="https://serpapi.com/search",
-        headers={
-            "Ocp-Apim-Subscription-Key": BING_API_KEY or "",
-            "Content-Type": "application/json",
-        },
+        headers={},
         query_param_name="q",
-        num_results_param="count",
+        num_results_param="num",
         search_params={},
         request_method="GET",
         results_path=["webPages", "value"],
@@ -32,7 +29,7 @@ PROVIDER_CONFIGS = {
             "title": "name",
             "link": "url",
             "full_content": "snippet",
-            "published_date": "datePublished",
+            "published_date": None,
         },
     ),
     ProviderType.EXA.value: ProviderConfig(
@@ -42,8 +39,8 @@ PROVIDER_CONFIGS = {
             "x-api-key": EXA_API_KEY or "",
             "Content-Type": "application/json",
         },
-        query_param_name="query",
-        num_results_param="num_results",
+        query_param_name="q",
+        num_results_param="num",
         search_params={
             "type": "auto",
             "contents": {
@@ -55,9 +52,9 @@ PROVIDER_CONFIGS = {
         results_path=["results"],
         result_mapping={
             "title": "title",
-            "link": "url",
+            "link": "link",
             "published_date": "publishedDate",
-            "full_content": "text",
+            "full_content": "snippet",
             "author": "author",
         },
     ),
