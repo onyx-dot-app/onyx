@@ -775,7 +775,7 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
       {
         type: "file",
         query: "Enter file locations:",
-        label: "File Locations",
+        label: "Files",
         name: "file_locations",
         optional: false,
       },
@@ -1586,6 +1586,7 @@ export interface LoopioConfig {
 
 export interface FileConfig {
   file_locations: string[];
+  file_names: string[];
   zip_metadata: Record<string, any>;
 }
 

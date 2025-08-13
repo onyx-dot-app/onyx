@@ -160,7 +160,11 @@ def create_connector(env_name: str, file_paths: list[str]) -> int:
         name=connector_name,
         source=DocumentSource.FILE,
         input_type=InputType.LOAD_STATE,
-        connector_specific_config={"file_locations": file_paths, "zip_metadata": {}},
+        connector_specific_config={
+            "file_locations": file_paths,
+            "file_names": [],  # For regression tests, no need for file_names
+            "zip_metadata": {},
+        },
         refresh_freq=None,
         prune_freq=None,
         indexing_start=None,

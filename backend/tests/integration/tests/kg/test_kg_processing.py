@@ -65,7 +65,11 @@ def kg_test_docs() -> tuple[list[str], int, list[KGEntityType]]:
         name="KG-Test-FileConnector",
         source=DocumentSource.FILE,
         input_type=InputType.LOAD_STATE,
-        connector_specific_config={"file_locations": [], "zip_metadata": {}},
+        connector_specific_config={
+            "file_locations": [],
+            "file_names": [],
+            "zip_metadata": {},
+        },
         user_performing_action=admin_user,
     )
     api_key = APIKeyManager.create(user_performing_action=admin_user)

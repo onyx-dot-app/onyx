@@ -222,11 +222,21 @@ class LocalFileConnector(LoadConnector):
     """
     Connector that reads files from Postgres and yields Documents, including
     embedded image extraction without summarization.
+
+    file_locations are S3/Filestore UUIDs
+    file_names are the names of the files
     """
 
+    # Note: file_names is a required parameter, but should not break backwards compatibility.
+    # If add_file_names migration is not run, old file connector configs will not have file_names.
+    # This is fine because the configs are not re-used to instantiate the connector.
+    # file_names is only used for display purposes in the UI and file_locations is used as a fallback.
     def __init__(
         self,
         file_locations: list[Path | str],
+        file_names: list[
+            str
+        ],  # Must accept this parameter as connector_specific_config is unpacked as args
         zip_metadata: dict[str, Any],
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
@@ -282,7 +292,9 @@ class LocalFileConnector(LoadConnector):
 
 if __name__ == "__main__":
     connector = LocalFileConnector(
-        file_locations=[os.environ["TEST_FILE"]], zip_metadata={}
+        file_locations=[os.environ["TEST_FILE"]],
+        file_names=[os.environ["TEST_FILE"]],
+        zip_metadata={},
     )
     connector.load_credentials({"pdf_password": os.environ.get("PDF_PASSWORD")})
     doc_batches = connector.load_from_state()

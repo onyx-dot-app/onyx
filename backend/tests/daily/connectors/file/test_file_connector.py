@@ -56,7 +56,9 @@ def test_single_text_file_with_metadata(
         "onyx.connectors.file.connector.get_default_file_store",
         return_value=mock_file_store,
     ):
-        connector = LocalFileConnector(file_locations=["test.txt"], zip_metadata={})
+        connector = LocalFileConnector(
+            file_locations=["test.txt"], file_names=["test.txt"], zip_metadata={}
+        )
         batches = list(connector.load_from_state())
 
     assert len(batches) == 1
@@ -113,7 +115,9 @@ def test_two_text_files_with_zip_metadata(
         return_value=mock_file_store,
     ):
         connector = LocalFileConnector(
-            file_locations=["file1.txt", "file2.txt"], zip_metadata=zip_metadata
+            file_locations=["file1.txt", "file2.txt"],
+            file_names=["file1.txt", "file2.txt"],
+            zip_metadata=zip_metadata,
         )
         batches = list(connector.load_from_state())
 

@@ -33,7 +33,7 @@ def _load_all_docs(
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:
                 raise RuntimeError(f"Failed to load documents: {failure}")
-            if document is not None:
+            if document is not None and isinstance(document, Document):
                 documents.append(document)
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint
@@ -100,7 +100,7 @@ def load_everything_from_checkpoint_connector(
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:
                 outputs.append(failure)
-            if document is not None:
+            if document is not None and isinstance(document, Document):
                 outputs.append(document)
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint

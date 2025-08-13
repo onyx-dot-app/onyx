@@ -1,5 +1,4 @@
 import copy
-import time
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
@@ -17,17 +16,22 @@ from github.Issue import Issue
 from github.NamedUser import NamedUser
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
-from github.Requester import Requester
 from pydantic import BaseModel
 from typing_extensions import override
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.github.models import SerializedRepository
+from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
+from onyx.connectors.github.utils import deserialize_repository
+from onyx.connectors.github.utils import get_external_access_permission
+from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import ConnectorFailure
@@ -46,17 +50,7 @@ CURSOR_LOG_FREQUENCY = 50
 _MAX_NUM_RATE_LIMIT_RETRIES = 5
 
 ONE_DAY = timedelta(days=1)
-
-
-def _sleep_after_rate_limit_exception(github_client: Github) -> None:
-    sleep_time = github_client.get_rate_limit().core.reset.replace(
-        tzinfo=timezone.utc
-    ) - datetime.now(tz=timezone.utc)
-    sleep_time += timedelta(minutes=1)  # add an extra minute just to be safe
-    logger.notice(f"Ran into Github rate-limit. Sleeping {sleep_time.seconds} seconds.")
-    time.sleep(sleep_time.seconds)
-
-
+SLIM_BATCH_SIZE = 100
 # Cases
 # X (from start) standard run, no fallback to cursor-based pagination
 # X (from start) standard run errors, fallback to cursor-based pagination
@@ -70,6 +64,10 @@ def _sleep_after_rate_limit_exception(github_client: Github) -> None:
 # things to check:
 # checkpoint state on return
 # checkpoint progress (no infinite loop)
+
+
+class DocMetadata(BaseModel):
+    repo: str
 
 
 def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
@@ -190,7 +188,7 @@ def _get_batch_rate_limited(
                 getattr(obj, "raw_data")
         yield from objs
     except RateLimitExceededException:
-        _sleep_after_rate_limit_exception(github_client)
+        sleep_after_rate_limit_exception(github_client)
         yield from _get_batch_rate_limited(
             git_objs,
             page_num,
@@ -232,12 +230,17 @@ def _get_userinfo(user: NamedUser) -> dict[str, str]:
     }
 
 
-def _convert_pr_to_document(pull_request: PullRequest) -> Document:
+def _convert_pr_to_document(
+    pull_request: PullRequest, repo_external_access: ExternalAccess | None
+) -> Document:
+    repo_name = pull_request.base.repo.full_name if pull_request.base else ""
+    doc_metadata = DocMetadata(repo=repo_name)
     return Document(
         id=pull_request.html_url,
         sections=[
             TextSection(link=pull_request.html_url, text=pull_request.body or "")
         ],
+        external_access=repo_external_access,
         source=DocumentSource.GITHUB,
         semantic_identifier=f"{pull_request.number}: {pull_request.title}",
         # updated_at is UTC time but is timezone unaware, explicitly add UTC
@@ -248,6 +251,8 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             if pull_request.updated_at
             else None
         ),
+        # this metadata is used in perm sync
+        doc_metadata=doc_metadata.model_dump(),
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -301,14 +306,21 @@ def _fetch_issue_comments(issue: Issue) -> str:
     return "\nComment: ".join(comment.body for comment in comments)
 
 
-def _convert_issue_to_document(issue: Issue) -> Document:
+def _convert_issue_to_document(
+    issue: Issue, repo_external_access: ExternalAccess | None
+) -> Document:
+    repo_name = issue.repository.full_name if issue.repository else ""
+    doc_metadata = DocMetadata(repo=repo_name)
     return Document(
         id=issue.html_url,
         sections=[TextSection(link=issue.html_url, text=issue.body or "")],
         source=DocumentSource.GITHUB,
+        external_access=repo_external_access,
         semantic_identifier=f"{issue.number}: {issue.title}",
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
+        # this metadata is used in perm sync
+        doc_metadata=doc_metadata.model_dump(),
         metadata={
             k: [str(vi) for vi in v] if isinstance(v, list) else str(v)
             for k, v in {
@@ -341,18 +353,6 @@ def _convert_issue_to_document(issue: Issue) -> Document:
             if v is not None
         },
     )
-
-
-class SerializedRepository(BaseModel):
-    # id is part of the raw_data as well, just pulled out for convenience
-    id: int
-    headers: dict[str, str | int]
-    raw_data: dict[str, Any]
-
-    def to_Repository(self, requester: Requester) -> Repository.Repository:
-        return Repository.Repository(
-            requester, self.headers, self.raw_data, completed=True
-        )
 
 
 class GithubConnectorStage(Enum):
@@ -394,7 +394,7 @@ def make_cursor_url_callback(
     return cursor_url_callback
 
 
-class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
+class GithubConnector(CheckpointedConnectorWithPermSync[GithubConnectorCheckpoint]):
     def __init__(
         self,
         repo_owner: str,
@@ -423,7 +423,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         )
         return None
 
-    def _get_github_repo(
+    def get_github_repo(
         self, github_client: Github, attempt_num: int = 0
     ) -> Repository.Repository:
         if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
@@ -434,10 +434,10 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         try:
             return github_client.get_repo(f"{self.repo_owner}/{self.repositories}")
         except RateLimitExceededException:
-            _sleep_after_rate_limit_exception(github_client)
-            return self._get_github_repo(github_client, attempt_num + 1)
+            sleep_after_rate_limit_exception(github_client)
+            return self.get_github_repo(github_client, attempt_num + 1)
 
-    def _get_github_repos(
+    def get_github_repos(
         self, github_client: Github, attempt_num: int = 0
     ) -> list[Repository.Repository]:
         """Get specific repositories based on comma-separated repo_name string."""
@@ -465,10 +465,10 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
             return repos
         except RateLimitExceededException:
-            _sleep_after_rate_limit_exception(github_client)
-            return self._get_github_repos(github_client, attempt_num + 1)
+            sleep_after_rate_limit_exception(github_client)
+            return self.get_github_repos(github_client, attempt_num + 1)
 
-    def _get_all_repos(
+    def get_all_repos(
         self, github_client: Github, attempt_num: int = 0
     ) -> list[Repository.Repository]:
         if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
@@ -487,8 +487,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 user = github_client.get_user(self.repo_owner)
                 return list(user.get_repos())
         except RateLimitExceededException:
-            _sleep_after_rate_limit_exception(github_client)
-            return self._get_all_repos(github_client, attempt_num + 1)
+            sleep_after_rate_limit_exception(github_client)
+            return self.get_all_repos(github_client, attempt_num + 1)
 
     def _pull_requests_func(
         self, repo: Repository.Repository
@@ -509,6 +509,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         checkpoint: GithubConnectorCheckpoint,
         start: datetime | None = None,
         end: datetime | None = None,
+        include_permissions: bool = False,
     ) -> Generator[Document | ConnectorFailure, None, GithubConnectorCheckpoint]:
         if self.github_client is None:
             raise ConnectorMissingCredentialError("GitHub")
@@ -521,13 +522,13 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             if self.repositories:
                 if "," in self.repositories:
                     # Multiple repositories specified
-                    repos = self._get_github_repos(self.github_client)
+                    repos = self.get_github_repos(self.github_client)
                 else:
                     # Single repository (backward compatibility)
-                    repos = [self._get_github_repo(self.github_client)]
+                    repos = [self.get_github_repo(self.github_client)]
             else:
                 # All repositories
-                repos = self._get_all_repos(self.github_client)
+                repos = self.get_all_repos(self.github_client)
             if not repos:
                 checkpoint.has_more = False
                 return checkpoint
@@ -547,28 +548,15 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         if checkpoint.cached_repo is None:
             raise ValueError("No repo saved in checkpoint")
 
-        # Try to access the requester - different PyGithub versions may use different attribute names
-        try:
-            # Try direct access to a known attribute name first
-            if hasattr(self.github_client, "_requester"):
-                requester = self.github_client._requester
-            elif hasattr(self.github_client, "_Github__requester"):
-                requester = self.github_client._Github__requester
-            else:
-                # If we can't find the requester attribute, we need to fall back to recreating the repo
-                raise AttributeError("Could not find requester attribute")
-
-            repo = checkpoint.cached_repo.to_Repository(requester)
-        except Exception as e:
-            # If all else fails, re-fetch the repo directly
-            logger.warning(
-                f"Failed to deserialize repository: {e}. Attempting to re-fetch."
-            )
-            repo_id = checkpoint.cached_repo.id
-            repo = self.github_client.get_repo(repo_id)
+        # Deserialize the repository from the checkpoint
+        repo = deserialize_repository(checkpoint.cached_repo, self.github_client)
 
         cursor_url_callback = make_cursor_url_callback(checkpoint)
-
+        repo_external_access: ExternalAccess | None = None
+        if include_permissions:
+            repo_external_access = get_external_access_permission(
+                repo, self.github_client
+            )
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
@@ -603,7 +591,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 ):
                     continue
                 try:
-                    yield _convert_pr_to_document(cast(PullRequest, pr))
+                    yield _convert_pr_to_document(
+                        cast(PullRequest, pr), repo_external_access
+                    )
                 except Exception as e:
                     error_msg = f"Error converting PR to document: {e}"
                     logger.exception(error_msg)
@@ -653,6 +643,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     self.github_client,
                 )
             )
+            logger.info(f"Fetched {len(issue_batch)} issues for repo: {repo.name}")
             checkpoint.curr_page += 1
             done_with_issues = False
             num_issues = 0
@@ -678,7 +669,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     continue
 
                 try:
-                    yield _convert_issue_to_document(issue)
+                    yield _convert_issue_to_document(issue, repo_external_access)
                 except Exception as e:
                     error_msg = f"Error converting issue to document: {e}"
                     logger.exception(error_msg)
@@ -715,12 +706,16 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
 
-        logger.info(f"{len(checkpoint.cached_repo_ids)} repos remaining")
+        if checkpoint.cached_repo_ids:
+            logger.info(
+                f"{len(checkpoint.cached_repo_ids)} repos remaining (IDs: {checkpoint.cached_repo_ids})"
+            )
+        else:
+            logger.info("No more repos remaining")
 
         return checkpoint
 
-    @override
-    def load_from_checkpoint(
+    def _load_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
@@ -741,7 +736,32 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             adjusted_start_datetime = epoch
 
         return self._fetch_from_github(
-            checkpoint, start=adjusted_start_datetime, end=end_datetime
+            checkpoint,
+            start=adjusted_start_datetime,
+            end=end_datetime,
+            include_permissions=include_permissions,
+        )
+
+    @override
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GithubConnectorCheckpoint,
+    ) -> CheckpointOutput[GithubConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=False
+        )
+
+    @override
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GithubConnectorCheckpoint,
+    ) -> CheckpointOutput[GithubConnectorCheckpoint]:
+        return self._load_from_checkpoint(
+            start, end, checkpoint, include_permissions=True
         )
 
     def validate_connector_settings(self) -> None:
@@ -774,6 +794,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                         try:
                             test_repo = self.github_client.get_repo(
                                 f"{self.repo_owner}/{repo_name}"
+                            )
+                            logger.info(
+                                f"Successfully accessed repository: {self.repo_owner}/{repo_name}"
                             )
                             test_repo.get_contents("")
                             valid_repos = True
@@ -882,7 +905,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
 if __name__ == "__main__":
     import os
-    from onyx.connectors.connector_runner import ConnectorRunner
 
     # Initialize the connector
     connector = GithubConnector(
@@ -892,6 +914,12 @@ if __name__ == "__main__":
     connector.load_credentials(
         {"github_access_token": os.environ["ACCESS_TOKEN_GITHUB"]}
     )
+
+    if connector.github_client:
+        get_external_access_permission(
+            connector.get_github_repos(connector.github_client).pop(),
+            connector.github_client,
+        )
 
     # Create a time range from epoch to now
     end_time = datetime.now(timezone.utc)

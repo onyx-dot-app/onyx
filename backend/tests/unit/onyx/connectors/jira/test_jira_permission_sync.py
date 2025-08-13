@@ -34,10 +34,16 @@ def mock_fetch_all_existing_docs_fn() -> MagicMock:
     return MagicMock(return_value=[])
 
 
+@pytest.fixture
+def mock_fetch_all_existing_docs_ids_fn() -> MagicMock:
+    return MagicMock(return_value=[])
+
+
 def test_jira_permission_sync(
     jira_connector: JiraConnector,
     mock_jira_cc_pair: MagicMock,
     mock_fetch_all_existing_docs_fn: MagicMock,
+    mock_fetch_all_existing_docs_ids_fn: MagicMock,
 ) -> None:
     with patch("onyx.connectors.jira.connector.build_jira_client") as mock_build_client:
         mock_build_client.return_value = jira_connector._jira_client
@@ -45,5 +51,6 @@ def test_jira_permission_sync(
         for doc in jira_doc_sync(
             cc_pair=mock_jira_cc_pair,
             fetch_all_existing_docs_fn=mock_fetch_all_existing_docs_fn,
+            fetch_all_existing_docs_ids_fn=mock_fetch_all_existing_docs_ids_fn,
         ):
             print(doc)
