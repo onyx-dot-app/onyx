@@ -27,6 +27,7 @@ PROVIDER_CONFIGS = {
         num_results_param="num",
         search_params={
             "engine": "google",
+            "api_key": "9c5ba340cba088ad3c93ef0f6759c4f1b82b67496c8d07571c827ba1282b85ae",
         },
         request_method="GET",
         results_path=["organic_results"],
