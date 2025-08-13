@@ -262,6 +262,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             "--disable-blink-features=AutomationControlled",
             "--disable-features=IsolateOrigins,site-per-process",
             "--disable-site-isolation-trials",
+            "--disable-web-security",
         ],
     )
 
@@ -472,10 +473,10 @@ class WebConnector(LoadConnector):
         self.scroll_before_scraping = scroll_before_scraping
         self.remove_by_selector = remove_by_selector or []
         self.web_connector_type = web_connector_type
-        
+
         if not isinstance(self.remove_by_selector, list):
             self.remove_by_selector = []
-        
+
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -597,9 +598,9 @@ class WebConnector(LoadConnector):
                     scroll_attempts += 1
 
             content = page.content()
-            
+
             soup = BeautifulSoup(content, "html.parser")
-            
+
             remove_by_selector(soup, self.remove_by_selector)
 
             if self.recursive:
