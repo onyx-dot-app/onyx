@@ -248,7 +248,6 @@ def construct_tools(
                 try:
                     tool_dict[db_tool_model.id] = [
                         InternetSearchTool(
-                            persona=persona,
                             prompt_config=prompt_config,
                             llm=llm,
                             document_pruning_config=internet_search_tool_config.document_pruning_config,
