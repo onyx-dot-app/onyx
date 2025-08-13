@@ -18,25 +18,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Install Helm
+      - name: Install Helm CLI
         uses: azure/setup-helm@v4
         with:
           version: v3.12.1
 
-      - name: Add Required Helm Repositories
+      - name: Add required Helm repositories
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo add onyx-vespa https://onyx-dot-app.github.io/vespa-helm-charts
           helm repo update
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
+      - name: Build chart dependencies
+        run: |
+          set -euo pipefail
+          for chart_dir in deployment/helm/charts/*; do
+            if [ -f "$chart_dir/Chart.yaml" ]; then
+              echo "Building dependencies for $chart_dir"
+              helm dependency build "$chart_dir"
+            fi
+          done
+
+      - name: Publish Helm charts to gh-pages
+        uses: stefanprodan/helm-gh-pages@v1.7.0
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           charts_dir: deployment/helm/charts
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          branch: gh-pages
+          commit_username: ${{ github.actor }}
+          commit_email: ${{ github.actor }}@users.noreply.github.com

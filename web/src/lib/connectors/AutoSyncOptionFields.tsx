@@ -17,4 +17,5 @@ export const autoSyncConfigBySource: Record<
   github: {},
   slack: {},
   salesforce: {},
+  sharepoint: {},
 };
