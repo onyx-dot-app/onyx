@@ -1,3 +1,4 @@
+import os
 from typing import Type
 from typing_extensions import TypedDict  # noreorder
 
@@ -13,9 +14,6 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
-)
-from backend.onyx.tools.tool_implementations.internet_search.providers import (
-    get_available_providers,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
@@ -47,7 +45,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
     ),
-    # Show internet search tool if any providers are available
+    # don't show the InternetSearchTool as an option if BING_API_KEY is not available
     *(
         [
             InCodeToolInfo(
@@ -60,7 +58,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 display_name=InternetSearchTool._DISPLAY_NAME,
             )
         ]
-        if (bool(get_available_providers()))
+        if os.environ.get("BING_API_KEY")
         else []
     ),
 ]
