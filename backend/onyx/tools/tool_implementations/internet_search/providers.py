@@ -219,7 +219,7 @@ def get_available_providers() -> dict[str, InternetSearchProvider]:
         try:
             if config.api_key:
                 providers[provider_name] = InternetSearchProvider(
-                    name=provider_name, config=config
+                    name="BING", config=config
                 )
         except Exception as e:
             logger.warning(f"{provider_name} provider not available: {e}")
