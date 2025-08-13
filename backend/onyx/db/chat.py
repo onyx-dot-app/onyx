@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
-from typing import Any
 from typing import cast
 from typing import Tuple
 from uuid import UUID
@@ -23,12 +22,12 @@ from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetr
 from onyx.agents.agent_search.shared_graph_utils.models import (
     SubQuestionAnswerResults,
 )
+from onyx.agents.agent_search.utils import create_citation_format_list
 from onyx.auth.schemas import UserRole
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
 from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
@@ -1111,27 +1110,6 @@ def log_agent_sub_question_results(
     primary_message_id: int | None,
     sub_question_answer_results: list[SubQuestionAnswerResults],
 ) -> None:
-    def _create_citation_format_list(
-        document_citations: list[InferenceSection],
-    ) -> list[dict[str, Any]]:
-        citation_list: list[dict[str, Any]] = []
-        for document_citation in document_citations:
-            document_citation_dict = {
-                "link": "",
-                "blurb": document_citation.center_chunk.blurb,
-                "content": document_citation.center_chunk.content,
-                "metadata": document_citation.center_chunk.metadata,
-                "updated_at": str(document_citation.center_chunk.updated_at),
-                "document_id": document_citation.center_chunk.document_id,
-                "source_type": "file",
-                "source_links": document_citation.center_chunk.source_links,
-                "match_highlights": document_citation.center_chunk.match_highlights,
-                "semantic_identifier": document_citation.center_chunk.semantic_identifier,
-            }
-
-            citation_list.append(document_citation_dict)
-
-        return citation_list
 
     now = datetime.now()
 
@@ -1141,7 +1119,7 @@ def log_agent_sub_question_results(
         ]
         sub_question = sub_question_answer_result.question
         sub_answer = sub_question_answer_result.answer
-        sub_document_results = _create_citation_format_list(
+        sub_document_results = create_citation_format_list(
             sub_question_answer_result.context_documents
         )
 

@@ -6,7 +6,12 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.agents.agent_search.kb_search.models import KGExpandedGraphObjects
 from onyx.agents.agent_search.kb_search.states import SubQuestionAnswerResults
-from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
+from onyx.agents.agent_search.kb_search.step_definitions import (
+    BASIC_SEARCH_STEP_DESCRIPTIONS,
+)
+from onyx.agents.agent_search.kb_search.step_definitions import (
+    KG_SEARCH_STEP_DESCRIPTIONS,
+)
 from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
@@ -95,14 +100,14 @@ def create_minimal_connected_query_graph(
     return KGExpandedGraphObjects(entities=entities, relationships=relationships)
 
 
-def stream_write_step_description(
+def stream_write_kg_search_description(
     writer: StreamWriter, step_nr: int, level: int = 0
 ) -> None:
 
     write_custom_event(
         "decomp_qs",
         SubQuestionPiece(
-            sub_question=STEP_DESCRIPTIONS[step_nr].description,
+            sub_question=KG_SEARCH_STEP_DESCRIPTIONS[step_nr].description,
             level=level,
             level_question_num=step_nr,
         ),
@@ -113,10 +118,12 @@ def stream_write_step_description(
     sleep(0.2)
 
 
-def stream_write_step_activities(
+def stream_write_kg_search_activities(
     writer: StreamWriter, step_nr: int, level: int = 0
 ) -> None:
-    for activity_nr, activity in enumerate(STEP_DESCRIPTIONS[step_nr].activities):
+    for activity_nr, activity in enumerate(
+        KG_SEARCH_STEP_DESCRIPTIONS[step_nr].activities
+    ):
         write_custom_event(
             "subqueries",
             SubQueryPiece(
@@ -129,23 +136,25 @@ def stream_write_step_activities(
         )
 
 
-def stream_write_step_activity_explicit(
-    writer: StreamWriter, step_nr: int, query_id: int, activity: str, level: int = 0
+def stream_write_basic_search_activities(
+    writer: StreamWriter, step_nr: int, level: int = 0
 ) -> None:
-    for activity in STEP_DESCRIPTIONS[step_nr].activities:
+    for activity_nr, activity in enumerate(
+        BASIC_SEARCH_STEP_DESCRIPTIONS[step_nr].activities
+    ):
         write_custom_event(
             "subqueries",
             SubQueryPiece(
                 sub_query=activity,
                 level=level,
                 level_question_num=step_nr,
-                query_id=query_id,
+                query_id=activity_nr + 1,
             ),
             writer,
         )
 
 
-def stream_write_step_answer_explicit(
+def stream_write_kg_search_answer_explicit(
     writer: StreamWriter, step_nr: int, answer: str, level: int = 0
 ) -> None:
     write_custom_event(
@@ -160,8 +169,8 @@ def stream_write_step_answer_explicit(
     )
 
 
-def stream_write_step_structure(writer: StreamWriter, level: int = 0) -> None:
-    for step_nr, step_detail in STEP_DESCRIPTIONS.items():
+def stream_write_kg_search_structure(writer: StreamWriter, level: int = 0) -> None:
+    for step_nr, step_detail in KG_SEARCH_STEP_DESCRIPTIONS.items():
 
         write_custom_event(
             "decomp_qs",
@@ -173,7 +182,7 @@ def stream_write_step_structure(writer: StreamWriter, level: int = 0) -> None:
             writer,
         )
 
-    for step_nr in STEP_DESCRIPTIONS.keys():
+    for step_nr in KG_SEARCH_STEP_DESCRIPTIONS.keys():
 
         write_custom_event(
             "stream_finished",
@@ -195,7 +204,40 @@ def stream_write_step_structure(writer: StreamWriter, level: int = 0) -> None:
     write_custom_event("stream_finished", stop_event, writer)
 
 
-def stream_close_step_answer(
+def stream_write_basic_search_structure(writer: StreamWriter, level: int = 0) -> None:
+    for step_nr, step_detail in BASIC_SEARCH_STEP_DESCRIPTIONS.items():
+        write_custom_event(
+            "decomp_qs",
+            SubQuestionPiece(
+                sub_question=step_detail.description,
+                level=level,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    for step_nr in BASIC_SEARCH_STEP_DESCRIPTIONS:
+        write_custom_event(
+            "stream_finished",
+            StreamStopInfo(
+                stop_reason=StreamStopReason.FINISHED,
+                stream_type=StreamType.SUB_QUESTIONS,
+                level=level,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.SUB_QUESTIONS,
+        level=0,
+    )
+
+    write_custom_event("stream_finished", stop_event, writer)
+
+
+def stream_kg_search_close_step_answer(
     writer: StreamWriter, step_nr: int, level: int = 0
 ) -> None:
     stop_event = StreamStopInfo(
@@ -207,7 +249,7 @@ def stream_close_step_answer(
     write_custom_event("stream_finished", stop_event, writer)
 
 
-def stream_write_close_steps(writer: StreamWriter, level: int = 0) -> None:
+def stream_write_kg_search_close_steps(writer: StreamWriter, level: int = 0) -> None:
     stop_event = StreamStopInfo(
         stop_reason=StreamStopReason.FINISHED,
         stream_type=StreamType.SUB_QUESTIONS,
@@ -355,7 +397,7 @@ def get_near_empty_step_results(
     Get near-empty step results from a list of step results.
     """
     return SubQuestionAnswerResults(
-        question=STEP_DESCRIPTIONS[step_number].description,
+        question=KG_SEARCH_STEP_DESCRIPTIONS[step_number].description,
         question_id="0_" + str(step_number),
         answer=step_answer,
         verified_high_quality=True,

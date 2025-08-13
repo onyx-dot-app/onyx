@@ -29,6 +29,7 @@ from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.db.models import Persona
+from onyx.db.models import Tool as ToolDBModel
 from onyx.db.search_settings import get_current_search_settings
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -143,7 +144,22 @@ class InternetSearchTool(Tool[None]):
             )
         )
 
+        tool_id: int | None = (
+            db_session.query(ToolDBModel.id)
+            .filter(ToolDBModel.in_code_tool_id == InternetSearchTool.__name__)
+            .scalar()
+        )
+        if not tool_id:
+            raise ValueError(
+                "Internet Search tool not found. This should never happen."
+            )
+        self._id = tool_id
+
     """For explicit tool calling"""
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

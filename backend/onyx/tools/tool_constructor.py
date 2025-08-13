@@ -16,6 +16,7 @@ from onyx.configs.app_configs import AZURE_DALLE_DEPLOYMENT_NAME
 from onyx.configs.app_configs import IMAGE_MODEL_NAME
 from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_CHUNKS
 from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
@@ -40,6 +41,9 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
+)
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens
@@ -264,6 +268,14 @@ def construct_tools(
                     raise ValueError(
                         "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
                     )
+
+            # Handle KG Tool
+            elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
+                if persona.name != TMP_DRALPHA_PERSONA_NAME:
+                    raise ValueError(
+                        f"Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
+                    )
+                tool_dict[db_tool_model.id] = [KnowledgeGraphTool()]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
