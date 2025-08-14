@@ -245,6 +245,9 @@ class LocalFileConnector(LoadConnector):
         # Resolve file_names: prefer explicit list, fall back to locations
         if file_names is None:
             file_names = self.file_locations
+        else:
+            # Ensure we have a concrete list of strings
+            file_names = [str(name) for name in file_names]
 
         self.batch_size = batch_size
         self.pdf_pass: Optional[str] = None
