@@ -5,12 +5,12 @@ from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import PreviousMessage
 from onyx.utils.special_types import JSON_ro
 
 
 if TYPE_CHECKING:
+    from onyx.llm.interfaces import LLM
+    from onyx.llm.models import PreviousMessage
     from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
     from onyx.tools.message import ToolCallSummary
     from onyx.tools.models import ToolResponse
@@ -53,8 +53,8 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     def get_args_for_non_tool_calling_llm(
         self,
         query: str,
-        history: list[PreviousMessage],
-        llm: LLM,
+        history: list["PreviousMessage"],
+        llm: "LLM",
         force_run: bool = False,
     ) -> dict[str, Any] | None:
         raise NotImplementedError

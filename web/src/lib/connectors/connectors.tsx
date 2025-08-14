@@ -638,15 +638,12 @@ Example:
   "Account": {
     "fields": ["Id", "Name", "Industry"],
     "associations": {
-      "Contact": {
-        "fields": ["Id", "FirstName", "LastName", "Email"],
-        "associations": {}
-      }
+      "Contact": ["Id", "FirstName", "LastName", "Email"]
     }
   }
 }
 
-See our docs for more details.`,
+[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.`,
               },
             ],
           },
@@ -666,14 +663,33 @@ See our docs for more details.`,
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
-
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
+• Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
+• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
 `,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Index Documents:",
+        label: "Index Documents",
+        name: "include_site_documents",
+        optional: true,
+        default: true,
+        description:
+          "Index documents of all SharePoint libraries or folders defined above.",
+      },
+      {
+        type: "checkbox",
+        query: "Index ASPX Sites:",
+        label: "Index ASPX Sites",
+        name: "include_site_pages",
+        optional: true,
+        default: true,
+        description:
+          "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
+      },
+    ],
   },
   teams: {
     description: "Configure Teams connector",
@@ -1579,6 +1595,8 @@ export interface SalesforceConfig {
 
 export interface SharepointConfig {
   sites?: string[];
+  include_site_pages?: boolean;
+  include_site_documents?: boolean;
 }
 
 export interface TeamsConfig {

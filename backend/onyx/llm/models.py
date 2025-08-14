@@ -72,6 +72,7 @@ class PreviousMessage(BaseModel):
             message_type = MessageType.USER
         elif isinstance(msg, AIMessage):
             message_type = MessageType.ASSISTANT
+
         message = message_to_string(msg)
         return cls(
             message=message,
