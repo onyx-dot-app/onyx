@@ -23,12 +23,6 @@ from tests.integration.connector_job_tests.sharepoint.conftest import (
 logger = setup_logger()
 
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
-    reason="Permission sync is enterprise only",
-)
-
-
 def get_user_acl(user: User, db_session: Session) -> set[str]:
     db_external_groups = (
         fetch_external_groups_for_user(db_session, user.id) if user else []
@@ -113,6 +107,10 @@ def get_documents_by_permission_type(
     return public_docs
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission tests are enterprise only",
+)
 def test_public_documents_accessible_by_all_users(
     sharepoint_test_env_setup: SharepointTestEnvSetupTuple,
 ) -> None:
@@ -164,6 +162,10 @@ def test_public_documents_accessible_by_all_users(
         )
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission tests are enterprise only",
+)
 def test_group_based_permissions(
     sharepoint_test_env_setup: SharepointTestEnvSetupTuple,
 ) -> None:
