@@ -1,3 +1,4 @@
+import os
 from typing import List
 from uuid import UUID
 
@@ -20,6 +21,12 @@ from tests.integration.connector_job_tests.sharepoint.conftest import (
 )
 
 logger = setup_logger()
+
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission sync is enterprise only",
+)
 
 
 def get_user_acl(user: User, db_session: Session) -> set[str]:
