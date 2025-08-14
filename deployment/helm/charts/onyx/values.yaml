@@ -620,7 +620,7 @@ auth:
     secretName: 'onyx-redis'
     # -- Use a secret specified elsewhere
     existingSecret: ""
-    # -- This defines the env var to secret map, key is always upper-cased elsewhere
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       REDIS_PASSWORD: redis_password
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
@@ -633,7 +633,7 @@ auth:
     secretName: 'onyx-objectstorage'
     # -- Use a secret specified elsewhere
     existingSecret: ""
-    # -- This defines the env var to secret map, key is always upper-cased elsewhere
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       S3_AWS_ACCESS_KEY_ID: s3_aws_access_key_id
       S3_AWS_SECRET_ACCESS_KEY: s3_aws_secret_access_key
@@ -648,7 +648,7 @@ auth:
     secretName: 'onyx-oauth'
     # -- Use a secret specified elsewhere
     existingSecret: ""
-    # -- This defines the env var to secret map, key is always upper-cased elsewhere
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       OAUTH_CLIENT_ID: "oauth_client_id"
       OAUTH_CLIENT_SECRET: "oauth_client_secret"
@@ -665,7 +665,7 @@ auth:
     secretName: 'onyx-smtp'
     # -- Use a secret specified elsewhere
     existingSecret: ""
-    # -- This defines the env var to secret map, key is always upper-cased elsewhere
+    # -- This defines the env var to secret map, key is always upper-cased as an env var
     secretKeys:
       SMTP_PASS: "smtp_pass"
     # -- Secrets values IF existingSecret is empty. Key here must match the value in secretKeys to be used
