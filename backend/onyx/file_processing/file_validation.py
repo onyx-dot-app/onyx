@@ -21,6 +21,9 @@ EXCLUDED_IMAGE_TYPES = [
     "image/avif",
 ]
 
+# Text MIME types
+TEXT_MIME_TYPE = "text/plain"
+
 
 def is_valid_image_type(mime_type: str) -> bool:
     """

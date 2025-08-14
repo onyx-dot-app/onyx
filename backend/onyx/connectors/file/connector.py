@@ -72,6 +72,7 @@ def _process_file(
     file: IO[Any],
     metadata: dict[str, Any] | None,
     pdf_pass: str | None,
+    file_type: str | None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -148,6 +149,7 @@ def _process_file(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
+        content_type=file_type,
     )
 
     # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/connectors/file
@@ -278,6 +280,7 @@ class LocalFileConnector(LoadConnector):
                 file=file_io,
                 metadata=metadata,
                 pdf_pass=self.pdf_pass,
+                file_type=file_record.file_type,
             )
             documents.extend(new_docs)
 
