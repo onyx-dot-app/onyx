@@ -40,5 +40,6 @@ resource "aws_db_instance" "this" {
   vpc_security_group_ids = [aws_security_group.this.id]
   publicly_accessible    = false
   deletion_protection    = true
-  tags                   = var.tags
+  storage_encrypted      = true
+  tags                   = var.tags 
 }

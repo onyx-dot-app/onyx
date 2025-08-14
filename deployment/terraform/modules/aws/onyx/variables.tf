@@ -58,7 +58,7 @@ variable "postgres_username" {
 variable "postgres_password" {
   type        = string
   description = "Password for the postgres database"
-  default     = "password"
+  default     = null
   sensitive   = true
 }
 
@@ -78,4 +78,11 @@ variable "cluster_endpoint_public_access_cidrs" {
   type        = list(string)
   description = "CIDR blocks allowed to access the public EKS API endpoint"
   default     = []
+}
+
+variable "redis_auth_token" {
+  type        = string
+  description = "Authentication token for the Redis cluster"
+  default     = null
+  sensitive   = true
 }

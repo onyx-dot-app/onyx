@@ -4,12 +4,6 @@ variable "vpc_name" {
   default     = "onyx-vpc"
 }
 
-variable "cluster_name" {
-  type        = string
-  description = "The name of the cluster"
-  default     = "onyx-eks"
-}
-
 variable "cidr_block" {
   type        = string
   description = "The CIDR block for the VPC"

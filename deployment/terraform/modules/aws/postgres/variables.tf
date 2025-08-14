@@ -52,7 +52,7 @@ variable "username" {
 variable "password" {
   type        = string
   description = "Password for the database"
-  default     = "password"
+  default     = null
   sensitive   = true
 }
 
