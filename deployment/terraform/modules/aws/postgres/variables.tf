@@ -18,7 +18,7 @@ variable "instance_type" {
 variable "storage_gb" {
   type        = number
   description = "Storage size in GB"
-  default     = 10
+  default     = 20
 }
 
 variable "engine_version" {

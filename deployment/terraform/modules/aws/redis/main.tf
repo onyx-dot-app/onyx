@@ -48,7 +48,6 @@ resource "aws_elasticache_replication_group" "redis" {
 
   # Enable authentication if auth_token is provided
   # If transit_encryption_enabled is true, AWS requires an auth_token to be set.
-  # This will error at apply time if not set, but we add a validation in variables.tf for clarity.
   auth_token = var.auth_token
   tags       = var.tags
 }

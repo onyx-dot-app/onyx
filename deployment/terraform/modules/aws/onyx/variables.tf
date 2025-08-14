@@ -25,7 +25,7 @@ variable "vpc_id" {
 variable "private_subnets" {
   type        = list(string)
   description = "Private subnets. Required if create_vpc is false."
-  default     = []
+  default     = [] # This will default to 0.0.0.0/0 if not provided
 }
 
 variable "public_subnets" {
