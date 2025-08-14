@@ -676,7 +676,8 @@ Example:
         name: "include_site_documents",
         optional: true,
         default: true,
-        description: "Index documents from SharePoint document libraries",
+        description:
+          "Index documents of all SharePoint libraries or folders defined above.",
       },
       {
         type: "checkbox",
@@ -685,7 +686,8 @@ Example:
         name: "include_site_pages",
         optional: true,
         default: true,
-        description: "Index SharePoint site pages (.aspx files)",
+        description:
+          "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
       },
     ],
   },

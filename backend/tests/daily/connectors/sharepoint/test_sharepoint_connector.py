@@ -111,8 +111,8 @@ def test_sharepoint_connector_all_sites__docs_only(
     ):
         # Initialize connector with no sites
         connector = SharepointConnector(
-        include_site_pages=False, include_site_documents=True
-    )
+            include_site_pages=False, include_site_documents=True
+        )
 
         # Load credentials
         connector.load_credentials(sharepoint_credentials)
@@ -179,8 +179,8 @@ def test_sharepoint_connector_root_folder__docs_only(
         # Initialize connector with the base site URL
         connector = SharepointConnector(
             sites=[os.environ["SHAREPOINT_SITE"]],
-        include_site_pages=False,
-        include_site_documents=True,
+            include_site_pages=False,
+            include_site_documents=True,
         )
 
         # Load credentials

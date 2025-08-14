@@ -506,6 +506,13 @@ class SharepointConnector(
         self.include_site_documents = include_site_documents
         self.sp_tenant_domain: str | None = None
 
+        # Validate that at least one content type is enabled
+        if not self.include_site_documents and not self.include_site_pages:
+            raise ConnectorValidationError(
+                "At least one content type must be enabled. "
+                "Please check either 'Include Site Documents' or 'Include Site Pages' (or both)."
+            )
+
     @property
     def graph_client(self) -> GraphClient:
         if self._graph_client is None:
@@ -1089,13 +1096,13 @@ class SharepointConnector(
                 return checkpoint
 
         # Phase 2: Initialize cached_drive_names for current site if needed
-        if (checkpoint.current_site_descriptor and checkpoint.cached_drive_names is None):
+        if checkpoint.current_site_descriptor and checkpoint.cached_drive_names is None:
             # If site documents flag is False, set empty drive list to skip document processing
             if not self.include_site_documents:
                 logger.debug("Documents disabled, skipping drive initialization")
                 checkpoint.cached_drive_names = deque()
                 return checkpoint
-            
+
             logger.info(
                 f"Initializing drives for site: {checkpoint.current_site_descriptor.url}"
             )
@@ -1270,45 +1277,35 @@ class SharepointConnector(
             and checkpoint.current_site_descriptor is not None
         ):
             # Fetch SharePoint site pages (.aspx files)
-            # Only fetch site pages if a folder or drive is not specified since this
-            # processing happens at a site-wide level + specifying a folder implies 
-            # that the user probably isn't looking for site pages
             site_descriptor = checkpoint.current_site_descriptor
-            specified_path = (
-                site_descriptor.folder_path is not None
-                or site_descriptor.drive_name is not None
-            )
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
             end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-            if not specified_path:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start_dt, end=end_dt
+            site_pages = self._fetch_site_pages(
+                site_descriptor, start=start_dt, end=end_dt
+            )
+            client_ctx: ClientContext | None = None
+            if include_permissions:
+                if self.msal_app and self.sp_tenant_domain:
+                    msal_app = self.msal_app
+                    sp_tenant_domain = self.sp_tenant_domain
+                    client_ctx = ClientContext(site_descriptor.url).with_access_token(
+                        lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
+                    )
+                else:
+                    raise RuntimeError("MSAL app or tenant domain is not set")
+            for site_page in site_pages:
+                logger.debug(
+                    f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
                 )
-                client_ctx: ClientContext | None = None
-                if include_permissions:
-                    if self.msal_app and self.sp_tenant_domain:
-                        msal_app = self.msal_app
-                        sp_tenant_domain = self.sp_tenant_domain
-                        client_ctx = ClientContext(
-                            site_descriptor.url
-                        ).with_access_token(
-                            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain)
-                        )
-                    else:
-                        raise RuntimeError("MSAL app or tenant domain is not set")
-                for site_page in site_pages:
-                    logger.debug(
-                        f"Processing site page: {site_page.get('webUrl', site_page.get('name', 'Unknown'))}"
+                yield (
+                    _convert_sitepage_to_document(
+                        site_page,
+                        site_descriptor.drive_name,
+                        client_ctx,
+                        self.graph_client,
+                        include_permissions=include_permissions,
                     )
-                    yield (
-                        _convert_sitepage_to_document(
-                            site_page,
-                            site_descriptor.drive_name,
-                            client_ctx,
-                            self.graph_client,
-                            include_permissions=include_permissions,
-                        )
-                    )
+                )
             logger.info(
                 f"Finished processing site pages for site: {site_descriptor.url}"
             )
