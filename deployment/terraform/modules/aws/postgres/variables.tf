@@ -46,12 +46,14 @@ variable "username" {
   type        = string
   description = "Username for the database"
   default     = "postgres"
+  sensitive   = true
 }
 
 variable "password" {
   type        = string
   description = "Password for the database"
   default     = "password"
+  sensitive   = true
 }
 
 variable "tags" {

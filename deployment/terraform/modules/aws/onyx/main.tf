@@ -1,7 +1,7 @@
 locals {
   workspace     = terraform.workspace
   name          = var.name
-  merged_tags   = merge(var.customer_tags, { tenant = local.name, environment = local.workspace })
+  merged_tags   = merge(var.tags, { tenant = local.name, environment = local.workspace })
   vpc_name      = "${var.name}-vpc-${local.workspace}"
   cluster_name  = "${var.name}-${local.workspace}"
   bucket_name   = "${var.name}-file-store-${local.workspace}"
@@ -39,7 +39,7 @@ module "redis" {
   ingress_cidrs = [local.vpc_cidr_block]
   tags          = local.merged_tags
 
-  # Enable authentication with the password from values.yaml
+  # Enable authentication with a static password
   auth_token = "${var.name}-redis-password-2025"
 }
 
@@ -71,6 +71,8 @@ module "eks" {
   tags            = local.merged_tags
   s3_bucket_names = [local.bucket_name]
 
-  # Enable public cluster access
-  public_cluster_enabled = true
+  # These variables must be defined in variables.tf or passed in via parent module
+  public_cluster_enabled  = var.public_cluster_enabled
+  private_cluster_enabled = var.private_cluster_enabled
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 }

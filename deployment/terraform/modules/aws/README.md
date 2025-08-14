@@ -167,7 +167,8 @@ aws eks update-kubeconfig --name $(terraform output -raw cluster_name) --region 
 kubectl create namespace onyx --dry-run=client -o yaml | kubectl apply -f -
 
 # If using AWS S3 via IRSA created by the EKS module, consider disabling MinIO
-helm upgrade --install onyx ./../../helm/charts/onyx \
+# Replace the path below with the absolute or correct relative path to the onyx Helm chart
+helm upgrade --install onyx /path/to/onyx/deployment/helm/charts/onyx \
   --namespace onyx \
   --set minio.enabled=false \
   --set serviceAccount.create=false \

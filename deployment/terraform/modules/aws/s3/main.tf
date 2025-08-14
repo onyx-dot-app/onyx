@@ -27,9 +27,10 @@ resource "aws_s3_bucket_policy" "bucket_policy" {
       {
         Sid       = "AllowAccessViaVPCE",
         Effect    = "Allow",
-        Principal = "*",
+        Principal = "*", # Update this to be the specific IAM roles, users, or service principals as needed
         Action = [
-          "s3:*",
+          "s3:GetObject",
+          "s3:ListBucket"
         ],
         Resource = [
           aws_s3_bucket.bucket.arn,

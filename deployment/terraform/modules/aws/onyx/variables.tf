@@ -52,10 +52,30 @@ variable "postgres_username" {
   type        = string
   description = "Username for the postgres database"
   default     = "postgres"
+  sensitive   = true
 }
 
 variable "postgres_password" {
   type        = string
   description = "Password for the postgres database"
   default     = "password"
+  sensitive   = true
+}
+
+variable "public_cluster_enabled" {
+  type        = bool
+  description = "Whether to enable public cluster access"
+  default     = true
+}
+
+variable "private_cluster_enabled" {
+  type        = bool
+  description = "Whether to enable private cluster access"
+  default     = false # Should be true for production, false for dev/staging
+}
+
+variable "cluster_endpoint_public_access_cidrs" {
+  type        = list(string)
+  description = "CIDR blocks allowed to access the public EKS API endpoint"
+  default     = []
 }
