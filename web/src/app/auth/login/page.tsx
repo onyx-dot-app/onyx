@@ -18,7 +18,7 @@ const Page = async (props: {
   const nextUrl =
     (Array.isArray(searchParams?.next)
       ? searchParams?.next[0]
-      : searchParams?.next) || "/";
+      : searchParams?.next) || "/chat";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
