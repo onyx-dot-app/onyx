@@ -4,6 +4,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import IO
+from typing import Optional
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -23,6 +24,7 @@ from onyx.file_processing.extract_file_text import OnyxExtensionType
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
+
 
 logger = setup_logger()
 
@@ -234,16 +236,22 @@ class LocalFileConnector(LoadConnector):
     def __init__(
         self,
         file_locations: list[Path | str],
-        file_names: list[
-            str
-        ],  # Must accept this parameter as connector_specific_config is unpacked as args
-        zip_metadata: dict[str, Any],
+        file_names: Optional[list[str]] = None,  # Must accept this parameter as connector_specific_config is unpacked as args
+        zip_metadata: dict[str, Any] = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
+
+        # Resolve file_names: prefer explicit list, fall back to locations
+        if file_names is None:
+            file_names = self.file_locations
+        else:
+            # Ensure we have a concrete list of strings
+            file_names = [str(name) for name in file_names]
+
         self.batch_size = batch_size
-        self.pdf_pass: str | None = None
-        self.zip_metadata = zip_metadata
+        self.pdf_pass: Optional[str] = None
+        self.zip_metadata = zip_metadata or {}
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.pdf_pass = credentials.get("pdf_password")
