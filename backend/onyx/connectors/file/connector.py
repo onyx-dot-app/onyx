@@ -237,7 +237,7 @@ class LocalFileConnector(LoadConnector):
         self,
         file_locations: list[Path | str],
         file_names: Optional[list[str]] = None,  # Must accept this parameter as connector_specific_config is unpacked as args
-        zip_metadata: dict[str, Any] = None,
+        zip_metadata: Optional[dict[str, Any]] = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
