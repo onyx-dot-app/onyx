@@ -24,10 +24,9 @@ provider "aws" {
 module "vpc" {
   source = "../vpc"
 
-  count        = var.create_vpc ? 1 : 0
-  vpc_name     = local.vpc_name
-  cluster_name = local.cluster_name
-  tags         = local.merged_tags
+  count    = var.create_vpc ? 1 : 0
+  vpc_name = local.vpc_name
+  tags     = local.merged_tags
 }
 
 module "redis" {
