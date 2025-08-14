@@ -798,6 +798,10 @@ class SharepointConnector(
         end: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
+        # Exclude personal sites because GET personal site pages returns 404
+        if "-my.sharepoint" in site_descriptor.url:
+            return []
+
         # Get the site to extract the site ID
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
         site.execute_query()  # Execute the query to actually fetch the data
