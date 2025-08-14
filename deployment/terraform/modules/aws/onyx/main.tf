@@ -39,8 +39,8 @@ module "redis" {
   ingress_cidrs = [local.vpc_cidr_block]
   tags          = local.merged_tags
 
-  # Enable authentication with a static password
-  auth_token = "${var.name}-redis-password-2025"
+  # Pass Redis authentication token as a sensitive input variable
+  auth_token = var.redis_auth_token
 }
 
 module "postgres" {
