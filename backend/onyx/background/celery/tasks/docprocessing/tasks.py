@@ -105,6 +105,10 @@ logger = setup_logger()
 
 USER_FILE_INDEXING_LIMIT = 100
 DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
+DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
+# Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
+# This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
+HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
 
 
 def _get_fence_validation_block_expiration() -> int:
@@ -136,14 +140,10 @@ def validate_active_indexing_attempts(
     every INDEXING_WORKER_HEARTBEAT_INTERVAL seconds.
     """
     logger.info("Validating active indexing attempts")
-    # Heartbeat timeout: if no heartbeat received for 5 minutes, consider it dead
-    # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s)
-    HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+
+    heartbeat_timeout_seconds = HEARTBEAT_TIMEOUT_SECONDS
 
     with get_session_with_current_tenant() as db_session:
-        cutoff_time = datetime.now(timezone.utc) - timedelta(
-            seconds=HEARTBEAT_TIMEOUT_SECONDS
-        )
 
         # Find all active indexing attempts
         active_attempts = (
@@ -202,6 +202,15 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
+            if fresh_attempt.total_batches and fresh_attempt.completed_batches == 0:
+                heartbeat_timeout_seconds = (
+                    HEARTBEAT_TIMEOUT_SECONDS
+                    * DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER
+                )
+            cutoff_time = datetime.now(timezone.utc) - timedelta(
+                seconds=heartbeat_timeout_seconds
+            )
+
             # Heartbeat hasn't advanced - check if it's been too long
             if last_check_time >= cutoff_time:
                 task_logger.debug(
@@ -211,7 +220,7 @@ def validate_active_indexing_attempts(
 
             # No heartbeat for too long - mark as failed
             failure_reason = (
-                f"No heartbeat received for {HEARTBEAT_TIMEOUT_SECONDS} seconds"
+                f"No heartbeat received for {heartbeat_timeout_seconds} seconds"
             )
 
             task_logger.warning(
