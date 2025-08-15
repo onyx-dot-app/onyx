@@ -38,6 +38,7 @@ import { transformLinkUri } from "@/lib/utils";
 import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 import { DatePicker } from "./ui/datePicker";
 import { Textarea, TextareaProps } from "./ui/textarea";
+import { RichTextSubtext } from "./RichTextSubtext";
 import {
   TypedFile,
   createTypedFile,
@@ -91,6 +92,18 @@ export function LabelWithTooltip({
 export function SubLabel({ children }: { children: string | JSX.Element }) {
   // Add whitespace-pre-wrap for multiline descriptions (when children is a string with newlines)
   const hasNewlines = typeof children === "string" && children.includes("\n");
+
+  // If children is a string, use RichTextSubtext to parse and render links
+  if (typeof children === "string") {
+    return (
+      <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+        <RichTextSubtext
+          text={children}
+          className={hasNewlines ? "whitespace-pre-wrap" : ""}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

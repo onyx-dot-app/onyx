@@ -554,29 +554,32 @@ export const AIMessage = ({
                             )}
                         </>
                       ) : null)}
-                    {userKnowledgeFiles && (
+                    {userKnowledgeFiles.length > 0 && (
                       <UserKnowledgeFiles
                         userKnowledgeFiles={userKnowledgeFiles}
                       />
                     )}
 
-                    {!userKnowledgeFiles &&
+                    {userKnowledgeFiles.length === 0 &&
                       toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
                       ) && (
-                        <ToolRunDisplay
-                          toolName={
-                            toolCall.tool_result && content
-                              ? `Used "${toolCall.tool_name}"`
-                              : `Using "${toolCall.tool_name}"`
-                          }
-                          toolLogo={
-                            <FiTool size={15} className="my-auto mr-1" />
-                          }
-                          isRunning={!toolCall.tool_result || !content}
-                        />
+                        <div className="mb-1">
+                          <ToolRunDisplay
+                            toolName={
+                              toolCall.tool_result && content
+                                ? `Used "${toolCall.tool_name}"`
+                                : `Using "${toolCall.tool_name}"`
+                            }
+                            toolLogo={
+                              <FiTool size={15} className="my-auto mr-1" />
+                            }
+                            isRunning={!toolCall.tool_result || !content}
+                          />
+                        </div>
                       )}
+
                     {toolCall &&
                       (!files || files.length == 0) &&
                       toolCall.tool_name === IMAGE_GENERATION_TOOL_NAME &&

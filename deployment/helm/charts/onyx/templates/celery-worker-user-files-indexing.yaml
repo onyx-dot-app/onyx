@@ -43,7 +43,7 @@ spec:
             [
               "celery",
               "-A",
-              "onyx.background.celery.versioned_apps.docprocessing",
+              "onyx.background.celery.versioned_apps.docfetching",
               "worker",
               "--loglevel=INFO",
               "--hostname=user-files-indexing@%n",

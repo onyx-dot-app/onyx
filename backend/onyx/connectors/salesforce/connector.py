@@ -438,7 +438,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> GenerateDocumentsOutput:
         type_to_processed: dict[str, int] = {}
 
-        logger.info("_fetch_from_salesforce starting.")
+        logger.info("_fetch_from_salesforce starting (full sync).")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
@@ -622,7 +622,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> GenerateDocumentsOutput:
         type_to_processed: dict[str, int] = {}
 
-        logger.info("_fetch_from_salesforce starting.")
+        logger.info("_fetch_from_salesforce starting (delta sync).")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
@@ -936,12 +936,28 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
             child_types_all = sf_client.get_children_of_sf_type(parent_type)
             logger.debug(f"Found {len(child_types_all)} child types for {parent_type}")
+            logger.debug(f"child types: {child_types_all}")
 
             child_types_working = child_types_all.copy()
             if associations_config is not None:
                 child_types_working = {
                     k: v for k, v in child_types_all.items() if k in associations_config
                 }
+                any_not_found = False
+                for k in associations_config:
+                    if k not in child_types_working:
+                        any_not_found = True
+                        logger.warning(f"Association {k} not found in {parent_type}")
+                if any_not_found:
+                    queryable_fields = sf_client.get_queryable_fields_by_type(
+                        parent_type
+                    )
+                    raise RuntimeError(
+                        f"Associations {associations_config} not found in {parent_type} "
+                        "make sure your parent-child associations are in the right order"
+                        # f"with child objects {child_types_all}"
+                        # f" and fields {queryable_fields}"
+                    )
 
             parent_to_child_relationships[parent_type] = set()
             parent_to_child_types[parent_type] = set()
