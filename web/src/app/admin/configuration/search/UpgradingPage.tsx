@@ -3,6 +3,8 @@ import { Modal } from "@/components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   ConnectorIndexingStatus,
+  ConnectorIndexingStatusLite,
+  ConnectorIndexingStatusLiteResponse,
   FailedConnectorIndexingStatus,
   ValidStatuses,
 } from "@/lib/types";
@@ -20,6 +22,7 @@ import {
 import { Connector } from "@/lib/connectors/connectors";
 import { FailedReIndexAttempts } from "@/components/embedding/FailedReIndexAttempts";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 
 export default function UpgradingPage({
   futureEmbeddingModel,
@@ -36,13 +39,15 @@ export default function UpgradingPage({
   });
 
   const {
-    data: ongoingReIndexingStatus,
+    data: connectorIndexingStatuses,
     isLoading: isLoadingOngoingReIndexingStatus,
-  } = useSWR<ConnectorIndexingStatus<any, any>[]>(
-    "/api/manage/admin/connector/indexing-status?secondary_index=true",
-    errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
-  );
+  } = useConnectorIndexingStatusWithPagination(
+    { secondary_index: true, get_all_connectors: true },
+    5000
+  ) as {
+    data: ConnectorIndexingStatusLiteResponse[];
+    isLoading: boolean;
+  };
 
   const { data: failedIndexingStatus } = useSWR<
     FailedConnectorIndexingStatus[]
@@ -78,19 +83,25 @@ export default function UpgradingPage({
     []
   );
 
+  const ongoingReIndexingStatus = useMemo(() => {
+    return connectorIndexingStatuses
+      .flatMap(
+        (status) => status.indexing_statuses as ConnectorIndexingStatusLite[]
+      )
+      .filter((status) => status.cc_pair_id !== undefined);
+  }, [connectorIndexingStatuses]);
+
   const sortedReindexingProgress = useMemo(() => {
     return [...(ongoingReIndexingStatus || [])].sort((a, b) => {
       const statusComparison =
-        statusOrder[a.latest_index_attempt?.status || "not_started"] -
-        statusOrder[b.latest_index_attempt?.status || "not_started"];
+        statusOrder[a.last_status || "not_started"] -
+        statusOrder[b.last_status || "not_started"];
 
       if (statusComparison !== 0) {
         return statusComparison;
       }
 
-      return (
-        (a.latest_index_attempt?.id || 0) - (b.latest_index_attempt?.id || 0)
-      );
+      return (a.cc_pair_id || 0) - (b.cc_pair_id || 0);
     });
   }, [ongoingReIndexingStatus, statusOrder]);
 

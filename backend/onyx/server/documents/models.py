@@ -1,6 +1,8 @@
+from collections.abc import Sequence
 from datetime import datetime
 from datetime import timezone
 from datetime import UTC
+from enum import Enum
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -21,6 +23,7 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
+from onyx.server.federated.models import FederatedConnectorStatus
 from onyx.server.utils import mask_credential_dict
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -382,6 +385,43 @@ class ConnectorIndexingStatus(ConnectorStatus):
     in_progress: bool
 
 
+class DocsCountOperator(str, Enum):
+    GREATER_THAN = ">"
+    LESS_THAN = "<"
+    EQUAL_TO = "="
+
+
+class ConnectorIndexingStatusLite(BaseModel):
+    cc_pair_id: int
+    name: str | None
+    source: DocumentSource
+    access_type: AccessType
+    cc_pair_status: ConnectorCredentialPairStatus
+    in_progress: bool
+    in_repeated_error_state: bool
+    last_finished_status: IndexingStatus | None
+    last_status: IndexingStatus | None
+    last_success: datetime | None
+    is_editable: bool
+    docs_indexed: int
+    latest_index_attempt_docs_indexed: int | None
+
+
+class SourceSummary(BaseModel):
+    total_connectors: int
+    active_connectors: int
+    public_connectors: int
+    total_docs_indexed: int
+
+
+class ConnectorIndexingStatusLiteResponse(BaseModel):
+    source: DocumentSource
+    summary: SourceSummary
+    current_page: int
+    total_pages: int
+    indexing_statuses: Sequence[ConnectorIndexingStatusLite | FederatedConnectorStatus]
+
+
 class ConnectorCredentialPairIdentifier(BaseModel):
     connector_id: int
     credential_id: int
@@ -500,3 +540,15 @@ class GmailCallback(BaseModel):
 class GDriveCallback(BaseModel):
     state: str
     code: str
+
+
+class IndexingStatusRequest(BaseModel):
+    secondary_index: bool = False
+    source: DocumentSource | None = None
+    access_type_filters: list[AccessType] = Field(default_factory=list)
+    last_status_filters: list[IndexingStatus] = Field(default_factory=list)
+    docs_count_operator: DocsCountOperator | None = None
+    docs_count_value: int | None = None
+    name_filter: str | None = None
+    source_to_page: dict[DocumentSource, int] = Field(default_factory=dict)
+    get_all_connectors: bool = False
