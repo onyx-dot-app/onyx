@@ -782,6 +782,7 @@ class SharepointConnector(
         if not sites:
             raise RuntimeError("No sites found in the tenant")
 
+        # OneDrive personal sites should not be indexed with SharepointConnector
         site_descriptors = [
             SiteDescriptor(
                 url=site.web_url or "",
@@ -789,6 +790,7 @@ class SharepointConnector(
                 folder_path=None,
             )
             for site in self._handle_paginated_sites(sites)
+            if "-my.sharepoint" not in site.web_url
         ]
         return site_descriptors
 
