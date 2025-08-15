@@ -29,6 +29,7 @@ from pypdf.errors import PdfStreamError
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
+from onyx.file_processing.file_validation import TEXT_MIME_TYPE
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
@@ -492,10 +493,23 @@ class ExtractionResult(NamedTuple):
     metadata: dict[str, Any]
 
 
+def extract_result_from_text_file(file: IO[Any]) -> ExtractionResult:
+    encoding = detect_encoding(file)
+    text_content_raw, file_metadata = read_text_file(
+        file, encoding=encoding, ignore_onyx_metadata=False
+    )
+    return ExtractionResult(
+        text_content=text_content_raw,
+        embedded_images=[],
+        metadata=file_metadata,
+    )
+
+
 def extract_text_and_images(
     file: IO[Any],
     file_name: str,
     pdf_pass: str | None = None,
+    content_type: str | None = None,
 ) -> ExtractionResult:
     """
     Primary new function for the updated connector.
@@ -515,6 +529,13 @@ def extract_text_and_images(
                 "Falling back to normal processing."
             )
             file.seek(0)  # Reset file pointer just in case
+
+    # When we upload a document via a connector or MyDocuments, we extract and store the content of files
+    # with content types in UploadMimeTypes.DOCUMENT_MIME_TYPES as plain text files.
+    # As a result, the file name extension may differ from the original content type.
+    # We process files with a plain text content type first to handle this scenario.
+    if content_type == TEXT_MIME_TYPE:
+        return extract_result_from_text_file(file)
 
     # Default processing
     try:
@@ -574,15 +595,7 @@ def extract_text_and_images(
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
-            encoding = detect_encoding(file)
-            text_content_raw, file_metadata = read_text_file(
-                file, encoding=encoding, ignore_onyx_metadata=False
-            )
-            return ExtractionResult(
-                text_content=text_content_raw,
-                embedded_images=[],
-                metadata=file_metadata,
-            )
+            return extract_result_from_text_file(file)
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text

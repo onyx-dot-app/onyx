@@ -71,13 +71,13 @@ from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger(propagate=False)
 
@@ -851,8 +851,8 @@ def run_docfetching_entrypoint(
 
     # set the indexing attempt ID so that all log messages from this process
     # will have it added as a prefix
-    TaskAttemptSingleton.set_cc_and_index_id(
-        index_attempt_id, connector_credential_pair_id
+    token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set(
+        (connector_credential_pair_id, index_attempt_id)
     )
     with get_session_with_current_tenant() as db_session:
         attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
@@ -889,6 +889,8 @@ def run_docfetching_entrypoint(
         f"config='{connector_config}' "
         f"credentials='{credential_id}'"
     )
+
+    INDEX_ATTEMPT_INFO_CONTEXTVAR.reset(token)
 
 
 def connector_document_extraction(

@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.2.5
+version: 0.2.6
 appVersion: latest
 annotations:
   category: Productivity
