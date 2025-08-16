@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from types import TracebackType
+from typing import Any
 from typing import cast
 from typing import Optional
 
@@ -404,6 +405,27 @@ def get_local_reranking_model(
     return _RERANK_MODEL
 
 
+ENCODING_RETRIES = 3
+ENCODING_RETRY_DELAY = 0.1
+
+
+def _concurrent_embedding(
+    texts: list[str], model: "SentenceTransformer", normalize_embeddings: bool
+) -> Any:
+    """Synchronous wrapper for concurrent_embedding to use with run_in_executor."""
+    for _ in range(ENCODING_RETRIES):
+        try:
+            return model.encode(texts, normalize_embeddings=normalize_embeddings)
+        except RuntimeError as e:
+            # There is a concurrency bug in the SentenceTransformer library that causes
+            # the model to fail to encode texts. It's pretty rare and we want to allow
+            # concurrent embedding, hence we retry (the specific error is
+            # "RuntimeError: Already borrowed" and occurs in the transformers library)
+            logger.error(f"Error encoding texts, retrying: {e}")
+            time.sleep(ENCODING_RETRY_DELAY)
+    return model.encode(texts, normalize_embeddings=normalize_embeddings)
+
+
 @simple_log_function_time()
 async def embed_text(
     texts: list[str],
@@ -492,8 +514,8 @@ async def embed_text(
         # Run CPU-bound embedding in a thread pool
         embeddings_vectors = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: local_model.encode(
-                prefixed_texts, normalize_embeddings=normalize_embeddings
+            lambda: _concurrent_embedding(
+                prefixed_texts, local_model, normalize_embeddings
             ),
         )
         embeddings = [
