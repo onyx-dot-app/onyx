@@ -47,7 +47,7 @@ export default async function Page(props: {
 
   const authDisabled = authTypeMetadata?.authType === "disabled";
   if (!authDisabled && !user) {
-    return redirect("/auth/login");
+    return redirect(`/auth/login?next=/chat/shared/${params.chatId}`);
   }
 
   if (user && !user.is_verified && authTypeMetadata?.requiresVerification) {
