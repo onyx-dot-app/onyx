@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from types import TracebackType
+from typing import Any
 from typing import cast
 from typing import Optional
 
@@ -404,6 +405,16 @@ def get_local_reranking_model(
     return _RERANK_MODEL
 
 
+_encode_lock = asyncio.Lock()
+
+
+async def concurrent_embedding(
+    texts: list[str], model: "SentenceTransformer", normalize_embeddings: bool
+) -> Any:
+    async with _encode_lock:
+        return model.encode(texts, normalize_embeddings=normalize_embeddings)
+
+
 @simple_log_function_time()
 async def embed_text(
     texts: list[str],
@@ -492,8 +503,8 @@ async def embed_text(
         # Run CPU-bound embedding in a thread pool
         embeddings_vectors = await asyncio.get_event_loop().run_in_executor(
             None,
-            lambda: local_model.encode(
-                prefixed_texts, normalize_embeddings=normalize_embeddings
+            lambda: concurrent_embedding(
+                prefixed_texts, local_model, normalize_embeddings
             ),
         )
         embeddings = [
