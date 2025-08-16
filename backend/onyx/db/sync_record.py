@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import and_
 from sqlalchemy import desc
 from sqlalchemy import func
@@ -117,6 +119,7 @@ def update_sync_record_status(
     sync_type: SyncType,
     sync_status: SyncStatus,
     num_docs_synced: int | None = None,
+    sync_warnings: dict[str, Any] | None = None,
 ) -> None:
     """Update the status of a sync record.
 
@@ -136,6 +139,8 @@ def update_sync_record_status(
     sync_record.sync_status = sync_status
     if num_docs_synced is not None:
         sync_record.num_docs_synced = num_docs_synced
+    if sync_warnings is not None:
+        sync_record.sync_warnings = sync_warnings
 
     if sync_status.is_terminal():
         sync_record.sync_end_time = func.now()  # type: ignore
