@@ -43,36 +43,6 @@ def route_initial_tool_choice(
         return "call_tool"
 
 
-def parallelize_initial_sub_question_answering(
-    state: MainState,
-) -> list[Send | Hashable]:
-    edge_start_time = datetime.now()
-    if len(state.initial_sub_questions) > 0:
-        return [
-            Send(
-                "answer_query_subgraph",
-                SubQuestionAnsweringInput(
-                    question=question,
-                    question_id=make_question_id(0, question_num + 1),
-                    log_messages=[
-                        f"{edge_start_time} -- Main Edge - Parallelize Initial Sub-question Answering"
-                    ],
-                ),
-            )
-            for question_num, question in enumerate(state.initial_sub_questions)
-        ]
-
-    else:
-        return [
-            Send(
-                "ingest_answers",
-                AnswerQuestionOutput(
-                    answer_results=[],
-                ),
-            )
-        ]
-
-
 # Define the function that determines whether to continue or not
 def continue_to_refined_answer_or_end(
     state: RequireRefinemenEvalUpdate,
