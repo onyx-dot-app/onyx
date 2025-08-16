@@ -14,7 +14,7 @@ spec:
       http:
         paths:
           - path: /api(/|$)(.*)
-            pathType: Prefix
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: {{ include "onyx-stack.fullname" . }}-api-service
