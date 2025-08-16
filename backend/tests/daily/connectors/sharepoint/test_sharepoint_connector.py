@@ -232,8 +232,6 @@ def test_sharepoint_connector_root_folder__docs_only(
             end=time.time(),
         )
 
-        print(found_documents)
-
         assert len(found_documents) == len(
             EXPECTED_DOCUMENTS
         ), "Should find all documents in main library"
