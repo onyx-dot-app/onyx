@@ -138,6 +138,14 @@ def build_vespa_filters(
             return f"!({DOC_UPDATED_AT} < {cutoff_secs}) and "
         return f"({DOC_UPDATED_AT} >= {cutoff_secs}) and "
 
+    def _build_end_time_filter(
+        cutoff: datetime | None,
+    ) -> str:
+        if not cutoff:
+            return ""
+        cutoff_secs = int(cutoff.timestamp())
+        return f"({DOC_UPDATED_AT} <= {cutoff_secs}) and "
+
     # Start building the filter string
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
@@ -179,6 +187,7 @@ def build_vespa_filters(
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
+    filter_str += _build_end_time_filter(filters.time_cutoff_end)
 
     # Knowledge Graph Filters
     filter_str += _build_kg_filter(
