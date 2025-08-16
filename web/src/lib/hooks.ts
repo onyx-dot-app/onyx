@@ -1,4 +1,5 @@
 "use client";
+
 import {
   ConnectorIndexingStatus,
   DocumentBoostStatus,
@@ -24,7 +25,6 @@ import {
 } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
-import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";

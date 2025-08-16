@@ -28,7 +28,6 @@ import {
 
 import Prism from "prismjs";
 import Cookies from "js-cookie";
-import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { MinimalPersonaSnapshot } from "../admin/assistants/interfaces";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import {
@@ -96,20 +95,16 @@ import {
 import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatPopup } from "./ChatPopup";
-import FunctionalHeader from "@/components/chat/Header";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
 import { useFederatedOAuthStatus } from "@/lib/hooks/useFederatedOAuthStatus";
-import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
   SIDEBAR_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
-import FixedLogo from "@/components/logo/FixedLogo";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
-import BlurBackground from "../../components/chat/BlurBackground";
 import { NoAssistantModal } from "@/components/modals/NoAssistantModal";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import TextView from "@/components/chat/TextView";
@@ -124,7 +119,6 @@ import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
-import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { FilePickerModal } from "./my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -139,7 +133,6 @@ import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { WelcomeModal } from "@/components/initialSetup/welcome/WelcomeModal";
 import { useFederatedConnectors } from "@/lib/hooks";
-import { Button } from "@/components/ui/button";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -151,9 +144,7 @@ export enum UploadIntent {
 }
 
 type ChatPageProps = {
-  toggle: (toggled?: boolean) => void;
   documentSidebarInitialWidth?: number;
-  sidebarVisible: boolean;
   firstMessage?: string;
   initialFolders?: any;
   initialFiles?: any;
@@ -174,9 +165,7 @@ type ChatPageProps = {
 // ---
 
 export function ChatPage({
-  toggle,
   documentSidebarInitialWidth,
-  sidebarVisible,
   firstMessage,
   initialFolders,
   initialFiles,
@@ -374,23 +363,21 @@ export function ChatPage({
   const slackChatId = searchParams?.get("slackChatId");
   const existingChatIdRaw = searchParams?.get("chatId");
 
-  const [showHistorySidebar, setShowHistorySidebar] = useState(false);
-
   const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
 
   const selectedChatSession = chatSessions.find(
     (chatSession) => chatSession.id === existingChatSessionId
   );
 
-  useEffect(() => {
-    if (user?.is_anonymous_user) {
-      Cookies.set(
-        SIDEBAR_TOGGLED_COOKIE_NAME,
-        String(!sidebarVisible).toLocaleLowerCase()
-      );
-      toggle(false);
-    }
-  }, [user]);
+  // useEffect(() => {
+  //   if (user?.is_anonymous_user) {
+  //     Cookies.set(
+  //       SIDEBAR_TOGGLED_COOKIE_NAME,
+  //       String(!sidebarVisible).toLocaleLowerCase()
+  //     );
+  //     toggle(false);
+  //   }
+  // }, [user]);
 
   const processSearchParamsAndSubmitMessage = (searchParamsString: string) => {
     const newSearchParams = new URLSearchParams(searchParamsString);
@@ -2175,44 +2162,20 @@ export function ChatPage({
   };
 
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
-  const [untoggled, setUntoggled] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
 
-  const explicitlyUntoggle = () => {
-    setShowHistorySidebar(false);
-
-    setUntoggled(true);
-    setTimeout(() => {
-      setUntoggled(false);
-    }, 200);
-  };
-  const toggleSidebar = () => {
-    if (user?.is_anonymous_user) {
-      return;
-    }
-    Cookies.set(
-      SIDEBAR_TOGGLED_COOKIE_NAME,
-      String(!sidebarVisible).toLocaleLowerCase()
-    );
-    toggle();
-  };
-  const removeToggle = () => {
-    setShowHistorySidebar(false);
-    toggle(false);
-  };
+  // const toggleSidebar = () => {
+  //   if (user?.is_anonymous_user) {
+  //     return;
+  //   }
+  //   Cookies.set(
+  //     SIDEBAR_TOGGLED_COOKIE_NAME,
+  //     String(!sidebarVisible).toLocaleLowerCase()
+  //   );
+  //   toggle();
+  // };
 
   const waitForScrollRef = useRef(false);
-  const sidebarElementRef = useRef<HTMLDivElement>(null);
-
-  useSidebarVisibility({
-    sidebarVisible,
-    sidebarElementRef,
-    showDocSidebar: showHistorySidebar,
-    setShowDocSidebar: setShowHistorySidebar,
-    setToggled: removeToggle,
-    mobile: settings?.isMobile,
-    isAnonymousUser: user?.is_anonymous_user,
-  });
 
   // Virtualization + Scrolling related effects and functions
   const scrollInitialized = useRef(false);
@@ -2378,8 +2341,6 @@ export function ChatPage({
 
     calculateTokensAndUpdateSearchMode();
   }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
-
-  useSidebarShortcut(router, toggleSidebar);
 
   const [sharedChatSession, setSharedChatSession] =
     useState<ChatSession | null>();
@@ -2625,70 +2586,8 @@ export function ChatPage({
         <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
       )}
 
-      <div className="fixed inset-0 flex flex-col text-text-dark">
+      <div className="flex flex-col text-text-dark">
         <div className="h-[100dvh] overflow-y-hidden">
-          <div className="w-full">
-            <div
-              ref={sidebarElementRef}
-              className={`
-                flex-none
-                fixed
-                left-0
-                z-40
-                bg-neutral-200
-                h-screen
-                transition-all
-                bg-opacity-80
-                duration-300
-                ease-in-out
-                ${
-                  !untoggled && (showHistorySidebar || sidebarVisible)
-                    ? "opacity-100 w-[250px] translate-x-0"
-                    : "opacity-0 w-[250px] pointer-events-none -translate-x-10"
-                }`}
-            >
-              <div className="w-full relative">
-                <HistorySidebar
-                  toggleChatSessionSearchModal={() =>
-                    setIsChatSearchModalOpen((open) => !open)
-                  }
-                  liveAssistant={liveAssistant}
-                  setShowAssistantsModal={setShowAssistantsModal}
-                  explicitlyUntoggle={explicitlyUntoggle}
-                  reset={reset}
-                  page="chat"
-                  ref={innerSidebarElementRef}
-                  toggleSidebar={toggleSidebar}
-                  toggled={sidebarVisible}
-                  existingChats={chatSessions}
-                  currentChatSession={selectedChatSession}
-                  folders={folders}
-                  removeToggle={removeToggle}
-                  showShareModal={showShareModal}
-                />
-              </div>
-
-              <div
-                className={`
-                flex-none
-                fixed
-                left-0
-                z-40
-                bg-background-100
-                h-screen
-                transition-all
-                bg-opacity-80
-                duration-300
-                ease-in-out
-                ${
-                  documentSidebarVisible &&
-                  !settings?.isMobile &&
-                  "opacity-100 w-[350px]"
-                }`}
-              ></div>
-            </div>
-          </div>
-
           <div
             style={{ transition: "width 0.30s ease-out" }}
             className={`
@@ -2738,12 +2637,6 @@ export function ChatPage({
               isOpen={documentSidebarVisible && !settings?.isMobile}
             />
           </div>
-
-          <BlurBackground
-            visible={!untoggled && (showHistorySidebar || sidebarVisible)}
-            onClick={() => toggleSidebar()}
-          />
-
           <div
             ref={masterFlexboxRef}
             className="flex h-full w-full overflow-x-hidden"
@@ -2752,26 +2645,6 @@ export function ChatPage({
               id="scrollableContainer"
               className="flex h-full relative px-2 flex-col w-full"
             >
-              {liveAssistant && (
-                <FunctionalHeader
-                  toggleUserSettings={() => setUserSettingsToggled(true)}
-                  sidebarToggled={sidebarVisible}
-                  reset={() => setMessage("")}
-                  page="chat"
-                  setSharingModalVisible={
-                    chatSessionIdRef.current !== null
-                      ? setSharingModalVisible
-                      : undefined
-                  }
-                  documentSidebarVisible={
-                    documentSidebarVisible && !settings?.isMobile
-                  }
-                  toggleSidebar={toggleSidebar}
-                  currentChatSession={selectedChatSession}
-                  hideUserDropdown={user?.is_anonymous_user}
-                />
-              )}
-
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone
                   key={currentSessionId()}
@@ -2782,51 +2655,15 @@ export function ChatPage({
                 >
                   {({ getRootProps }) => (
                     <div className="flex h-full w-full">
-                      {!settings?.isMobile && (
-                        <div
-                          style={{ transition: "width 0.30s ease-out" }}
-                          className={`
-                          flex-none 
-                          overflow-y-hidden 
-                          bg-transparent
-                          transition-all 
-                          bg-opacity-80
-                          duration-300 
-                          ease-in-out
-                          h-full
-                          ${sidebarVisible ? "w-[200px]" : "w-[0px]"}
-                      `}
-                        ></div>
-                      )}
-
                       <div
                         className={`h-full w-full relative flex-auto transition-margin duration-300 overflow-x-auto mobile:pb-12 desktop:pb-[100px]`}
                         {...getRootProps()}
                       >
                         <div
                           onScroll={handleScroll}
-                          className={`w-full h-[calc(100vh-160px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
+                          className={`w-full h-[calc(100vh-130px)] flex flex-col default-scrollbar overflow-y-auto overflow-x-hidden relative`}
                           ref={scrollableDivRef}
                         >
-                          {liveAssistant && (
-                            <div className="z-20 fixed top-0 pointer-events-none left-0 w-full flex justify-center overflow-visible">
-                              {!settings?.isMobile && (
-                                <div
-                                  style={{ transition: "width 0.30s ease-out" }}
-                                  className={`
-                                  flex-none 
-                                  overflow-y-hidden 
-                                  transition-all 
-                                  pointer-events-none
-                                  duration-300 
-                                  ease-in-out
-                                  h-full
-                                  ${sidebarVisible ? "w-[200px]" : "w-[0px]"}
-                              `}
-                                />
-                              )}
-                            </div>
-                          )}
                           {/* ChatBanner is a custom banner that displays a admin-specified message at 
                       the top of the chat page. Oly used in the EE version of the app. */}
                           {messageHistory.length === 0 &&
@@ -3544,15 +3381,6 @@ export function ChatPage({
                 </Dropzone>
               ) : (
                 <div className="mx-auto h-full flex">
-                  <div
-                    style={{ transition: "width 0.30s ease-out" }}
-                    className={`flex-none bg-transparent transition-all bg-opacity-80 duration-300 ease-in-out h-full
-                        ${
-                          sidebarVisible && !settings?.isMobile
-                            ? "w-[250px] "
-                            : "w-[0px]"
-                        }`}
-                  />
                   <div className="my-auto">
                     <OnyxInitializingLoader />
                   </div>
@@ -3560,7 +3388,6 @@ export function ChatPage({
               )}
             </div>
           </div>
-          <FixedLogo backgroundToggled={sidebarVisible || showHistorySidebar} />
         </div>
       </div>
     </>
