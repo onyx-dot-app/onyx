@@ -25,6 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+const RECENT_DOCUMENTS_FOLDER_ID = -1;
 // Define a type for uploading files that includes progress
 interface UploadingFile {
   name: string;
@@ -760,14 +761,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               </button>
             </div>
           )}
-          <div className="w-full max-w-[90rem] mx-auto px-4 md:px-8 2xl:px-14 flex justify-center">
-            <FileUploadSection
-              onUpload={handleFileUpload}
-              onUrlUpload={handleCreateFileFromLink}
-              isUploading={uploadingFiles.length > 0}
-              onUploadComplete={handleUploadComplete}
-            />
-          </div>
+          {folderId !== RECENT_DOCUMENTS_FOLDER_ID && (
+            <div className="w-full max-w-[90rem] mx-auto px-4 md:px-8 2xl:px-14 flex justify-center">
+              <FileUploadSection
+                onUpload={handleFileUpload}
+                onUrlUpload={handleCreateFileFromLink}
+                isUploading={uploadingFiles.length > 0}
+                onUploadComplete={handleUploadComplete}
+              />
+            </div>
+          )}
         </div>
       </div>
     </>
