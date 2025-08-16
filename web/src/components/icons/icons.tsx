@@ -84,6 +84,7 @@ import cohereIcon from "../../../public/Cohere.svg";
 import googleIcon from "../../../public/Google.png";
 import xenforoIcon from "../../../public/Xenforo.svg";
 import highspotIcon from "../../../public/Highspot.png";
+import outlineIcon from "../../../public/Outline.svg";
 import { FaGithub, FaRobot } from "react-icons/fa";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -3500,5 +3501,18 @@ export const FolderMoveIcon = ({
       <polyline points="12 8 8 12 12 16"></polyline>
       <line x1="16" y1="12" x2="8" y2="12"></line>
     </svg>
+  );
+};
+
+export const OutlineIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <LogoIcon
+      size={size}
+      className={`${className} dark:invert`}
+      src={outlineIcon}
+    />
   );
 };
