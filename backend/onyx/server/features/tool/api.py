@@ -11,7 +11,7 @@ from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import User
-from onyx.db.tools import create_tool
+from onyx.db.tools import create_tool__no_commit
 from onyx.db.tools import delete_tool
 from onyx.db.tools import get_tool_by_id
 from onyx.db.tools import get_tools
@@ -63,7 +63,7 @@ def create_custom_tool(
 ) -> ToolSnapshot:
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data)
-    tool = create_tool(
+    tool = create_tool__no_commit(
         name=tool_data.name,
         description=tool_data.description,
         openapi_schema=tool_data.definition,
@@ -72,6 +72,7 @@ def create_custom_tool(
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
     )
+    db_session.commit()
     return ToolSnapshot.from_model(tool)
 
 
@@ -111,6 +112,7 @@ def delete_custom_tool(
     except Exception as e:
         # handles case where tool is still used by an Assistant
         raise HTTPException(status_code=400, detail=str(e))
+    db_session.commit()
 
 
 class ValidateToolRequest(BaseModel):

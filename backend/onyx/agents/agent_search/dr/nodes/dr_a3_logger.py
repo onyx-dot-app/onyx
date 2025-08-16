@@ -120,8 +120,9 @@ def save_iteration(
     # lastly, insert the citations
     citation_dict: dict[int, int] = {}
     cited_doc_nrs = _extract_citation_numbers(final_answer)
-    for cited_doc_nr in cited_doc_nrs:
-        citation_dict[cited_doc_nr] = search_docs[cited_doc_nr - 1].id
+    if search_docs:
+        for cited_doc_nr in cited_doc_nrs:
+            citation_dict[cited_doc_nr] = search_docs[cited_doc_nr - 1].id
 
     # TODO: generate plan as dict in the first place
     plan_of_record = state.plan_of_record.plan if state.plan_of_record else ""

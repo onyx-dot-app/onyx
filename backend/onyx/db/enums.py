@@ -56,6 +56,17 @@ class SyncStatus(str, PyEnum):
         return self in terminal_states
 
 
+class MCPAuthenticationType(str, PyEnum):
+    NONE = "NONE"
+    API_TOKEN = "API_TOKEN"
+    OAUTH = "OAUTH"
+
+
+class MCPAuthenticationPerformer(str, PyEnum):
+    ADMIN = "ADMIN"
+    PER_USER = "PER_USER"
+
+
 # Consistent with Celery task statuses
 class TaskStatus(str, PyEnum):
     PENDING = "PENDING"

@@ -253,7 +253,7 @@ def orchestrator(
                     ],
                 )
 
-        # for Thoightful mode, we force a tool if requested an available
+        # for Thoughtful mode, we force a tool if requested an available
         available_tools_for_decision = available_tools
         force_use_tool = graph_config.tooling.force_use_tool
         if iteration_nr == 1 and force_use_tool and force_use_tool.force_use:

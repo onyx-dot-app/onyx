@@ -3,13 +3,13 @@ from collections.abc import Generator
 from typing import Optional
 from typing import Protocol
 
-from ee.onyx.db.external_perm import ExternalUserGroup
-from onyx.access.models import DocExternalAccess
+from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
+from onyx.access.models import DocExternalAccess  # noqa
 from onyx.context.search.models import InferenceChunk
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair  # noqa
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface  # noqa
 
 
 class FetchAllDocumentsFunction(Protocol):

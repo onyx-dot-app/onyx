@@ -887,7 +887,7 @@ Here is the base question that ultimately needs to be answered:
 ---base_question---
 {SEPARATOR_LINE}
 
-Here is the tool response:
+Here is the tool, its description, and the results that it returned:
 {SEPARATOR_LINE}
 ---tool_response---
 {SEPARATOR_LINE}
@@ -896,6 +896,7 @@ Notes:
    - clearly state in your answer if the tool response did not provide relevant information, \
 or the response does not apply to this specific context. Do not make up information!
    - It is critical to avoid hallucinations as well as taking information out of context.
+   - Make sure you consider the tool description as context for the provided result.
    - clearly indicate any assumptions you make in your answer.
    - while the base question is important, really focus on answering the specific task query. \
 That is your task.

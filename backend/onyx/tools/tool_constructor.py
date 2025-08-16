@@ -26,7 +26,13 @@ from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.enums import MCPAuthenticationPerformer
+from onyx.db.enums import MCPAuthenticationType
 from onyx.db.llm import fetch_existing_llm_providers
+from onyx.db.mcp import get_all_mcp_tools_for_server
+from onyx.db.mcp import get_mcp_server_auth_performer
+from onyx.db.mcp import get_mcp_server_by_id
+from onyx.db.mcp import get_user_connection_config
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.file_store.models import InMemoryChatFile
@@ -48,6 +54,7 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
 )
+from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
 )
@@ -189,6 +196,7 @@ def construct_tools(
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
 
+    mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available
     user_oauth_token = None
     if user and user.oauth_accounts:
@@ -341,6 +349,64 @@ def construct_tools(
                     ),
                 ),
             )
+
+        # Handle MCP tools
+        elif db_tool_model.mcp_server_id:
+            if db_tool_model.mcp_server_id in mcp_tool_cache:
+                tool_dict[db_tool_model.id] = [
+                    mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
+                ]
+                continue
+
+            mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
+
+            # Get user-specific connection config if needed
+            connection_config = None
+            user_email = user.email if user else ""
+
+            if (
+                mcp_server.auth_type == MCPAuthenticationType.API_TOKEN
+                or mcp_server.auth_type == MCPAuthenticationType.OAUTH
+            ):
+                # If server has a per-user template, only use that user's config
+                if (
+                    get_mcp_server_auth_performer(mcp_server)
+                    == MCPAuthenticationPerformer.PER_USER
+                ):
+                    connection_config = get_user_connection_config(
+                        mcp_server.id, user_email, db_session
+                    )
+                else:
+                    # No per-user template: use admin config
+                    connection_config = mcp_server.admin_connection_config
+
+            # Get all saved tools for this MCP server
+            saved_tools = get_all_mcp_tools_for_server(mcp_server.id, db_session)
+
+            # Find the specific tool that this database entry represents
+            expected_tool_name = db_tool_model.display_name
+
+            mcp_tool_cache[db_tool_model.mcp_server_id] = {}
+            # Find the matching tool definition
+            for saved_tool in saved_tools:
+                # Create MCPTool instance for this specific tool
+                mcp_tool = MCPTool(
+                    tool_id=saved_tool.id,
+                    mcp_server=mcp_server,
+                    tool_name=saved_tool.name,
+                    tool_description=saved_tool.description,
+                    tool_definition=saved_tool.mcp_input_schema or {},
+                    connection_config=connection_config,
+                    user_email=user_email,
+                )
+                mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
+
+                if saved_tool.name == expected_tool_name:
+                    tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
+            if db_tool_model.id not in tool_dict:
+                logger.warning(
+                    f"Tool '{expected_tool_name}' not found in MCP server '{mcp_server.name}'"
+                )
 
     tools: list[Tool] = []
     for tool_list in tool_dict.values():

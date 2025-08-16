@@ -37,6 +37,7 @@ import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmPr
 import { DeepResearchToggle } from "./DeepResearchToggle";
 import { ActionToggle } from "./ActionManagement";
 import { SelectedTool } from "./SelectedTool";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 
 const MAX_INPUT_HEIGHT = 200;
 
