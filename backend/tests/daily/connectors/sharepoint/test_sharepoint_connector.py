@@ -26,7 +26,7 @@ class ExpectedDocument:
 EXPECTED_DOCUMENTS = [
     ExpectedDocument(
         semantic_identifier="test1.docx",
-        content="test1",
+        content="Test1 password: 1234",
         folder_path="test",
     ),
     ExpectedDocument(
@@ -44,6 +44,16 @@ EXPECTED_DOCUMENTS = [
         content="other",
         folder_path=None,
         library="Other Library",
+    ),
+    ExpectedDocument(
+        semantic_identifier="Book.xlsx",
+        content="## Sheet1\n| exel | 9090 |\n| --- | --- |",
+        folder_path=None,
+    ),
+    ExpectedDocument(
+        semantic_identifier="Presentation.pptx",
+        content="<!-- Slide number: 1 -->\n# Powerpoint 6565\n\n### Notes:\n6767",
+        folder_path=None,
     ),
 ]
 
@@ -125,6 +135,33 @@ def test_sharepoint_connector_all_sites__docs_only(
             end=time.time(),
         )
         assert document_batches, "Should find documents from all sites"
+
+
+def test_sharepoint_connector_all_sites__pages_only(
+    mock_get_unstructured_api_key: MagicMock,
+    mock_store_image: MagicMock,
+    sharepoint_credentials: dict[str, str],
+) -> None:
+    with patch(
+        "onyx.connectors.sharepoint.connector.store_image_and_create_section",
+        mock_store_image,
+    ):
+        # Initialize connector with no docs
+        connector = SharepointConnector(
+            include_site_pages=True, include_site_documents=False
+        )
+
+        # Load credentials
+        connector.load_credentials(sharepoint_credentials)
+
+        # Not asserting expected sites because that can change in test tenant at any time
+        # Finding any docs is good enough to verify that the connector is working
+        document_batches = load_all_docs_from_checkpoint_connector(
+            connector=connector,
+            start=0,
+            end=time.time(),
+        )
+        assert document_batches, "Should find site pages from all sites"
 
 
 def test_sharepoint_connector_specific_folder(
@@ -301,7 +338,9 @@ def test_sharepoint_connector_pages(
     ):
         # Initialize connector with the base site URL
         connector = SharepointConnector(
-            sites=["https://danswerai.sharepoint.com/sites/sharepoint-tests-pages"]
+            sites=["https://danswerai.sharepoint.com/sites/sharepoint-tests-pages"],
+            include_site_pages=True,
+            include_site_documents=False,
         )
 
         # Load credentials

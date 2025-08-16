@@ -271,7 +271,7 @@ def _check_failure_threshold(
 
 # NOTE: this is the old run_indexing function that the new decoupled approach
 # is based on. Leaving this for comparison purposes, but if you see this comment
-# has been here for >1 month, please delete this function.
+# has been here for >2 month, please delete this function.
 def _run_indexing(
     db_session: Session,
     index_attempt_id: int,

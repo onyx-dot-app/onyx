@@ -54,7 +54,8 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.sharepoint.connector_utils import get_sharepoint_external_access
 from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import extract_text_and_images
+from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
@@ -242,12 +243,24 @@ def _convert_driveitem_to_document_with_permissions(
         image_section.link = driveitem.web_url
         sections.append(image_section)
     else:
-        file_text = extract_file_text(
-            file=io.BytesIO(content_bytes),
-            file_name=driveitem.name,
-            break_on_unprocessable=False,
+        # Note: we don't process Onyx metadata for connectors like Drive & Sharepoint, but could
+        extraction_result = extract_text_and_images(
+            file=io.BytesIO(content_bytes), file_name=driveitem.name
         )
-        sections.append(TextSection(link=driveitem.web_url, text=file_text))
+        if extraction_result.text_content:
+            sections.append(
+                TextSection(link=driveitem.web_url, text=extraction_result.text_content)
+            )
+
+        for idx, (img_data, img_name) in enumerate(extraction_result.embedded_images):
+            image_section, _ = store_image_and_create_section(
+                image_data=img_data,
+                file_id=f"{driveitem.id}_img_{idx}",
+                display_name=img_name or f"{driveitem.name} - image {idx}",
+                file_origin=FileOrigin.CONNECTOR,
+            )
+            image_section.link = driveitem.web_url
+            sections.append(image_section)
 
     if include_permissions and ctx is not None:
         logger.info(f"Getting external access for {driveitem.name}")
@@ -782,6 +795,7 @@ class SharepointConnector(
         if not sites:
             raise RuntimeError("No sites found in the tenant")
 
+        # OneDrive personal sites should not be indexed with SharepointConnector
         site_descriptors = [
             SiteDescriptor(
                 url=site.web_url or "",
@@ -789,6 +803,7 @@ class SharepointConnector(
                 folder_path=None,
             )
             for site in self._handle_paginated_sites(sites)
+            if "-my.sharepoint" not in site.web_url
         ]
         return site_descriptors
 
@@ -799,9 +814,6 @@ class SharepointConnector(
         end: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch SharePoint site pages (.aspx files) using the SharePoint Pages API."""
-        # Exclude personal sites because GET personal site pages returns 404
-        if "-my.sharepoint" in site_descriptor.url:
-            return []
 
         # Get the site to extract the site ID
         site = self.graph_client.sites.get_by_url(site_descriptor.url)
@@ -1236,6 +1248,13 @@ class SharepointConnector(
                 else current_drive_name
             )
             for driveitem in driveitems:
+                driveitem_extension = get_file_ext(driveitem.name)
+                # Only yield empty documents if they are PDFs or images
+                should_yield_if_empty = (
+                    driveitem_extension in ACCEPTED_IMAGE_FILE_EXTENSIONS
+                    or driveitem_extension == ".pdf"
+                )
+
                 try:
                     doc = _convert_driveitem_to_document_with_permissions(
                         driveitem,
@@ -1244,7 +1263,12 @@ class SharepointConnector(
                         self.graph_client,
                         include_permissions=include_permissions,
                     )
-                    yield doc
+
+                    if doc.sections:
+                        yield doc
+                    elif should_yield_if_empty:
+                        doc.sections = [TextSection(link=driveitem.web_url, text="")]
+                        yield doc
                 except Exception as e:
                     logger.warning(
                         f"Failed to process driveitem {driveitem.web_url}: {e}"
