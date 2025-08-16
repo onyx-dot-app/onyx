@@ -216,12 +216,15 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         # skip it. This is generally used to avoid indexing extra sensitive
         # tickets.
         labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
+        # Custom JQL query to filter Jira issues
+        jql_query: str | None = None,
     ) -> None:
         self.batch_size = batch_size
         self.jira_base = jira_base_url.rstrip("/")  # Remove trailing slash if present
         self.jira_project = project_key
         self._comment_email_blacklist = comment_email_blacklist or []
         self.labels_to_skip = set(labels_to_skip)
+        self.jql_query = jql_query
 
         self._jira_client: JIRA | None = None
 
@@ -252,7 +255,11 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
-        """Get the JQL query based on whether a specific project is set and time range"""
+        """Get the JQL query based on configuration and time range
+        
+        If a custom JQL query is provided, it will be used and combined with time constraints.
+        Otherwise, the query will be constructed based on project key (if provided).
+        """
         start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M"
         )
@@ -262,6 +269,11 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
 
         time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
 
+        # If custom JQL query is provided, use it and combine with time constraints
+        if self.jql_query:
+            return f"({self.jql_query}) AND {time_jql}"
+        
+        # Otherwise, use project key if provided
         if self.jira_project:
             base_jql = f"project = {self.quoted_jira_project}"
             return f"{base_jql} AND {time_jql}"
@@ -371,9 +383,51 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("Jira")
+            
+        # Check if both jql_query and project_key are defined
+        if self.jql_query and self.jira_project:
+            raise ConnectorValidationError(
+                "Cannot specify both JQL query and project key. Use only one of these options, "
+                "or include project filtering directly in your JQL query (e.g., 'project = KEY AND ...')."
+            )
+
+        # If a custom JQL query is set, validate it's valid
+        if self.jql_query:
+            try:
+                # Try to execute the JQL query with a small limit to validate its syntax
+                # We use a list comprehension to force evaluation of the generator
+                # without actually processing the results
+                [_ for _ in _perform_jql_search(
+                    jira_client=self.jira_client,
+                    jql=self.jql_query,
+                    start=0,
+                    max_results=1,
+                )]
+            except Exception as e:
+                status_code = getattr(e, "status_code", None)
+
+                if status_code == 401:
+                    raise CredentialExpiredError(
+                        "Jira credential appears to be expired or invalid (HTTP 401)."
+                    )
+                elif status_code == 403:
+                    raise InsufficientPermissionsError(
+                        "Your Jira token does not have sufficient permissions to execute this JQL query (HTTP 403)."
+                    )
+                elif status_code == 400:
+                    # This is typically a JQL syntax error
+                    raise ConnectorValidationError(
+                        "Invalid Jira request. Please check your JQL string for errors."
+                    )
+                elif status_code == 429:
+                    raise ConnectorValidationError(
+                        "Validation failed due to Jira rate-limits being exceeded. Please try again later."
+                    )
+
+                raise RuntimeError(f"Unexpected Jira error during validation: {e}")
 
         # If a specific project is set, validate it exists
-        if self.jira_project:
+        elif self.jira_project:
             try:
                 self.jira_client.project(self.jira_project)
             except Exception as e:
@@ -398,7 +452,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
 
                 raise RuntimeError(f"Unexpected Jira error during validation: {e}")
         else:
-            # If no project specified, validate we can access the Jira API
+            # If neither JQL nor project specified, validate we can access the Jira API
             try:
                 # Try to list projects to validate access
                 self.jira_client.projects()
