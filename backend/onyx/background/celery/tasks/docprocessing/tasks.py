@@ -505,7 +505,14 @@ def check_indexing_completion(
                 ConnectorCredentialPairStatus.SCHEDULED,
                 ConnectorCredentialPairStatus.INITIAL_INDEXING,
             ]:
-                cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
+                # User file connectors must be paused on success
+                # NOTE: _run_indexing doesn't update connectors if the index attempt is the future embedding model
+                # TODO: figure out why this doesn't pause connectors during swap
+                cc_pair.status = (
+                    ConnectorCredentialPairStatus.PAUSED
+                    if cc_pair.is_user_file
+                    else ConnectorCredentialPairStatus.ACTIVE
+                )
                 db_session.commit()
 
             # Clear repeated error state on success
