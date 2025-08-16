@@ -33,7 +33,7 @@ class EmbedRequest(BaseModel):
     api_version: str | None = None
 
     # allows for the truncation of the vector to a lower dimension
-    # to reduce memory usage. Currently only supported for OpenAI models.
+    # to reduce memory usage. Currently supported for OpenAI and Google models.
     # will be ignored for other providers.
     reduced_dimension: int | None = None
 
