@@ -572,22 +572,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             logger.debug(f"Current tenant user count: {user_count}")
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-                if user_count == 1:
-                    create_milestone_and_report(
-                        user=user,
-                        distinct_id=user.email,
-                        event_type=MilestoneRecordType.USER_SIGNED_UP,
-                        properties=None,
-                        db_session=db_session,
-                    )
-                else:
-                    create_milestone_and_report(
-                        user=user,
-                        distinct_id=user.email,
-                        event_type=MilestoneRecordType.MULTIPLE_USERS,
-                        properties=None,
-                        db_session=db_session,
-                    )
+                event_type = (
+                    MilestoneRecordType.USER_SIGNED_UP
+                    if user_count == 1
+                    else MilestoneRecordType.MULTIPLE_USERS
+                )
+                create_milestone_and_report(
+                    user=user,
+                    distinct_id=user.email,
+                    event_type=event_type,
+                    properties=None,
+                    db_session=db_session,
+                )
+
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 

@@ -5,16 +5,18 @@ interface CreateButtonProps {
   href?: string;
   onClick?: () => void;
   text?: string;
+  icon?: React.ReactNode;
 }
 
 export default function CreateButton({
   href,
   onClick,
   text = "Create",
+  icon = <FiPlusCircle />,
 }: CreateButtonProps) {
   const content = (
     <Button className="font-normal mt-2" variant="create" onClick={onClick}>
-      <FiPlusCircle />
+      {icon}
       {text}
     </Button>
   );

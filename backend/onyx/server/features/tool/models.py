@@ -14,6 +14,7 @@ class ToolSnapshot(BaseModel):
     in_code_tool_id: str | None
     custom_headers: list[Any] | None
     passthrough_auth: bool
+    mcp_server_id: int | None = None
 
     @classmethod
     def from_model(cls, tool: Tool) -> "ToolSnapshot":
@@ -26,6 +27,7 @@ class ToolSnapshot(BaseModel):
             in_code_tool_id=tool.in_code_tool_id,
             custom_headers=tool.custom_headers,
             passthrough_auth=tool.passthrough_auth,
+            mcp_server_id=tool.mcp_server_id,
         )
 
 

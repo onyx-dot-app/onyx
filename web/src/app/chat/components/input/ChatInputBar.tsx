@@ -38,6 +38,13 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { DeepResearchToggle } from "./DeepResearchToggle";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
+import { MCPDropdown } from "@/components/chat/MCPDropdown";
+import { MCPApiKeyModal } from "@/components/chat/MCPApiKeyModal";
+import {
+  MCPAuthenticationPerformer,
+  MCPAuthenticationType,
+} from "@/lib/tools/interfaces";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -162,6 +169,132 @@ export function ChatInputBar({
   );
 
   const settings = useContext(SettingsContext);
+
+  // MCP state
+  const [mcpApiKeyModal, setMcpApiKeyModal] = useState<{
+    isOpen: boolean;
+    serverId: string;
+    serverName: string;
+    authTemplate?: any;
+    onSuccess?: () => void;
+    isAuthenticated?: boolean;
+    existingCredentials?: Record<string, string>;
+  }>({
+    isOpen: false,
+    serverId: "",
+    serverName: "",
+    authTemplate: undefined,
+    onSuccess: undefined,
+    isAuthenticated: false,
+  });
+
+  const handleMCPAuthenticate = async (
+    serverId: string,
+    authType: MCPAuthenticationType
+  ) => {
+    if (authType === MCPAuthenticationType.OAUTH) {
+      // Initiate OAuth flow for per-user authentication
+      try {
+        const response = await fetch("/api/mcp/oauth/initiate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            server_id: serverId,
+            return_path: "/chat",
+            include_resource_param: true,
+          }),
+        });
+
+        if (!response.ok) {
+          console.error("Failed to initiate OAuth");
+          return;
+        }
+
+        const { oauth_url } = await response.json();
+        window.location.href = oauth_url;
+      } catch (error) {
+        console.error("Error initiating OAuth:", error);
+      }
+    }
+  };
+
+  const handleMCPApiKeySubmit = async (serverId: string, apiKey: string) => {
+    try {
+      const response = await fetch("/api/mcp/user-credentials", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          server_id: serverId,
+          credentials: { api_key: apiKey },
+          transport: "streamable-http", // Default transport TODO make configurable
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || "Failed to save API key";
+        throw new Error(errorMessage);
+      }
+
+      // Success - no need to reload page
+    } catch (error) {
+      console.error("Error saving API key:", error);
+      throw error;
+    }
+  };
+
+  const handleMCPCredentialsSubmit = async (
+    serverId: string,
+    credentials: Record<string, string>
+  ) => {
+    try {
+      const response = await fetch("/api/mcp/user-credentials", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          server_id: serverId,
+          credentials: credentials,
+          transport: "streamable-http", // Default transport TODO make configurable
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || "Failed to save credentials";
+        throw new Error(errorMessage);
+      }
+
+      // Success - no need to reload page
+    } catch (error) {
+      console.error("Error saving credentials:", error);
+      throw error;
+    }
+  };
+
+  const handleOpenMCPApiKeyModal = (
+    serverId: string,
+    serverName: string,
+    authTemplate?: any,
+    onSuccess?: () => void,
+    isAuthenticated?: boolean,
+    existingCredentials?: Record<string, string>
+  ) => {
+    setMcpApiKeyModal({
+      isOpen: true,
+      serverId,
+      serverName,
+      authTemplate,
+      onSuccess,
+      isAuthenticated,
+      existingCredentials,
+    });
+  };
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -378,13 +511,13 @@ export function ChatInputBar({
       <div className="flex  justify-center mx-auto">
         <div
           className="
-            max-w-full
-            w-[800px]
-            relative
-            desktop:px-4
-            mx-auto
-          "
-        >
+          max-w-full
+          w-[800px]
+          relative
+          desktop:px-4
+          mx-auto
+        "
+      >
           {showPrompts && user?.preferences?.shortcut_enabled && (
             <div
               ref={suggestionsRef}
@@ -433,319 +566,349 @@ export function ChatInputBar({
           <div className="w-full h-[10px]"></div>
           <div
             className="
-              opacity-100
+            opacity-100
+            w-full
+            h-fit
+            flex
+            flex-col
+            border
+            shadow-lg
+            bg-input-background
+            border-input-border
+            dark:border-none
+            rounded-xl
+            overflow-hidden
+            text-text-chatbar
+            [&:has(textarea:focus)]::ring-1
+            [&:has(textarea:focus)]::ring-black
+          "
+        >
+          <textarea
+            onPaste={handlePaste}
+            onKeyDownCapture={handleKeyDown}
+            onChange={handleInputChange}
+            ref={textAreaRef}
+            id="onyx-chat-input-textarea"
+            className={`
+              m-0
               w-full
-              h-fit
-              flex
-              flex-col
-              border
-              shadow-lg
+              shrink
+              resize-none
+              rounded-lg
+              border-0
               bg-input-background
-              border-input-border
-              dark:border-none
-              rounded-xl
-              overflow-hidden
-              text-text-chatbar
-              [&:has(textarea:focus)]::ring-1
-              [&:has(textarea:focus)]::ring-black
-            "
-          >
-            <textarea
-              onPaste={handlePaste}
-              onKeyDownCapture={handleKeyDown}
-              onChange={handleInputChange}
-              ref={textAreaRef}
-              id="onyx-chat-input-textarea"
-              className={`
-                m-0
-                w-full
-                shrink
-                resize-none
-                rounded-lg
-                border-0
-                bg-input-background
-                font-normal
-                text-base
-                leading-6
-                placeholder:text-text-400 dark:placeholder:text-text-500
-                ${
-                  textAreaRef.current &&
-                  textAreaRef.current.scrollHeight > MAX_INPUT_HEIGHT
-                    ? "overflow-y-auto mt-2"
-                    : ""
+              font-normal
+              text-base
+              leading-6
+              placeholder:text-text-400 dark:placeholder:text-text-500
+              ${
+                textAreaRef.current &&
+                textAreaRef.current.scrollHeight > MAX_INPUT_HEIGHT
+                  ? "overflow-y-auto mt-2"
+                  : ""
+              }
+              whitespace-normal
+              break-word
+              overscroll-contain
+              outline-none
+              resize-none
+              px-5
+              py-5
+            `}
+            autoFocus
+            style={{ scrollbarWidth: "thin" }}
+            role="textarea"
+            aria-multiline
+            placeholder={`How can ${selectedAssistant.name} help you today`}
+            value={message}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !showPrompts &&
+                !showSuggestions &&
+                !event.shiftKey &&
+                !(event.nativeEvent as any).isComposing
+              ) {
+                event.preventDefault();
+                if (message) {
+                  onSubmit();
                 }
-                whitespace-normal
-                break-word
-                overscroll-contain
-                outline-none
-                resize-none
-                px-5
-                py-5
-              `}
-              autoFocus
-              style={{ scrollbarWidth: "thin" }}
-              role="textarea"
-              aria-multiline
-              placeholder={`How can ${selectedAssistant.name} help you today`}
-              value={message}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !showPrompts &&
-                  !showSuggestions &&
-                  !event.shiftKey &&
-                  !(event.nativeEvent as any).isComposing
-                ) {
-                  event.preventDefault();
-                  if (message) {
-                    onSubmit();
-                  }
-                }
-              }}
-              suppressContentEditableWarning={true}
-            />
+              }
+            }}
+            suppressContentEditableWarning={true}
+          />
 
-            {(selectedDocuments.length > 0 ||
-              selectedFiles.length > 0 ||
-              selectedFolders.length > 0 ||
-              currentMessageFiles.length > 0 ||
-              filterManager.timeRange ||
-              filterManager.selectedDocumentSets.length > 0 ||
-              filterManager.selectedTags.length > 0 ||
-              filterManager.selectedSources.length > 0) && (
-              <div className="flex bg-input-background gap-x-.5 px-2">
-                <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
-                  {filterManager.selectedTags &&
-                    filterManager.selectedTags.map((tag, index) => (
-                      <SourceChip
-                        key={index}
-                        icon={<TagIcon size={12} />}
-                        title={`#${tag.tag_key}_${tag.tag_value}`}
-                        onRemove={() => {
-                          filterManager.setSelectedTags(
-                            filterManager.selectedTags.filter(
-                              (t) => t.tag_key !== tag.tag_key
-                            )
-                          );
-                        }}
-                      />
-                    ))}
-
-                  {/* Unified file rendering section for both selected and current message files */}
-                  {allFiles.map((file, index) =>
-                    file.chatFileType === ChatFileType.IMAGE ? (
-                      <SourceChip
-                        key={`${file.source}-${file.id}-${index}`}
-                        icon={
-                          file.isUploading ? (
-                            <FiLoader className="animate-spin" />
-                          ) : (
-                            <img
-                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
-                              src={buildImgUrl(file.id)}
-                              alt={file.name || "File image"}
-                            />
-                          )
-                        }
-                        title={file.name}
-                        onRemove={() => {
-                          if (file.source === "selected") {
-                            removeSelectedFile(file.originalFile);
-                          } else {
-                            setCurrentMessageFiles(
-                              currentMessageFiles.filter(
-                                (fileInFilter) => fileInFilter.id !== file.id
-                              )
-                            );
-                          }
-                        }}
-                      />
-                    ) : (
-                      <SourceChip
-                        key={`${file.source}-${file.id}-${index}`}
-                        icon={
-                          <FileIcon
-                            className={
-                              file.source === "current" ? "text-red-500" : ""
-                            }
-                            size={16}
-                          />
-                        }
-                        title={file.name}
-                        onRemove={() => {
-                          if (file.source === "selected") {
-                            removeSelectedFile(file.originalFile);
-                          } else {
-                            setCurrentMessageFiles(
-                              currentMessageFiles.filter(
-                                (fileInFilter) => fileInFilter.id !== file.id
-                              )
-                            );
-                          }
-                        }}
-                      />
-                    )
-                  )}
-                  {selectedFolders.map((folder) => (
+          {(selectedDocuments.length > 0 ||
+            selectedFiles.length > 0 ||
+            selectedFolders.length > 0 ||
+            currentMessageFiles.length > 0 ||
+            filterManager.timeRange ||
+            filterManager.selectedDocumentSets.length > 0 ||
+            filterManager.selectedTags.length > 0 ||
+            filterManager.selectedSources.length > 0) && (
+            <div className="flex bg-input-background gap-x-.5 px-2">
+              <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
+                {filterManager.selectedTags &&
+                  filterManager.selectedTags.map((tag, index) => (
                     <SourceChip
-                      key={folder.id}
-                      icon={<FolderIcon size={16} />}
-                      title={folder.name}
-                      onRemove={() => removeSelectedFolder(folder)}
+                      key={index}
+                      icon={<TagIcon size={12} />}
+                      title={`#${tag.tag_key}_${tag.tag_value}`}
+                      onRemove={() => {
+                        filterManager.setSelectedTags(
+                          filterManager.selectedTags.filter(
+                            (t) => t.tag_key !== tag.tag_key
+                          )
+                        );
+                      }}
                     />
                   ))}
-                  {filterManager.timeRange && (
+
+                {/* Unified file rendering section for both selected and current message files */}
+                {allFiles.map((file, index) =>
+                  file.chatFileType === ChatFileType.IMAGE ? (
                     <SourceChip
-                      truncateTitle={false}
-                      key="time-range"
-                      icon={<CalendarIcon size={12} />}
-                      title={`${getFormattedDateRangeString(
-                        filterManager.timeRange.from,
-                        filterManager.timeRange.to
-                      )}`}
-                      onRemove={() => {
-                        filterManager.setTimeRange(null);
-                      }}
-                    />
-                  )}
-                  {filterManager.selectedDocumentSets.length > 0 &&
-                    filterManager.selectedDocumentSets.map((docSet, index) => (
-                      <SourceChip
-                        key={`doc-set-${index}`}
-                        icon={<DocumentIcon2 size={16} />}
-                        title={docSet}
-                        onRemove={() => {
-                          filterManager.setSelectedDocumentSets(
-                            filterManager.selectedDocumentSets.filter(
-                              (ds) => ds !== docSet
-                            )
-                          );
-                        }}
-                      />
-                    ))}
-                  {filterManager.selectedSources.length > 0 &&
-                    filterManager.selectedSources.map((source, index) => (
-                      <SourceChip
-                        key={`source-${index}`}
-                        icon={
-                          <SourceIcon
-                            sourceType={source.internalName}
-                            iconSize={16}
+                      key={`${file.source}-${file.id}-${index}`}
+                      icon={
+                        file.isUploading ? (
+                          <FiLoader className="animate-spin" />
+                        ) : (
+                          <img
+                            className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
+                            src={buildImgUrl(file.id)}
+                            alt={file.name || "File image"}
                           />
-                        }
-                        title={source.displayName}
-                        onRemove={() => {
-                          filterManager.setSelectedSources(
-                            filterManager.selectedSources.filter(
-                              (s) => s.internalName !== source.internalName
+                        )
+                      }
+                      title={file.name}
+                      onRemove={() => {
+                        if (file.source === "selected") {
+                          removeSelectedFile(file.originalFile);
+                        } else {
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
+                              (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );
-                        }}
-                      />
-                    ))}
-                  {selectedDocuments.length > 0 && (
-                    <SourceChip
-                      key="selected-documents"
-                      onClick={() => {
-                        toggleDocumentSidebar();
+                        }
                       }}
-                      icon={<FileIcon size={16} />}
-                      title={`${selectedDocuments.length} selected`}
-                      onRemove={removeDocs}
                     />
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
-              <div className="space-x-1 flex  px-4 ">
-                <ChatInputOption
-                  flexPriority="stiff"
-                  Icon={FileUploadIcon}
-                  onClick={() => {
-                    toggleDocSelection();
-                  }}
-                  tooltipContent={"Upload files and attach user files"}
-                />
-
-                {retrievalEnabled && (
-                  <FilterPopup
-                    availableSources={availableSources}
-                    availableDocumentSets={
-                      selectedAssistant.document_sets &&
-                      selectedAssistant.document_sets.length > 0
-                        ? selectedAssistant.document_sets
-                        : availableDocumentSets
-                    }
-                    availableTags={availableTags}
-                    filterManager={filterManager}
-                    trigger={{
-                      name: "Filters",
-                      Icon: FiFilter,
-                      tooltipContent: "Filter your search",
+                  ) : (
+                    <SourceChip
+                      key={`${file.source}-${file.id}-${index}`}
+                      icon={
+                        <FileIcon
+                          className={
+                            file.source === "current" ? "text-red-500" : ""
+                          }
+                          size={16}
+                        />
+                      }
+                      title={file.name}
+                      onRemove={() => {
+                        if (file.source === "selected") {
+                          removeSelectedFile(file.originalFile);
+                        } else {
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
+                              (fileInFilter) => fileInFilter.id !== file.id
+                            )
+                          );
+                        }
+                      }}
+                    />
+                  )
+                )}
+                {selectedFolders.map((folder) => (
+                  <SourceChip
+                    key={folder.id}
+                    icon={<FolderIcon size={16} />}
+                    title={folder.name}
+                    onRemove={() => removeSelectedFolder(folder)}
+                  />
+                ))}
+                {filterManager.timeRange && (
+                  <SourceChip
+                    truncateTitle={false}
+                    key="time-range"
+                    icon={<CalendarIcon size={12} />}
+                    title={`${getFormattedDateRangeString(
+                      filterManager.timeRange.from,
+                      filterManager.timeRange.to
+                    )}`}
+                    onRemove={() => {
+                      filterManager.setTimeRange(null);
                     }}
                   />
                 )}
-
-                {retrievalEnabled &&
-                  settings?.settings.deep_research_enabled && (
-                    <DeepResearchToggle
-                      deepResearchEnabled={deepResearchEnabled}
-                      setDeepResearchEnabled={setDeepResearchEnabled}
+                {filterManager.selectedDocumentSets.length > 0 &&
+                  filterManager.selectedDocumentSets.map((docSet, index) => (
+                    <SourceChip
+                      key={`doc-set-${index}`}
+                      icon={<DocumentIcon2 size={16} />}
+                      title={docSet}
+                      onRemove={() => {
+                        filterManager.setSelectedDocumentSets(
+                          filterManager.selectedDocumentSets.filter(
+                            (ds) => ds !== docSet
+                          )
+                        );
+                      }}
                     />
-                  )}
+                  ))}
+                {filterManager.selectedSources.length > 0 &&
+                  filterManager.selectedSources.map((source, index) => (
+                    <SourceChip
+                      key={`source-${index}`}
+                      icon={
+                        <SourceIcon
+                          sourceType={source.internalName}
+                          iconSize={16}
+                        />
+                      }
+                      title={source.displayName}
+                      onRemove={() => {
+                        filterManager.setSelectedSources(
+                          filterManager.selectedSources.filter(
+                            (s) => s.internalName !== source.internalName
+                          )
+                        );
+                      }}
+                    />
+                  ))}
+                {selectedDocuments.length > 0 && (
+                  <SourceChip
+                    key="selected-documents"
+                    onClick={() => {
+                      toggleDocumentSidebar();
+                    }}
+                    icon={<FileIcon size={16} />}
+                    title={`${selectedDocuments.length} selected`}
+                    onRemove={removeDocs}
+                  />
+                )}
               </div>
-              <div className="flex items-center my-auto gap-x-2">
-                <LLMPopover
-                  llmProviders={llmProviders}
-                  llmManager={llmManager}
-                  requiresImageGeneration={true}
-                  currentAssistant={selectedAssistant}
-                />
+            </div>
+          )}
 
-                <button
-                  id="onyx-chat-input-send-button"
-                  className={`cursor-pointer ${
-                    chatState == "streaming" ||
-                    chatState == "toolBuilding" ||
-                    chatState == "loading"
-                      ? chatState != "streaming"
-                        ? "bg-neutral-500 dark:bg-neutral-400 "
-                        : "bg-neutral-900 dark:bg-neutral-50"
-                      : "bg-red-200"
-                  } h-[22px] w-[22px] rounded-full`}
-                  onClick={() => {
-                    if (chatState == "streaming") {
-                      stopGenerating();
-                    } else if (message) {
-                      onSubmit();
-                    }
+          <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
+            <div className="space-x-1 flex  px-4 ">
+              <ChatInputOption
+                flexPriority="stiff"
+                Icon={FileUploadIcon}
+                onClick={() => {
+                  toggleDocSelection();
+                }}
+                tooltipContent={"Upload files and attach user files"}
+              />
+
+              {retrievalEnabled && (
+                <FilterPopup
+                  availableSources={availableSources}
+                  availableDocumentSets={
+                    selectedAssistant.document_sets &&
+                    selectedAssistant.document_sets.length > 0
+                      ? selectedAssistant.document_sets
+                      : availableDocumentSets
+                  }
+                  availableTags={availableTags}
+                  filterManager={filterManager}
+                  trigger={{
+                    name: "Filters",
+                    Icon: FiFilter,
+                    tooltipContent: "Filter your search",
                   }}
-                >
-                  {chatState == "streaming" ||
+                />
+              )}
+
+              {retrievalEnabled &&
+                settings?.settings.deep_research_enabled && (
+                  <DeepResearchToggle
+                    deepResearchEnabled={deepResearchEnabled}
+                    setDeepResearchEnabled={setDeepResearchEnabled}
+                  />
+                )}
+              <MCPDropdown
+              selectedAssistant={selectedAssistant}
+              onAuthenticateServer={handleMCPAuthenticate}
+              onOpenApiKeyModal={handleOpenMCPApiKeyModal}
+              />
+            </div>
+            <div className="flex items-center my-auto gap-x-2">
+              <LLMPopover
+                llmProviders={llmProviders}
+                llmManager={llmManager}
+                requiresImageGeneration={true}
+                currentAssistant={selectedAssistant}
+              />
+
+              <button
+                id="onyx-chat-input-send-button"
+                className={`cursor-pointer ${
+                  chatState == "streaming" ||
                   chatState == "toolBuilding" ||
-                  chatState == "loading" ? (
-                    <StopGeneratingIcon
-                      size={8}
-                      className="text-neutral-50 dark:text-neutral-900 m-auto text-white flex-none"
-                    />
-                  ) : (
-                    <SendIcon
-                      size={22}
-                      className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
-                        chatState == "input" && message
-                          ? "bg-neutral-900 dark:bg-neutral-50"
-                          : "bg-neutral-500 dark:bg-neutral-400"
-                      }`}
-                    />
-                  )}
-                </button>
-              </div>
+                  chatState == "loading"
+                    ? chatState != "streaming"
+                      ? "bg-neutral-500 dark:bg-neutral-400 "
+                      : "bg-neutral-900 dark:bg-neutral-50"
+                    : "bg-red-200"
+                } h-[22px] w-[22px] rounded-full`}
+                onClick={() => {
+                  if (chatState == "streaming") {
+                    stopGenerating();
+                  } else if (message) {
+                    onSubmit();
+                  }
+                }}
+              >
+                {chatState == "streaming" ||
+                chatState == "toolBuilding" ||
+                chatState == "loading" ? (
+                  <StopGeneratingIcon
+                    size={8}
+                    className="text-neutral-50 dark:text-neutral-900 m-auto text-white flex-none"
+                  />
+                ) : (
+                  <SendIcon
+                    size={22}
+                    className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
+                      chatState == "input" && message
+                        ? "bg-neutral-900 dark:bg-neutral-50"
+                        : "bg-neutral-500 dark:bg-neutral-400"
+                    }`}
+                  />
+                )}
+              </button>
             </div>
           </div>
         </div>
       </div>
+    </div>
+      {/* MCP API Key Modal */}
+      {mcpApiKeyModal.isOpen && (
+        <MCPApiKeyModal
+          isOpen={mcpApiKeyModal.isOpen}
+          onClose={() =>
+            setMcpApiKeyModal({
+              isOpen: false,
+              serverId: "",
+              serverName: "",
+              authTemplate: undefined,
+              onSuccess: undefined,
+              isAuthenticated: false,
+              existingCredentials: undefined,
+            })
+          }
+          serverName={mcpApiKeyModal.serverName}
+          serverId={mcpApiKeyModal.serverId}
+          authTemplate={mcpApiKeyModal.authTemplate}
+          onSubmit={handleMCPApiKeySubmit}
+          onSubmitCredentials={handleMCPCredentialsSubmit}
+          onSuccess={mcpApiKeyModal.onSuccess}
+          isAuthenticated={mcpApiKeyModal.isAuthenticated}
+          existingCredentials={mcpApiKeyModal.existingCredentials}
+        />
+      )}
     </div>
   );
 }
