@@ -219,9 +219,6 @@ class BlobType(str, Enum):
     GOOGLE_CLOUD_STORAGE = "google_cloud_storage"
     OCI_STORAGE = "oci_storage"
 
-    # Special case, for internet search
-    NOT_APPLICABLE = "not_applicable"
-
 
 class DocumentIndexType(str, Enum):
     COMBINED = "combined"  # Vespa

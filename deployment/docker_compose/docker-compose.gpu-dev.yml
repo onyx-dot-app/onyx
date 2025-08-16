@@ -97,6 +97,9 @@ services:
 
       # Chat Configs
       - HARD_DELETE_CHATS=${HARD_DELETE_CHATS:-}
+      
+      # Show extra/uncommon connectors
+      - SHOW_EXTRA_CONNECTORS=${SHOW_EXTRA_CONNECTORS:-true}
 
       # Vespa Language Forcing
       # See: https://docs.vespa.ai/en/linguistics.html 
