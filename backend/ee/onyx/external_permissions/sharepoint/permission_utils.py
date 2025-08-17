@@ -406,7 +406,7 @@ def _get_groups_and_members_recursively(
                 if group_info:
                     group_queue.extend(group_info)
             except ClientRequestException as e:
-                # If the group is not found, we skip it. There is a chance that group is still refrenced
+                # If the group is not found, we skip it. There is a chance that group is still referenced
                 # in sharepoint but it is removed from Azure AD. There is no actual documentation on this, but based on
                 # our testing we have seen this happen.
                 if e.response is not None and e.response.status_code == 404:
