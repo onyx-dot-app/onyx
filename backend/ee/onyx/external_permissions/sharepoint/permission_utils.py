@@ -1,6 +1,8 @@
 import re
 from collections import deque
 from typing import Any
+from urllib.parse import unquote
+from urllib.parse import urlparse
 
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
@@ -232,6 +234,7 @@ def _get_sharepoint_groups(
         nonlocal groups, user_emails
 
         for user in users:
+            logger.info(f"User: {user.to_json()}")
             if user.principal_type == USER_PRINCIPAL_TYPE and hasattr(
                 user, "user_principal_name"
             ):
@@ -286,7 +289,7 @@ def _get_azuread_groups(
 
         for member in members:
             member_data = member.to_json()
-
+            logger.info(f"Member: {member_data}")
             # Check for user-specific attributes
             user_principal_name = member_data.get("userPrincipalName")
             mail = member_data.get("mail")
@@ -437,6 +440,7 @@ def get_external_access_from_sharepoint(
     ) -> None:
         nonlocal user_emails, groups
         for assignment in role_assignments:
+            logger.info(f"Assignment: {assignment.to_json()}")
             if assignment.role_definition_bindings:
                 is_limited_access = True
                 for role_definition_binding in assignment.role_definition_bindings:
@@ -513,12 +517,19 @@ def get_external_access_from_sharepoint(
         )
     elif site_page:
         site_url = site_page.get("webUrl")
-        site_pages = client_context.web.lists.get_by_title("Site Pages")
-        client_context.load(site_pages)
-        client_context.execute_query()
-        site_pages.items.get_by_url(site_url).role_assignments.expand(
-            ["Member", "RoleDefinitionBindings"]
-        ).get_all(page_loaded=add_user_and_group_to_sets).execute_query()
+        # Prefer server-relative URL to avoid OData filters that break on apostrophes
+        server_relative_url = unquote(urlparse(site_url).path)
+        file_obj = client_context.web.get_file_by_server_relative_url(
+            server_relative_url
+        )
+        item = file_obj.listItemAllFields
+
+        sleep_and_retry(
+            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
+                page_loaded=add_user_and_group_to_sets,
+            ),
+            "get_external_access_from_sharepoint",
+        )
     else:
         raise RuntimeError("No drive item or site page provided")
 
