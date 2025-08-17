@@ -17,7 +17,7 @@ def resume_paused_connectors(
 
     # Get all paused connectors
     response = requests.post(
-        f"{api_server_url}/api/manage/admin/connector/indexing-status-paginated",
+        f"{api_server_url}/api/manage/admin/connector/indexing-status",
         headers=headers,
         json={"get_all_connectors": True},
     )

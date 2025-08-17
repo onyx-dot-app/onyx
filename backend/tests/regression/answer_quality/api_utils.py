@@ -72,9 +72,7 @@ def get_answer_from_query(
 
 @retry(tries=10, delay=10)
 def check_indexing_status(env_name: str) -> tuple[int, bool]:
-    url = _api_url_builder(
-        env_name, "/manage/admin/connector/indexing-status-paginated/"
-    )
+    url = _api_url_builder(env_name, "/manage/admin/connector/indexing-status/")
     try:
         indexing_status_dict = requests.post(
             url, headers=GENERAL_HEADERS, json={"get_all_connectors": True}

@@ -183,7 +183,7 @@ class CCPairManager:
         user_performing_action: DATestUser | None = None,
     ) -> ConnectorIndexingStatusLite | None:
         response = requests.post(
-            f"{API_SERVER_URL}/manage/admin/connector/indexing-status-paginated",
+            f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=(
                 user_performing_action.headers
                 if user_performing_action
@@ -206,7 +206,7 @@ class CCPairManager:
         user_performing_action: DATestUser | None = None,
     ) -> list[ConnectorIndexingStatusLite]:
         response = requests.post(
-            f"{API_SERVER_URL}/manage/admin/connector/indexing-status-paginated",
+            f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
             headers=(
                 user_performing_action.headers
                 if user_performing_action

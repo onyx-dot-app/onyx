@@ -87,8 +87,7 @@ export const useObjectState = <T>(
   return [state, set];
 };
 
-const INDEXING_STATUS_PAGINATED_URL =
-  "/api/manage/admin/connector/indexing-status-paginated";
+const INDEXING_STATUS_URL = "/api/manage/admin/connector/indexing-status";
 const CONNECTOR_STATUS_URL = "/api/manage/admin/connector/status";
 
 export const useConnectorIndexingStatusWithPagination = (
@@ -125,18 +124,14 @@ export const useConnectorIndexingStatusWithPagination = (
     [filters]
   );
 
-  const swrKey = [INDEXING_STATUS_PAGINATED_URL, JSON.stringify(mainRequest)];
+  const swrKey = [INDEXING_STATUS_URL, JSON.stringify(mainRequest)];
 
   // Main data fetch with auto-refresh
   const { data, isLoading, error } = useSWR<
     ConnectorIndexingStatusLiteResponse[]
   >(
     swrKey,
-    () =>
-      fetchConnectorIndexingStatusPaginated(
-        mainRequest,
-        sourcePagesRef.current
-      ),
+    () => fetchConnectorIndexingStatus(mainRequest, sourcePagesRef.current),
     {
       refreshInterval,
     }
@@ -163,8 +158,7 @@ export const useConnectorIndexingStatusWithPagination = (
       setSourceLoadingStates((prev) => ({ ...prev, [source]: true }));
 
       try {
-        const sourceData =
-          await fetchConnectorIndexingStatusPaginated(sourceRequest);
+        const sourceData = await fetchConnectorIndexingStatus(sourceRequest);
         if (sourceData && sourceData.length > 0) {
           setMergedData((prevData) =>
             prevData
@@ -785,11 +779,11 @@ export const useUserGroups = (): {
   };
 };
 
-export const fetchConnectorIndexingStatusPaginated = async (
+export const fetchConnectorIndexingStatus = async (
   request: IndexingStatusRequest = {},
   sourcePages: Record<ValidSources, number> | null = null
 ): Promise<ConnectorIndexingStatusLiteResponse[]> => {
-  const response = await fetch(INDEXING_STATUS_PAGINATED_URL, {
+  const response = await fetch(INDEXING_STATUS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

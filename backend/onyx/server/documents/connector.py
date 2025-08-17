@@ -702,8 +702,8 @@ def get_connector_status(
     ]
 
 
-@router.post("/admin/connector/indexing-status-paginated")
-def get_connector_indexing_status_paginated(
+@router.post("/admin/connector/indexing-status")
+def get_connector_indexing_status(
     request: IndexingStatusRequest,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
