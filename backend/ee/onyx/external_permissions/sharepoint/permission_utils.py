@@ -4,6 +4,7 @@ from typing import Any
 
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
+from office365.runtime.client_request import ClientRequestException  # type: ignore
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection  # type: ignore[import-untyped]
 from pydantic import BaseModel
@@ -390,16 +391,25 @@ def _get_groups_and_members_recursively(
             if group_info:
                 group_queue.extend(group_info)
         if group.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
-            # if the site is public, we have default groups assigned to it, so we return early
-            if _is_public_login_name(group.login_name):
-                return GroupsResult(groups_to_emails={}, found_public_group=True)
+            try:
+                # if the site is public, we have default groups assigned to it, so we return early
+                if _is_public_login_name(group.login_name):
+                    return GroupsResult(groups_to_emails={}, found_public_group=True)
 
-            group_info, user_emails = _get_azuread_groups(
-                graph_client, group.login_name
-            )
-            visited_group_name_to_emails[group.name].update(user_emails)
-            if group_info:
-                group_queue.extend(group_info)
+                group_info, user_emails = _get_azuread_groups(
+                    graph_client, group.login_name
+                )
+                visited_group_name_to_emails[group.name].update(user_emails)
+                if group_info:
+                    group_queue.extend(group_info)
+            except ClientRequestException as e:
+                # If the group is not found, we skip it. There is a chance that group is still refrenced
+                # in sharepoint but it is removed from Azure AD. There is no actual documentation on this, but based on
+                # our testing we have seen this happen.
+                if e.response is not None and e.response.status_code == 404:
+                    logger.warning(f"Group {group.login_name} not found")
+                    continue
+                raise e
 
     return GroupsResult(
         groups_to_emails=visited_group_name_to_emails, found_public_group=False
