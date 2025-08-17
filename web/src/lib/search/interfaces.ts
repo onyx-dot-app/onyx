@@ -162,14 +162,13 @@ export interface SearchResponse {
 }
 
 export enum SourceCategory {
+  Wiki = "Knowledge Base & Wikis",
   Storage = "Cloud Storage",
-  Wiki = "Knowledge Base & Wiki",
+  TicketingAndTaskManagement = "Ticketing & Task Management",
   Messaging = "Messaging",
-  ProjectManagement = "Project Management",
-  SalesAndMarketing = "Sales & Marketing",
-  CustomerSupport = "Customer Support",
+  Sales = "Sales",
   CodeRepository = "Code Repository",
-  Other = "Other",
+  Other = "Others",
 }
 
 export interface SourceMetadata {
