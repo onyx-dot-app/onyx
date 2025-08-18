@@ -384,7 +384,7 @@ def get_external_access_permission(
 
 def get_external_user_group(
     repo: Repository, github_client: Github
-) -> list[ExternalUserGroup]:
+) -> tuple[list[ExternalUserGroup], set[str]]:
     """
     Get the external user group for a repository.
     Creates ExternalUserGroup objects with actual user emails for each permission group.
@@ -394,6 +394,7 @@ def get_external_user_group(
         f"Generating ExternalUserGroups for {repo.full_name}: visibility={repo_visibility.value}"
     )
 
+    user_without_email: set[str] = set()
     if repo_visibility == GitHubVisibility.PRIVATE:
         logger.info(f"Processing private repository {repo.full_name}")
 
@@ -408,7 +409,7 @@ def get_external_user_group(
             if collab.email:
                 user_emails.add(collab.email)
             else:
-                logger.error(f"Collaborator {collab.login} has no email")
+                user_without_email.add(collab.login)
 
         if user_emails:
             collaborators_group = ExternalUserGroup(
@@ -424,7 +425,7 @@ def get_external_user_group(
             if collab.email:
                 user_emails.add(collab.email)
             else:
-                logger.error(f"Outside collaborator {collab.login} has no email")
+                user_without_email.add(collab.login)
 
         if user_emails:
             outside_collaborators_group = ExternalUserGroup(
@@ -443,8 +444,7 @@ def get_external_user_group(
                 if member.email:
                     user_emails.add(member.email)
                 else:
-                    logger.error(f"Team member {member.login} has no email")
-
+                    user_without_email.add(member.login)
             if user_emails:
                 team_group = ExternalUserGroup(
                     id=team.slug,
@@ -458,7 +458,7 @@ def get_external_user_group(
         logger.info(
             f"Created {len(external_user_groups)} ExternalUserGroups for private repository {repo.full_name}"
         )
-        return external_user_groups
+        return external_user_groups, user_without_email
 
     if repo_visibility == GitHubVisibility.INTERNAL:
         logger.info(f"Processing internal repository {repo.full_name}")
@@ -473,8 +473,7 @@ def get_external_user_group(
             if member.email:
                 user_emails.add(member.email)
             else:
-                logger.error(f"Org member {member.login} has no email")
-
+                user_without_email.add(member.login)
         org_group = ExternalUserGroup(
             id=org_group_id,
             user_emails=list(user_emails),
@@ -482,7 +481,7 @@ def get_external_user_group(
         logger.info(
             f"Created organization group with {len(user_emails)} emails for internal repository {repo.full_name}"
         )
-        return [org_group]
+        return [org_group], user_without_email
 
     logger.info(f"Repository {repo.full_name} is public - no user groups needed")
-    return []
+    return [], set()

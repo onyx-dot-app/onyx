@@ -1,5 +1,6 @@
 from datetime import datetime
 from http import HTTPStatus
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -18,7 +19,10 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
 )
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import SyncStatus
+from onyx.db.enums import SyncType
 from onyx.db.models import User
+from onyx.db.sync_record import fetch_latest_sync_record
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.models import StatusResponse
@@ -175,3 +179,33 @@ def sync_cc_pair_groups(
         success=True,
         message="Successfully created the external group sync task.",
     )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/sync-groups/warnings")
+def get_cc_pair_latest_group_sync_warnings(
+    cc_pair_id: int,
+    user: User = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> dict[str, Any] | None:
+
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+    )
+    if not cc_pair:
+        raise HTTPException(
+            status_code=400,
+            detail="cc_pair not found for current user's permissions",
+        )
+
+    sync_record = fetch_latest_sync_record(
+        db_session=db_session,
+        entity_id=cc_pair_id,
+        sync_type=SyncType.EXTERNAL_GROUP,
+        sync_status=SyncStatus.SUCCESS,
+    )
+    if sync_record:
+        return sync_record.sync_warnings
+    return None
