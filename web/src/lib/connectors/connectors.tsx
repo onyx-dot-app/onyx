@@ -613,14 +613,56 @@ export const connectorConfigs: Record<
     description: "Configure Salesforce connector",
     values: [
       {
-        type: "list",
-        query: "Enter requested objects:",
-        label: "Requested Objects",
-        name: "requested_objects",
+        type: "tab",
+        name: "salesforce_config_type",
+        label: "Configuration Type",
         optional: true,
-        description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.
+        tabs: [
+          {
+            value: "simple",
+            label: "Simple",
+            fields: [
+              {
+                type: "list",
+                query: "Enter requested objects:",
+                label: "Requested Objects",
+                name: "requested_objects",
+                optional: true,
+                description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.
 
 Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').`,
+              },
+            ],
+          },
+          {
+            value: "advanced",
+            label: "Advanced",
+            fields: [
+              {
+                type: "text",
+                query: "Enter custom query config:",
+                label: "Custom Query Config",
+                name: "custom_query_config",
+                optional: true,
+                isTextArea: true,
+                description: `Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure.
+
+Example:
+{
+  "Account": {
+    "fields": ["Id", "Name", "Industry"],
+    "associations": {
+      "Contact": ["Id", "FirstName", "LastName", "Email"]
+    }
+  }
+}
+
+[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.`,
+              },
+            ],
+          },
+        ],
+        defaultTab: "simple",
       },
     ],
     advanced_values: [],
@@ -635,14 +677,33 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
         name: "sites",
         optional: true,
         description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
-
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
+• Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
+• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
 `,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Index Documents:",
+        label: "Index Documents",
+        name: "include_site_documents",
+        optional: true,
+        default: true,
+        description:
+          "Index documents of all SharePoint libraries or folders defined above.",
+      },
+      {
+        type: "checkbox",
+        query: "Index ASPX Sites:",
+        label: "Index ASPX Sites",
+        name: "include_site_pages",
+        optional: true,
+        default: true,
+        description:
+          "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
+      },
+    ],
   },
   teams: {
     description: "Configure Teams connector",
@@ -1549,6 +1610,8 @@ export interface SalesforceConfig {
 
 export interface SharepointConfig {
   sites?: string[];
+  include_site_pages?: boolean;
+  include_site_documents?: boolean;
 }
 
 export interface TeamsConfig {

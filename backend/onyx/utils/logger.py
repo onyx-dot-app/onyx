@@ -13,6 +13,7 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 
@@ -32,30 +33,6 @@ class LoggerContextVars:
     def reset() -> None:
         pruning_ctx.set(dict())
         doc_permission_sync_ctx.set(dict())
-
-
-class TaskAttemptSingleton:
-    """Used to tell if this process is an indexing job, and if so what is the
-    unique identifier for this indexing attempt. For things like the API server,
-    main background job (scheduler), etc. this will not be used."""
-
-    _INDEX_ATTEMPT_ID: None | int = None
-    _CONNECTOR_CREDENTIAL_PAIR_ID: None | int = None
-
-    @classmethod
-    def get_index_attempt_id(cls) -> None | int:
-        return cls._INDEX_ATTEMPT_ID
-
-    @classmethod
-    def get_connector_credential_pair_id(cls) -> None | int:
-        return cls._CONNECTOR_CREDENTIAL_PAIR_ID
-
-    @classmethod
-    def set_cc_and_index_id(
-        cls, index_attempt_id: int, connector_credential_pair_id: int
-    ) -> None:
-        cls._INDEX_ATTEMPT_ID = index_attempt_id
-        cls._CONNECTOR_CREDENTIAL_PAIR_ID = connector_credential_pair_id
 
 
 def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
@@ -102,14 +79,12 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
                     msg = f"[Doc Permissions Sync: {doc_permission_sync_ctx_dict['request_id']}] {msg}"
                 break
 
-            index_attempt_id = TaskAttemptSingleton.get_index_attempt_id()
-            cc_pair_id = TaskAttemptSingleton.get_connector_credential_pair_id()
-
-            if index_attempt_id is not None:
-                msg = f"[Index Attempt: {index_attempt_id}] {msg}"
-
-            if cc_pair_id is not None:
-                msg = f"[CC Pair: {cc_pair_id}] {msg}"
+            index_attempt_info = INDEX_ATTEMPT_INFO_CONTEXTVAR.get()
+            if index_attempt_info:
+                cc_pair_id, index_attempt_id = index_attempt_info
+                msg = (
+                    f"[Index Attempt: {index_attempt_id}] [CC Pair: {cc_pair_id}] {msg}"
+                )
 
             break
 

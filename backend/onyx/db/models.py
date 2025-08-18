@@ -1293,6 +1293,7 @@ class Tag(Base):
     source: Mapped[DocumentSource] = mapped_column(
         Enum(DocumentSource, native_enum=False)
     )
+    is_list: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     documents = relationship(
         "Document",
@@ -1302,7 +1303,11 @@ class Tag(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tag_key", "tag_value", "source", name="_tag_key_value_source_uc"
+            "tag_key",
+            "tag_value",
+            "source",
+            "is_list",
+            name="_tag_key_value_source_list_uc",
         ),
     )
 
@@ -1685,12 +1690,14 @@ class IndexAttempt(Base):
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # NEW: Database-based coordination fields (replacing Redis fencing)
+    # Database-based coordination fields (replacing Redis fencing)
     celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
     cancellation_requested: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # NEW: Batch coordination fields (replacing FileStore state)
+    # Batch coordination fields
+    # Once this is set, docfetching has completed
     total_batches: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # batches that are fully indexed (i.e. have completed docfetching and docprocessing)
     completed_batches: Mapped[int] = mapped_column(Integer, default=0)
     # TODO: unused, remove this column
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
@@ -1702,7 +1709,7 @@ class IndexAttempt(Base):
     )
     last_batches_completed_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    # NEW: Heartbeat tracking for worker liveness detection
+    # Heartbeat tracking for worker liveness detection
     heartbeat_counter: Mapped[int] = mapped_column(Integer, default=0)
     last_heartbeat_value: Mapped[int] = mapped_column(Integer, default=0)
     last_heartbeat_time: Mapped[datetime.datetime | None] = mapped_column(

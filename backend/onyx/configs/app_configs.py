@@ -121,6 +121,8 @@ OAUTH_CLIENT_SECRET = (
     os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET"))
     or ""
 )
+# OpenID Connect configuration URL for Okta Profile Tool and other OIDC integrations
+OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -358,6 +360,12 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # If this is empty, all connectors are enabled, this is an option for security heavy orgs where
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
+
+# If set to true, curators can only access and edit assistants that they created
+CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
+    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
+    == "true"
+)
 
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
@@ -610,6 +618,17 @@ AVERAGE_SUMMARY_EMBEDDINGS = (
 )
 
 MAX_TOKENS_FOR_FULL_INCLUSION = 4096
+
+
+#####
+# Tool Configs
+#####
+OKTA_PROFILE_TOOL_ENABLED = (
+    os.environ.get("OKTA_PROFILE_TOOL_ENABLED", "").lower() == "true"
+)
+# API token for SSWS auth to Okta Admin API. If set, Users API will be used to enrich profile.
+OKTA_API_TOKEN = os.environ.get("OKTA_API_TOKEN") or ""
+
 
 #####
 # Miscellaneous

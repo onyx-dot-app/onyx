@@ -2,6 +2,11 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+NAME_FIELD = "Name"
+MODIFIED_FIELD = "LastModifiedDate"
+ACCOUNT_OBJECT_TYPE = "Account"
+USER_OBJECT_TYPE = "User"
+
 
 @dataclass
 class SalesforceObject:

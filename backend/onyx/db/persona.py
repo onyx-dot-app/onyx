@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.app_configs import CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import CONTEXT_CHUNKS_ABOVE
@@ -94,6 +95,14 @@ def _add_user_filters(
     # If user is None, this is an anonymous user and we should only show public Personas
     if user is None:
         where_clause = Persona.is_public == True  # noqa: E712
+        return stmt.where(where_clause)
+
+    # If curator ownership restriction is enabled, curators can only access their own assistants
+    if CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS and user.role in [
+        UserRole.CURATOR,
+        UserRole.GLOBAL_CURATOR,
+    ]:
+        where_clause = (Persona.user_id == user.id) | (Persona.user_id.is_(None))
         return stmt.where(where_clause)
 
     where_clause = User__UserGroup.user_id == user.id

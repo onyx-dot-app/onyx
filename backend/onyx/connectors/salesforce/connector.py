@@ -1,5 +1,6 @@
 import csv
 import gc
+import json
 import os
 import sys
 import tempfile
@@ -28,8 +29,12 @@ from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
 from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
+from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.connectors.salesforce.utils import get_sqlite_db_path
+from onyx.connectors.salesforce.utils import MODIFIED_FIELD
+from onyx.connectors.salesforce.utils import NAME_FIELD
+from onyx.connectors.salesforce.utils import USER_OBJECT_TYPE
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -38,27 +43,27 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-_DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
+_DEFAULT_PARENT_OBJECT_TYPES = [ACCOUNT_OBJECT_TYPE]
 
 _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
     "Opportunity": {
-        "Account": "account",
+        ACCOUNT_OBJECT_TYPE: "account",
         "FiscalQuarter": "fiscal_quarter",
         "FiscalYear": "fiscal_year",
         "IsClosed": "is_closed",
-        "Name": "name",
+        NAME_FIELD: "name",
         "StageName": "stage_name",
         "Type": "type",
         "Amount": "amount",
         "CloseDate": "close_date",
         "Probability": "probability",
         "CreatedDate": "created_date",
-        "LastModifiedDate": "last_modified_date",
+        MODIFIED_FIELD: "last_modified_date",
     },
     "Contact": {
-        "Account": "account",
+        ACCOUNT_OBJECT_TYPE: "account",
         "CreatedDate": "created_date",
-        "LastModifiedDate": "last_modified_date",
+        MODIFIED_FIELD: "last_modified_date",
     },
 }
 
@@ -74,17 +79,75 @@ class SalesforceConnectorContext:
     parent_to_child_types: dict[str, set[str]] = {}  # map from parent to child types
     child_to_parent_types: dict[str, set[str]] = {}  # map from child to parent types
     parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
-    type_to_queryable_fields: dict[str, list[str]] = {}
+    type_to_queryable_fields: dict[str, set[str]] = {}
     prefix_to_type: dict[str, str] = {}  # infer the object type of an id immediately
 
     parent_to_child_relationships: dict[str, set[str]] = (
         {}
     )  # map from parent to child relationships
-    parent_to_relationship_queryable_fields: dict[str, dict[str, list[str]]] = (
+    parent_to_relationship_queryable_fields: dict[str, dict[str, set[str]]] = (
         {}
     )  # map from relationship to queryable fields
 
     parent_child_names_to_relationships: dict[str, str] = {}
+
+
+def _extract_fields_and_associations_from_config(
+    config: dict[str, Any], object_type: str
+) -> tuple[list[str] | None, dict[str, list[str]]]:
+    """
+    Extract fields and associations for a specific object type from custom config.
+
+    Returns:
+        tuple of (fields_list, associations_dict)
+        - fields_list: List of fields to query, or None if not specified (use all)
+        - associations_dict: Dict mapping association names to their config
+    """
+    if object_type not in config:
+        return None, {}
+
+    obj_config = config[object_type]
+    fields = obj_config.get("fields")
+    associations = obj_config.get("associations", {})
+
+    return fields, associations
+
+
+def _validate_custom_query_config(config: dict[str, Any]) -> None:
+    """
+    Validate the structure of the custom query configuration.
+    """
+
+    for object_type, obj_config in config.items():
+        if not isinstance(obj_config, dict):
+            raise ValueError(
+                f"top level object {object_type} must be mapped to a dictionary"
+            )
+
+        # Check if fields is a list when present
+        if "fields" in obj_config:
+            if not isinstance(obj_config["fields"], list):
+                raise ValueError("if fields key exists, value must be a list")
+            for v in obj_config["fields"]:
+                if not isinstance(v, str):
+                    raise ValueError(f"if fields list value {v} is not a string")
+
+        # Check if associations is a dict when present
+        if "associations" in obj_config:
+            if not isinstance(obj_config["associations"], dict):
+                raise ValueError(
+                    "if associations key exists, value must be a dictionary"
+                )
+            for assoc_name, assoc_fields in obj_config["associations"].items():
+                if not isinstance(assoc_fields, list):
+                    raise ValueError(
+                        f"associations list value {assoc_fields} for key {assoc_name} is not a list"
+                    )
+                for v in assoc_fields:
+                    if not isinstance(v, str):
+                        raise ValueError(
+                            f"if associations list value {v} is not a string"
+                        )
 
 
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
@@ -134,14 +197,25 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         batch_size: int = INDEX_BATCH_SIZE,
         requested_objects: list[str] = [],
+        custom_query_config: str | None = None,
     ) -> None:
         self.batch_size = batch_size
         self._sf_client: OnyxSalesforce | None = None
-        self.parent_object_list = (
-            [obj.capitalize() for obj in requested_objects]
-            if requested_objects
-            else _DEFAULT_PARENT_OBJECT_TYPES
-        )
+
+        # Validate and store custom query config
+        if custom_query_config:
+            config_json = json.loads(custom_query_config)
+            self.custom_query_config: dict[str, Any] | None = config_json
+            # If custom query config is provided, use the object types from it
+            self.parent_object_list = list(config_json.keys())
+        else:
+            self.custom_query_config = None
+            # Use the traditional requested_objects approach
+            self.parent_object_list = (
+                [obj.strip().capitalize() for obj in requested_objects]
+                if requested_objects
+                else _DEFAULT_PARENT_OBJECT_TYPES
+            )
 
     def load_credentials(
         self,
@@ -187,7 +261,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     @staticmethod
     def _download_object_csvs(
         all_types_to_filter: dict[str, bool],
-        queryable_fields_by_type: dict[str, list[str]],
+        queryable_fields_by_type: dict[str, set[str]],
         directory: str,
         sf_client: OnyxSalesforce,
         start: SecondsSinceUnixEpoch | None = None,
@@ -325,9 +399,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     #         all_types.update(child_types.keys())
 
     #     # Always want to make sure user is grabbed for permissioning purposes
-    #     all_types.add("User")
+    #     all_types.add(USER_OBJECT_TYPE)
     #     # Always want to make sure account is grabbed for reference purposes
-    #     all_types.add("Account")
+    #     all_types.add(ACCOUNT_OBJECT_TYPE)
 
     #     logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
@@ -351,7 +425,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     #         all_types.update(child_types)
 
     #     # Always want to make sure user is grabbed for permissioning purposes
-    #     all_types.add("User")
+    #     all_types.add(USER_OBJECT_TYPE)
 
     #     logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
@@ -364,7 +438,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> GenerateDocumentsOutput:
         type_to_processed: dict[str, int] = {}
 
-        logger.info("_fetch_from_salesforce starting.")
+        logger.info("_fetch_from_salesforce starting (full sync).")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
@@ -548,7 +622,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> GenerateDocumentsOutput:
         type_to_processed: dict[str, int] = {}
 
-        logger.info("_fetch_from_salesforce starting.")
+        logger.info("_fetch_from_salesforce starting (delta sync).")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
@@ -677,7 +751,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     try:
                         last_modified_by_id = record["LastModifiedById"]
                         user_record = self.sf_client.query_object(
-                            "User", last_modified_by_id, ctx.type_to_queryable_fields
+                            USER_OBJECT_TYPE,
+                            last_modified_by_id,
+                            ctx.type_to_queryable_fields,
                         )
                         if user_record:
                             primary_owner = BasicExpertInfo.from_dict(user_record)
@@ -792,7 +868,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = (
             {}
         )  # for a given object, the fields reference parent objects
-        type_to_queryable_fields: dict[str, list[str]] = {}
+        type_to_queryable_fields: dict[str, set[str]] = {}
         prefix_to_type: dict[str, str] = {}
 
         parent_to_child_relationships: dict[str, set[str]] = (
@@ -802,15 +878,13 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         # relationship keys are formatted as "parent__relationship"
         # we have to do this because relationship names are not unique!
         # values are a dict of relationship names to a list of queryable fields
-        parent_to_relationship_queryable_fields: dict[str, dict[str, list[str]]] = {}
+        parent_to_relationship_queryable_fields: dict[str, dict[str, set[str]]] = {}
 
         parent_child_names_to_relationships: dict[str, str] = {}
 
-        full_sync = False
-        if start is None and end is None:
-            full_sync = True
+        full_sync = start is None and end is None
 
-        # Step 1 - make a list of all the types to download (parent + direct child + "User")
+        # Step 1 - make a list of all the types to download (parent + direct child + USER_OBJECT_TYPE)
         # prefixes = {}
 
         global_description = sf_client.describe()
@@ -831,16 +905,63 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
         for parent_type in parent_types:
             # parent_onyx_sf_type = OnyxSalesforceType(parent_type, sf_client)
-            type_to_queryable_fields[parent_type] = (
-                sf_client.get_queryable_fields_by_type(parent_type)
-            )
 
-            child_types_working = sf_client.get_children_of_sf_type(parent_type)
-            logger.debug(
-                f"Found {len(child_types_working)} child types for {parent_type}"
-            )
+            custom_fields: list[str] | None = []
+            associations_config: dict[str, list[str]] | None = None
 
-            # parent_to_child_relationships[parent_type] = child_types_working
+            # Set queryable fields for parent type
+            if self.custom_query_config:
+                custom_fields, associations_config = (
+                    _extract_fields_and_associations_from_config(
+                        self.custom_query_config, parent_type
+                    )
+                )
+                custom_fields = custom_fields or []
+
+                # Get custom fields for parent type
+                field_set = set(custom_fields)
+                # these are expected and used during doc conversion
+                field_set.add(NAME_FIELD)
+                field_set.add(MODIFIED_FIELD)
+
+                # Use only the specified fields
+                type_to_queryable_fields[parent_type] = field_set
+                logger.info(f"Using custom fields for {parent_type}: {field_set}")
+            else:
+                # Use all queryable fields
+                type_to_queryable_fields[parent_type] = (
+                    sf_client.get_queryable_fields_by_type(parent_type)
+                )
+                logger.info(f"Using all fields for {parent_type}")
+
+            child_types_all = sf_client.get_children_of_sf_type(parent_type)
+            logger.debug(f"Found {len(child_types_all)} child types for {parent_type}")
+            logger.debug(f"child types: {child_types_all}")
+
+            child_types_working = child_types_all.copy()
+            if associations_config is not None:
+                child_types_working = {
+                    k: v for k, v in child_types_all.items() if k in associations_config
+                }
+                any_not_found = False
+                for k in associations_config:
+                    if k not in child_types_working:
+                        any_not_found = True
+                        logger.warning(f"Association {k} not found in {parent_type}")
+                if any_not_found:
+                    queryable_fields = sf_client.get_queryable_fields_by_type(
+                        parent_type
+                    )
+                    raise RuntimeError(
+                        f"Associations {associations_config} not found in {parent_type} "
+                        "make sure your parent-child associations are in the right order"
+                        # f"with child objects {child_types_all}"
+                        # f" and fields {queryable_fields}"
+                    )
+
+            parent_to_child_relationships[parent_type] = set()
+            parent_to_child_types[parent_type] = set()
+            parent_to_relationship_queryable_fields[parent_type] = {}
 
             for child_type, child_relationship in child_types_working.items():
                 child_type = cast(str, child_type)
@@ -848,8 +969,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
 
                 # map parent name to child name
-                if parent_type not in parent_to_child_types:
-                    parent_to_child_types[parent_type] = set()
                 parent_to_child_types[parent_type].add(child_type)
 
                 # reverse map child name to parent name
@@ -858,18 +977,24 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 child_to_parent_types[child_type].add(parent_type)
 
                 # map parent name to child relationship
-                if parent_type not in parent_to_child_relationships:
-                    parent_to_child_relationships[parent_type] = set()
                 parent_to_child_relationships[parent_type].add(child_relationship)
 
                 # map relationship to queryable fields of the target table
-                queryable_fields = sf_client.get_queryable_fields_by_type(child_type)
+                if config_fields := (
+                    associations_config and associations_config.get(child_type)
+                ):
+                    field_set = set(config_fields)
+                    # these are expected and used during doc conversion
+                    field_set.add(NAME_FIELD)
+                    field_set.add(MODIFIED_FIELD)
+                    queryable_fields = field_set
+                else:
+                    queryable_fields = sf_client.get_queryable_fields_by_type(
+                        child_type
+                    )
 
                 if child_relationship in parent_to_relationship_queryable_fields:
                     raise RuntimeError(f"{child_relationship=} already exists")
-
-                if parent_type not in parent_to_relationship_queryable_fields:
-                    parent_to_relationship_queryable_fields[parent_type] = {}
 
                 parent_to_relationship_queryable_fields[parent_type][
                     child_relationship
@@ -894,14 +1019,22 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         all_types.update(child_types)
 
         # NOTE(rkuo): should this be an implicit parent type?
-        all_types.add("User")  # Always add User for permissioning purposes
-        all_types.add("Account")  # Always add Account for reference purposes
+        all_types.add(USER_OBJECT_TYPE)  # Always add User for permissioning purposes
+        all_types.add(ACCOUNT_OBJECT_TYPE)  # Always add Account for reference purposes
 
         logger.info(f"All object types: num={len(all_types)} list={all_types}")
 
+        # Ensure User and Account have queryable fields if they weren't already processed
+        essential_types = [USER_OBJECT_TYPE, ACCOUNT_OBJECT_TYPE]
+        for essential_type in essential_types:
+            if essential_type not in type_to_queryable_fields:
+                type_to_queryable_fields[essential_type] = (
+                    sf_client.get_queryable_fields_by_type(essential_type)
+                )
+
         # 1.1 - Detect all fields in child types which reference a parent type.
         # build dicts to detect relationships between parent and child
-        for child_type in child_types:
+        for child_type in child_types.union(essential_types):
             # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
             parent_reference_fields = sf_client.get_parent_reference_fields(
                 child_type, parent_types
@@ -1003,6 +1136,32 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         yield doc_metadata_list
 
+    def validate_connector_settings(self) -> None:
+        """
+        Validate that the Salesforce credentials and connector settings are correct.
+        Specifically checks that we can make an authenticated request to Salesforce.
+        """
+
+        try:
+            # Attempt to fetch a small batch of objects (arbitrary endpoint) to verify credentials
+            self.sf_client.describe()
+        except Exception as e:
+            raise ConnectorMissingCredentialError(
+                "Failed to validate Salesforce credentials. Please check your"
+                f"credentials and try again. Error: {e}"
+            )
+
+        if self.custom_query_config:
+            try:
+                _validate_custom_query_config(self.custom_query_config)
+            except Exception as e:
+                raise ConnectorMissingCredentialError(
+                    "Failed to validate Salesforce custom query config. Please check your"
+                    f"config and try again. Error: {e}"
+                )
+
+        logger.info("Salesforce credentials validated successfully.")
+
     # @override
     # def load_from_checkpoint(
     #     self,
@@ -1032,7 +1191,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
-    connector = SalesforceConnector(requested_objects=["Account"])
+    connector = SalesforceConnector(requested_objects=[ACCOUNT_OBJECT_TYPE])
 
     connector.load_credentials(
         {

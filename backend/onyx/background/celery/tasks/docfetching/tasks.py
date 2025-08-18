@@ -2,7 +2,6 @@ import multiprocessing
 import os
 import time
 import traceback
-from http import HTTPStatus
 from time import sleep
 
 import sentry_sdk
@@ -22,7 +21,7 @@ from onyx.background.celery.tasks.models import SimpleJobResult
 from onyx.background.indexing.job_client import SimpleJob
 from onyx.background.indexing.job_client import SimpleJobClient
 from onyx.background.indexing.job_client import SimpleJobException
-from onyx.background.indexing.run_docfetching import run_indexing_entrypoint
+from onyx.background.indexing.run_docfetching import run_docfetching_entrypoint
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -34,7 +33,6 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import SENTRY_DSN
@@ -156,7 +154,6 @@ def _docfetching_task(
     )
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    redis_connector.new_index(search_settings_id)
 
     # TODO: remove all fences, cause all signals to be set in postgres
     if redis_connector.delete.fenced:
@@ -214,7 +211,7 @@ def _docfetching_task(
         )
 
         # This is where the heavy/real work happens
-        run_indexing_entrypoint(
+        run_docfetching_entrypoint(
             app,
             index_attempt_id,
             tenant_id,
@@ -261,7 +258,7 @@ def _docfetching_task(
 def process_job_result(
     job: SimpleJob,
     connector_source: str | None,
-    redis_connector_index: RedisConnectorIndex,
+    index_attempt_id: int,
     log_builder: ConnectorIndexingLogBuilder,
 ) -> SimpleJobResult:
     result = SimpleJobResult()
@@ -278,13 +275,11 @@ def process_job_result(
 
     # In EKS, there is an edge case where successful tasks return exit
     # code 1 in the cloud due to the set_spawn_method not sticking.
-    # We've since worked around this, but the following is a safe way to
-    # work around this issue. Basically, we ignore the job error state
-    # if the completion signal is OK.
-    status_int = redis_connector_index.get_completion()
-    if status_int:
-        status_enum = HTTPStatus(status_int)
-        if status_enum == HTTPStatus.OK:
+    # Workaround: check that the total number of batches is set, since this only
+    # happens when docfetching completed successfully
+    with get_session_with_current_tenant() as db_session:
+        index_attempt = get_index_attempt(db_session, index_attempt_id)
+        if index_attempt and index_attempt.total_batches is not None:
             ignore_exitcode = True
 
     if ignore_exitcode:
@@ -300,7 +295,11 @@ def process_job_result(
         if result.exit_code is not None:
             result.status = IndexingWatchdogTerminalStatus.from_code(result.exit_code)
 
-        result.exception_str = job.exception()
+        job_level_exception = job.exception()
+        result.exception_str = (
+            f"Docfetching returned exit code {result.exit_code} "
+            f"with exception: {job_level_exception}"
+        )
 
     return result
 
@@ -458,9 +457,6 @@ def docfetching_proxy_task(
         )
     )
 
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    redis_connector_index = redis_connector.new_index(search_settings_id)
-
     # Track the last time memory info was emitted
     last_memory_emit_time = 0.0
 
@@ -487,7 +483,7 @@ def docfetching_proxy_task(
             if job.done():
                 try:
                     result = process_job_result(
-                        job, result.connector_source, redis_connector_index, log_builder
+                        job, result.connector_source, index_attempt_id, log_builder
                     )
                 except Exception:
                     task_logger.exception(

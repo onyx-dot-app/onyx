@@ -154,6 +154,9 @@ export default function UpgradingPage({
                     re-indexed successfully, the new model will be used for all
                     search queries. Until then, we will use the old model so
                     that no downtime is necessary during this transition.
+                    <br />
+                    Note: User file re-indexing progress is not shown. You will
+                    see this page until all user files are re-indexed!
                   </Text>
 
                   {sortedReindexingProgress ? (

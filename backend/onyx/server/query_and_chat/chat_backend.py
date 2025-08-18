@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import io
 import json
 import os
 import time
@@ -31,7 +30,6 @@ from onyx.chat.prompt_builder.citations_prompt import (
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
@@ -63,9 +61,7 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.user_documents import create_user_files
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
-from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms
@@ -717,106 +713,65 @@ def upload_files_for_chat(
         ):
             raise HTTPException(
                 status_code=400,
-                detail="File size must be less than 20MB",
+                detail="Images must be less than 20MB",
             )
 
-    file_store = get_default_file_store()
-
-    file_info: list[tuple[str, str | None, ChatFileType]] = []
-    for file in files:
-        file_type = mime_type_to_chat_file_type(file.content_type)
-
-        file_content = file.file.read()  # Read the file content
-
-        # NOTE: Image conversion to JPEG used to be enforced here.
-        # This was removed to:
-        # 1. Preserve original file content for downloads
-        # 2. Maintain transparency in formats like PNG
-        # 3. Ameliorate issue with file conversion
-        file_content_io = io.BytesIO(file_content)
-
-        new_content_type = file.content_type
-
-        # Store the file normally
-        file_id = file_store.save_file(
-            content=file_content_io,
-            display_name=file.filename,
-            file_origin=FileOrigin.CHAT_UPLOAD,
-            file_type=new_content_type or file_type.value,
+    # 5) Create a user file for each uploaded file
+    user_files = create_user_files(files, RECENT_DOCS_FOLDER_ID, user, db_session)
+    for user_file in user_files:
+        # 6) Create connector
+        connector_base = ConnectorBase(
+            name=f"UserFile-{int(time.time())}",
+            source=DocumentSource.FILE,
+            input_type=InputType.LOAD_STATE,
+            connector_specific_config={
+                "file_locations": [user_file.file_id],
+                "file_names": [user_file.name],
+                "zip_metadata": {},
+            },
+            refresh_freq=None,
+            prune_freq=None,
+            indexing_start=None,
+        )
+        connector = create_connector(
+            db_session=db_session,
+            connector_data=connector_base,
         )
 
-        # 4) If the file is a doc, extract text and store that separately
-        if file_type == ChatFileType.DOC:
-            # Re-wrap bytes in a fresh BytesIO so we start at position 0
-            extracted_text_io = io.BytesIO(file_content)
-            extracted_text = extract_file_text(
-                file=extracted_text_io,  # use the bytes we already read
-                file_name=file.filename or "",
-            )
+        # 7) Create credential
+        credential_info = CredentialBase(
+            credential_json={},
+            admin_public=True,
+            source=DocumentSource.FILE,
+            curator_public=True,
+            groups=[],
+            name=f"UserFileCredential-{int(time.time())}",
+            is_user_file=True,
+        )
+        credential = create_credential(credential_info, user, db_session)
 
-            text_file_id = file_store.save_file(
-                content=io.BytesIO(extracted_text.encode()),
-                display_name=file.filename,
-                file_origin=FileOrigin.CHAT_UPLOAD,
-                file_type="text/plain",
-            )
-            # Return the text file as the "main" file descriptor for doc types
-            file_info.append((text_file_id, file.filename, ChatFileType.PLAIN_TEXT))
-        else:
-            file_info.append((file_id, file.filename, file_type))
-
-        # 5) Create a user file for each uploaded file
-        user_files = create_user_files([file], RECENT_DOCS_FOLDER_ID, user, db_session)
-        for user_file in user_files:
-            # 6) Create connector
-            connector_base = ConnectorBase(
-                name=f"UserFile-{int(time.time())}",
-                source=DocumentSource.FILE,
-                input_type=InputType.LOAD_STATE,
-                connector_specific_config={
-                    "file_locations": [user_file.file_id],
-                    "file_names": [user_file.name],
-                    "zip_metadata": {},
-                },
-                refresh_freq=None,
-                prune_freq=None,
-                indexing_start=None,
-            )
-            connector = create_connector(
-                db_session=db_session,
-                connector_data=connector_base,
-            )
-
-            # 7) Create credential
-            credential_info = CredentialBase(
-                credential_json={},
-                admin_public=True,
-                source=DocumentSource.FILE,
-                curator_public=True,
-                groups=[],
-                name=f"UserFileCredential-{int(time.time())}",
-                is_user_file=True,
-            )
-            credential = create_credential(credential_info, user, db_session)
-
-            # 8) Create connector credential pair
-            cc_pair = add_credential_to_connector(
-                db_session=db_session,
-                user=user,
-                connector_id=connector.id,
-                credential_id=credential.id,
-                cc_pair_name=f"UserFileCCPair-{int(time.time())}",
-                access_type=AccessType.PRIVATE,
-                auto_sync_options=None,
-                groups=[],
-            )
-            user_file.cc_pair_id = cc_pair.data
-            db_session.commit()
+        # 8) Create connector credential pair
+        cc_pair = add_credential_to_connector(
+            db_session=db_session,
+            user=user,
+            connector_id=connector.id,
+            credential_id=credential.id,
+            cc_pair_name=f"UserFileCCPair-{int(time.time())}",
+            access_type=AccessType.PRIVATE,
+            auto_sync_options=None,
+            groups=[],
+        )
+        user_file.cc_pair_id = cc_pair.data
+        db_session.commit()
 
     return {
         "files": [
-            {"id": file_id, "type": file_type, "name": file_name}
-            for file_id, file_name, file_type in file_info
+            {
+                "id": user_file.file_id,
+                "type": mime_type_to_chat_file_type(user_file.content_type),
+                "name": user_file.name,
+            }
+            for user_file in user_files
         ]
     }
 

@@ -193,12 +193,7 @@ def check_for_connector_deletion_task(self: Task, *, tenant_id: str) -> bool | N
                             task_logger.info(
                                 "Timed out waiting for tasks blocking deletion. Resetting blocking fences."
                             )
-                            search_settings_list = get_all_search_settings(db_session)
-                            for search_settings in search_settings_list:
-                                redis_connector_index = redis_connector.new_index(
-                                    search_settings.id
-                                )
-                                redis_connector_index.reset()
+
                             redis_connector.prune.reset()
                             redis_connector.permissions.reset()
                             redis_connector.external_group_sync.reset()

@@ -15,7 +15,7 @@ export function StarterMessages({
     <div
       key={-4}
       className={`
-        short:hidden
+        very-short:hidden
         mx-auto
         w-full
         ${

@@ -11,6 +11,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.salesforce.connector import SalesforceConnector
+from onyx.connectors.salesforce.utils import ACCOUNT_OBJECT_TYPE
 
 
 def extract_key_value_pairs_to_set(
@@ -35,7 +36,7 @@ def _load_reference_data(
 @pytest.fixture
 def salesforce_connector() -> SalesforceConnector:
     connector = SalesforceConnector(
-        requested_objects=["Account", "Contact", "Opportunity"],
+        requested_objects=[ACCOUNT_OBJECT_TYPE, "Contact", "Opportunity"],
     )
 
     username = os.environ["SF_USERNAME"]
