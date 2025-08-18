@@ -30,7 +30,7 @@ def jira_connector() -> JiraConnector:
 def jira_connector_with_jql() -> JiraConnector:
     connector = JiraConnector(
         jira_base_url="https://danswerai.atlassian.net",
-        jql_query="project = AS AND issuetype = Story",
+        jql_query="project = \'AS\' AND issuetype = Story",
         comment_email_blacklist=[],
     )
     connector.load_credentials(
@@ -138,7 +138,7 @@ def test_jira_connector_with_jql(reset: None, jira_connector_with_jql: JiraConne
     """Test that JQL query functionality works correctly.
     
     This test verifies that when a JQL query is provided, only issues matching the query are returned.
-    The JQL query used is "project = AS AND issuetype = Story", which should only return Story-type issues.
+    The JQL query used is "project = \'AS\' AND issuetype = Story", which should only return Story-type issues.
     """
     docs = load_all_docs_from_checkpoint_connector(
         connector=jira_connector_with_jql,

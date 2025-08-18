@@ -20,6 +20,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
@@ -380,98 +381,77 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
 
         yield slim_doc_batch
 
+
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("Jira")
             
-        # Check if both jql_query and project_key are defined
-        if self.jql_query and self.jira_project:
-            raise ConnectorValidationError(
-                "Cannot specify both JQL query and project key. Use only one of these options, "
-                "or include project filtering directly in your JQL query (e.g., 'project = KEY AND ...')."
-            )
-
         # If a custom JQL query is set, validate it's valid
         if self.jql_query:
             try:
                 # Try to execute the JQL query with a small limit to validate its syntax
-                # We use a list comprehension to force evaluation of the generator
-                # without actually processing the results
-                [_ for _ in _perform_jql_search(
+                # Use next(iter(...), None) to get just the first result without
+                # forcing evaluation of all results
+                next(iter(_perform_jql_search(
                     jira_client=self.jira_client,
                     jql=self.jql_query,
                     start=0,
                     max_results=1,
-                )]
+                )), None)
             except Exception as e:
-                status_code = getattr(e, "status_code", None)
-
-                if status_code == 401:
-                    raise CredentialExpiredError(
-                        "Jira credential appears to be expired or invalid (HTTP 401)."
-                    )
-                elif status_code == 403:
-                    raise InsufficientPermissionsError(
-                        "Your Jira token does not have sufficient permissions to execute this JQL query (HTTP 403)."
-                    )
-                elif status_code == 400:
-                    # This is typically a JQL syntax error
-                    raise ConnectorValidationError(
-                        "Invalid Jira request. Please check your JQL string for errors."
-                    )
-                elif status_code == 429:
-                    raise ConnectorValidationError(
-                        "Validation failed due to Jira rate-limits being exceeded. Please try again later."
-                    )
-
-                raise RuntimeError(f"Unexpected Jira error during validation: {e}")
+                self._handle_jira_connector_settings_error(e)
 
         # If a specific project is set, validate it exists
         elif self.jira_project:
             try:
                 self.jira_client.project(self.jira_project)
             except Exception as e:
-                status_code = getattr(e, "status_code", None)
-
-                if status_code == 401:
-                    raise CredentialExpiredError(
-                        "Jira credential appears to be expired or invalid (HTTP 401)."
-                    )
-                elif status_code == 403:
-                    raise InsufficientPermissionsError(
-                        "Your Jira token does not have sufficient permissions for this project (HTTP 403)."
-                    )
-                elif status_code == 404:
-                    raise ConnectorValidationError(
-                        f"Jira project not found with key: {self.jira_project}"
-                    )
-                elif status_code == 429:
-                    raise ConnectorValidationError(
-                        "Validation failed due to Jira rate-limits being exceeded. Please try again later."
-                    )
-
-                raise RuntimeError(f"Unexpected Jira error during validation: {e}")
+                self._handle_jira_connector_settings_error(e)
         else:
             # If neither JQL nor project specified, validate we can access the Jira API
             try:
                 # Try to list projects to validate access
                 self.jira_client.projects()
             except Exception as e:
-                status_code = getattr(e, "status_code", None)
-                if status_code == 401:
-                    raise CredentialExpiredError(
-                        "Jira credential appears to be expired or invalid (HTTP 401)."
-                    )
-                elif status_code == 403:
-                    raise InsufficientPermissionsError(
-                        "Your Jira token does not have sufficient permissions to list projects (HTTP 403)."
-                    )
-                elif status_code == 429:
-                    raise ConnectorValidationError(
-                        "Validation failed due to Jira rate-limits being exceeded. Please try again later."
-                    )
+                self._handle_jira_connector_setting_error(e)
 
-                raise RuntimeError(f"Unexpected Jira error during validation: {e}")
+    def _handle_jira_connector_settings_error(self, e: Exception) -> None:
+        """Helper method to handle Jira API errors consistently.
+        
+        Extracts error messages from the Jira API response for all status codes when possible,
+        providing more user-friendly error messages.
+
+        Args:
+            e: The exception raised by the Jira API
+
+        Raises:
+            CredentialExpiredError: If the status code is 401
+            InsufficientPermissionsError: If the status code is 403
+            ConnectorValidationError: For other HTTP errors with extracted error messages
+        """
+        status_code = getattr(e, "status_code", None)
+        logger.error(f"Jira API error during validation: {e}")
+
+        # Handle specific status codes with appropriate exceptions
+        if status_code == 401:
+            raise CredentialExpiredError(
+                "Jira credential appears to be expired or invalid (HTTP 401)."
+            )
+        elif status_code == 403:
+            raise InsufficientPermissionsError(
+                f"Your Jira token does not have sufficient permissions for this configuration (HTTP 403)."
+            )
+        elif status_code == 429:
+            raise ConnectorValidationError(
+                "Validation failed due to Jira rate-limits being exceeded. Please try again later."
+            )
+
+        # Try to extract original error message from the response
+        error_message = getattr(e, "text", None)
+        if error_message is None:
+            raise UnexpectedValidationError(f"Unexpected Jira error during validation: {e}")
+
+        raise ConnectorValidationError(f"Validation failed due to Jira error: {error_message}")
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> JiraConnectorCheckpoint:

@@ -590,7 +590,7 @@ export const connectorConfigs: Record<
                 label: "JQL Query",
                 name: "jql_query",
                 description:
-                  "A custom JQL query to filter Jira issues. See https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/ for more details.",
+                  "A custom JQL query to filter Jira issues. IMPORTANT: Do not use a filter for the 'updated' field. Also, do not use the 'ORDER BY' clause, as it could cause issues with our connector polling logic. See https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/ for more details on JQL syntax.",
               },
             ],
           },
