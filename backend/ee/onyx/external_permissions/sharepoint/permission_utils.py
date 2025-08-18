@@ -234,7 +234,7 @@ def _get_sharepoint_groups(
         nonlocal groups, user_emails
 
         for user in users:
-            logger.info(f"User: {user.to_json()}")
+            logger.debug(f"User: {user.to_json()}")
             if user.principal_type == USER_PRINCIPAL_TYPE and hasattr(
                 user, "user_principal_name"
             ):
@@ -289,7 +289,7 @@ def _get_azuread_groups(
 
         for member in members:
             member_data = member.to_json()
-            logger.info(f"Member: {member_data}")
+            logger.debug(f"Member: {member_data}")
             # Check for user-specific attributes
             user_principal_name = member_data.get("userPrincipalName")
             mail = member_data.get("mail")
@@ -370,6 +370,7 @@ def _get_groups_and_members_recursively(
     client_context: ClientContext,
     graph_client: GraphClient,
     groups: set[SharepointGroup],
+    is_group_sync: bool = False,
 ) -> GroupsResult:
     """
     Get all groups and their members recursively.
@@ -377,6 +378,7 @@ def _get_groups_and_members_recursively(
     group_queue: deque[SharepointGroup] = deque(groups)
     visited_groups: set[str] = set()
     visited_group_name_to_emails: dict[str, set[str]] = {}
+    found_public_group = False
     while group_queue:
         group = group_queue.popleft()
         if group.login_name in visited_groups:
@@ -397,8 +399,14 @@ def _get_groups_and_members_recursively(
             try:
                 # if the site is public, we have default groups assigned to it, so we return early
                 if _is_public_login_name(group.login_name):
-                    return GroupsResult(groups_to_emails={}, found_public_group=True)
-
+                    found_public_group = True
+                    if not is_group_sync:
+                        return GroupsResult(
+                            groups_to_emails={}, found_public_group=True
+                        )
+                    else:
+                        # we don't want to sync public groups, so we skip them
+                        continue
                 group_info, user_emails = _get_azuread_groups(
                     graph_client, group.login_name
                 )
@@ -415,7 +423,8 @@ def _get_groups_and_members_recursively(
                 raise e
 
     return GroupsResult(
-        groups_to_emails=visited_group_name_to_emails, found_public_group=False
+        groups_to_emails=visited_group_name_to_emails,
+        found_public_group=found_public_group,
     )
 
 
@@ -440,7 +449,7 @@ def get_external_access_from_sharepoint(
     ) -> None:
         nonlocal user_emails, groups
         for assignment in role_assignments:
-            logger.info(f"Assignment: {assignment.to_json()}")
+            logger.debug(f"Assignment: {assignment.to_json()}")
             if assignment.role_definition_bindings:
                 is_limited_access = True
                 for role_definition_binding in assignment.role_definition_bindings:
@@ -616,12 +625,8 @@ def get_sharepoint_external_groups(
         "get_sharepoint_external_groups",
     )
     groups_and_members: GroupsResult = _get_groups_and_members_recursively(
-        client_context, graph_client, groups
+        client_context, graph_client, groups, is_group_sync=True
     )
-
-    # We don't have any direct way to check if the site is public, so we check if any public group is present
-    if groups_and_members.found_public_group:
-        return []
 
     # get all Azure AD groups because if any group is assigned to the drive item, we don't want to miss them
     # We can't assign sharepoint groups to drive items or drives, so we don't need to get all sharepoint groups
