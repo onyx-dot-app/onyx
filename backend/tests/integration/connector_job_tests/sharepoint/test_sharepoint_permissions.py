@@ -1,3 +1,4 @@
+import os
 from typing import List
 from uuid import UUID
 
@@ -106,6 +107,10 @@ def get_documents_by_permission_type(
     return public_docs
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission tests are enterprise only",
+)
 def test_public_documents_accessible_by_all_users(
     sharepoint_test_env_setup: SharepointTestEnvSetupTuple,
 ) -> None:
@@ -157,6 +162,10 @@ def test_public_documents_accessible_by_all_users(
         )
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Permission tests are enterprise only",
+)
 def test_group_based_permissions(
     sharepoint_test_env_setup: SharepointTestEnvSetupTuple,
 ) -> None:
