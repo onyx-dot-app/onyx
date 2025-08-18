@@ -14,6 +14,15 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
+# Create non-root user for security best practices
+RUN mkdir -p /app && \
+    groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx  && \
+    chown -R onyx:onyx /app && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
+
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
         --retries 5 \
@@ -41,15 +50,8 @@ SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_rem
 # In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
 # running Onyx, move the current contents of the cache folder to a temporary location to ensure 
 # it's preserved in order to combine with the user's cache contents
-RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface
-
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    chown -R onyx:onyx /app && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
+RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface && \
+    chown -R onyx:onyx /app
 
 WORKDIR /app
 
