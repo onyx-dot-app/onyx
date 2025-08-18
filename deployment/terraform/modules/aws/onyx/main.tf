@@ -75,3 +75,17 @@ module "eks" {
   private_cluster_enabled = var.private_cluster_enabled
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 }
+
+module "waf" {
+  source = "../waf"
+  
+  name = local.name
+  tags = local.merged_tags
+  
+  # WAF configuration with sensible defaults
+  rate_limit_requests_per_5_minutes      = var.waf_rate_limit_requests_per_5_minutes
+  api_rate_limit_requests_per_5_minutes  = var.waf_api_rate_limit_requests_per_5_minutes
+  geo_restriction_countries              = var.waf_geo_restriction_countries
+  enable_logging                         = var.waf_enable_logging
+  log_retention_days                     = var.waf_log_retention_days
+}

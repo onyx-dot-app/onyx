@@ -86,3 +86,34 @@ variable "redis_auth_token" {
   default     = null
   sensitive   = true
 }
+
+# WAF Configuration Variables
+variable "waf_rate_limit_requests_per_5_minutes" {
+  type        = number
+  description = "Rate limit for requests per 5 minutes per IP address"
+  default     = 2000
+}
+
+variable "waf_api_rate_limit_requests_per_5_minutes" {
+  type        = number
+  description = "Rate limit for API requests per 5 minutes per IP address"
+  default     = 1000
+}
+
+variable "waf_geo_restriction_countries" {
+  type        = list(string)
+  description = "List of country codes to block. Leave empty to disable geo restrictions"
+  default     = []
+}
+
+variable "waf_enable_logging" {
+  type        = bool
+  description = "Enable WAF logging to S3"
+  default     = true
+}
+
+variable "waf_log_retention_days" {
+  type        = number
+  description = "Number of days to retain WAF logs"
+  default     = 90
+}
