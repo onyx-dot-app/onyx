@@ -529,11 +529,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             ):
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # type: ignore
-
+            remove_user_from_invited_users(user.email)
             if token:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-            remove_user_from_invited_users(user.email)
             return user
 
     async def on_after_login(
