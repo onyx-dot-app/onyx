@@ -1,4 +1,5 @@
-FROM python:3.11.7-slim-bookworm
+# BUILD stage - Install dependencies and download models
+FROM python:3.11.7-slim-bookworm AS build
 
 LABEL com.danswer.maintainer="founders@onyx.app"
 LABEL com.danswer.description="This image is for the Onyx model server which runs all of the \
@@ -17,20 +18,19 @@ RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 # Create non-root user for security best practices
 RUN mkdir -p /app && \
     groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx  && \
-    chown -R onyx:onyx /app && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app
 
+# Install Python dependencies
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
         --retries 5 \
         --timeout 30 \
         -r /tmp/requirements.txt
 
-RUN apt-get remove -y --allow-remove-essential perl-base && \ 
-    apt-get autoremove -y
+# Switch to onyx user for model downloads to ensure proper ownership
+USER onyx
+WORKDIR /app
 
 # Pre-downloading models for setups with limited egress
 # Download tokenizers, distilbert for the Onyx model
@@ -47,27 +47,53 @@ snapshot_download('mixedbread-ai/mxbai-rerank-xsmall-v1'); \
 from sentence_transformers import SentenceTransformer; \
 SentenceTransformer(model_name_or_path='nomic-ai/nomic-embed-text-v1', trust_remote_code=True);"
 
-# In case the user has volumes mounted to /app/.cache/huggingface that they've downloaded while
-# running Onyx, move the current contents of the cache folder to a temporary location to ensure 
-# it's preserved in order to combine with the user's cache contents
-RUN mv /app/.cache/huggingface /app/.cache/temp_huggingface && \
-    chown -R onyx:onyx /app
+# RUN stage - Minimal runtime environment
+FROM python:3.11.7-slim-bookworm AS run
+
+# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION} \
+    DANSWER_RUNNING_IN_DOCKER="true" \
+    HF_HOME=/app/.cache/huggingface \
+    PYTHONPATH=/app
+
+RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
+
+# Create non-root user for security best practices
+RUN mkdir -p /app && \
+    groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx
+
+# Copy Python packages from build stage instead of reinstalling
+COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=build /usr/local/bin /usr/local/bin
+
+# Clean up unnecessary packages to reduce image size
+RUN apt-get remove -y --allow-remove-essential perl-base && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy Hugging Face cache from build stage to runtime location
+COPY --from=build --chown=onyx:onyx /app/.cache/huggingface /app/.cache/temp_huggingface
 
 WORKDIR /app
 
 # Utils used by model server
-COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
-COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
+COPY --chown=onyx:onyx ./onyx/utils/logger.py /app/onyx/utils/logger.py
+COPY --chown=onyx:onyx ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 
 # Place to fetch version information
-COPY ./onyx/__init__.py /app/onyx/__init__.py
+COPY --chown=onyx:onyx ./onyx/__init__.py /app/onyx/__init__.py
 
 # Shared between Onyx Backend and Model Server
-COPY ./shared_configs /app/shared_configs
+COPY --chown=onyx:onyx ./shared_configs /app/shared_configs
 
 # Model Server main code
-COPY ./model_server /app/model_server
-
-ENV PYTHONPATH=/app
+COPY --chown=onyx:onyx ./model_server /app/model_server
 
 CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
