@@ -28,7 +28,6 @@ from retry import retry
 from vertexai.language_models import TextEmbeddingInput  # type: ignore
 from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
-from onyx.utils.search_nlp_models_utils import pass_aws_key
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
 from onyx.configs.app_configs import SKIP_WARM_UP
@@ -51,6 +50,7 @@ from onyx.natural_language_processing.exceptions import (
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
+from onyx.utils.search_nlp_models_utils import pass_aws_key
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT

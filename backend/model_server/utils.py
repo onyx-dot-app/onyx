@@ -70,6 +70,3 @@ def get_gpu_type() -> str:
         return GPUStatus.MAC_MPS
 
     return GPUStatus.NONE
-
-
-
