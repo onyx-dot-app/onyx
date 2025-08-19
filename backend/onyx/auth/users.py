@@ -241,7 +241,7 @@ def verify_email_domain(email: str) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email is not valid",
             )
-        domain = email.split("@")[-1]
+        domain = email.split("@")[-1].lower()
         if domain not in VALID_EMAIL_DOMAINS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
