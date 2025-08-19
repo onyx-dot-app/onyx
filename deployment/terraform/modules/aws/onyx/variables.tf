@@ -108,7 +108,7 @@ variable "waf_geo_restriction_countries" {
 
 variable "waf_enable_logging" {
   type        = bool
-  description = "Enable WAF logging to S3"
+  description = "Enable WAF logging to CloudWatch"
   default     = true
 }
 

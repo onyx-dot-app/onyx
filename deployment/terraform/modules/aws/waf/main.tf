@@ -107,7 +107,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # IP Rate Limiting for specific paths (API protection)
+  # IP Rate Limiting
   rule {
     name     = "APIRateLimitRule"
     priority = 5
@@ -153,7 +153,7 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
-  # XSS Protection
+  # Anonymous IP Protection
   rule {
     name     = "AWSManagedRulesAnonymousIpList"
     priority = 7
