@@ -7,13 +7,7 @@ AI models for Onyx. This container and all the code is MIT Licensed and free for
 You can find it at https://hub.docker.com/r/onyx/onyx-model-server. For more details, \
 visit https://github.com/onyx-dot-app/onyx."
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.0.0-dev
-ENV ONYX_VERSION=${ONYX_VERSION} \
-    DANSWER_RUNNING_IN_DOCKER="true" \
-    HF_HOME=/app/.cache/huggingface
-
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
+ENV HF_HOME=/app/.cache/huggingface
 
 # Install Python dependencies
 COPY ./requirements/model_server.txt /tmp/requirements.txt

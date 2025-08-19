@@ -1,128 +1,132 @@
-FROM python:3.11.7-slim-bookworm
+# syntax=docker/dockerfile:1.7
+
+# ----------------------------
+# Base runtime image (minimal)
+# ----------------------------
+FROM python:3.11.7-slim-bookworm AS base
 
 LABEL com.danswer.maintainer="founders@onyx.app"
-LABEL com.danswer.description="This image is the web/frontend container of Onyx which \
-contains code for both the Community and Enterprise editions of Onyx. If you do not \
-have a contract or agreement with DanswerAI, you are not permitted to use the Enterprise \
-Edition features outside of personal development or testing purposes. Please reach out to \
-founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
+LABEL com.danswer.description="Optimized multi-stage Onyx backend container"
 
-# Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.0.0-dev
-# DO_NOT_TRACK is used to disable telemetry for Unstructured
-ENV ONYX_VERSION=${ONYX_VERSION} \
-    DANSWER_RUNNING_IN_DOCKER="true" \
-    DO_NOT_TRACK="true"
+# Common envs for all stages
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-
-RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
-# Install system dependencies
-# cmake needed for psycopg (postgres)
-# libpq-dev needed for psycopg (postgres)
-# curl included just for users' convenience
-# zip for Vespa step futher down
-# ca-certificates for HTTPS
-RUN apt-get update && \
-    apt-get install -y \
-        cmake \
+# Install only runtime system dependencies
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
         curl \
         zip \
-        ca-certificates \
+        postgresql-client \
         libgnutls30 \
         libblkid1 \
         libmount1 \
         libsmartcols1 \
         libuuid1 \
-        libxmlsec1-dev \
-        pkg-config \
-        gcc \
-        nano \
-        vim && \
-    rm -rf /var/lib/apt/lists/* && \
+        libxmlsec1-openssl; \
+    rm -rf /var/lib/apt/lists/*; \
     apt-get clean
 
+# Create non-root user early
+RUN set -eux; \
+    groupadd -g 1001 onyx; \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx; \
+    mkdir -p /app /var/log/onyx; \
+    chown -R onyx:onyx /app /var/log/onyx; \
+    chmod 755 /var/log/onyx
 
+# ----------------------------
+# Builder stage: deps + compilation
+# ----------------------------
+FROM base AS builder
 
-# Install Python dependencies
-# Remove py which is pulled in by retry, py is not needed and is a CVE
-COPY ./requirements/default.txt /tmp/requirements.txt
-COPY ./requirements/ee.txt /tmp/ee-requirements.txt
-RUN pip install --no-cache-dir --upgrade \
-        --retries 5 \
-        --timeout 30 \
-        -r /tmp/requirements.txt \
-        -r /tmp/ee-requirements.txt && \
-    pip uninstall -y py && \
-    playwright install chromium && \
-    playwright install-deps chromium && \
-    ln -s /usr/local/bin/supervisord /usr/bin/supervisord
+# Default ONYX_VERSION, typically overridden during builds by CI
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION}
 
-# Cleanup for CVEs and size reduction
-# https://github.com/tornadoweb/tornado/issues/3107
-# xserver-common and xvfb included by playwright installation but not needed after
-# perl-base is part of the base Python Debian image but not needed for Onyx functionality
-# perl-base could only be removed with --allow-remove-essential
-RUN apt-get update && \
-    apt-get remove -y --allow-remove-essential \
-        perl-base \
-        xserver-common \
-        xvfb \
+# Install build dependencies
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
         cmake \
-        libldap-2.5-0 \
-        libxmlsec1-dev \
+        gcc \
         pkg-config \
-        gcc && \
-    apt-get install -y libxmlsec1-openssl && \
-    apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/* && \
-    rm -f /usr/local/lib/python3.11/site-packages/tornado/test/test.key
+        libxmlsec1-dev; \
+    rm -rf /var/lib/apt/lists/*
 
-# Install postgresql-client for easy manual tests
-# Install it here to avoid it being cleaned up above
-RUN apt-get update && apt-get install -y postgresql-client
+# Create and use virtual environment
+RUN python -m venv /venv
+ENV PATH="/venv/bin:$PATH"
 
-# Pre-downloading models for setups with limited egress
-RUN python -c "from tokenizers import Tokenizer; \
-Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
+# Install Python dependencies with BuildKit cache
+COPY requirements/default.txt requirements/ee.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    set -eux; \
+    pip install --upgrade pip; \
+    pip install --retries 5 --timeout 30 \
+        -r /tmp/default.txt \
+        -r /tmp/ee.txt; \
+    pip uninstall -y py
 
-# Pre-downloading NLTK for setups with limited egress
-RUN python -c "import nltk; \
-nltk.download('stopwords', quiet=True); \
-nltk.download('punkt_tab', quiet=True);"
-# nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
+# Install Playwright and browsers in builder
+RUN set -eux; \
+    playwright install chromium; \
+    playwright install-deps chromium
 
-# Set up application files
+# Pre-download models and NLTK data
+RUN set -eux; \
+    python -c "from tokenizers import Tokenizer; Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"; \
+    python -c "import nltk; nltk.download('stopwords', quiet=True); nltk.download('punkt_tab', quiet=True)"
+
+# Create symlink for supervisord
+RUN ln -s /venv/bin/supervisord /usr/bin/supervisord
+
+# ----------------------------
+# Final runtime image
+# ----------------------------
+FROM base AS runtime
+
+# Default ONYX_VERSION, typically overridden during builds by CI
+ARG ONYX_VERSION=0.0.0-dev
+ENV ONYX_VERSION=${ONYX_VERSION} \
+    DANSWER_RUNNING_IN_DOCKER="true" \
+    DO_NOT_TRACK="true"
+
+RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
+
 WORKDIR /app
 
-# Enterprise Version Files
-COPY ./ee /app/ee
+# Copy the virtual environment from builder
+COPY --from=builder /venv /venv
+
+# Copy Playwright browsers and dependencies
+COPY --from=builder /root/.cache /root/.cache
+COPY --from=builder /usr/bin/supervisord /usr/bin/supervisord
+
+# Set PATH to use venv
+ENV PATH="/venv/bin:$PATH" \
+    PYTHONPATH=/app
+
+# Copy application files with proper ownership
+COPY --chown=onyx:onyx ee /app/ee
+COPY --chown=onyx:onyx onyx /app/onyx
+COPY --chown=onyx:onyx shared_configs /app/shared_configs
+COPY --chown=onyx:onyx alembic /app/alembic
+COPY --chown=onyx:onyx alembic_tenants /app/alembic_tenants
+COPY --chown=onyx:onyx alembic.ini /app/alembic.ini
+COPY --chown=onyx:onyx static /app/static
+COPY --chown=onyx:onyx assets /app/assets
+
+# Copy scripts
+COPY --chown=onyx:onyx scripts/debugging /app/scripts/debugging
+COPY --chown=onyx:onyx scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
+
+# Copy supervisor configs
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Set up application files
-COPY ./onyx /app/onyx
-COPY ./shared_configs /app/shared_configs
-COPY ./alembic /app/alembic
-COPY ./alembic_tenants /app/alembic_tenants
-COPY ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
-COPY ./static /app/static
-
-# Escape hatch scripts
-COPY ./scripts/debugging /app/scripts/debugging
-COPY ./scripts/force_delete_connector_by_id.py /app/scripts/force_delete_connector_by_id.py
-
-# Put logo in assets
-COPY ./assets /app/assets
-
-ENV PYTHONPATH=/app
-
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    chown -R onyx:onyx /app && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
 
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD
