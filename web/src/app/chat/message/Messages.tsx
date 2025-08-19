@@ -105,7 +105,9 @@ function FileDisplay({
 }) {
   const [close, setClose] = useState(true);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const textFiles = files.filter((file) => isTextFile(file.type));
+  const textFiles = files.filter(
+    (file) => isTextFile(file.type) && file.type !== ChatFileType.CSV
+  );
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
