@@ -102,4 +102,4 @@ def test_user_can_accept_invitation(reset_multitenant: None) -> None:
     invited_users = UserManager.get_invited_users(admin_user)
     assert invited_user.email not in [
         user.email for user in invited_users
-    ], f"User {invited_user.email} should not found in invited users list after accepting invitation"
+    ], f"User {invited_user.email} should not be found in invited users list after accepting invitation"
