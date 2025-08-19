@@ -6,10 +6,12 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Any
 
+from celery import Celery
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from pydantic import BaseModel
+from redis import Redis
 from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -49,9 +51,11 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
-from onyx.db.connector_credential_pair import ConnectorType
 from onyx.db.connector_credential_pair import (
-    fetch_indexable_connector_credential_pair_ids,
+    fetch_indexable_standard_connector_credential_pair_ids,
+)
+from onyx.db.connector_credential_pair import (
+    fetch_indexable_user_file_connector_credential_pair_ids,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
@@ -72,8 +76,9 @@ from onyx.db.indexing_coordination import CoordinationStatus
 from onyx.db.indexing_coordination import INDEXING_PROGRESS_TIMEOUT_HOURS
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import IndexAttempt
-from onyx.db.search_settings import get_active_search_settings_list
+from onyx.db.models import SearchSettings
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.document_batch_storage import DocumentBatchStorage
@@ -105,7 +110,6 @@ from shared_configs.contextvars import INDEX_ATTEMPT_INFO_CONTEXTVAR
 
 logger = setup_logger()
 
-USER_FILE_INDEXING_LIMIT = 100
 DOCPROCESSING_STALL_TIMEOUT_MULTIPLIER = 4
 DOCPROCESSING_HEARTBEAT_TIMEOUT_MULTIPLIER = 24
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead
@@ -362,6 +366,22 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
+def _resolve_indexing_entity_errors(
+    cc_pair_id: int,
+    db_session: Session,
+) -> None:
+    unresolved_errors = get_index_attempt_errors_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        unresolved_only=True,
+        db_session=db_session,
+    )
+    for error in unresolved_errors:
+        if error.entity_id:
+            error.is_resolved = True
+            db_session.add(error)
+    db_session.commit()
+
+
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -542,20 +562,145 @@ def check_indexing_completion(
     logger.info(f"Database coordination completed for attempt {index_attempt_id}")
 
 
-def _resolve_indexing_entity_errors(
+def _existing_index_attempts(
     cc_pair_id: int,
+    search_settings_id: int,
     db_session: Session,
-) -> None:
-    unresolved_errors = get_index_attempt_errors_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        unresolved_only=True,
-        db_session=db_session,
+) -> bool:
+    """
+    Check if there's already an active indexing attempt for this CC pair + search settings.
+    This prevents race conditions where multiple indexing attempts could be created.
+    We check for any non-terminal status (NOT_STARTED, IN_PROGRESS).
+
+    Returns True if there's an active indexing attempt, False otherwise.
+    """
+    existing_attempts = (
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                IndexAttempt.search_settings_id == search_settings_id,
+                IndexAttempt.status.in_(
+                    [
+                        IndexingStatus.NOT_STARTED,
+                        IndexingStatus.IN_PROGRESS,
+                    ]
+                ),
+            )
+        )
+        .scalars()
+        .all()
     )
-    for error in unresolved_errors:
-        if error.entity_id:
-            error.is_resolved = True
-            db_session.add(error)
-    db_session.commit()
+
+    if existing_attempts:
+        task_logger.debug(
+            f"_existing_index_attempts - Skipping due to active indexing attempt: "
+            f"cc_pair={cc_pair_id} search_settings={search_settings_id} "
+            f"active_attempts={[a.id for a in existing_attempts]}"
+        )
+        return True
+    return False
+
+
+def _kickoff_indexing_tasks(
+    celery_app: Celery,
+    db_session: Session,
+    search_settings: SearchSettings,
+    cc_pair_ids: list[int],
+    secondary_index_building: bool,
+    redis_client: Redis,
+    lock_beat: RedisLock,
+    tenant_id: str,
+) -> int:
+    """Kick off indexing tasks for the given cc_pair_ids and search_settings.
+
+    Returns the number of tasks successfully created.
+    """
+    tasks_created = 0
+
+    for cc_pair_id in cc_pair_ids:
+        lock_beat.reacquire()
+
+        # Lightweight check prior to fetching cc pair
+        if _existing_index_attempts(
+            cc_pair_id=cc_pair_id,
+            search_settings_id=search_settings.id,
+            db_session=db_session,
+        ):
+            continue
+
+        cc_pair = get_connector_credential_pair_from_id(
+            db_session=db_session,
+            cc_pair_id=cc_pair_id,
+        )
+        if not cc_pair:
+            task_logger.warning(
+                f"_kickoff_indexing_tasks - CC pair not found: cc_pair={cc_pair_id}"
+            )
+            continue
+
+        # Heavyweight check after fetching cc pair
+        if not should_index(
+            cc_pair=cc_pair,
+            search_settings_instance=search_settings,
+            secondary_index_building=secondary_index_building,
+            db_session=db_session,
+        ):
+            task_logger.debug(
+                f"_kickoff_indexing_tasks - Not indexing cc_pair_id: {cc_pair_id} "
+                f"search_settings={search_settings.id}, "
+                f"secondary_index_building={secondary_index_building}"
+            )
+            continue
+
+        task_logger.debug(
+            f"_kickoff_indexing_tasks - Will index cc_pair_id: {cc_pair_id} "
+            f"search_settings={search_settings.id}, "
+            f"secondary_index_building={secondary_index_building}"
+        )
+
+        reindex = False
+        # the indexing trigger is only checked and cleared with the current search settings
+        if search_settings.status.is_current() and cc_pair.indexing_trigger is not None:
+            if cc_pair.indexing_trigger == IndexingMode.REINDEX:
+                reindex = True
+
+            task_logger.info(
+                f"_kickoff_indexing_tasks - Connector indexing manual trigger detected: "
+                f"cc_pair={cc_pair.id} "
+                f"search_settings={search_settings.id} "
+                f"indexing_mode={cc_pair.indexing_trigger}"
+            )
+
+            mark_ccpair_with_indexing_trigger(cc_pair.id, None, db_session)
+
+        # using a task queue and only allowing one task per cc_pair/search_setting
+        # prevents us from starving out certain attempts
+        attempt_id = try_creating_docfetching_task(
+            celery_app,
+            cc_pair,
+            search_settings,
+            reindex,
+            db_session,
+            redis_client,
+            tenant_id,
+        )
+
+        if attempt_id:
+            task_logger.info(
+                f"Connector indexing queued: "
+                f"index_attempt={attempt_id} "
+                f"cc_pair={cc_pair.id} "
+                f"search_settings={search_settings.id}"
+            )
+            tasks_created += 1
+        else:
+            task_logger.info(
+                f"Failed to create indexing task: "
+                f"cc_pair={cc_pair.id} "
+                f"search_settings={search_settings.id}"
+            )
+
+    return tasks_created
 
 
 @shared_task(
@@ -643,47 +788,45 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         embedding_model=embedding_model,
                     )
 
-        # determine if embedding swap is in progress
+        # gather search settings and indexable cc_pair_ids
+        # indexable CC pairs include everything for future model and only active cc pairs for current model
         lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
-            # comment copied from elohn & rkuo for search_settings_list
-            # NOTE: some potential race conditions here, but the worse case is
-            # kicking off some "invalid" indexing tasks which will just fail
-            search_settings_list = get_active_search_settings_list(db_session)
-
-            embedding_swap_in_progress = any(
-                search_settings.status.is_future()
-                for search_settings in search_settings_list
+            # Get CC pairs for primary search settings
+            standard_cc_pair_ids = (
+                fetch_indexable_standard_connector_credential_pair_ids(
+                    db_session, active_cc_pairs_only=True
+                )
+            )
+            user_file_cc_pair_ids = (
+                fetch_indexable_user_file_connector_credential_pair_ids(
+                    db_session, search_settings_id=current_search_settings.id
+                )
             )
 
-        # gather cc_pair_ids
-        with get_session_with_current_tenant() as db_session:
-            if embedding_swap_in_progress:
-                # If a swap is in progress, we need to collect all cc pairs for re-indexing
-                cc_pair_ids = fetch_indexable_connector_credential_pair_ids(db_session)
-            else:
-                standard_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
-                    db_session, connector_type=ConnectorType.STANDARD
-                )
-                # only index 50 user files at a time. This makes sense since user files are
-                # indexed only once, and then they are done. In practice, we would rarely
-                # have more than `USER_FILE_INDEXING_LIMIT` user files to index.
-                user_file_cc_pair_ids = fetch_indexable_connector_credential_pair_ids(
-                    db_session,
-                    connector_type=ConnectorType.USER_FILE,
-                    limit=USER_FILE_INDEXING_LIMIT,
-                )
-                cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+            primary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
 
-        current_search_settings = next(
-            search_settings_instance
-            for search_settings_instance in search_settings_list
-            if search_settings_instance.status.is_current()
-        )
+            # Get CC pairs for secondary search settings
+            secondary_search_settings = get_secondary_search_settings(db_session)
+            if secondary_search_settings:
+                # Include paused CC pairs during embedding swap
+                standard_cc_pair_ids = (
+                    fetch_indexable_standard_connector_credential_pair_ids(
+                        db_session, active_cc_pairs_only=False
+                    )
+                )
+                user_file_cc_pair_ids = (
+                    fetch_indexable_user_file_connector_credential_pair_ids(
+                        db_session, search_settings_id=secondary_search_settings.id
+                    )
+                    or []
+                )
 
-        # mark CC Pairs that are repeatedly failing as in repeated error state
+                secondary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
+
+        # Flag CC pairs in repeated error state for primary/current search settings
         with get_session_with_current_tenant() as db_session:
-            for cc_pair_id in cc_pair_ids:
+            for cc_pair_id in primary_cc_pair_ids:
                 lock_beat.reacquire()
 
                 if is_in_repeated_error_state(
@@ -697,131 +840,44 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         in_repeated_error_state=True,
                     )
 
-        # kick off index attempts
-        for cc_pair_id in cc_pair_ids:
-            lock_beat.reacquire()
+        # NOTE: At this point, we haven't done heavy checks on whether or not the CC pairs should actually be indexed
+        # Heavy check, should_index(), is called in _kickoff_indexing_tasks
+        with get_session_with_current_tenant() as db_session:
+            # Primary first
+            tasks_created += _kickoff_indexing_tasks(
+                celery_app=self.app,
+                db_session=db_session,
+                search_settings=current_search_settings,
+                cc_pair_ids=primary_cc_pair_ids,
+                secondary_index_building=secondary_search_settings is not None,
+                redis_client=redis_client,
+                lock_beat=lock_beat,
+                tenant_id=tenant_id,
+            )
 
-            with get_session_with_current_tenant() as db_session:
-                for search_settings_instance in search_settings_list:
-                    # skip non-live search settings that don't have background reindex enabled
-                    # those should just auto-change to live shortly after creation without
-                    # requiring any indexing till that point
-                    if (
-                        not search_settings_instance.status.is_current()
-                        and not search_settings_instance.background_reindex_enabled
-                    ):
-                        task_logger.warning("SKIPPING DUE TO NON-LIVE SEARCH SETTINGS")
-
-                        continue
-
-                    # Check if there's already an active indexing attempt for this CC pair + search settings
-                    # This prevents race conditions where multiple indexing attempts could be created
-                    # We check for any non-terminal status (NOT_STARTED, IN_PROGRESS)
-                    existing_attempts = (
-                        db_session.execute(
-                            select(IndexAttempt).where(
-                                IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                                IndexAttempt.search_settings_id
-                                == search_settings_instance.id,
-                                IndexAttempt.status.in_(
-                                    [
-                                        IndexingStatus.NOT_STARTED,
-                                        IndexingStatus.IN_PROGRESS,
-                                    ]
-                                ),
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
-
-                    if existing_attempts:
-                        task_logger.debug(
-                            f"check_for_indexing - Skipping due to active indexing attempt: "
-                            f"cc_pair={cc_pair_id} search_settings={search_settings_instance.id} "
-                            f"active_attempts={[a.id for a in existing_attempts]}"
-                        )
-                        continue
-
-                    cc_pair = get_connector_credential_pair_from_id(
-                        db_session=db_session,
-                        cc_pair_id=cc_pair_id,
-                    )
-                    if not cc_pair:
-                        task_logger.warning(
-                            f"check_for_indexing - CC pair not found: cc_pair={cc_pair_id}"
-                        )
-                        continue
-
-                    if not should_index(
-                        cc_pair=cc_pair,
-                        search_settings_instance=search_settings_instance,
-                        secondary_index_building=len(search_settings_list) > 1,
-                        db_session=db_session,
-                    ):
-                        task_logger.debug(
-                            f"check_for_indexing - Not indexing cc_pair_id: {cc_pair_id} "
-                            f"search_settings={search_settings_instance.id}, "
-                            f"secondary_index_building={len(search_settings_list) > 1}"
-                        )
-                        continue
-
-                    task_logger.debug(
-                        f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
-                        f"search_settings={search_settings_instance.id}, "
-                        f"secondary_index_building={len(search_settings_list) > 1}"
-                    )
-
-                    reindex = False
-                    if search_settings_instance.status.is_current():
-                        # the indexing trigger is only checked and cleared with the current search settings
-                        if cc_pair.indexing_trigger is not None:
-                            if cc_pair.indexing_trigger == IndexingMode.REINDEX:
-                                reindex = True
-
-                            task_logger.info(
-                                f"Connector indexing manual trigger detected: "
-                                f"cc_pair={cc_pair.id} "
-                                f"search_settings={search_settings_instance.id} "
-                                f"indexing_mode={cc_pair.indexing_trigger}"
-                            )
-
-                            mark_ccpair_with_indexing_trigger(
-                                cc_pair.id, None, db_session
-                            )
-
-                    # using a task queue and only allowing one task per cc_pair/search_setting
-                    # prevents us from starving out certain attempts
-                    attempt_id = try_creating_docfetching_task(
-                        self.app,
-                        cc_pair,
-                        search_settings_instance,
-                        reindex,
-                        db_session,
-                        redis_client,
-                        tenant_id,
-                    )
-                    if attempt_id:
-                        task_logger.info(
-                            f"Connector indexing queued: "
-                            f"index_attempt={attempt_id} "
-                            f"cc_pair={cc_pair.id} "
-                            f"search_settings={search_settings_instance.id}"
-                        )
-                        tasks_created += 1
-                    else:
-                        task_logger.info(
-                            f"Failed to create indexing task: "
-                            f"cc_pair={cc_pair.id} "
-                            f"search_settings={search_settings_instance.id}"
-                        )
-
-        lock_beat.reacquire()
+            if (
+                secondary_search_settings
+                and secondary_search_settings.background_reindex_enabled
+            ):
+                tasks_created += _kickoff_indexing_tasks(
+                    celery_app=self.app,
+                    db_session=db_session,
+                    search_settings=secondary_search_settings,
+                    cc_pair_ids=secondary_cc_pair_ids,
+                    secondary_index_building=True,
+                    redis_client=redis_client,
+                    lock_beat=lock_beat,
+                    tenant_id=tenant_id,
+                )
+            else:
+                task_logger.warning(
+                    "Secondary search settings are not live, skipping indexing attempts"
+                )
 
         # 2/3: VALIDATE
-
         # Check for inconsistent index attempts - active attempts without task IDs
         # This can happen if attempt creation fails partway through
+        lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
             inconsistent_attempts = (
                 db_session.execute(
