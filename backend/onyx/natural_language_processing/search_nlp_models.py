@@ -525,7 +525,7 @@ class EmbeddingModel:
         # Only build model server endpoint for local models
         if self.provider_type is None:
             model_server_url = build_model_server_url(server_host, server_port)
-            self.embed_server_endpoint = f"{model_server_url}/encoder/bi-encoder-embed"
+            self.embed_server_endpoint: str | None = f"{model_server_url}/encoder/bi-encoder-embed"
         else:
             # API providers don't need model server endpoint
             self.embed_server_endpoint = None
@@ -865,7 +865,7 @@ class RerankingModel:
             model_server_url = build_model_server_url(
                 model_server_host, model_server_port
             )
-            self.rerank_server_endpoint = (
+            self.rerank_server_endpoint: str | None = (
                 model_server_url + "/encoder/cross-encoder-scores"
             )
         else:

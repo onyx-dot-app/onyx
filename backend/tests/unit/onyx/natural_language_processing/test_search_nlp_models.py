@@ -10,6 +10,7 @@ from litellm.exceptions import RateLimitError
 
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from shared_configs.enums import EmbeddingProvider
+from shared_configs.enums import EmbedTextType
 
 
 @pytest.fixture
@@ -78,5 +79,5 @@ async def test_rate_limit_handling() -> None:
             await embedding.embed(
                 texts=["test"],
                 model_name="fake-model",
-                text_type=None,
+                text_type=EmbedTextType.QUERY,
             )
