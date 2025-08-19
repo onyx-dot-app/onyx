@@ -17,20 +17,19 @@ logger = setup_logger()
 
 PROVIDER_CONFIGS = {
     ProviderType.BING.value: ProviderConfig(
-        api_key="9c5ba340cba088ad3c93ef0f6759c4f1b82b67496c8d07571c827ba1282b85ae",
-        api_base="https://serpapi.com/search",
+        api_key="AIzaSyAN7Ih98u34DbXc6sZHq-1kHh7KYc9hkg0",
+        api_base="https://www.googleapis.com/customsearch/v1",
         headers={
-        "x-api-key": "9c5ba340cba088ad3c93ef0f6759c4f1b82b67496c8d07571c827ba1282b85ae",
-        "Content-Type": "application/json",
+            "Content-Type": "application/json",
         },
         query_param_name="q",
         num_results_param="num",
         search_params={
-            "engine": "google",
-            "api_key": "9c5ba340cba088ad3c93ef0f6759c4f1b82b67496c8d07571c827ba1282b85ae",
+            "key": "AIzaSyAN7Ih98u34DbXc6sZHq-1kHh7KYc9hkg0",
+            "cx": "13e69233e9f0249a3",  # Remplace par ton ID de moteur de recherche personnalisé Google
         },
         request_method="GET",
-        results_path=["organic_results"],
+        results_path=["items"],
         result_mapping={
             "title": "title",
             "link": "link",
