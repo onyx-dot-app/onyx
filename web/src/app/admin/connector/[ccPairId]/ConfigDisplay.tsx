@@ -1,4 +1,3 @@
-import { getNameFromPath } from "@/lib/fileUtils";
 import { ValidSources } from "@/lib/types";
 import { EditIcon } from "@/components/icons/icons";
 
@@ -29,11 +28,14 @@ export function buildConfigEntries(
   sourceType: ValidSources
 ): { [key: string]: string } {
   if (sourceType === ValidSources.File) {
-    return obj.file_locations
+    return obj.file_names
       ? {
-          file_names: obj.file_locations.map(getNameFromPath),
+          file_names: obj.file_names,
         }
-      : {};
+      : {
+          // For deployments that don't run file_names migration
+          file_locations: obj.file_locations,
+        };
   } else if (sourceType === ValidSources.GoogleSites) {
     return {
       base_url: obj.base_url,
@@ -139,13 +141,38 @@ export function AdvancedConfigDisplay({
 }) {
   const formatRefreshFrequency = (seconds: number | null): string => {
     if (seconds === null) return "-";
-    const minutes = Math.round(seconds / 60);
+    const totalMinutes = seconds / 60;
+
+    // If it's 60 minutes or more and evenly divisible by 60, show in hours
+    if (totalMinutes >= 60 && totalMinutes % 60 === 0) {
+      const hours = totalMinutes / 60;
+      return `${hours} hour${hours !== 1 ? "s" : ""}`;
+    }
+
+    // Otherwise show in minutes
+    const minutes = Math.round(totalMinutes);
     return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
   };
   const formatPruneFrequency = (seconds: number | null): string => {
     if (seconds === null) return "-";
-    const days = Math.round(seconds / (60 * 60 * 24));
-    return `${days} day${days !== 1 ? "s" : ""}`;
+    const totalHours = seconds / 3600;
+
+    // If less than 1 hour, show in minutes
+    if (totalHours < 1) {
+      const minutes = Math.round(seconds / 60);
+      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    }
+
+    const hours = Math.round(totalHours);
+
+    // If it's 24 hours or more and evenly divisible by 24, show in days
+    if (hours >= 24 && hours % 24 === 0) {
+      const days = hours / 24;
+      return `${days} day${days !== 1 ? "s" : ""}`;
+    }
+
+    // Otherwise show in hours
+    return `${hours} hour${hours !== 1 ? "s" : ""}`;
   };
 
   const formatDate = (date: Date | null): string => {

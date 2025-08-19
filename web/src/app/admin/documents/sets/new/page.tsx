@@ -31,8 +31,12 @@ function Main() {
     setUserGroupsIsLoadingState(false);
   }
 
-  if (isCCPairsLoading || userGroupsIsLoadingState) {
-    return <ThreeDotsLoader />;
+  if (isCCPairsLoading || userGroupsIsLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <ThreeDotsLoader />
+      </div>
+    );
   }
 
   if (ccPairsError || !ccPairs) {

@@ -43,7 +43,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
 
 # from onyx.utils.sitemap_eea import list_pages_for_site_eea
-from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea, list_pages_for_protected_site_eea, soer_login
+from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea, list_pages_for_protected_site_eea, soer_login, remove_by_selector
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -264,6 +264,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             "--disable-blink-features=AutomationControlled",
             "--disable-features=IsolateOrigins,site-per-process",
             "--disable-site-isolation-trials",
+            "--disable-web-security",
         ],
     )
 
@@ -346,7 +347,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         urls = [_ensure_absolute_url(sitemap_url, loc_tag.text)
                 for loc_tag in soup.find_all("loc")]
 
-        if sitemap_url.endswith("protected=true"):
+        if "protected=true" in sitemap_url:
             eea_auth = soer_login()
             eea_global_auth["login"] = eea_auth
             urls = list_pages_for_protected_site_eea(sitemap_url, eea_auth)
@@ -454,6 +455,13 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
         logger.exception(
             f"Unexpected error while handling cookies for Web Connector with URL {url}")
 
+def set_auth_cookies():
+    cookies = {}
+    if eea_global_auth.get("login") is not None:
+        cookies["__ac__eea"] = eea_global_auth["login"]["__ac__eea"]
+        cookies["auth_token"] =eea_global_auth["login"]["auth_token"]
+
+    return cookies
 
 class WebConnector(LoadConnector):
     MAX_RETRIES = 3
@@ -465,6 +473,7 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        remove_by_selector: list = [],
         timeout: int = 30000,
         **kwargs: Any,
     ) -> None:
@@ -472,8 +481,13 @@ class WebConnector(LoadConnector):
         self.batch_size = batch_size
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
+        self.remove_by_selector = remove_by_selector or []
         self.timeout = timeout
         self.web_connector_type = web_connector_type
+
+        if not isinstance(self.remove_by_selector, list):
+            self.remove_by_selector = []
+
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -525,13 +539,17 @@ class WebConnector(LoadConnector):
         _handle_cookies(session_ctx.playwright_context, initial_url)
 
         # First do a HEAD request to check content type without downloading the entire content
+        auth_cookies = set_auth_cookies()
         head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True)
+            initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True)
+        if eea_global_auth.get("login") is not None and "@@download/file" in initial_url:
+            head_response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies, allow_redirects=True, stream=True)
+
         is_pdf = is_pdf_content(head_response)
 
         if is_pdf or initial_url.lower().endswith(".pdf"):
             # PDF files are not checked for links
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+            response = requests.get(initial_url, headers=DEFAULT_HEADERS, cookies=auth_cookies)
             page_text, metadata, images = read_pdf_file(
                 file=io.BytesIO(response.content))
             last_modified = response.headers.get("Last-Modified")
@@ -599,7 +617,10 @@ class WebConnector(LoadConnector):
                     scroll_attempts += 1
 
             content = page.content()
+
             soup = BeautifulSoup(content, "html.parser")
+
+            remove_by_selector(soup, self.remove_by_selector)
 
             if self.recursive:
                 internal_links = get_internal_links(

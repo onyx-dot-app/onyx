@@ -1,4 +1,4 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { useSortable } from "@dnd-kit/sortable";
 import React from "react";
@@ -6,7 +6,7 @@ import { FiImage, FiSearch } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 
 import { Badge } from "../ui/badge";
-import { IIMAGE_GENERATION_TOOL_ID } from "@/app/chat/tools/constants";
+import { IMAGE_GENERATION_TOOL_ID } from "@/app/chat/tools/constants";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
 export const AssistantCard = ({
@@ -14,9 +14,9 @@ export const AssistantCard = ({
   isSelected,
   onSelect,
 }: {
-  assistant: Persona;
+  assistant: MinimalPersonaSnapshot;
   isSelected: boolean;
-  onSelect: (assistant: Persona) => void;
+  onSelect: (assistant: MinimalPersonaSnapshot) => void;
 }) => {
   const renderBadgeContent = (tool: { name: string }) => {
     switch (tool.name) {
@@ -27,7 +27,7 @@ export const AssistantCard = ({
             <span>Search</span>
           </>
         );
-      case IIMAGE_GENERATION_TOOL_ID:
+      case IMAGE_GENERATION_TOOL_ID:
         return (
           <>
             <FiImage className="h-3 w-3 my-auto" />
@@ -73,9 +73,9 @@ export const AssistantCard = ({
 };
 
 export function DraggableAssistantCard(props: {
-  assistant: Persona;
+  assistant: MinimalPersonaSnapshot;
   isSelected: boolean;
-  onSelect: (assistant: Persona) => void;
+  onSelect: (assistant: MinimalPersonaSnapshot) => void;
   llmName: string;
 }) {
   const {

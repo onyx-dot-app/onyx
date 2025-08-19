@@ -128,11 +128,14 @@ def validate_object_creation_for_user(
     target_group_ids: list[int] | None = None,
     object_is_public: bool | None = None,
     object_is_perm_sync: bool | None = None,
+    object_is_owned_by_user: bool = False,
+    object_is_new: bool = False,
 ) -> None:
     """
     All users can create/edit permission synced objects if they don't specify a group
     All admin actions are allowed.
-    Prevents non-admins from creating/editing:
+    Curators and global curators can create public objects.
+    Prevents other non-admins from creating/editing:
     - public objects
     - objects with no groups
     - objects that belong to a group they don't curate
@@ -143,13 +146,23 @@ def validate_object_creation_for_user(
     if not user or user.role == UserRole.ADMIN:
         return
 
-    if object_is_public:
-        detail = "User does not have permission to create public credentials"
+    # Allow curators and global curators to create public objects
+    # w/o associated groups IF the object is new/owned by them
+    if (
+        object_is_public
+        and user.role in [UserRole.CURATOR, UserRole.GLOBAL_CURATOR]
+        and (object_is_new or object_is_owned_by_user)
+    ):
+        return
+
+    if object_is_public and user.role == UserRole.BASIC:
+        detail = "User does not have permission to create public objects"
         logger.error(detail)
         raise HTTPException(
             status_code=400,
             detail=detail,
         )
+
     if not target_group_ids:
         detail = "Curators must specify 1+ groups"
         logger.error(detail)

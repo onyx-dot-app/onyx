@@ -992,7 +992,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         doc_metadata_list: list[SlimDocument] = []
         for parent_object_type in self.parent_object_list:
             query = f"SELECT Id FROM {parent_object_type}"
-            query_result = self.sf_client.query_all(query)
+            query_result = self.sf_client.safe_query_all(query)
             doc_metadata_list.extend(
                 SlimDocument(
                     id=f"{ID_PREFIX}{instance_dict.get('Id', '')}",

@@ -40,9 +40,11 @@ from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.index_attempt import delete_index_attempts
+from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
 from onyx.db.search_settings import get_all_search_settings
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
@@ -69,13 +71,21 @@ def revoke_tasks_blocking_deletion(
 ) -> None:
     search_settings_list = get_all_search_settings(db_session)
     for search_settings in search_settings_list:
-        redis_connector_index = redis_connector.new_index(search_settings.id)
         try:
-            index_payload = redis_connector_index.payload
-            if index_payload and index_payload.celery_task_id:
-                app.control.revoke(index_payload.celery_task_id)
+            recent_index_attempts = get_recent_attempts_for_cc_pair(
+                cc_pair_id=redis_connector.cc_pair_id,
+                search_settings_id=search_settings.id,
+                limit=1,
+                db_session=db_session,
+            )
+            if (
+                recent_index_attempts
+                and recent_index_attempts[0].status == IndexingStatus.IN_PROGRESS
+                and recent_index_attempts[0].celery_task_id
+            ):
+                app.control.revoke(recent_index_attempts[0].celery_task_id)
                 task_logger.info(
-                    f"Revoked indexing task {index_payload.celery_task_id}."
+                    f"Revoked indexing task {recent_index_attempts[0].celery_task_id}."
                 )
         except Exception:
             task_logger.exception("Exception while revoking indexing task")
@@ -281,8 +291,16 @@ def try_generate_document_cc_pair_cleanup_tasks(
         # do not proceed if connector indexing or connector pruning are running
         search_settings_list = get_all_search_settings(db_session)
         for search_settings in search_settings_list:
-            redis_connector_index = redis_connector.new_index(search_settings.id)
-            if redis_connector_index.fenced:
+            recent_index_attempts = get_recent_attempts_for_cc_pair(
+                cc_pair_id=cc_pair_id,
+                search_settings_id=search_settings.id,
+                limit=1,
+                db_session=db_session,
+            )
+            if (
+                recent_index_attempts
+                and recent_index_attempts[0].status == IndexingStatus.IN_PROGRESS
+            ):
                 raise TaskDependencyError(
                     "Connector deletion - Delayed (indexing in progress): "
                     f"cc_pair={cc_pair_id} "

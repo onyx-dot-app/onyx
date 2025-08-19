@@ -28,13 +28,21 @@ import {
   AgenticMessageResponseIDInfo,
   UserKnowledgeFilePacket,
 } from "./interfaces";
-import { Persona } from "../admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Settings } from "../admin/settings/interfaces";
 import { INTERNET_SEARCH_TOOL_ID } from "./tools/constants";
 import { SEARCH_TOOL_ID } from "./tools/constants";
-import { IIMAGE_GENERATION_TOOL_ID } from "./tools/constants";
+import { IMAGE_GENERATION_TOOL_ID } from "./tools/constants";
+
+// Date range group constants
+export const DATE_RANGE_GROUPS = {
+  TODAY: "Today",
+  PREVIOUS_7_DAYS: "Previous 7 Days",
+  PREVIOUS_30_DAYS: "Previous 30 Days",
+  OVER_30_DAYS: "Over 30 Days",
+} as const;
 
 interface ChatRetentionInfo {
   chatRetentionDays: number;
@@ -421,10 +429,10 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
   today.setHours(0, 0, 0, 0); // Set to start of today for accurate comparison
 
   const groups: Record<string, ChatSession[]> = {
-    Today: [],
-    "Previous 7 Days": [],
-    "Previous 30 days": [],
-    "Over 30 days": [],
+    [DATE_RANGE_GROUPS.TODAY]: [],
+    [DATE_RANGE_GROUPS.PREVIOUS_7_DAYS]: [],
+    [DATE_RANGE_GROUPS.PREVIOUS_30_DAYS]: [],
+    [DATE_RANGE_GROUPS.OVER_30_DAYS]: [],
   };
 
   chatSessions.forEach((chatSession) => {
@@ -434,22 +442,22 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
     const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
 
     if (diffDays < 1) {
-      const groups_today = groups["Today"];
+      const groups_today = groups[DATE_RANGE_GROUPS.TODAY];
       if (groups_today) {
         groups_today.push(chatSession);
       }
     } else if (diffDays <= 7) {
-      const groups_7 = groups["Previous 7 Days"];
+      const groups_7 = groups[DATE_RANGE_GROUPS.PREVIOUS_7_DAYS];
       if (groups_7) {
         groups_7.push(chatSession);
       }
     } else if (diffDays <= 30) {
-      const groups_30 = groups["Previous 30 Days"];
+      const groups_30 = groups[DATE_RANGE_GROUPS.PREVIOUS_30_DAYS];
       if (groups_30) {
         groups_30.push(chatSession);
       }
     } else {
-      const groups_over_30 = groups["Over 30 days"];
+      const groups_over_30 = groups[DATE_RANGE_GROUPS.OVER_30_DAYS];
       if (groups_over_30) {
         groups_over_30.push(chatSession);
       }
@@ -631,8 +639,8 @@ export function removeMessage(
 
 export function checkAnyAssistantHasSearch(
   messageHistory: Message[],
-  availableAssistants: Persona[],
-  livePersona: Persona
+  availableAssistants: MinimalPersonaSnapshot[],
+  livePersona: MinimalPersonaSnapshot
 ): boolean {
   const response =
     messageHistory.some((message) => {
@@ -653,22 +661,20 @@ export function checkAnyAssistantHasSearch(
   return response;
 }
 
-export function personaIncludesRetrieval(selectedPersona: Persona) {
+export function personaIncludesRetrieval(
+  selectedPersona: MinimalPersonaSnapshot
+) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(
-        tool.in_code_tool_id
-      ) &&
-      selectedPersona.user_file_ids?.length === 0 &&
-      selectedPersona.user_folder_ids?.length === 0
+      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
   );
 }
 
-export function personaIncludesImage(selectedPersona: Persona) {
+export function personaIncludesImage(selectedPersona: MinimalPersonaSnapshot) {
   return selectedPersona.tools.some(
     (tool) =>
-      tool.in_code_tool_id && tool.in_code_tool_id == IIMAGE_GENERATION_TOOL_ID
+      tool.in_code_tool_id && tool.in_code_tool_id == IMAGE_GENERATION_TOOL_ID
   );
 }
 

@@ -147,7 +147,7 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
     metrics = []
     queue_mappings = {
         "celery_queue_length": "celery",
-        "indexing_queue_length": "indexing",
+        "docprocessing_queue_length": "docprocessing",
         "sync_queue_length": "sync",
         "deletion_queue_length": "deletion",
         "pruning_queue_length": "pruning",
@@ -882,7 +882,13 @@ def monitor_celery_queues_helper(
 
     r_celery = task.app.broker_connection().channel().client  # type: ignore
     n_celery = celery_get_queue_length("celery", r_celery)
-    n_indexing = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery)
+    n_docfetching = celery_get_queue_length(
+        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
+    )
+    n_docprocessing = celery_get_queue_length(OnyxCeleryQueues.DOCPROCESSING, r_celery)
+    n_user_files_indexing = celery_get_queue_length(
+        OnyxCeleryQueues.USER_FILES_INDEXING, r_celery
+    )
     n_sync = celery_get_queue_length(OnyxCeleryQueues.VESPA_METADATA_SYNC, r_celery)
     n_deletion = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_DELETION, r_celery)
     n_pruning = celery_get_queue_length(OnyxCeleryQueues.CONNECTOR_PRUNING, r_celery)
@@ -896,14 +902,20 @@ def monitor_celery_queues_helper(
         OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT, r_celery
     )
 
-    n_indexing_prefetched = celery_get_unacked_task_ids(
-        OnyxCeleryQueues.CONNECTOR_INDEXING, r_celery
+    n_docfetching_prefetched = celery_get_unacked_task_ids(
+        OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
+    )
+    n_docprocessing_prefetched = celery_get_unacked_task_ids(
+        OnyxCeleryQueues.DOCPROCESSING, r_celery
     )
 
     task_logger.info(
         f"Queue lengths: celery={n_celery} "
-        f"indexing={n_indexing} "
-        f"indexing_prefetched={len(n_indexing_prefetched)} "
+        f"docfetching={n_docfetching} "
+        f"docfetching_prefetched={len(n_docfetching_prefetched)} "
+        f"docprocessing={n_docprocessing} "
+        f"docprocessing_prefetched={len(n_docprocessing_prefetched)} "
+        f"user_files_indexing={n_user_files_indexing} "
         f"sync={n_sync} "
         f"deletion={n_deletion} "
         f"pruning={n_pruning} "

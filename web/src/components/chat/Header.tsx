@@ -4,7 +4,7 @@ import { FiShare2 } from "react-icons/fi";
 import { SetStateAction, useContext, useEffect } from "react";
 import { ChatSession } from "@/app/chat/interfaces";
 import Link from "next/link";
-import { pageType } from "@/app/chat/sessionSidebar/types";
+import { pageType } from "@/components/sidebar/types";
 import { useRouter } from "next/navigation";
 import { ChatBanner } from "@/app/chat/ChatBanner";
 import LogoWithText from "../header/LogoWithText";

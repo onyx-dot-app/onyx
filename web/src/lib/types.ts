@@ -175,6 +175,20 @@ export interface ConnectorIndexingStatus<
   docs_indexed: number;
 }
 
+export interface FederatedConnectorDetail {
+  id: number;
+  source: ValidSources.FederatedSlack;
+  name: string;
+  credentials: Record<string, any>;
+  oauth_token_exists: boolean;
+  oauth_token_expires_at: string | null;
+  document_sets: Array<{
+    id: number;
+    name: string;
+    entities: Record<string, any>;
+  }>;
+}
+
 export interface OAuthPrepareAuthorizationResponse {
   url: string;
 }
@@ -243,15 +257,43 @@ export interface CCPairDescriptor<ConnectorType, CredentialType> {
   access_type: AccessType;
 }
 
-export interface DocumentSet {
+export interface FederatedConnectorConfig {
+  federated_connector_id: number;
+  entities: Record<string, any>;
+}
+
+export interface FederatedConnectorDescriptor {
+  id: number;
+  name: string;
+  source: string;
+  entities: Record<string, any>;
+}
+
+// Simplified interfaces with minimal data
+export interface CCPairSummary {
+  id: number;
+  name: string | null;
+  source: ValidSources;
+  access_type: AccessType;
+}
+
+export interface FederatedConnectorSummary {
+  id: number;
+  name: string;
+  source: string;
+  entities: Record<string, any>;
+}
+
+export interface DocumentSetSummary {
   id: number;
   name: string;
   description: string;
-  cc_pair_descriptors: CCPairDescriptor<any, any>[];
+  cc_pair_summaries: CCPairSummary[];
   is_up_to_date: boolean;
   is_public: boolean;
   users: string[];
   groups: number[];
+  federated_connector_summaries: FederatedConnectorSummary[];
 }
 
 export interface Tag {
@@ -339,7 +381,7 @@ export interface UserGroup {
   users: User[];
   curator_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];
-  document_sets: DocumentSet[];
+  document_sets: DocumentSetSummary[];
   personas: Persona[];
   is_up_to_date: boolean;
   is_up_for_deletion: boolean;
@@ -392,7 +434,20 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  Imap = "imap",
+
+  // Federated Connectors
+  FederatedSlack = "federated_slack",
 }
+
+export const federatedSourceToRegularSource = (
+  maybeFederatedSource: ValidSources
+): ValidSources => {
+  if (maybeFederatedSource === ValidSources.FederatedSlack) {
+    return ValidSources.Slack;
+  }
+  return maybeFederatedSource;
+};
 
 export const validAutoSyncSources = [
   ValidSources.Confluence,
@@ -400,6 +455,7 @@ export const validAutoSyncSources = [
   ValidSources.Gmail,
   ValidSources.Slack,
   ValidSources.Salesforce,
+  ValidSources.GitHub,
 ] as const;
 
 // Create a type from the array elements
@@ -407,7 +463,9 @@ export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
 
 export type ConfigurableSources = Exclude<
   ValidSources,
-  ValidSources.NotApplicable | ValidSources.IngestionApi
+  | ValidSources.NotApplicable
+  | ValidSources.IngestionApi
+  | ValidSources.FederatedSlack // is part of ValiedSources.Slack
 >;
 
 export const oauthSupportedSources: ConfigurableSources[] = [
@@ -418,3 +476,27 @@ export const oauthSupportedSources: ConfigurableSources[] = [
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+
+// Federated Connector Types
+export interface CredentialFieldSpec {
+  type: string;
+  description: string;
+  required: boolean;
+  default?: any;
+  example?: any;
+  secret: boolean;
+}
+
+export interface CredentialSchemaResponse {
+  credentials: Record<string, CredentialFieldSpec>;
+}
+
+export interface FederatedConnectorCreateRequest {
+  source: string;
+  credentials: Record<string, any>;
+}
+
+export interface FederatedConnectorCreateResponse {
+  id: number;
+  source: string;
+}

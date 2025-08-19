@@ -5,7 +5,7 @@ import {
   useLlmManager,
 } from "@/lib/hooks";
 
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { useState } from "react";
 import { Hoverable } from "@/components/Hoverable";
@@ -19,7 +19,7 @@ export default function RegenerateOption({
   overriddenModel,
   onDropdownVisibleChange,
 }: {
-  selectedAssistant: Persona;
+  selectedAssistant: MinimalPersonaSnapshot;
   regenerate: (modelOverRide: LlmDescriptor) => Promise<void>;
   overriddenModel?: string;
   onDropdownVisibleChange: (isVisible: boolean) => void;

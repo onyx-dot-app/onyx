@@ -187,7 +187,7 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
             f"{connector_id} and Credential ID: {credential_id} does not exist."
         )
 
-    file_names: list[str] = (
+    file_ids: list[str] = (
         cc_pair.connector.connector_specific_config["file_locations"]
         if cc_pair.connector.source == DocumentSource.FILE
         else []
@@ -211,12 +211,12 @@ def _delete_connector(cc_pair_id: int, db_session: Session) -> None:
     except Exception as e:
         logger.error(f"Failed to delete connector due to {e}")
 
-    if file_names:
+    if file_ids:
         logger.notice("Deleting stored files!")
-        file_store = get_default_file_store(db_session)
-        for file_name in file_names:
-            logger.notice(f"Deleting file {file_name}")
-            file_store.delete_file(file_name)
+        file_store = get_default_file_store()
+        for file_id in file_ids:
+            logger.notice(f"Deleting file {file_id}")
+            file_store.delete_file(file_id)
 
     db_session.commit()
 

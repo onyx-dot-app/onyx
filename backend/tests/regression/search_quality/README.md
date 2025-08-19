@@ -1,62 +1,50 @@
 # Search Quality Test Script
 
-This Python script evaluates the search results for a list of queries.
-
-This script will likely get refactored in the future as an API endpoint.
-In the meanwhile, it is used to evaluate the search quality using locally ingested documents.
-The key differentiating factor with `answer_quality` is that it can evaluate results without explicit "ground truth" using the reranker as a reference.
+This Python script evaluates the search and answer quality for a list of queries, against a ground truth. It will use the currently ingested documents for the search, answer generation, and ground truth comparisons.
 
 ## Usage
 
 1. Ensure you have the required dependencies installed and onyx running.
 
-2. Ensure a reranker model is configured in the search settings.
-This can be checked/modified by opening the admin panel, going to search settings, and ensuring a reranking model is set.
+2. Ensure you have `OPENAI_API_KEY` set if you intend to do answer evaluation (enabled by default, unless you run the script with the `-s` flag). Also, if you're not using `AUTH_TYPE=disabled`, go to the API Keys page in the admin panel, generate a basic api token, and add it to the env file as `ONYX_API_KEY=on_...`.
 
-3. Set up the PYTHONPATH permanently:
-   Add the following line to your shell configuration file (e.g., `~/.bashrc`, `~/.zshrc`, or `~/.bash_profile`):
-   ```
-   export PYTHONPATH=$PYTHONPATH:/path/to/onyx/backend
-   ```
-   Replace `/path/to/onyx` with the actual path to your Onyx repository.
-   After adding this line, restart your terminal or run `source ~/.bashrc` (or the appropriate config file) to apply the changes.
-
-4. Navigate to Onyx repo, search_quality folder:
+3. Navigate to Onyx repo, **search_quality** folder:
 
 ```
 cd path/to/onyx/backend/tests/regression/search_quality
 ```
 
-5. Copy `test_queries.json.template` to `test_queries.json` and add/remove test queries in it. The possible fields are:
+4. Copy `test_queries.json.template` to `test_queries.json` and add/remove test queries in it. The fields for each query are:
 
    - `question: str` the query
-   - `question_search: Optional[str]` modified query specifically for the search step
-   - `ground_truth: Optional[list[GroundTruth]]` a ranked list of expected search results with fields:
-      - `doc_source: str` document source (e.g., Web, Drive, Linear), currently unused
+   - `ground_truth: list[GroundTruth]` an un-ranked list of expected search results with fields:
+      - `doc_source: str` document source (e.g., web, google_drive, linear), used to normalize the links in some cases
       - `doc_link: str` link associated with document, used to find corresponding document in local index
+   - `ground_truth_response: Optional[str]` a response with clauses the ideal answer should include
    - `categories: Optional[list[str]]` list of categories, used to aggregate evaluation results
 
-6. Copy `search_eval_config.yaml.template` to `search_eval_config.yaml` and specify the search and eval parameters
-
-7. Run `run_search_eval.py` to run the search and evaluate the search results
+5. Run `run_search_eval.py` to evaluate the queries.  All parameters are optional and have sensible defaults:
 
 ```
 python run_search_eval.py
+  -d --dataset          # Path to the test-set JSON file (default: ./test_queries.json)
+  -n --num_search       # Maximum number of documents to retrieve per search (default: 50)
+  -a --num_answer       # Maximum number of documents to use for answer evaluation (default: 25)
+  -w --max_workers      # Maximum number of concurrent search requests (0 = unlimited, default: 10).
+  -r --max_req_rate     # Maximum number of search requests per minute (0 = unlimited, default: 0).
+  -q --timeout          # Request timeout in seconds (default: 120)
+  -e --api_endpoint     # Base URL of the Onyx API server (default: http://127.0.0.1:8080)
+  -s --search_only      # Only perform search and not answer evaluation (default: false)
+  -t --tenant_id        # Tenant ID to use for the evaluation (default: None)
 ```
 
-8. Optionally, save the generated `test_queries.json` in the export folder to reuse the generated `question_search`, and rerun the search evaluation with alternative search parameters.
+Note: If you only care about search quality, you should run with the `-s` flag for a significantly faster evaluation. Furthermore, you should set `-r` to 1 if running with federated search enabled to avoid hitting rate limits.
 
-## Metrics
-There are two main metrics currently implemented:
-- ratio_topk: the ratio of documents in the comparison set that are in the topk search results (higher is better, 0-1)
-- avg_rank_delta: the average rank difference between the comparison set and search results (lower is better, 0-inf)
+6. After the run, an `eval-YYYY-MM-DD-HH-MM-SS` folder is created containing:
 
-Ratio topk gives a general idea on whether the most relevant documents are appearing first in the search results. Decreasing `eval_topk` will make this metric stricter, requiring relevant documents to appear in a narrow window.
+   * `test_queries.json`   – the dataset used with the list of valid queries and corresponding indexed ground truth.
+   * `search_results.json` – per-query search and answer details.
+   * `results_by_category.csv` – aggregated metrics per category and for "all".
+   * `search_position_chart.png` – bar-chart of ground-truth ranks.
 
-Avg rank delta is another metric which can give insight on the performance of documents not in the topk search results. If none of the comparison documents are in the topk, `ratio_topk` will only show a 0, whereas `avg_rank_delta` will show a higher value the worse the search results gets.
-
-Furthermore, there are two versions of the metrics: ground truth, and soft truth.
-
-The ground truth includes documents explicitly listed as relevant in the test dataset. The ground truth metrics will only be computed if a ground truth set is provided for the question and exists in the index.
-
-The soft truth is built on top of the ground truth (if provided), filling the remaining entries with results from the reranker. The soft truth metrics will only be computed if `skip_rerank` is false. Computing the soft truth metric can be extremely slow, especially for large `num_returned_hits`. However, it can provide a good basis when there are many relevant documents in no particular order, or for running quick tests without explicitly having to mention which documents are relevant.
+You can replace `test_queries.json` with the generated one for a slightly faster loading of the queries the next time around.

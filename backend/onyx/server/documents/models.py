@@ -406,6 +406,26 @@ class ConnectorCredentialPairDescriptor(BaseModel):
     access_type: AccessType
 
 
+class CCPairSummary(BaseModel):
+    """Simplified connector-credential pair information with just essential data"""
+
+    id: int
+    name: str | None
+    source: DocumentSource
+    access_type: AccessType
+
+    @classmethod
+    def from_cc_pair_descriptor(
+        cls, descriptor: ConnectorCredentialPairDescriptor
+    ) -> "CCPairSummary":
+        return cls(
+            id=descriptor.id,
+            name=descriptor.name,
+            source=descriptor.connector.source,
+            access_type=descriptor.access_type,
+        )
+
+
 class RunConnectorRequest(BaseModel):
     connector_id: int
     credential_ids: list[int] | None = None
@@ -455,6 +475,7 @@ class GoogleServiceAccountCredentialRequest(BaseModel):
 
 class FileUploadResponse(BaseModel):
     file_paths: list[str]
+    file_names: list[str]
     zip_metadata: dict[str, Any]
 
 

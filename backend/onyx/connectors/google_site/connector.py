@@ -12,7 +12,6 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.file_processing.html_utils import web_html_cleanup
@@ -68,10 +67,7 @@ class GoogleSitesConnector(LoadConnector):
     def load_from_state(self) -> GenerateDocumentsOutput:
         documents: list[Document] = []
 
-        with get_session_with_current_tenant() as db_session:
-            file_content_io = get_default_file_store(db_session).read_file(
-                self.zip_path, mode="b"
-            )
+        file_content_io = get_default_file_store().read_file(self.zip_path, mode="b")
 
         # load the HTML files
         files = load_files_from_zip(file_content_io)

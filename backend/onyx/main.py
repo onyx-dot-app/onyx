@@ -73,6 +73,7 @@ from onyx.server.features.persona.api import admin_router as admin_persona_route
 from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
+from onyx.server.federated.api import router as federated_router
 from onyx.server.gpts.api import router as gpts_router
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.long_term_logs.long_term_logs_api import (
@@ -260,7 +261,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
             # set up the file store (e.g. create bucket if needed). On multi-tenant,
             # this is done via IaC
-            get_default_file_store(db_session).initialize()
+            get_default_file_store().initialize()
     else:
         setup_multitenant_onyx()
 
@@ -372,6 +373,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, long_term_logs_router)
     include_router_with_global_prefix_prepended(application, api_key_router)
     include_router_with_global_prefix_prepended(application, standard_oauth_router)
+    include_router_with_global_prefix_prepended(application, federated_router)
 
     include_router_with_global_prefix_prepended(application, eea_config_router)
 

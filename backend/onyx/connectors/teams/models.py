@@ -27,7 +27,7 @@ class User(BaseModel):
 
 
 class From(BaseModel):
-    user: User
+    user: User | None
 
     model_config = ConfigDict(
         alias_generator=to_camel,

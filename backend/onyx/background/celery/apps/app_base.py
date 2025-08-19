@@ -24,13 +24,14 @@ from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatt
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
 from onyx.background.celery.celery_utils import make_probe_path
+from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_PREFIX
+from onyx.background.celery.tasks.vespa.document_sync import DOCUMENT_SYNC_TASKSET_KEY
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.document_index.vespa.shared_utils.utils import wait_for_vespa_with_timeout
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_connector_credential_pair import RedisConnectorCredentialPair
 from onyx.redis.redis_connector_delete import RedisConnectorDelete
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
 from onyx.redis.redis_connector_ext_group_sync import RedisConnectorExternalGroupSync
@@ -39,6 +40,7 @@ from onyx.redis.redis_document_set import RedisDocumentSet
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import ColoredFormatter
+from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import PlainFormatter
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -92,7 +94,13 @@ def on_task_prerun(
     kwargs: dict[str, Any] | None = None,
     **other_kwargs: Any,
 ) -> None:
-    pass
+    # Reset any per-task logging context so that prefixes (e.g. pruning_ctx)
+    # from a previous task executed in the same worker process do not leak
+    # into the next task's log messages. This fixes incorrect [CC Pair:/Index Attempt]
+    # prefixes observed when a pruning task finishes and an indexing task
+    # runs in the same process.
+
+    LoggerContextVars.reset()
 
 
 def on_task_postrun(
@@ -145,8 +153,11 @@ def on_task_postrun(
 
     r = get_redis_client(tenant_id=tenant_id)
 
-    if task_id.startswith(RedisConnectorCredentialPair.PREFIX):
-        r.srem(RedisConnectorCredentialPair.get_taskset_key(), task_id)
+    # NOTE: we want to remove the `Redis*` classes, prefer to just have functions to
+    # do these things going forward. In short, things should generally be like the doc
+    # sync task rather than the others below
+    if task_id.startswith(DOCUMENT_SYNC_PREFIX):
+        r.srem(DOCUMENT_SYNC_TASKSET_KEY, task_id)
         return
 
     if task_id.startswith(RedisDocumentSet.PREFIX):
@@ -470,7 +481,8 @@ class TenantContextFilter(logging.Filter):
 
         tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
         if tenant_id:
-            tenant_id = tenant_id.split(TENANT_ID_PREFIX)[-1][:5]
+            # Match the 8 character tenant abbreviation used in OnyxLoggingAdapter
+            tenant_id = tenant_id.split(TENANT_ID_PREFIX)[-1][:8]
             record.name = f"[t:{tenant_id}]"
         else:
             record.name = ""

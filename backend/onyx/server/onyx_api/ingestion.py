@@ -21,7 +21,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder
-from onyx.indexing.indexing_pipeline import build_indexing_pipeline
+from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
@@ -113,16 +113,13 @@ def upsert_ingestion_doc(
 
     information_content_classification_model = InformationContentClassificationModel()
 
-    indexing_pipeline = build_indexing_pipeline(
+    indexing_pipeline_result = run_indexing_pipeline(
         embedder=index_embedding_model,
         information_content_classification_model=information_content_classification_model,
         document_index=curr_doc_index,
         ignore_time_skip=True,
         db_session=db_session,
         tenant_id=tenant_id,
-    )
-
-    indexing_pipeline_result = indexing_pipeline(
         document_batch=[document],
         index_attempt_metadata=IndexAttemptMetadata(
             connector_id=cc_pair.connector_id,
@@ -148,16 +145,13 @@ def upsert_ingestion_doc(
             active_search_settings.secondary, None
         )
 
-        sec_ind_pipeline = build_indexing_pipeline(
+        run_indexing_pipeline(
             embedder=new_index_embedding_model,
             information_content_classification_model=information_content_classification_model,
             document_index=sec_doc_index,
             ignore_time_skip=True,
             db_session=db_session,
             tenant_id=tenant_id,
-        )
-
-        sec_ind_pipeline(
             document_batch=[document],
             index_attempt_metadata=IndexAttemptMetadata(
                 connector_id=cc_pair.connector_id,

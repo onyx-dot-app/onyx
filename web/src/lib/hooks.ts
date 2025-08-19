@@ -6,7 +6,7 @@ import {
   UserGroup,
   ConnectorStatus,
   CCPairBasicInfo,
-  ValidSources,
+  FederatedConnectorDetail,
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
@@ -18,7 +18,10 @@ import { ChatSession } from "@/app/chat/interfaces";
 import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { Persona, PersonaLabel } from "@/app/admin/assistants/interfaces";
+import {
+  MinimalPersonaSnapshot,
+  PersonaLabel,
+} from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
@@ -121,6 +124,20 @@ export const useBasicConnectorStatus = () => {
   };
 };
 
+export const useFederatedConnectors = () => {
+  const { mutate } = useSWRConfig();
+  const url = "/api/federated";
+  const swrResponse = useSWR<FederatedConnectorDetail[]>(
+    url,
+    errorHandlingFetcher
+  );
+
+  return {
+    ...swrResponse,
+    refreshFederatedConnectors: () => mutate(url),
+  };
+};
+
 export const useLabels = () => {
   const { mutate } = useSWRConfig();
   const { data: labels, error } = useSWR<PersonaLabel[]>(
@@ -210,7 +227,7 @@ export interface FilterManager {
   getFilterString: () => string;
   buildFiltersFromQueryString: (
     filterString: string,
-    availableSources: ValidSources[],
+    availableSources: SourceMetadata[],
     availableDocumentSets: string[],
     availableTags: Tag[]
   ) => void;
@@ -267,7 +284,7 @@ export function useFilters(): FilterManager {
 
   function buildFiltersFromQueryString(
     filterString: string,
-    availableSources: ValidSources[],
+    availableSources: SourceMetadata[],
     availableDocumentSets: string[],
     availableTags: Tag[]
   ): void {
@@ -286,12 +303,11 @@ export function useFilters(): FilterManager {
     }
 
     // Parse sources
-    const availableSourcesMetadata = availableSources.map(getSourceMetadata);
     let newSelectedSources: SourceMetadata[] = [];
     const sourcesParam = params.get("sources");
     if (sourcesParam) {
       const sourceNames = sourcesParam.split(",").map(decodeURIComponent);
-      newSelectedSources = availableSourcesMetadata.filter((source) =>
+      newSelectedSources = availableSources.filter((source) =>
         sourceNames.includes(source.internalName)
       );
     }
@@ -367,7 +383,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAssistant: Persona | null;
+  liveAssistant: MinimalPersonaSnapshot | null;
   maxTemperature: number;
 }
 
@@ -415,7 +431,7 @@ providing appropriate defaults for new conversations based on the available tool
 export function useLlmManager(
   llmProviders: LLMProviderDescriptor[],
   currentChatSession?: ChatSession,
-  liveAssistant?: Persona
+  liveAssistant?: MinimalPersonaSnapshot
 ): LlmManager {
   const { user } = useUser();
 
@@ -663,6 +679,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "o1-mini": "o1 Mini",
   "o1-preview": "o1 Preview",
   o1: "o1",
+  "gpt-5": "GPT 5",
+  "gpt-5-mini": "GPT 5 Mini",
   "gpt-4.1": "GPT 4.1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",

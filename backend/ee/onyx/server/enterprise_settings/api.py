@@ -134,15 +134,14 @@ def ee_fetch_settings() -> EnterpriseSettings:
 def put_logo(
     file: UploadFile,
     is_logotype: bool = False,
-    db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
 ) -> None:
-    upload_logo(file=file, db_session=db_session, is_logotype=is_logotype)
+    upload_logo(file=file, is_logotype=is_logotype)
 
 
 def fetch_logo_helper(db_session: Session) -> Response:
     try:
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")
@@ -158,7 +157,7 @@ def fetch_logo_helper(db_session: Session) -> Response:
 
 def fetch_logotype_helper(db_session: Session) -> Response:
     try:
-        file_store = get_default_file_store(db_session)
+        file_store = get_default_file_store()
         onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
         if not onyx_file:
             raise ValueError("get_onyx_file returned None!")

@@ -4,6 +4,7 @@ from typing import TypeVar
 
 from nltk.corpus import stopwords  # type:ignore
 from nltk.tokenize import word_tokenize  # type:ignore
+from sqlalchemy.orm import Session
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.context.search.models import InferenceChunk
@@ -12,7 +13,13 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
+from onyx.db.search_settings import get_current_search_settings
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MODEL_SERVER_HOST
+from shared_configs.configs import MODEL_SERVER_PORT
+from shared_configs.enums import EmbedTextType
+from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
 
@@ -160,3 +167,21 @@ def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
     except Exception as e:
         logger.warning(f"Error removing stop words and punctuation: {e}")
         return keywords
+
+
+def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedding]:
+    search_settings = get_current_search_settings(db_session)
+
+    model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
+        # The below are globally set, this flow always uses the indexing one
+        server_host=MODEL_SERVER_HOST,
+        server_port=MODEL_SERVER_PORT,
+    )
+
+    query_embedding = model.encode(queries, text_type=EmbedTextType.QUERY)
+    return query_embedding
+
+
+def get_query_embedding(query: str, db_session: Session) -> Embedding:
+    return get_query_embeddings([query], db_session)[0]

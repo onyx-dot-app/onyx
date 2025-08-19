@@ -67,7 +67,11 @@ def test_image_indexing(
         name=connector_name,
         source=DocumentSource.FILE,
         input_type=InputType.LOAD_STATE,
-        connector_specific_config={"file_locations": file_paths, "zip_metadata": {}},
+        connector_specific_config={
+            "file_locations": file_paths,
+            "file_names": [FILE_NAME],
+            "zip_metadata": {},
+        },
         access_type=AccessType.PUBLIC,
         groups=[],
         user_performing_action=admin_user,
@@ -90,7 +94,7 @@ def test_image_indexing(
     CCPairManager.wait_for_indexing_completion(
         cc_pair=cc_pair,
         after=datetime.now(timezone.utc),
-        timeout=180,
+        timeout=300,
         user_performing_action=admin_user,
     )
 

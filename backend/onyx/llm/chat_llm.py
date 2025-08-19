@@ -24,6 +24,7 @@ from langchain_core.messages import SystemMessageChunk
 from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
+from litellm.utils import get_supported_openai_params
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
@@ -36,7 +37,6 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
-from onyx.llm.llm_provider_options import CREDENTIALS_FILE_CUSTOM_CONFIG_KEY
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -52,7 +52,10 @@ litellm.telemetry = False
 litellm.enable_preview_features = True
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
-VERTEX_CREDENTIALS_KWARG = "vertex_credentials"
+VERTEX_CREDENTIALS_FILE_KWARG = "vertex_credentials"
+VERTEX_LOCATION_KWARG = "vertex_location"
+LEGACY_MAX_TOKENS_KWARG = "max_tokens"
+STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 
 
 class LLMTimeoutError(Exception):
@@ -295,13 +298,12 @@ class DefaultMultiLLM(LLM):
             # Specifically pass in "vertex_credentials" / "vertex_location" as a
             # model_kwarg to the completion call for vertex AI. More details here:
             # https://docs.litellm.ai/docs/providers/vertex
-            vertex_location_key = "vertex_location"
             for k, v in custom_config.items():
                 if model_provider == "vertex_ai":
-                    if k == VERTEX_CREDENTIALS_KWARG:
+                    if k == VERTEX_CREDENTIALS_FILE_KWARG:
                         model_kwargs[k] = v
                         continue
-                    elif k == vertex_location_key:
+                    elif k == VERTEX_LOCATION_KWARG:
                         model_kwargs[k] = v
                         continue
 
@@ -315,13 +317,21 @@ class DefaultMultiLLM(LLM):
 
         self._model_kwargs = model_kwargs
 
-    def log_model_configs(self) -> None:
-        logger.debug(f"Config: {self.config}")
+        self._max_token_param = LEGACY_MAX_TOKENS_KWARG
+        try:
+            params = get_supported_openai_params(model_name, model_provider)
+            if STANDARD_MAX_TOKENS_KWARG in (params or []):
+                self._max_token_param = STANDARD_MAX_TOKENS_KWARG
+        except Exception as e:
+            logger.warning(f"Error getting supported openai params: {e}")
 
     def _safe_model_config(self) -> dict:
         dump = self.config.model_dump()
         dump["api_key"] = mask_string(dump.get("api_key", ""))
         return dump
+
+    def log_model_configs(self) -> None:
+        logger.debug(f"Config: {self._safe_model_config()}")
 
     def _record_call(self, prompt: LanguageModelInput) -> None:
         if self._long_term_logger:
@@ -379,13 +389,6 @@ class DefaultMultiLLM(LLM):
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
 
-        final_model_kwargs = {**self._model_kwargs}
-        if (
-            VERTEX_CREDENTIALS_KWARG not in final_model_kwargs
-            and self.config.credentials_file
-        ):
-            final_model_kwargs[VERTEX_CREDENTIALS_KWARG] = self.config.credentials_file
-
         try:
             return litellm.completion(
                 guardrails=["EEA-pre-guard_noerror"],
@@ -403,11 +406,14 @@ class DefaultMultiLLM(LLM):
                 messages=processed_prompt,
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
-                max_tokens=max_tokens,
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=self._temperature,
+                temperature=(
+                    1
+                    if self.config.model_name in ["gpt-5", "gpt-5-mini", "gpt-5-nano"]
+                    else self._temperature
+                ),
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
@@ -432,7 +438,8 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **final_model_kwargs,
+                **({self._max_token_param: max_tokens} if max_tokens else {}),
+                **self._model_kwargs,
             )
         except Exception as e:
             self._record_error(processed_prompt, e)
@@ -448,7 +455,7 @@ class DefaultMultiLLM(LLM):
     @property
     def config(self) -> LLMConfig:
         credentials_file: str | None = (
-            self._custom_config.get(CREDENTIALS_FILE_CUSTOM_CONFIG_KEY, None)
+            self._custom_config.get(VERTEX_CREDENTIALS_FILE_KWARG, None)
             if self._custom_config
             else None
         )

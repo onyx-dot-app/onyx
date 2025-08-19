@@ -40,3 +40,7 @@ spec:
           - name: INDEXING_ONLY
             value: "{{ default "True" .Values.indexCapability.indexingOnly }}"
           {{- include "onyx-stack.envSecrets" . | nindent 10}}
+        {{- if .Values.indexCapability.resources }}
+        resources:
+          {{- toYaml .Values.indexCapability.resources | nindent 10 }}
+        {{- end }}

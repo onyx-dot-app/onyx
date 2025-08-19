@@ -98,7 +98,10 @@ export function SelectedFilterDisplay({
             }
           >
             <>
-              <SourceIcon sourceType={source.internalName} iconSize={16} />
+              <SourceIcon
+                sourceType={source.baseSourceType || source.internalName}
+                iconSize={16}
+              />
               <span className="ml-2">{source.displayName}</span>
             </>
           </SelectedFilter>

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 from typing import TypeVar
@@ -5,6 +6,7 @@ from typing import TypeVar
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointedConnectorWithPermSync
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -15,25 +17,23 @@ from onyx.connectors.models import TextSection
 _ITERATION_LIMIT = 100_000
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
+LoadFunction = Callable[[CT], CheckpointOutput[CT]]
 
 
-def load_all_docs_from_checkpoint_connector(
+def _load_all_docs(
     connector: CheckpointedConnector[CT],
-    start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
+    load: LoadFunction,
 ) -> list[Document]:
     num_iterations = 0
 
     checkpoint = cast(CT, connector.build_dummy_checkpoint())
     documents: list[Document] = []
     while checkpoint.has_more:
-        doc_batch_generator = CheckpointOutputWrapper[CT]()(
-            connector.load_from_checkpoint(start, end, checkpoint)
-        )
+        doc_batch_generator = CheckpointOutputWrapper[CT]()(load(checkpoint))
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:
                 raise RuntimeError(f"Failed to load documents: {failure}")
-            if document is not None:
+            if document is not None and isinstance(document, Document):
                 documents.append(document)
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint
@@ -43,6 +43,32 @@ def load_all_docs_from_checkpoint_connector(
             raise RuntimeError("Too many iterations. Infinite loop?")
 
     return documents
+
+
+def load_all_docs_from_checkpoint_connector_with_perm_sync(
+    connector: CheckpointedConnectorWithPermSync[CT],
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> list[Document]:
+    return _load_all_docs(
+        connector=connector,
+        load=lambda checkpoint: connector.load_from_checkpoint_with_perm_sync(
+            start=start, end=end, checkpoint=checkpoint
+        ),
+    )
+
+
+def load_all_docs_from_checkpoint_connector(
+    connector: CheckpointedConnector[CT],
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> list[Document]:
+    return _load_all_docs(
+        connector=connector,
+        load=lambda checkpoint: connector.load_from_checkpoint(
+            start=start, end=end, checkpoint=checkpoint
+        ),
+    )
 
 
 def load_everything_from_checkpoint_connector(
@@ -74,7 +100,7 @@ def load_everything_from_checkpoint_connector(
         for document, failure, next_checkpoint in doc_batch_generator:
             if failure is not None:
                 outputs.append(failure)
-            if document is not None:
+            if document is not None and isinstance(document, Document):
                 outputs.append(document)
             if next_checkpoint is not None:
                 checkpoint = next_checkpoint

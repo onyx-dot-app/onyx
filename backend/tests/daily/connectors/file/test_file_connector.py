@@ -30,14 +30,12 @@ def mock_filestore_record() -> MagicMock:
 
 
 @patch("onyx.connectors.file.connector.get_default_file_store")
-@patch("onyx.connectors.file.connector.get_session_with_current_tenant")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_single_text_file_with_metadata(
     mock_get_unstructured_api_key: MagicMock,
     mock_get_session: MagicMock,
-    mock_get_filestore: MagicMock,
     mock_db_session: MagicMock,
     mock_file_store: MagicMock,
     mock_filestore_record: MagicMock,
@@ -48,13 +46,20 @@ def test_single_text_file_with_metadata(
           "doc_updated_at": "2001-01-01T00:00:00Z"}\n'
         b"Test answer is 12345"
     )
+    mock_get_filestore = MagicMock()
     mock_get_filestore.return_value = mock_file_store
     mock_file_store.read_file_record.return_value = mock_filestore_record
     mock_get_session.return_value.__enter__.return_value = mock_db_session
     mock_file_store.read_file.return_value = file_content
 
-    connector = LocalFileConnector(file_locations=["test.txt"], zip_metadata={})
-    batches = list(connector.load_from_state())
+    with patch(
+        "onyx.connectors.file.connector.get_default_file_store",
+        return_value=mock_file_store,
+    ):
+        connector = LocalFileConnector(
+            file_locations=["test.txt"], file_names=["test.txt"], zip_metadata={}
+        )
+        batches = list(connector.load_from_state())
 
     assert len(batches) == 1
     docs = batches[0]
@@ -69,26 +74,22 @@ def test_single_text_file_with_metadata(
     assert doc.doc_updated_at == datetime(2001, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
 
 
-@patch("onyx.connectors.file.connector.get_default_file_store")
-@patch("onyx.connectors.file.connector.get_session_with_current_tenant")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key", return_value=None
 )
 def test_two_text_files_with_zip_metadata(
     mock_get_unstructured_api_key: MagicMock,
-    mock_get_session: MagicMock,
-    mock_get_filestore: MagicMock,
     mock_db_session: MagicMock,
     mock_file_store: MagicMock,
 ) -> None:
     file1_content = io.BytesIO(b"File 1 content")
     file2_content = io.BytesIO(b"File 2 content")
+    mock_get_filestore = MagicMock()
     mock_get_filestore.return_value = mock_file_store
     mock_file_store.read_file_record.side_effect = [
         MagicMock(file_id=str(uuid4()), display_name="file1.txt"),
         MagicMock(file_id=str(uuid4()), display_name="file2.txt"),
     ]
-    mock_get_session.return_value.__enter__.return_value = mock_db_session
     mock_file_store.read_file.side_effect = [file1_content, file2_content]
     zip_metadata = {
         "file1.txt": {
@@ -109,10 +110,16 @@ def test_two_text_files_with_zip_metadata(
         },
     }
 
-    connector = LocalFileConnector(
-        file_locations=["file1.txt", "file2.txt"], zip_metadata=zip_metadata
-    )
-    batches = list(connector.load_from_state())
+    with patch(
+        "onyx.connectors.file.connector.get_default_file_store",
+        return_value=mock_file_store,
+    ):
+        connector = LocalFileConnector(
+            file_locations=["file1.txt", "file2.txt"],
+            file_names=["file1.txt", "file2.txt"],
+            zip_metadata=zip_metadata,
+        )
+        batches = list(connector.load_from_state())
 
     assert len(batches) == 1
     docs = batches[0]

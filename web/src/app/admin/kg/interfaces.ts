@@ -16,31 +16,20 @@ export type KGConfigRaw = {
 
 export type EntityTypeValues = { [key: string]: EntityType };
 
+export type SourceAndEntityTypeView = {
+  source_statistics: Record<string, SourceStatistics>;
+  entity_types: Record<string, EntityType[]>;
+};
+
+export type SourceStatistics = {
+  source_name: string;
+  last_updated: string;
+  entities_count: number;
+};
+
 export type EntityType = {
   name: string;
   description: string;
   active: boolean;
+  grounded_source_name: string;
 };
-
-export function sanitizeKGConfig(raw: KGConfigRaw): KGConfig {
-  const coverage_start = new Date(raw.coverage_start);
-
-  return {
-    ...raw,
-    coverage_start,
-  };
-}
-
-export function sanitizeKGEntityTypes(
-  entityTypes: EntityType[]
-): [EntityTypeValues, EntityType[]] {
-  const entityTypeMap: EntityTypeValues = {};
-  for (const entityType of entityTypes) {
-    entityTypeMap[entityType.name.toLowerCase()] = entityType;
-  }
-
-  const sortedData = Object.values(entityTypeMap);
-  sortedData.sort((a, b) => a.name.localeCompare(b.name));
-
-  return [entityTypeMap, sortedData];
-}

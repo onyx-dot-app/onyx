@@ -1,4 +1,6 @@
 import time
+from typing import Any
+from uuid import UUID
 from uuid import uuid4
 
 import requests
@@ -19,6 +21,7 @@ class DocumentSetManager:
         is_public: bool = True,
         users: list[str] | None = None,
         groups: list[int] | None = None,
+        federated_connectors: list[dict[str, Any]] | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestDocumentSet:
         if name is None:
@@ -29,8 +32,9 @@ class DocumentSetManager:
             "description": description or name,
             "cc_pair_ids": cc_pair_ids or [],
             "is_public": is_public,
-            "users": users or [],
+            "users": [str(UUID(user_id)) for user_id in (users or [])],
             "groups": groups or [],
+            "federated_connectors": federated_connectors or [],
         }
 
         response = requests.post(
@@ -53,6 +57,7 @@ class DocumentSetManager:
             is_up_to_date=True,
             users=users or [],
             groups=groups or [],
+            federated_connectors=federated_connectors or [],
         )
 
     @staticmethod
@@ -65,8 +70,9 @@ class DocumentSetManager:
             "description": document_set.description,
             "cc_pair_ids": document_set.cc_pair_ids,
             "is_public": document_set.is_public,
-            "users": document_set.users,
+            "users": [str(UUID(user_id)) for user_id in document_set.users],
             "groups": document_set.groups,
+            "federated_connectors": document_set.federated_connectors,
         }
         response = requests.patch(
             f"{API_SERVER_URL}/manage/admin/document-set",
@@ -114,13 +120,12 @@ class DocumentSetManager:
                 id=doc_set["id"],
                 name=doc_set["name"],
                 description=doc_set["description"],
-                cc_pair_ids=[
-                    cc_pair["id"] for cc_pair in doc_set["cc_pair_descriptors"]
-                ],
+                cc_pair_ids=[cc_pair["id"] for cc_pair in doc_set["cc_pair_summaries"]],
                 is_public=doc_set["is_public"],
                 is_up_to_date=doc_set["is_up_to_date"],
-                users=doc_set["users"],
+                users=[str(user_id) for user_id in doc_set["users"]],
                 groups=doc_set["groups"],
+                federated_connectors=doc_set["federated_connector_summaries"],
             )
             for doc_set in response.json()
         ]
@@ -186,6 +191,8 @@ class DocumentSetManager:
                     and doc_set.is_public == document_set.is_public
                     and set(doc_set.users) == set(document_set.users)
                     and set(doc_set.groups) == set(document_set.groups)
+                    and doc_set.federated_connectors
+                    == document_set.federated_connectors
                 ):
                     return
         if not verify_deleted:

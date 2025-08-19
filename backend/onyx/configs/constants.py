@@ -63,7 +63,8 @@ POSTGRES_CELERY_BEAT_APP_NAME = "celery_beat"
 POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
-POSTGRES_CELERY_WORKER_INDEXING_APP_NAME = "celery_worker_indexing"
+POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME = "celery_worker_docprocessing"
+POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME = "celery_worker_docfetching"
 POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
 
 # Postgres connection constants for application_name
@@ -123,6 +124,8 @@ CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * \
 # hard termination should always fire first if the connector is hung
 CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
 
+# Heartbeat interval for indexing worker liveness detection
+INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
@@ -188,12 +191,23 @@ class DocumentSource(str, Enum):
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
 
+    IMAP = "imap"
+
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
 
 
-DocumentSourceRequiringTenantContext: list[DocumentSource] = [
-    DocumentSource.FILE]
+
+class FederatedConnectorSource(str, Enum):
+    FEDERATED_SLACK = "federated_slack"
+
+    def to_non_federated_source(self) -> DocumentSource | None:
+        if self == FederatedConnectorSource.FEDERATED_SLACK:
+            return DocumentSource.SLACK
+        return None
+
+
+DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
 
 
 class NotificationType(str, Enum):
@@ -323,8 +337,11 @@ class OnyxCeleryQueues:
     CSV_GENERATION = "csv_generation"
 
     # Indexing queue
-    CONNECTOR_INDEXING = "connector_indexing"
     USER_FILES_INDEXING = "user_files_indexing"
+
+    # Document processing pipeline queue
+    DOCPROCESSING = "docprocessing"
+    CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -429,10 +446,20 @@ class OnyxCeleryTask:
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
-    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = "connector_permission_sync_generator_task"
-    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = "update_external_document_permissions_task"
-    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = "connector_external_group_sync_generator_task"
-    CONNECTOR_INDEXING_PROXY_TASK = "connector_indexing_proxy_task"
+    CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
+        "connector_permission_sync_generator_task"
+    )
+    UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK = (
+        "update_external_document_permissions_task"
+    )
+    CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK = (
+        "connector_external_group_sync_generator_task"
+    )
+
+    # New split indexing tasks
+    CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
+    DOCPROCESSING_TASK = "docprocessing_task"
+
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"

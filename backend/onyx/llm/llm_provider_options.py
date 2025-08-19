@@ -3,6 +3,8 @@ from enum import Enum
 import litellm  # type: ignore
 from pydantic import BaseModel
 
+from onyx.llm.chat_llm import VERTEX_CREDENTIALS_FILE_KWARG
+from onyx.llm.chat_llm import VERTEX_LOCATION_KWARG
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationView
 
@@ -24,6 +26,7 @@ class CustomConfigKey(BaseModel):
     is_required: bool = True
     is_secret: bool = False
     key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
+    default_value: str | None = None
 
 
 class WellKnownLLMProviderDescriptor(BaseModel):
@@ -44,6 +47,9 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-5-nano",
     "o4-mini",
     "o3-mini",
     "o1-mini",
@@ -70,7 +76,14 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-3.5-turbo-16k-0613",
     "gpt-3.5-turbo-0301",
 ]
-OPEN_AI_VISIBLE_MODEL_NAMES = ["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"]
+OPEN_AI_VISIBLE_MODEL_NAMES = [
+    "gpt-5",
+    "gpt-5-mini",
+    "o1",
+    "o3-mini",
+    "gpt-4o",
+    "gpt-4o-mini",
+]
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 # need to remove all the weird "bedrock/eu-central-1/anthropic.claude-v1" named
@@ -152,9 +165,6 @@ _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
 }
-
-
-CREDENTIALS_FILE_CUSTOM_CONFIG_KEY = "CREDENTIALS_FILE"
 
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
@@ -240,12 +250,22 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             ),
             custom_config_keys=[
                 CustomConfigKey(
-                    name=CREDENTIALS_FILE_CUSTOM_CONFIG_KEY,
+                    name=VERTEX_CREDENTIALS_FILE_KWARG,
                     display_name="Credentials File",
                     description="This should be a JSON file containing some private credentials.",
                     is_required=True,
                     is_secret=False,
                     key_type=CustomConfigKeyType.FILE_INPUT,
+                ),
+                CustomConfigKey(
+                    name=VERTEX_LOCATION_KWARG,
+                    display_name="Location",
+                    description="The location of the Vertex AI model. Please refer to the "
+                    "[Vertex AI configuration docs](https://docs.onyx.app/gen_ai_configs/vertex_ai) for all possible values.",
+                    is_required=False,
+                    is_secret=False,
+                    key_type=CustomConfigKeyType.TEXT_INPUT,
+                    default_value="us-east1",
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
