@@ -465,12 +465,14 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        timeout: int = 30000,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
+        self.timeout = timeout
         self.web_connector_type = web_connector_type
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -551,7 +553,7 @@ class WebConnector(LoadConnector):
         try:
             page_response = page.goto(
                 initial_url,
-                timeout=30000,  # 30 seconds
+                timeout=self.timeout,  # 30 seconds
                 wait_until="commit",
             )
             page.wait_for_function("document.readyState === 'interactive'")
@@ -587,7 +589,7 @@ class WebConnector(LoadConnector):
                     page.evaluate(
                         "window.scrollTo(0, document.body.scrollHeight)")
                     # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=self.timeout)
                     time.sleep(0.5)  # let javascript run
 
                     new_height = page.evaluate("document.body.scrollHeight")

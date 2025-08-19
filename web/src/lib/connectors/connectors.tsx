@@ -177,6 +177,15 @@ export const connectorConfigs: Record<
         name: "scroll_before_scraping",
         optional: true,
       },
+      {
+        type: "number",
+        query: "Timeout (milliseconds):",
+        label: "Timeout (milliseconds)",
+        description:
+          "Timeout for the website to load the desired content",
+        name: "timeout",
+        optional: true,
+      },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
