@@ -15,12 +15,6 @@ ENV ONYX_VERSION=${ONYX_VERSION} \
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
-# Create non-root user for security best practices
-# RUN mkdir -p /app && \
-#     groupadd -g 1001 onyx && \
-#     useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-#     chown -R onyx:onyx /app
-
 # Install Python dependencies
 COPY ./requirements/model_server.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade \
@@ -28,8 +22,6 @@ RUN pip install --no-cache-dir --upgrade \
         --timeout 30 \
         -r /tmp/requirements.txt
 
-# Switch to onyx user for model downloads to ensure proper ownership
-# USER onyx
 WORKDIR /app
 
 # Pre-downloading models for setups with limited egress
@@ -69,31 +61,30 @@ RUN apt-get remove -y --allow-remove-essential perl-base && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy Hugging Face cache from build stage to runtime location
-COPY --from=build /app/.cache/huggingface /app/.cache/temp_huggingface
-
 WORKDIR /app
 
-# Utils used by model server
-COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
-COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
-
-# Place to fetch version information
-COPY ./onyx/__init__.py /app/onyx/__init__.py
-
-# Shared between Onyx Backend and Model Server
-COPY ./shared_configs /app/shared_configs
-
-# Model Server main code
-COPY ./model_server /app/model_server
-
 # Create non-root user for security best practices
-RUN mkdir -p /app && \
-    groupadd -g 1001 onyx && \
+RUN groupadd -g 1001 onyx && \
     useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    chown -R onyx:onyx /app && \
+    chown onyx:onyx /app && \
     mkdir -p /var/log/onyx && \
     chmod 755 /var/log/onyx && \
     chown onyx:onyx /var/log/onyx
+
+# Copy Hugging Face cache from build stage to runtime location
+COPY --from=build --chown=onyx:onyx /app/.cache/huggingface /app/.cache/temp_huggingface
+
+# Utils used by model server
+COPY --chown=onyx:onyx ./onyx/utils/logger.py /app/onyx/utils/logger.py
+COPY --chown=onyx:onyx ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
+
+# Place to fetch version information
+COPY --chown=onyx:onyx ./onyx/__init__.py /app/onyx/__init__.py
+
+# Shared between Onyx Backend and Model Server
+COPY --chown=onyx:onyx ./shared_configs /app/shared_configs
+
+# Model Server main code
+COPY --chown=onyx:onyx ./model_server /app/model_server
 
 CMD ["uvicorn", "model_server.main:app", "--host", "0.0.0.0", "--port", "9000"]
