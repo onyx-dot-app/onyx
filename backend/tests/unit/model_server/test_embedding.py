@@ -17,7 +17,10 @@ from shared_configs.model_server_models import EmbedRequest
 @pytest.mark.asyncio
 async def test_embed_text_no_model_name() -> None:
     # Test that the function raises an error when no model name is provided
-    with pytest.raises(ValueError, match="Either model name.*must be provided"):
+    with pytest.raises(
+        ValueError,
+        match="Either model name or provider must be provided to run embeddings",
+    ):
         await embed_text(
             texts=["test1", "test2"],
             model_name=None,
