@@ -15,9 +15,8 @@ def pass_aws_key(api_key: str) -> tuple[str, str, str]:
     parts = api_key.split("_")
     if len(parts) != 4:
         raise ValueError(
-            f"API key must be in format 'aws_ACCESSKEY_SECRETKEY_REGION', got {len(parts) - 1} parts"
+            f"API key must be in format 'aws_ACCESSKEY_SECRETKEY_REGION', got {len(parts) - 1} parts "
             "this is an onyx specific format for formatting the aws secrets for bedrock"
-        )
 
     try:
         _, aws_access_key_id, aws_secret_access_key, aws_region = parts
