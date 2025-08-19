@@ -525,7 +525,9 @@ class EmbeddingModel:
         # Only build model server endpoint for local models
         if self.provider_type is None:
             model_server_url = build_model_server_url(server_host, server_port)
-            self.embed_server_endpoint: str | None = f"{model_server_url}/encoder/bi-encoder-embed"
+            self.embed_server_endpoint: str | None = (
+                f"{model_server_url}/encoder/bi-encoder-embed"
+            )
         else:
             # API providers don't need model server endpoint
             self.embed_server_endpoint = None
@@ -605,6 +607,12 @@ class EmbeddingModel:
         tenant_id: str | None = None,
         request_id: str | None = None,
     ) -> EmbedResponse:
+        if self.embed_server_endpoint is None:
+            raise ValueError("Model server endpoint is not configured for local models")
+
+        # Store the endpoint in a local variable to help mypy understand it's not None
+        endpoint = self.embed_server_endpoint
+
         def _make_request() -> Response:
             headers = {}
             if tenant_id:
@@ -614,7 +622,7 @@ class EmbeddingModel:
                 headers["X-Onyx-Request-ID"] = request_id
 
             response = requests.post(
-                self.embed_server_endpoint,
+                endpoint,
                 headers=headers,
                 json=embed_request.model_dump(),
             )
@@ -914,6 +922,11 @@ class RerankingModel:
             return asyncio.run(self._make_direct_rerank_call(query, passages))
         else:
             # For local models, use model server
+            if self.rerank_server_endpoint is None:
+                raise ValueError(
+                    "Rerank server endpoint is not configured for local models"
+                )
+
             rerank_request = RerankRequest(
                 query=query,
                 documents=passages,
