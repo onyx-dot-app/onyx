@@ -26,7 +26,12 @@ import { SearchSummary, UserKnowledgeFiles } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
-import { ChatFileType, FileDescriptor, ToolCallMetadata } from "../interfaces";
+import {
+  ChatFileType,
+  FileDescriptor,
+  isTextFile,
+  ToolCallMetadata,
+} from "../interfaces";
 import {
   IMAGE_GENERATION_TOOL_NAME,
   SEARCH_TOOL_NAME,
@@ -99,12 +104,8 @@ function FileDisplay({
   setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) {
   const [close, setClose] = useState(true);
-  const [expandedKnowledge, setExpandedKnowledge] = useState(false);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const textFiles = files.filter(
-    (file) => file.type == ChatFileType.PLAIN_TEXT
-  );
-
+  const textFiles = files.filter((file) => isTextFile(file.type));
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
