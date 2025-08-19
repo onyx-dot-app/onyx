@@ -34,7 +34,7 @@ export const GET = async (request: NextRequest) => {
         typeof (decodedState as any).next_url === "string" &&
         !decodedState.next_url.includes("://")
       ) {
-        destination = decodedState.next_url;
+        destination = decodedState.next_url || "/";
       }
     } catch (e) {
       console.error("Failed to decode JWT state", e);
