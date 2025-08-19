@@ -97,6 +97,13 @@ class ConnectorCredentialPairStatus(str, PyEnum):
             ConnectorCredentialPairStatus.INITIAL_INDEXING,
         ]
 
+    @classmethod
+    def indexable_statuses(self) -> list["ConnectorCredentialPairStatus"]:
+        # Superset of active statuses for indexing model swaps
+        return self.active_statuses() + [
+            ConnectorCredentialPairStatus.PAUSED,
+        ]
+
     def is_active(self) -> bool:
         return self in self.active_statuses()
 
