@@ -25,16 +25,6 @@ logger = setup_logger()
 router = APIRouter(prefix="/encoder")
 
 
-# Custom exception for authentication errors (needed for reranking functions)
-class AuthenticationError(Exception):
-    """Raised when authentication fails with a provider."""
-
-    def __init__(self, provider: str, message: str = "API key is invalid or expired"):
-        self.provider = provider
-        self.message = message
-        super().__init__(f"{provider} authentication failed: {message}")
-
-
 _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
 _RERANK_MODEL: Optional["CrossEncoder"] = None
 
@@ -163,10 +153,8 @@ async def embed_text(
             f"elapsed={elapsed:.2f}"
         )
     else:
-        logger.error("Neither model name nor provider specified for embedding")
-        raise ValueError(
-            "Either model name or provider must be provided to run embeddings."
-        )
+        logger.error("Model name not specified for embedding")
+        raise ValueError("Model name must be provided to run embeddings.")
 
     return embeddings
 
@@ -215,13 +203,6 @@ async def process_embed_request(
             gpu_type=gpu_type,
         )
         return EmbedResponse(embeddings=embeddings)
-    except AuthenticationError as e:
-        # Handle authentication errors consistently
-        logger.error(f"Authentication error: {e.provider}")
-        raise HTTPException(
-            status_code=401,
-            detail=f"Authentication failed: {e.message}",
-        )
     except RateLimitError as e:
         raise HTTPException(
             status_code=429,
@@ -259,15 +240,13 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
                 f"API provider {rerank_request.provider_type} requests should be handled by API server directly"
             )
 
-        if rerank_request.provider_type is None:
-            sim_scores = await local_rerank(
-                query=rerank_request.query,
-                docs=rerank_request.documents,
-                model_name=rerank_request.model_name,
-            )
-            return RerankResponse(scores=sim_scores)
-        else:
-            raise ValueError("Neither model name nor provider specified for reranking")
+        # At this point, provider_type is None, so handle local reranking
+        sim_scores = await local_rerank(
+            query=rerank_request.query,
+            docs=rerank_request.documents,
+            model_name=rerank_request.model_name,
+        )
+        return RerankResponse(scores=sim_scores)
 
     except Exception as e:
         logger.exception(f"Error during reranking process:\n{str(e)}")
