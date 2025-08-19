@@ -31,14 +31,16 @@
         ],
         "presentation": {
           "group": "1"
-        }
+        },
+        "stopAll": true
       },
       {
         "name": "Web / Model / API",
         "configurations": ["Web Server", "Model Server", "API Server"],
         "presentation": {
           "group": "1"
-        }
+        },
+        "stopAll": true
       },
       {
         "name": "Celery (all)",
@@ -53,7 +55,8 @@
         ],
         "presentation": {
           "group": "1"
-        }
+        },
+        "stopAll": true
       }
     ],
     "configurations": [
