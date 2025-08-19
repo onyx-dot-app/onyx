@@ -286,6 +286,7 @@ def _migrate_files_to_external_storage() -> None:
 
         # Save to external storage (this will handle the database record update and cleanup)
         # NOTE: this WILL .commit() the transaction.
+        file_id = file_id.replace("—", "-").replace("’", "'")
         external_store.save_file(
             file_id=file_id,
             content=file_content,
