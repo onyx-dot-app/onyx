@@ -856,7 +856,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             )
 
             if (
-                secondary_search_settings
+                secondary_cc_pair_ids
+                and secondary_search_settings
                 and secondary_search_settings.background_reindex_enabled
             ):
                 tasks_created += _kickoff_indexing_tasks(
