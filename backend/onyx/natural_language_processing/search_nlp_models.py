@@ -19,16 +19,16 @@ import vertexai  # type: ignore
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
 from google.oauth2 import service_account  # type: ignore
-from vertexai.language_models import TextEmbeddingInput  # type: ignore
-from vertexai.language_models import TextEmbeddingModel  # type: ignore
 from httpx import HTTPError
 from litellm import aembedding
-from litellm.exceptions import RateLimitError
 from requests import JSONDecodeError
 from requests import RequestException
 from requests import Response
 from retry import retry
+from vertexai.language_models import TextEmbeddingInput  # type: ignore
+from vertexai.language_models import TextEmbeddingModel  # type: ignore
 
+from model_server.utils import pass_aws_key  # change from where this is imported
 from onyx.configs.app_configs import INDEXING_EMBEDDING_MODEL_NUM_THREADS
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
 from onyx.configs.app_configs import SKIP_WARM_UP
@@ -40,18 +40,17 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.natural_language_processing.constants import DEFAULT_COHERE_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
+from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
+from onyx.natural_language_processing.constants import EmbeddingModelTextType
 from onyx.natural_language_processing.exceptions import (
     ModelServerRateLimitError,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
-from onyx.natural_language_processing.constants import DEFAULT_COHERE_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_OPENAI_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_VERTEX_MODEL
-from onyx.natural_language_processing.constants import DEFAULT_VOYAGE_MODEL
-from onyx.natural_language_processing.constants import EmbeddingModelTextType
-from model_server.utils import pass_aws_key # change from where this is imported
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
 from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
@@ -540,7 +539,7 @@ class EmbeddingModel:
         """Make direct API call to cloud provider, bypassing model server."""
         if self.provider_type is None:
             raise ValueError("Provider type is required for direct API calls")
-        
+
         if self.api_key is None:
             logger.error("API key not provided for cloud model")
             raise RuntimeError("API key not provided for cloud model")
@@ -704,19 +703,21 @@ class EmbeddingModel:
             )
 
             start_time = time.monotonic()
-            
+
             # Route between direct API calls and model server calls
             if self.provider_type is not None:
                 # For API providers, make direct API call
-                response = asyncio.run(self._make_direct_api_call(
-                    embed_request, tenant_id=tenant_id, request_id=request_id
-                ))
+                response = asyncio.run(
+                    self._make_direct_api_call(
+                        embed_request, tenant_id=tenant_id, request_id=request_id
+                    )
+                )
             else:
                 # For local models, use model server
                 response = self._make_model_server_request(
                     embed_request, tenant_id=tenant_id, request_id=request_id
                 )
-            
+
             end_time = time.monotonic()
 
             processing_time = end_time - start_time
@@ -858,11 +859,15 @@ class RerankingModel:
         self.provider_type = provider_type
         self.api_key = api_key
         self.api_url = api_url
-        
+
         # Only build model server endpoint for local models
         if self.provider_type is None:
-            model_server_url = build_model_server_url(model_server_host, model_server_port)
-            self.rerank_server_endpoint = model_server_url + "/encoder/cross-encoder-scores"
+            model_server_url = build_model_server_url(
+                model_server_host, model_server_port
+            )
+            self.rerank_server_endpoint = (
+                model_server_url + "/encoder/cross-encoder-scores"
+            )
         else:
             # API providers don't need model server endpoint
             self.rerank_server_endpoint = None
@@ -873,23 +878,32 @@ class RerankingModel:
         """Make direct API call to cloud provider, bypassing model server."""
         if self.provider_type is None:
             raise ValueError("Provider type is required for direct API calls")
-        
+
         if self.api_key is None:
             raise ValueError("API key is required for cloud provider")
 
         if self.provider_type == RerankerProvider.COHERE:
-            return await cohere_rerank_api(query, passages, self.model_name, self.api_key)
+            return await cohere_rerank_api(
+                query, passages, self.model_name, self.api_key
+            )
         elif self.provider_type == RerankerProvider.BEDROCK:
             aws_access_key_id, aws_secret_access_key, aws_region = pass_aws_key(
                 self.api_key
             )
             return await cohere_rerank_aws(
-                query, passages, self.model_name, aws_region, aws_access_key_id, aws_secret_access_key
+                query,
+                passages,
+                self.model_name,
+                aws_region,
+                aws_access_key_id,
+                aws_secret_access_key,
             )
         elif self.provider_type == RerankerProvider.LITELLM:
             if self.api_url is None:
                 raise ValueError("API URL is required for LiteLLM reranking.")
-            return await litellm_rerank(query, passages, self.api_url, self.model_name, self.api_key)
+            return await litellm_rerank(
+                query, passages, self.api_url, self.model_name, self.api_key
+            )
         else:
             raise ValueError(f"Unsupported reranking provider: {self.provider_type}")
 

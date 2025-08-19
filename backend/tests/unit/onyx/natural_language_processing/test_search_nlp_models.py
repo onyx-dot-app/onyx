@@ -1,4 +1,3 @@
-import time
 from collections.abc import AsyncGenerator
 from typing import List
 from unittest.mock import AsyncMock
@@ -66,13 +65,15 @@ async def test_openai_embedding(
 
 @pytest.mark.asyncio
 async def test_rate_limit_handling() -> None:
-    with patch("onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed") as mock_embed:
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed"
+    ) as mock_embed:
         mock_embed.side_effect = RateLimitError(
             "Rate limit exceeded", llm_provider="openai", model="fake-model"
         )
 
         embedding = CloudEmbedding("fake-key", EmbeddingProvider.OPENAI)
-        
+
         with pytest.raises(RateLimitError):
             await embedding.embed(
                 texts=["test"],

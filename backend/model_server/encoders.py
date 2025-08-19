@@ -1,37 +1,29 @@
 import asyncio
-import json
 import time
 from typing import Any
 from typing import Optional
 
-import aioboto3  # type: ignore
-import httpx
-from cohere import AsyncClient as CohereAsyncClient
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
 from litellm.exceptions import RateLimitError
-from retry import retry
 from sentence_transformers import CrossEncoder  # type: ignore
 from sentence_transformers import SentenceTransformer  # type: ignore
 
-from model_server.utils import pass_aws_key
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.enums import EmbedTextType
-from shared_configs.enums import EmbeddingProvider
-from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
 from shared_configs.model_server_models import RerankRequest
 from shared_configs.model_server_models import RerankResponse
 
-
 logger = setup_logger()
 
 router = APIRouter(prefix="/encoder")
+
 
 # Custom exception for authentication errors (needed for reranking functions)
 class AuthenticationError(Exception):
@@ -42,17 +34,13 @@ class AuthenticationError(Exception):
         self.message = message
         super().__init__(f"{provider} authentication failed: {message}")
 
+
 _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
 _RERANK_MODEL: Optional["CrossEncoder"] = None
 
 # If we are not only indexing, dont want retry very long
 _RETRY_DELAY = 10 if INDEXING_ONLY else 0.1
 _RETRY_TRIES = 10 if INDEXING_ONLY else 2
-
-
-
-
-
 
 
 def get_embedding_model(
@@ -193,8 +181,6 @@ async def local_rerank(query: str, docs: list[str], model_name: str) -> list[flo
     )
 
 
-
-
 @router.post("/bi-encoder-embed")
 async def route_bi_encoder_embed(
     request: Request,
@@ -266,8 +252,12 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
     try:
         # Reject API provider requests - they should go directly to API server now
         if rerank_request.provider_type is not None:
-            logger.error(f"API provider {rerank_request.provider_type} should not call model server")
-            raise ValueError(f"API provider {rerank_request.provider_type} requests should be handled by API server directly")
+            logger.error(
+                f"API provider {rerank_request.provider_type} should not call model server"
+            )
+            raise ValueError(
+                f"API provider {rerank_request.provider_type} requests should be handled by API server directly"
+            )
 
         if rerank_request.provider_type is None:
             sim_scores = await local_rerank(
