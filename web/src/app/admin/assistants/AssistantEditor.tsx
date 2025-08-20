@@ -111,7 +111,7 @@ function findLangflowTool(tools: ToolSnapshot[]) {
 }
 
 function findDocFormatterTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "DocFormatter");
+  return tools.find((tool) => tool.in_code_tool_id === "ResumeTool");
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
@@ -272,6 +272,8 @@ export function AssistantEditor({
   const { selectedFiles, selectedFolders } = useDocumentsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
+
+  console.log("existingPersona", existingPersona);
 
   const initialValues = {
     name: existingPersona?.name ?? "",
@@ -1211,6 +1213,29 @@ export function AssistantEditor({
                                 placeholder="Введите идентификатор пайплайна"
                                 subtext="Идентификатор пайплайна Langflow"
                               />
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex justify-start gap-x-2"
+                                onClick={() => {
+                                  const fileInput =
+                                    document.createElement("input");
+                                  fileInput.type = "file";
+                                  fileInput.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement)
+                                      .files?.[0];
+                                    if (file) {
+                                      setFieldValue("template_file", file);
+                                    }
+                                  };
+                                  fileInput.click();
+                                }}
+                              >
+                                <CameraIcon size={14} />
+                                Загрузить файл шаблона
+                              </Button>
                             </>
                           </div>
                         )}
