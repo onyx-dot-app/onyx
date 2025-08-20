@@ -46,11 +46,11 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
-from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
-    OktaProfileTool,
-)
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
+)
+from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
+    OktaProfileTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens
@@ -209,6 +209,7 @@ def construct_tools(
                     search_tool_config = SearchToolConfig()
 
                 search_tool = SearchTool(
+                    tool_id=db_tool_model.id,
                     db_session=db_session,
                     user=user,
                     persona=persona,
@@ -248,6 +249,7 @@ def construct_tools(
                         api_version=img_generation_llm_config.api_version,
                         additional_headers=image_generation_tool_config.additional_headers,
                         model=img_generation_llm_config.model_name,
+                        tool_id=db_tool_model.id,
                     )
                 ]
 
@@ -259,6 +261,7 @@ def construct_tools(
                 try:
                     tool_dict[db_tool_model.id] = [
                         InternetSearchTool(
+                            tool_id=db_tool_model.id,
                             db_session=db_session,
                             persona=persona,
                             prompt_config=prompt_config,
@@ -300,6 +303,7 @@ def construct_tools(
                         client_secret=OAUTH_CLIENT_SECRET,
                         openid_config_url=OPENID_CONFIG_URL,
                         okta_api_token=OKTA_API_TOKEN,
+                        tool_id=db_tool_model.id,
                     )
                 ]
 
@@ -309,7 +313,9 @@ def construct_tools(
                     raise ValueError(
                         f"Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
                     )
-                tool_dict[db_tool_model.id] = [KnowledgeGraphTool()]
+                tool_dict[db_tool_model.id] = [
+                    KnowledgeGraphTool(tool_id=db_tool_model.id)
+                ]
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:

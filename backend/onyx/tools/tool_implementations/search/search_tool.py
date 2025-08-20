@@ -34,7 +34,6 @@ from onyx.context.search.models import UserFileFilters
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
 from onyx.db.models import Persona
-from onyx.db.models import Tool as ToolDBModel
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
@@ -88,6 +87,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     def __init__(
         self,
+        tool_id: int,
         db_session: Session,
         user: User | None,
         persona: Persona,
@@ -163,13 +163,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
         )
 
-        tool_id: int | None = (
-            db_session.query(ToolDBModel.id)
-            .filter(ToolDBModel.in_code_tool_id == SearchTool.__name__)
-            .scalar()
-        )
-        if not tool_id:
-            raise ValueError("Search tool not found. This should never happen.")
         self._id = tool_id
 
     @property

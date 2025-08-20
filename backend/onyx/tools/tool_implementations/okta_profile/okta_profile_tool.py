@@ -49,6 +49,7 @@ class OktaProfileTool(BaseTool):
         client_secret: str,
         openid_config_url: str,
         okta_api_token: str,
+        tool_id: int,
         request_timeout_sec: int = 15,
     ) -> None:
         self.access_token = access_token
@@ -64,6 +65,12 @@ class OktaProfileTool(BaseTool):
         self.okta_api_token = okta_api_token
 
         self._oidc_config: OIDCConfig | None = None
+
+        self._id = tool_id
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

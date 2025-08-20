@@ -1,7 +1,7 @@
 """add research agent database tables and chat message research fields
 
 Revision ID: 5ae8240accb3
-Revises: 62c3a055a141
+Revises: b558f51620b4
 Create Date: 2025-08-06 14:29:24.691388
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "5ae8240accb3"
-down_revision = "62c3a055a141"
+down_revision = "b558f51620b4"
 branch_labels = None
 depends_on = None
 

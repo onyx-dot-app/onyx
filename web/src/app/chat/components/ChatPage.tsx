@@ -6,11 +6,7 @@ import { ChatSession, ChatSessionSharedStatus, Message } from "../interfaces";
 import Cookies from "js-cookie";
 import { HistorySidebar } from "@/components/sidebar/HistorySidebar";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
-import {
-  getHumanAndAIMessageFromMessageNumber,
-  personaIncludesRetrieval,
-  useScrollonStream,
-} from "../services/lib";
+import { personaIncludesRetrieval, useScrollonStream } from "../services/lib";
 import {
   useCallback,
   useContext,
@@ -33,7 +29,6 @@ import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { FiArrowDown } from "react-icons/fi";
 import { ChatIntro } from "./ChatIntro";
-import { HumanMessage } from "../message/HumanMessage";
 import { StarterMessages } from "../../../components/assistants/StarterMessage";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -55,10 +50,7 @@ import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
-import {
-  CHROME_MESSAGE,
-  SUBMIT_MESSAGE_TYPES,
-} from "@/lib/extension/constants";
+import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
@@ -85,7 +77,6 @@ import {
 } from "../stores/useChatSessionStore";
 import {
   useCurrentChatState,
-  useCurrentRegenerationState,
   useSubmittedMessage,
   useAgenticGenerating,
   useLoadingError,
@@ -100,6 +91,7 @@ import {
 } from "../stores/useChatSessionStore";
 import { AIMessage } from "../message/messageComponents/AIMessage";
 import { FederatedOAuthModal } from "@/components/chat/FederatedOAuthModal";
+import { HumanMessage } from "../message/HumanMessage";
 
 export function ChatPage({
   toggle,

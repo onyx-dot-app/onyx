@@ -410,7 +410,10 @@ def create_temporary_persona(
         for schema in persona_config.custom_tools_openapi:
             tools = cast(
                 list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(schema),
+                build_custom_tools_from_openapi_schema_and_headers(
+                    tool_id=0,  # dummy tool id
+                    openapi_schema=schema,
+                ),
             )
             persona.tools.extend(tools)
 
