@@ -1,6 +1,6 @@
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
-import {KnowledgeMapAnswer} from "@/app/admin/documents/knowledge_maps/lib";
+import { KnowledgeMapAnswer } from "@/app/admin/documents/knowledge_maps/lib";
 
 export interface StarterMessageBase {
   message: string;
@@ -53,6 +53,9 @@ export interface FullPersona extends Persona {
   prompts: Prompt[];
   llm_relevance_filter?: boolean;
   llm_filter_extraction?: boolean;
+  pipeline_id?: string;
+  use_default?: boolean;
+  template_file?: File | null;
 }
 
 export interface PersonaLabel {

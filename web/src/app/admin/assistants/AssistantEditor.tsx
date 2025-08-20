@@ -324,6 +324,9 @@ export function AssistantEditor({
         ? "user_files"
         : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
+    pipeline_id: existingPersona?.pipeline_id,
+    use_default: existingPersona?.use_default,
+    template_file: null,
   };
 
   interface AssistantPrompt {

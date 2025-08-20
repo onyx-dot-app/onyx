@@ -31,6 +31,9 @@ interface PersonaUpsertRequest {
   label_ids: number[] | null;
   user_file_ids: number[] | null;
   user_folder_ids: number[] | null;
+  pipeline_id?: string;
+  use_default?: boolean;
+  template_file?: File | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -60,6 +63,9 @@ export interface PersonaUpsertParameters {
   label_ids: number[] | null;
   user_file_ids: number[];
   user_folder_ids: number[];
+  pipeline_id?: string;
+  use_default?: boolean;
+  template_file?: File | null;
 }
 
 export const createPersonaLabel = (name: string) => {
@@ -120,6 +126,9 @@ function buildPersonaUpsertRequest(
     search_start_date,
     user_file_ids,
     user_folder_ids,
+    pipeline_id,
+    use_default,
+    template_file,
   } = creationRequest;
 
   return {
@@ -154,6 +163,9 @@ function buildPersonaUpsertRequest(
     label_ids: creationRequest.label_ids ?? null,
     user_file_ids: user_file_ids ?? null,
     user_folder_ids: user_folder_ids ?? null,
+    pipeline_id,
+    use_default,
+    template_file,
   };
 }
 
