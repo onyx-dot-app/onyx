@@ -137,7 +137,7 @@ _DEFAULT_NEW_USER_ROLE_RAW = os.environ.get(
 )
 try:
     DEFAULT_NEW_USER_ROLE = UserRole(_DEFAULT_NEW_USER_ROLE_RAW)
-except Exception:
+except ValueError:
     DEFAULT_NEW_USER_ROLE = UserRole.BASIC
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
