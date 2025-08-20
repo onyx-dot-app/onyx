@@ -180,6 +180,13 @@ async def route_bi_encoder_embed(
 async def process_embed_request(
     embed_request: EmbedRequest, gpu_type: str = "UNKNOWN"
 ) -> EmbedResponse:
+    # Only local models should use this endpoint - API providers should make direct API calls
+    if embed_request.provider_type is not None:
+        raise ValueError(
+            f"Model server embedding endpoint should only be used for local models. "
+            f"API provider '{embed_request.provider_type}' should make direct API calls instead."
+        )
+
     if not embed_request.texts:
         raise HTTPException(status_code=400, detail="No texts to be embedded")
 
@@ -220,6 +227,13 @@ async def process_embed_request(
 @router.post("/cross-encoder-scores")
 async def process_rerank_request(rerank_request: RerankRequest) -> RerankResponse:
     """Cross encoders can be purely black box from the app perspective"""
+    # Only local models should use this endpoint - API providers should make direct API calls
+    if rerank_request.provider_type is not None:
+        raise ValueError(
+            f"Model server reranking endpoint should only be used for local models. "
+            f"API provider '{rerank_request.provider_type}' should make direct API calls instead."
+        )
+
     if INDEXING_ONLY:
         raise RuntimeError("Indexing model server should not call intent endpoint")
 
@@ -231,15 +245,6 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
         raise ValueError("Empty documents cannot be reranked.")
 
     try:
-        # Reject API provider requests - they should go directly to API server now
-        if rerank_request.provider_type is not None:
-            logger.error(
-                f"API provider {rerank_request.provider_type} should not call model server"
-            )
-            raise ValueError(
-                f"API provider {rerank_request.provider_type} requests should be handled by API server directly"
-            )
-
         # At this point, provider_type is None, so handle local reranking
         sim_scores = await local_rerank(
             query=rerank_request.query,
