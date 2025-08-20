@@ -60,6 +60,10 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
+          {{- with .Values.celery_worker_docfetching.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
           readinessProbe:
@@ -81,4 +85,8 @@ spec:
                 - >
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
-                    --filename /tmp/onyx_k8s_docfetching_liveness.txt 
+                    --filename /tmp/onyx_k8s_docfetching_liveness.txt
+      {{- with .Values.celery_worker_docfetching.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }} 
