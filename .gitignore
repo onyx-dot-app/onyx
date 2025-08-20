@@ -21,6 +21,7 @@ backend/tests/regression/search_quality/*.json
 # secret files
 .env
 jira_test_env
+settings.json
 
 # others
 /deployment/data/nginx/app.conf

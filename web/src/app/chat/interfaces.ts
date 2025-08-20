@@ -41,6 +41,14 @@ export enum ChatFileType {
   USER_KNOWLEDGE = "user_knowledge",
 }
 
+export const isTextFile = (fileType: ChatFileType) =>
+  [
+    ChatFileType.PLAIN_TEXT,
+    ChatFileType.CSV,
+    ChatFileType.USER_KNOWLEDGE,
+    ChatFileType.DOCUMENT,
+  ].includes(fileType);
+
 export interface FileDescriptor {
   id: string;
   type: ChatFileType;

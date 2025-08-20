@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
+from onyx.auth.invited_users import remove_user_from_invited_users
 from onyx.auth.invited_users import write_invited_users
 from onyx.auth.noauth_user import fetch_no_auth_user
 from onyx.auth.noauth_user import set_no_auth_user_preferences
@@ -367,15 +368,11 @@ def remove_invited_user(
     db_session: Session = Depends(get_session),
 ) -> int:
     tenant_id = get_current_tenant_id()
-    user_emails = get_invited_users()
-    remaining_users = [user for user in user_emails if user != user_email.user_email]
-
     if MULTI_TENANT:
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
         )([user_email.user_email], tenant_id)
-
-    number_of_invited_users = write_invited_users(remaining_users)
+    number_of_invited_users = remove_user_from_invited_users(user_email.user_email)
 
     try:
         if MULTI_TENANT and not DEV_MODE:

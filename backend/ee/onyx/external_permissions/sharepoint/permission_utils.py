@@ -1,9 +1,12 @@
 import re
 from collections import deque
 from typing import Any
+from urllib.parse import unquote
+from urllib.parse import urlparse
 
 from office365.graph_client import GraphClient  # type: ignore[import-untyped]
 from office365.onedrive.driveitems.driveItem import DriveItem  # type: ignore[import-untyped]
+from office365.runtime.client_request import ClientRequestException  # type: ignore
 from office365.sharepoint.client_context import ClientContext  # type: ignore[import-untyped]
 from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection  # type: ignore[import-untyped]
 from pydantic import BaseModel
@@ -231,6 +234,7 @@ def _get_sharepoint_groups(
         nonlocal groups, user_emails
 
         for user in users:
+            logger.debug(f"User: {user.to_json()}")
             if user.principal_type == USER_PRINCIPAL_TYPE and hasattr(
                 user, "user_principal_name"
             ):
@@ -285,7 +289,7 @@ def _get_azuread_groups(
 
         for member in members:
             member_data = member.to_json()
-
+            logger.debug(f"Member: {member_data}")
             # Check for user-specific attributes
             user_principal_name = member_data.get("userPrincipalName")
             mail = member_data.get("mail")
@@ -366,6 +370,7 @@ def _get_groups_and_members_recursively(
     client_context: ClientContext,
     graph_client: GraphClient,
     groups: set[SharepointGroup],
+    is_group_sync: bool = False,
 ) -> GroupsResult:
     """
     Get all groups and their members recursively.
@@ -373,6 +378,7 @@ def _get_groups_and_members_recursively(
     group_queue: deque[SharepointGroup] = deque(groups)
     visited_groups: set[str] = set()
     visited_group_name_to_emails: dict[str, set[str]] = {}
+    found_public_group = False
     while group_queue:
         group = group_queue.popleft()
         if group.login_name in visited_groups:
@@ -390,19 +396,35 @@ def _get_groups_and_members_recursively(
             if group_info:
                 group_queue.extend(group_info)
         if group.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
-            # if the site is public, we have default groups assigned to it, so we return early
-            if _is_public_login_name(group.login_name):
-                return GroupsResult(groups_to_emails={}, found_public_group=True)
-
-            group_info, user_emails = _get_azuread_groups(
-                graph_client, group.login_name
-            )
-            visited_group_name_to_emails[group.name].update(user_emails)
-            if group_info:
-                group_queue.extend(group_info)
+            try:
+                # if the site is public, we have default groups assigned to it, so we return early
+                if _is_public_login_name(group.login_name):
+                    found_public_group = True
+                    if not is_group_sync:
+                        return GroupsResult(
+                            groups_to_emails={}, found_public_group=True
+                        )
+                    else:
+                        # we don't want to sync public groups, so we skip them
+                        continue
+                group_info, user_emails = _get_azuread_groups(
+                    graph_client, group.login_name
+                )
+                visited_group_name_to_emails[group.name].update(user_emails)
+                if group_info:
+                    group_queue.extend(group_info)
+            except ClientRequestException as e:
+                # If the group is not found, we skip it. There is a chance that group is still referenced
+                # in sharepoint but it is removed from Azure AD. There is no actual documentation on this, but based on
+                # our testing we have seen this happen.
+                if e.response is not None and e.response.status_code == 404:
+                    logger.warning(f"Group {group.login_name} not found")
+                    continue
+                raise e
 
     return GroupsResult(
-        groups_to_emails=visited_group_name_to_emails, found_public_group=False
+        groups_to_emails=visited_group_name_to_emails,
+        found_public_group=found_public_group,
     )
 
 
@@ -427,6 +449,7 @@ def get_external_access_from_sharepoint(
     ) -> None:
         nonlocal user_emails, groups
         for assignment in role_assignments:
+            logger.debug(f"Assignment: {assignment.to_json()}")
             if assignment.role_definition_bindings:
                 is_limited_access = True
                 for role_definition_binding in assignment.role_definition_bindings:
@@ -503,12 +526,19 @@ def get_external_access_from_sharepoint(
         )
     elif site_page:
         site_url = site_page.get("webUrl")
-        site_pages = client_context.web.lists.get_by_title("Site Pages")
-        client_context.load(site_pages)
-        client_context.execute_query()
-        site_pages.items.get_by_url(site_url).role_assignments.expand(
-            ["Member", "RoleDefinitionBindings"]
-        ).get_all(page_loaded=add_user_and_group_to_sets).execute_query()
+        # Prefer server-relative URL to avoid OData filters that break on apostrophes
+        server_relative_url = unquote(urlparse(site_url).path)
+        file_obj = client_context.web.get_file_by_server_relative_url(
+            server_relative_url
+        )
+        item = file_obj.listItemAllFields
+
+        sleep_and_retry(
+            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
+                page_loaded=add_user_and_group_to_sets,
+            ),
+            "get_external_access_from_sharepoint",
+        )
     else:
         raise RuntimeError("No drive item or site page provided")
 
@@ -595,12 +625,8 @@ def get_sharepoint_external_groups(
         "get_sharepoint_external_groups",
     )
     groups_and_members: GroupsResult = _get_groups_and_members_recursively(
-        client_context, graph_client, groups
+        client_context, graph_client, groups, is_group_sync=True
     )
-
-    # We don't have any direct way to check if the site is public, so we check if any public group is present
-    if groups_and_members.found_public_group:
-        return []
 
     # get all Azure AD groups because if any group is assigned to the drive item, we don't want to miss them
     # We can't assign sharepoint groups to drive items or drives, so we don't need to get all sharepoint groups

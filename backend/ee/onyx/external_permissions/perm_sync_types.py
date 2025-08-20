@@ -2,18 +2,14 @@ from collections.abc import Callable
 from collections.abc import Generator
 from typing import Optional
 from typing import Protocol
-from typing import TYPE_CHECKING
 
+from ee.onyx.db.external_perm import ExternalUserGroup
+from onyx.access.models import DocExternalAccess
 from onyx.context.search.models import InferenceChunk
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.utils import DocumentRow
 from onyx.db.utils import SortOrder
-
-# Avoid circular imports
-if TYPE_CHECKING:
-    from ee.onyx.db.external_perm import ExternalUserGroup  # noqa
-    from onyx.access.models import DocExternalAccess  # noqa
-    from onyx.db.models import ConnectorCredentialPair  # noqa
-    from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface  # noqa
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 
 class FetchAllDocumentsFunction(Protocol):
@@ -52,20 +48,20 @@ class FetchAllDocumentsIdsFunction(Protocol):
 # Defining the input/output types for the sync functions
 DocSyncFuncType = Callable[
     [
-        "ConnectorCredentialPair",
+        ConnectorCredentialPair,
         FetchAllDocumentsFunction,
         FetchAllDocumentsIdsFunction,
-        Optional["IndexingHeartbeatInterface"],
+        Optional[IndexingHeartbeatInterface],
     ],
-    Generator["DocExternalAccess", None, None],
+    Generator[DocExternalAccess, None, None],
 ]
 
 GroupSyncFuncType = Callable[
     [
         str,  # tenant_id
-        "ConnectorCredentialPair",  # cc_pair
+        ConnectorCredentialPair,  # cc_pair
     ],
-    Generator["ExternalUserGroup", None, None],
+    Generator[ExternalUserGroup, None, None],
 ]
 
 # list of chunks to be censored and the user email. returns censored chunks

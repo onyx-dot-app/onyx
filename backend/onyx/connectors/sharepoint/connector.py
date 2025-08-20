@@ -101,7 +101,7 @@ def sleep_and_retry(
             return query_obj.execute_query()
         except ClientRequestException as e:
             if (
-                e.response
+                e.response is not None
                 and e.response.status_code in [429, 503]
                 and attempt < max_retries
             ):
@@ -119,7 +119,7 @@ def sleep_and_retry(
                 time.sleep(sleep_time)
             else:
                 # Either not a rate limit error, or we've exhausted retries
-                if e.response and e.response.status_code == 429:
+                if e.response is not None and e.response.status_code == 429:
                     logger.error(
                         f"Rate limit retry exhausted for {method_name} after {max_retries} attempts"
                     )
