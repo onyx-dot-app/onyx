@@ -15,7 +15,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { Bubble } from "@/components/Bubble";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Spinner } from "@/components/Spinner";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 
 interface AssistantSharingModalProps {
   assistant: Persona;
@@ -32,7 +32,7 @@ export function AssistantSharingModal({
   show,
   onClose,
 }: AssistantSharingModalProps) {
-  const { refreshAssistants } = useAssistants();
+  const { refreshAssistants } = useAssistantsContext();
   const { popup, setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<MinimalUserSnapshot[]>([]);

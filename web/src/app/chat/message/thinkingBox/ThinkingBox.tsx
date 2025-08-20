@@ -14,7 +14,7 @@ import {
   cleanThinkingContent,
   hasPartialThinkingTokens,
   isThinkingComplete,
-} from "../../utils/thinkingTokens";
+} from "../../services/thinkingTokens";
 import "./ThinkingBox.css";
 
 interface ThinkingBoxProps {

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
-import { SimplifiedChatInputBar } from "../input/SimplifiedChatInputBar";
+import { SimplifiedChatInputBar } from "../components/input/SimplifiedChatInputBar";
 import { Menu } from "lucide-react";
 import { Shortcut } from "./interfaces";
 import {
@@ -22,7 +22,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { useNightTime } from "@/lib/dateUtils";
 import { useFilters } from "@/lib/hooks";
-import { uploadFilesForChat } from "../lib";
+import { uploadFilesForChat } from "../services/lib";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import { useChatContext } from "@/components/context/ChatContext";
 import Dropzone from "react-dropzone";

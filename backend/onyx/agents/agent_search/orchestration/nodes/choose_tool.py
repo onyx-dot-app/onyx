@@ -271,7 +271,10 @@ def choose_tool(
         should_stream_answer
         and not agent_config.behavior.skip_gen_ai_answer_generation,
         writer,
-    )
+    ).ai_message_chunk
+
+    if tool_message is None:
+        raise ValueError("No tool message emitted by LLM")
 
     # If no tool calls are emitted by the LLM, we should not choose a tool
     if len(tool_message.tool_calls) == 0:

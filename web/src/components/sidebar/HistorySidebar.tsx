@@ -16,7 +16,7 @@ import {
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChatSession } from "@/app/chat/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
+import { Folder } from "@/app/chat/components/folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
 import {
@@ -29,9 +29,9 @@ import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { DragEndEvent } from "@dnd-kit/core";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { buildChatUrl } from "@/app/chat/lib";
+import { buildChatUrl } from "@/app/chat/services/lib";
 import { reorderPinnedAssistants } from "@/lib/assistants/updateAssistantPreferences";
 import { useUser } from "@/components/user/UserProvider";
 import { DragHandle } from "@/components/table/DragHandle";
@@ -193,7 +193,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
     const router = useRouter();
     const { user, toggleAssistantPinnedStatus } = useUser();
     const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
-      useAssistants();
+      useAssistantsContext();
 
     const currentChatId = currentChatSession?.id;
 

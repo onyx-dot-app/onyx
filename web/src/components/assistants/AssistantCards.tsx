@@ -6,8 +6,8 @@ import { FiImage, FiSearch } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 
 import { Badge } from "../ui/badge";
-import { IMAGE_GENERATION_TOOL_ID } from "@/app/chat/tools/constants";
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import { IMAGE_GENERATION_TOOL_ID } from "@/app/chat/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 
 export const AssistantCard = ({
   assistant,

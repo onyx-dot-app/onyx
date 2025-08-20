@@ -18,7 +18,7 @@ import CardSection from "@/components/admin/CardSection";
 import { useRouter } from "next/navigation";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
 import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
 
 export const SlackChannelConfigCreationForm = ({

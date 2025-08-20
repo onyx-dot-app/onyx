@@ -156,7 +156,7 @@ export const AssistantsProvider: React.FC<{
   );
 };
 
-export const useAssistants = (): AssistantsContextProps => {
+export const useAssistantsContext = (): AssistantsContextProps => {
   const context = useContext(AssistantsContext);
   if (!context) {
     throw new Error("useAssistants must be used within an AssistantsProvider");

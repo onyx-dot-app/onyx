@@ -6,10 +6,8 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import model_validator
 
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
-from onyx.chat.models import SubQuestionIdentifier
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import LLMEvaluationType
@@ -19,6 +17,8 @@ from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
 from onyx.server.manage.models import StandardAnswer
+from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 
 
 class StandardAnswerRequest(BaseModel):

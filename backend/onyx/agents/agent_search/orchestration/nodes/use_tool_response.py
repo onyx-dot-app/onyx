@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.basic.models import BasicSearchProcessedStreamResults
 from onyx.agents.agent_search.basic.states import BasicOutput
 from onyx.agents.agent_search.basic.states import BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
@@ -20,6 +21,7 @@ from onyx.tools.tool_implementations.search_like_tool_utils import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+
 
 logger = setup_logger()
 
@@ -62,7 +64,9 @@ def basic_use_tool_response(
                 for section in dedupe_documents(search_response_summary.top_sections)[0]
             ]
 
-    new_tool_call_chunk = AIMessageChunk(content="")
+    new_tool_call_chunk = BasicSearchProcessedStreamResults(
+        ai_message_chunk=AIMessageChunk(content=""), full_answer=None
+    )
     if not agent_config.behavior.skip_gen_ai_answer_generation:
         stream = llm.stream(
             prompt=new_prompt_builder.build(),
@@ -80,4 +84,9 @@ def basic_use_tool_response(
             displayed_search_results=initial_search_results or final_search_results,
         )
 
-    return BasicOutput(tool_call_chunk=new_tool_call_chunk)
+    return BasicOutput(
+        tool_call_chunk=new_tool_call_chunk.ai_message_chunk,
+        full_answer=new_tool_call_chunk.full_answer,
+        cited_references=new_tool_call_chunk.cited_references,
+        retrieved_documents=new_tool_call_chunk.retrieved_documents,
+    )

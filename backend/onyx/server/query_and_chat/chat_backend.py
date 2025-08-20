@@ -47,6 +47,7 @@ from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
+from onyx.db.chat import translate_db_message_to_packets
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.connector import create_connector
@@ -92,6 +93,8 @@ from onyx.server.query_and_chat.models import RenameChatSessionResponse
 from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
+from onyx.server.query_and_chat.streaming_models import OverallStop
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
@@ -233,6 +236,24 @@ def get_chat_session(
         prefetch_tool_calls=True,
     )
 
+    # Convert messages to ChatMessageDetail format
+    chat_message_details = [
+        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
+    ]
+
+    simplified_packet_lists: list[list[Packet]] = []
+    end_step_nr = 1
+    for msg in session_messages:
+        if msg.message_type == MessageType.ASSISTANT:
+            msg_packet_object = translate_db_message_to_packets(
+                msg, db_session=db_session, start_step_nr=end_step_nr
+            )
+            end_step_nr = msg_packet_object.end_step_nr
+            msg_packet_list = msg_packet_object.packet_list
+
+            msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
+            simplified_packet_lists.append(msg_packet_list)
+
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
         description=chat_session.description,
@@ -245,13 +266,13 @@ def get_chat_session(
             chat_session.persona.icon_shape if chat_session.persona else None
         ),
         current_alternate_model=chat_session.current_alternate_model,
-        messages=[
-            translate_db_message_to_chat_message_detail(msg) for msg in session_messages
-        ],
+        messages=chat_message_details,
         time_created=chat_session.time_created,
         shared_status=chat_session.shared_status,
         current_temperature_override=chat_session.temperature_override,
         deleted=chat_session.deleted,
+        # specifically for the Onyx Chat UI
+        packets=simplified_packet_lists,
     )
 
 

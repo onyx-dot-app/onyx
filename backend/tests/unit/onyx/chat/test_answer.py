@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.answer import Answer
 from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import PromptConfig
@@ -27,6 +26,7 @@ from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.context.search.models import RerankingDetails
 from onyx.llm.interfaces import LLM
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff

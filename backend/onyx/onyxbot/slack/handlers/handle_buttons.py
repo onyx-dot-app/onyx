@@ -9,7 +9,6 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.webhook import WebhookClient
 
 from onyx.chat.models import ChatOnyxBotResponse
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import QADocsResponse
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
@@ -50,6 +49,7 @@ from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import ChatMessageDetail
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.utils.logger import setup_logger
 
 

@@ -1,0 +1,343 @@
+import re
+
+from langchain.schema.messages import BaseMessage
+from langchain.schema.messages import HumanMessage
+from sqlalchemy.orm import Session
+
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
+from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.dr.models import AggregatedDRContext
+from onyx.agents.agent_search.dr.models import IterationAnswer
+from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
+from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
+from onyx.agents.agent_search.shared_graph_utils.operators import (
+    dedup_inference_section_list,
+)
+from onyx.configs.constants import MessageType
+from onyx.context.search.models import InferenceSection
+from onyx.context.search.models import SavedSearchDoc
+from onyx.context.search.utils import chunks_or_sections_to_search_docs
+from onyx.db.models import ChatMessage
+from onyx.db.models import SearchDoc
+
+
+CITATION_PREFIX = "CITE:"
+
+
+def extract_document_citations(
+    answer: str, claims: list[str]
+) -> tuple[list[int], str, list[str]]:
+    """
+    Finds all citations of the form [1], [2, 3], etc. and returns the list of cited indices,
+    as well as the answer and claims with the citations replaced with [<CITATION_PREFIX>1],
+    etc., to help with citation deduplication later on.
+    """
+    citations: set[int] = set()
+
+    # Pattern to match both single citations [1] and multiple citations [1, 2, 3]
+    # This regex matches:
+    # - \[(\d+)\] for single citations like [1]
+    # - \[(\d+(?:,\s*\d+)*)\] for multiple citations like [1, 2, 3]
+    pattern = re.compile(r"\[(\d+(?:,\s*\d+)*)\]")
+
+    def _extract_and_replace(match: re.Match[str]) -> str:
+        numbers = [int(num) for num in match.group(1).split(",")]
+        citations.update(numbers)
+        return "".join(f"[{CITATION_PREFIX}{num}]" for num in numbers)
+
+    new_answer = pattern.sub(_extract_and_replace, answer)
+    new_claims = [pattern.sub(_extract_and_replace, claim) for claim in claims]
+
+    return list(citations), new_answer, new_claims
+
+
+def aggregate_context(
+    iteration_responses: list[IterationAnswer], include_documents: bool = True
+) -> AggregatedDRContext:
+    """
+    Converts the iteration response into a single string with unified citations.
+    For example,
+        it 1: the answer is x [3][4]. {3: doc_abc, 4: doc_xyz}
+        it 2: blah blah [1, 3]. {1: doc_xyz, 3: doc_pqr}
+    Output:
+        it 1: the answer is x [1][2].
+        it 2: blah blah [2][3]
+        [1]: doc_xyz
+        [2]: doc_abc
+        [3]: doc_pqr
+    """
+    # dedupe and merge inference section contents
+    unrolled_inference_sections: list[InferenceSection] = []
+    is_internet_marker_dict: dict[str, bool] = {}
+    for iteration_response in sorted(
+        iteration_responses,
+        key=lambda x: (x.iteration_nr, x.parallelization_nr),
+    ):
+
+        iteration_tool = iteration_response.tool
+        if iteration_tool == "InternetSearchTool":
+            is_internet = True
+        else:
+            is_internet = False
+
+        for cited_doc in iteration_response.cited_documents.values():
+            unrolled_inference_sections.append(cited_doc)
+            if cited_doc.center_chunk.document_id not in is_internet_marker_dict:
+                is_internet_marker_dict[cited_doc.center_chunk.document_id] = (
+                    is_internet
+                )
+            cited_doc.center_chunk.score = None  # None means maintain order
+
+    global_documents = dedup_inference_section_list(unrolled_inference_sections)
+
+    global_citations = {
+        doc.center_chunk.document_id: i for i, doc in enumerate(global_documents, 1)
+    }
+
+    # build output string
+    output_strings: list[str] = []
+    global_iteration_responses: list[IterationAnswer] = []
+
+    for iteration_response in sorted(
+        iteration_responses,
+        key=lambda x: (x.iteration_nr, x.parallelization_nr),
+    ):
+        # add basic iteration info
+        output_strings.append(
+            f"Iteration: {iteration_response.iteration_nr}, "
+            f"Question {iteration_response.parallelization_nr}"
+        )
+        output_strings.append(f"Tool: {iteration_response.tool}")
+        output_strings.append(f"Question: {iteration_response.question}")
+
+        # get answer and claims with global citations
+        answer_str = iteration_response.answer
+        claims = iteration_response.claims or []
+
+        iteration_citations: list[int] = []
+        for local_number, cited_doc in iteration_response.cited_documents.items():
+            global_number = global_citations[cited_doc.center_chunk.document_id]
+            # translate local citations to global citations
+            answer_str = answer_str.replace(
+                f"[{CITATION_PREFIX}{local_number}]", f"[{global_number}]"
+            )
+            claims = [
+                claim.replace(
+                    f"[{CITATION_PREFIX}{local_number}]", f"[{global_number}]"
+                )
+                for claim in claims
+            ]
+            iteration_citations.append(global_number)
+
+        # add answer, claims, and citation info
+        if answer_str:
+            output_strings.append(f"Answer: {answer_str}")
+        if claims:
+            output_strings.append(
+                "Claims: " + "".join(f"\n  - {claim}" for claim in claims or [])
+                or "No claims provided"
+            )
+        if not answer_str and not claims:
+            output_strings.append(
+                "Retrieved documents: "
+                + (
+                    "".join(
+                        f"[{global_number}]"
+                        for global_number in sorted(iteration_citations)
+                    )
+                    or "No documents retrieved"
+                )
+            )
+        output_strings.append("\n---\n")
+
+        # save global iteration response
+        global_iteration_responses.append(
+            IterationAnswer(
+                tool=iteration_response.tool,
+                tool_id=iteration_response.tool_id,
+                iteration_nr=iteration_response.iteration_nr,
+                parallelization_nr=iteration_response.parallelization_nr,
+                question=iteration_response.question,
+                reasoning=iteration_response.reasoning,
+                answer=answer_str,
+                cited_documents={
+                    global_citations[doc.center_chunk.document_id]: doc
+                    for doc in iteration_response.cited_documents.values()
+                },
+                background_info=iteration_response.background_info,
+                claims=claims,
+                additional_data=iteration_response.additional_data,
+            )
+        )
+
+    # add document contents if requested
+    if include_documents:
+        if global_documents:
+            output_strings.append("Cited document contents:")
+        for doc in global_documents:
+            output_strings.append(
+                build_document_context(
+                    doc, global_citations[doc.center_chunk.document_id]
+                )
+            )
+            output_strings.append("\n---\n")
+
+    return AggregatedDRContext(
+        context="\n".join(output_strings),
+        cited_documents=global_documents,
+        is_internet_marker_dict=is_internet_marker_dict,
+        global_iteration_responses=global_iteration_responses,
+    )
+
+
+def get_chat_history_string(chat_history: list[BaseMessage], max_messages: int) -> str:
+    """
+    Get the chat history (up to max_messages) as a string.
+    """
+    # get past max_messages USER, ASSISTANT message pairs
+    past_messages = chat_history[-max_messages * 2 :]
+    return (
+        "...\n"
+        if len(chat_history) > len(past_messages)
+        else ""
+        "\n".join(
+            ("user" if isinstance(msg, HumanMessage) else "you")
+            + f": {str(msg.content).strip()}"
+            for msg in past_messages
+        )
+    )
+
+
+def get_prompt_question(
+    question: str, clarification: OrchestrationClarificationInfo | None
+) -> str:
+    if clarification:
+        clarification_question = clarification.clarification_question
+        clarification_response = clarification.clarification_response
+        return (
+            f"Initial User Question: {question}\n"
+            f"(Clarification Question: {clarification_question}\n"
+            f"User Response: {clarification_response})"
+        )
+
+    return question
+
+
+def create_tool_call_string(tool_name: str, query_list: list[str]) -> str:
+    """
+    Create a string representation of the tool call.
+    """
+    questions_str = "\n  - ".join(query_list)
+    return f"Tool: {tool_name}\n\nQuestions:\n{questions_str}"
+
+
+def parse_plan_to_dict(plan_text: str) -> dict[str, str]:
+    # Convert plan string to numbered dict format
+    if not plan_text:
+        return {}
+
+    # Split by numbered items (1., 2., 3., etc. or 1), 2), 3), etc.)
+    parts = re.split(r"(\d+[.)])", plan_text)
+    plan_dict = {}
+
+    for i in range(
+        1, len(parts), 2
+    ):  # Skip empty first part, then take number and text pairs
+        if i + 1 < len(parts):
+            number = parts[i].rstrip(".)")  # Remove the dot or parenthesis
+            text = parts[i + 1].strip()
+            if text:  # Only add if there's actual content
+                plan_dict[number] = text
+
+    return plan_dict
+
+
+def convert_inference_sections_to_search_docs(
+    inference_sections: list[InferenceSection],
+    is_internet: bool = False,
+) -> list[SavedSearchDoc]:
+    # Convert InferenceSections to SavedSearchDocs
+    search_docs = chunks_or_sections_to_search_docs(inference_sections)
+    for search_doc in search_docs:
+        search_doc.is_internet = is_internet
+
+    retrieved_saved_search_docs = [
+        SavedSearchDoc.from_search_doc(search_doc, db_doc_id=0)
+        for search_doc in search_docs
+    ]
+    return retrieved_saved_search_docs
+
+
+def update_db_session_with_messages(
+    db_session: Session,
+    chat_message_id: int,
+    chat_session_id: str,
+    is_agentic: bool | None,
+    message: str | None = None,
+    message_type: str | None = None,
+    token_count: int | None = None,
+    rephrased_query: str | None = None,
+    prompt_id: int | None = None,
+    citations: dict[str | int, int] | None = None,
+    error: str | None = None,
+    alternate_assistant_id: int | None = None,
+    overridden_model: str | None = None,
+    research_type: str | None = None,
+    research_plan: dict[str, str] | None = None,
+    final_documents: list[SearchDoc] | None = None,
+    update_parent_message: bool = True,
+    research_answer_purpose: ResearchAnswerPurpose | None = None,
+) -> None:
+
+    chat_message = (
+        db_session.query(ChatMessage)
+        .filter(
+            ChatMessage.id == chat_message_id,
+            ChatMessage.chat_session_id == chat_session_id,
+        )
+        .first()
+    )
+    if not chat_message:
+        raise ValueError("Chat message with id not found")  # should never happen
+
+    if message:
+        chat_message.message = message
+    if message_type:
+        chat_message.message_type = MessageType(message_type)
+    if token_count:
+        chat_message.token_count = token_count
+    if rephrased_query:
+        chat_message.rephrased_query = rephrased_query
+    if prompt_id:
+        chat_message.prompt_id = prompt_id
+    if citations:
+        # Convert string keys to integers to match database field type
+        chat_message.citations = {int(k): v for k, v in citations.items()}
+    if error:
+        chat_message.error = error
+    if alternate_assistant_id:
+        chat_message.alternate_assistant_id = alternate_assistant_id
+    if overridden_model:
+        chat_message.overridden_model = overridden_model
+    if research_type:
+        chat_message.research_type = ResearchType(research_type)
+    if research_plan:
+        chat_message.research_plan = research_plan
+    if final_documents:
+        chat_message.search_docs = final_documents
+    if is_agentic:
+        chat_message.is_agentic = is_agentic
+
+    if research_answer_purpose:
+        chat_message.research_answer_purpose = research_answer_purpose
+
+    if update_parent_message:
+        parent_chat_message = (
+            db_session.query(ChatMessage)
+            .filter(ChatMessage.id == chat_message.parent_message)
+            .first()
+        )
+        if parent_chat_message:
+            parent_chat_message.latest_child_message = chat_message.id
+
+    return

@@ -29,7 +29,6 @@ from onyx.chat.models import QADocsResponse
 from onyx.chat.models import RefinedAnswerImprovement
 from onyx.chat.models import StreamingError
 from onyx.chat.models import SubQueryPiece
-from onyx.chat.models import SubQuestionIdentifier
 from onyx.chat.models import SubQuestionPiece
 from onyx.chat.process_message import ChatPacketStream
 from onyx.chat.process_message import stream_chat_message_objects
@@ -48,6 +47,7 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.query_expansion import thread_based_query_rephrase
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

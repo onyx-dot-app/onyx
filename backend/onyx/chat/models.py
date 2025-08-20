@@ -1,7 +1,5 @@
-from collections import OrderedDict
 from collections.abc import Callable
 from collections.abc import Iterator
-from collections.abc import Mapping
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -22,6 +20,19 @@ from onyx.context.search.models import RetrievalDocs
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import PromptOverride
+from onyx.server.query_and_chat.streaming_models import CitationDelta
+from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import CitationStart
+from onyx.server.query_and_chat.streaming_models import MessageDelta
+from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import OverallStop
+from onyx.server.query_and_chat.streaming_models import Packet
+from onyx.server.query_and_chat.streaming_models import ReasoningDelta
+from onyx.server.query_and_chat.streaming_models import ReasoningStart
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
+from onyx.server.query_and_chat.streaming_models import SearchToolStart
+from onyx.server.query_and_chat.streaming_models import SectionEnd
+from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
@@ -44,46 +55,6 @@ class LlmDoc(BaseModel):
     link: str | None
     source_links: dict[int, str] | None
     match_highlights: list[str] | None
-
-
-class SubQuestionIdentifier(BaseModel):
-    """None represents references to objects in the original flow. To our understanding,
-    these will not be None in the packets returned from agent search.
-    """
-
-    level: int | None = None
-    level_question_num: int | None = None
-
-    @staticmethod
-    def make_dict_by_level(
-        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"],
-    ) -> dict[int, list["SubQuestionIdentifier"]]:
-        """returns a dict of level to object list (sorted by level_question_num)
-        Ordering is asc for readability.
-        """
-
-        # organize by level, then sort ascending by question_index
-        level_dict: dict[int, list[SubQuestionIdentifier]] = {}
-
-        # group by level
-        for k, obj in original_dict.items():
-            level = k[0]
-            if level not in level_dict:
-                level_dict[level] = []
-            level_dict[level].append(obj)
-
-        # for each level, sort the group
-        for k2, value2 in level_dict.items():
-            # we need to handle the none case due to SubQuestionIdentifier typing
-            # level_question_num as int | None, even though it should never be None here.
-            level_dict[k2] = sorted(
-                value2,
-                key=lambda x: (x.level_question_num is None, x.level_question_num),
-            )
-
-        # sort by level
-        sorted_dict = OrderedDict(sorted(level_dict.items()))
-        return sorted_dict
 
 
 # First chunk of info for streaming QA
@@ -164,11 +135,6 @@ class OnyxAnswerPiece(BaseModel):
 
 # An intermediate representation of citations, later translated into
 # a mapping of the citation [n] number to SearchDoc
-class CitationInfo(SubQuestionIdentifier):
-    citation_num: int
-    document_id: str
-
-
 class AllCitations(BaseModel):
     citations: list[CitationInfo]
 
@@ -388,7 +354,21 @@ AgentSearchPacket = Union[
 ]
 
 AnswerPacket = (
-    AnswerQuestionPossibleReturn | AgentSearchPacket | ToolCallKickoff | ToolResponse
+    AnswerQuestionPossibleReturn
+    | AgentSearchPacket
+    | ToolCallKickoff
+    | ToolResponse
+    | MessageStart
+    | MessageDelta
+    | SectionEnd
+    | ReasoningStart
+    | ReasoningDelta
+    | SearchToolStart
+    | SearchToolDelta
+    | OnyxAnswerPiece
+    | CitationStart
+    | CitationDelta
+    | OverallStop
 )
 
 
@@ -402,12 +382,12 @@ ResponsePart = (
     | AgentSearchPacket
 )
 
-AnswerStream = Iterator[AnswerPacket]
+AnswerStream = Iterator[Packet]
 
 
 class AnswerPostInfo(BaseModel):
     ai_message_files: list[FileDescriptor]
-    qa_docs_response: QADocsResponse | None = None
+    rephrased_query: str | None = None
     reference_db_search_docs: list[DbSearchDoc] | None = None
     dropped_indices: list[int] | None = None
     tool_result: ToolCallFinalResult | None = None

@@ -18,79 +18,37 @@ from onyx.agents.agent_search.deep_search.main.graph_builder import (
 from onyx.agents.agent_search.deep_search.main.states import (
     MainInput as MainInput,
 )
+from onyx.agents.agent_search.dr.graph_builder import dr_graph_builder
+from onyx.agents.agent_search.dr.states import MainInput as DRMainInput
 from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
 from onyx.agents.agent_search.kb_search.states import MainInput as KBMainInput
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import ExtendedToolResponse
 from onyx.chat.models import RefinedAnswerImprovement
-from onyx.chat.models import StreamingError
-from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
-from onyx.chat.models import ToolResponse
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.llm.factory import get_default_llms
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
 
+GraphInput = BasicInput | MainInput | DCMainInput | KBMainInput | DRMainInput
+
 _COMPILED_GRAPH: CompiledStateGraph | None = None
-
-
-def _parse_agent_event(
-    event: StreamEvent,
-) -> AnswerPacket | None:
-    """
-    Parse the event into a typed object.
-    Return None if we are not interested in the event.
-    """
-    event_type = event["event"]
-
-    # We always just yield the event data, but this piece is useful for two development reasons:
-    # 1. It's a list of the names of every place we dispatch a custom event
-    # 2. We maintain the intended types yielded by each event
-    if event_type == "on_custom_event":
-        if event["name"] == "decomp_qs":
-            return cast(SubQuestionPiece, event["data"])
-        elif event["name"] == "subqueries":
-            return cast(SubQueryPiece, event["data"])
-        elif event["name"] == "sub_answers":
-            return cast(AgentAnswerPiece, event["data"])
-        elif event["name"] == "stream_finished":
-            return cast(StreamStopInfo, event["data"])
-        elif event["name"] == "initial_agent_answer":
-            return cast(AgentAnswerPiece, event["data"])
-        elif event["name"] == "refined_agent_answer":
-            return cast(AgentAnswerPiece, event["data"])
-        elif event["name"] == "start_refined_answer_creation":
-            return cast(ToolCallKickoff, event["data"])
-        elif event["name"] == "tool_response":
-            return cast(ToolResponse, event["data"])
-        elif event["name"] == "basic_response":
-            return cast(AnswerPacket, event["data"])
-        elif event["name"] == "refined_answer_improvement":
-            return cast(RefinedAnswerImprovement, event["data"])
-        elif event["name"] == "refined_sub_question_creation_error":
-            return cast(StreamingError, event["data"])
-        else:
-            logger.error(f"Unknown event name: {event['name']}")
-            return None
-
-    logger.error(f"Unknown event type: {event_type}")
-    return None
 
 
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput | DCMainInput | KBMainInput,
+    graph_input: GraphInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -104,16 +62,14 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput | DCMainInput | KBMainInput,
+    input: GraphInput,
 ) -> AnswerStream:
 
     for event in manage_sync_streaming(
         compiled_graph=compiled_graph, config=config, graph_input=input
     ):
-        if not (parsed_object := _parse_agent_event(event)):
-            continue
 
-        yield parsed_object
+        yield cast(Packet, event["data"])
 
 
 # It doesn't actually take very long to load the graph, but we'd rather
@@ -154,12 +110,19 @@ def run_kb_graph(
 ) -> AnswerStream:
     graph = kb_graph_builder()
     compiled_graph = graph.compile()
-    input = KBMainInput(log_messages=[])
-
-    yield ToolCallKickoff(
-        tool_name="agent_search_0",
-        tool_args={"query": config.inputs.prompt_builder.raw_user_query},
+    input = KBMainInput(
+        log_messages=[], question=config.inputs.prompt_builder.raw_user_query
     )
+
+    yield from run_graph(compiled_graph, config, input)
+
+
+def run_dr_graph(
+    config: GraphConfig,
+) -> AnswerStream:
+    graph = dr_graph_builder()
+    compiled_graph = graph.compile()
+    input = DRMainInput(log_messages=[])
 
     yield from run_graph(compiled_graph, config, input)
 

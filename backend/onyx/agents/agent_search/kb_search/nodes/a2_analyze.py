@@ -9,10 +9,14 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
     create_minimal_connected_query_graph,
 )
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
-from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
 from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
+    stream_kg_search_close_step_answer,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_activities,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_kg_search_answer_explicit,
 )
 from onyx.agents.agent_search.kb_search.models import KGAnswerApproach
 from onyx.agents.agent_search.kb_search.states import AnalysisUpdate
@@ -141,7 +145,7 @@ def analyze(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
     entities = (
         state.extracted_entities_no_attributes
     )  # attribute knowledge is not required for this step
@@ -150,7 +154,8 @@ def analyze(
 
     ## STEP 2 - stream out goals
 
-    stream_write_step_activities(writer, _KG_STEP_NR)
+    if state.individual_flow:
+        stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     # Continue with node
 
@@ -277,9 +282,12 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
     else:
         query_type = KGRelationshipDetection.NO_RELATIONSHIPS.value
 
-    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
+    if state.individual_flow:
+        stream_write_kg_search_answer_explicit(
+            writer, step_nr=_KG_STEP_NR, answer=step_answer
+        )
 
-    stream_close_step_answer(writer, _KG_STEP_NR)
+        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     # End node
 

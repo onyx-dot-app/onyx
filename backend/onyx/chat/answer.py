@@ -1,9 +1,11 @@
 from collections import defaultdict
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
@@ -12,12 +14,11 @@ from onyx.agents.agent_search.models import GraphTooling
 from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
-from onyx.agents.agent_search.run_graph import run_kb_graph
+from onyx.agents.agent_search.run_graph import run_dr_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
@@ -32,6 +33,7 @@ from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -68,6 +70,8 @@ class Answer:
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
         use_agentic_search: bool = False,
+        research_type: ResearchType | None = None,
+        research_plan: dict[str, Any] | None = None,
     ) -> None:
         self.is_connected: Callable[[], bool] | None = is_connected
         self._processed_stream: list[AnswerPacket] | None = None
@@ -124,6 +128,9 @@ class Answer:
             allow_agent_reranking=allow_agent_reranking,
             perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
             kg_config_settings=get_kg_config_settings(),
+            research_type=(
+                ResearchType.DEEP if use_agentic_search else ResearchType.THOUGHTFUL
+            ),
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,
@@ -138,12 +145,10 @@ class Answer:
             yield from self._processed_stream
             return
 
-        if self.graph_config.behavior.use_agentic_search and (
-            self.graph_config.inputs.persona
-            and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith("KG Beta")
-        ):
-            run_langgraph = run_kb_graph
+        # TODO: add toggle in UI with customizable TimeBudget
+        if self.graph_config.inputs.persona:
+            run_langgraph = run_dr_graph
+
         elif self.graph_config.behavior.use_agentic_search:
             run_langgraph = run_agent_search_graph
         elif (
@@ -209,23 +214,6 @@ class Answer:
                 citations.append(packet)
 
         return citations
-
-    def citations_by_subquestion(self) -> dict[SubQuestionKey, list[CitationInfo]]:
-        citations_by_subquestion: dict[SubQuestionKey, list[CitationInfo]] = (
-            defaultdict(list)
-        )
-        basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
-        for packet in self.processed_streamed_output:
-            if isinstance(packet, CitationInfo):
-                if packet.level_question_num is not None and packet.level is not None:
-                    citations_by_subquestion[
-                        SubQuestionKey(
-                            level=packet.level, question_num=packet.level_question_num
-                        )
-                    ].append(packet)
-                elif packet.level is None:
-                    citations_by_subquestion[basic_subq_key].append(packet)
-        return citations_by_subquestion
 
     def is_cancelled(self) -> bool:
         if self._is_cancelled:

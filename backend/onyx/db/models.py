@@ -82,6 +82,8 @@ from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import RerankerProvider
+from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 
 logger = setup_logger()
 
@@ -677,8 +679,8 @@ class KGEntityType(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    grounded_source_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=False
+    grounded_source_name: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=False
     )
 
     entity_values: Mapped[list[str]] = mapped_column(
@@ -2146,10 +2148,24 @@ class ChatMessage(Base):
         order_by="(AgentSubQuestion.level, AgentSubQuestion.level_question_num)",
     )
 
+    research_iterations: Mapped[list["ResearchAgentIteration"]] = relationship(
+        "ResearchAgentIteration",
+        foreign_keys="ResearchAgentIteration.primary_question_id",
+        cascade="all, delete-orphan",
+    )
+
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
         "StandardAnswer",
         secondary=ChatMessage__StandardAnswer.__table__,
         back_populates="chat_messages",
+    )
+
+    research_type: Mapped[ResearchType] = mapped_column(
+        Enum(ResearchType, native_enum=False), nullable=True
+    )
+    research_plan: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    research_answer_purpose: Mapped[ResearchAnswerPurpose] = mapped_column(
+        Enum(ResearchAnswerPurpose, native_enum=False), nullable=True
     )
 
 
@@ -3349,4 +3365,74 @@ class TenantAnonymousUserPath(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
+    )
+
+
+class ResearchAgentIteration(Base):
+    __tablename__ = "research_agent_iteration"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    primary_question_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
+    iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    purpose: Mapped[str] = mapped_column(String, nullable=True)
+
+    reasoning: Mapped[str] = mapped_column(String, nullable=True)
+
+    # Relationships
+    primary_message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        foreign_keys=[primary_question_id],
+        back_populates="research_iterations",
+    )
+
+    sub_steps: Mapped[list["ResearchAgentIterationSubStep"]] = relationship(
+        "ResearchAgentIterationSubStep",
+        primaryjoin=(
+            "and_("
+            "ResearchAgentIteration.primary_question_id == ResearchAgentIterationSubStep.primary_question_id, "
+            "ResearchAgentIteration.iteration_nr == ResearchAgentIterationSubStep.iteration_nr"
+            ")"
+        ),
+        foreign_keys="[ResearchAgentIterationSubStep.primary_question_id, ResearchAgentIterationSubStep.iteration_nr]",
+        cascade="all, delete-orphan",
+    )
+
+
+class ResearchAgentIterationSubStep(Base):
+    __tablename__ = "research_agent_iteration_sub_step"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    primary_question_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE")
+    )
+    parent_question_id: Mapped[int | None] = mapped_column(
+        ForeignKey("research_agent_iteration_sub_step.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    iteration_sub_step_nr: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    sub_step_instructions: Mapped[str] = mapped_column(String, nullable=True)
+    sub_step_tool_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool.id"), nullable=True
+    )
+    reasoning: Mapped[str] = mapped_column(String, nullable=True)
+    sub_answer: Mapped[str] = mapped_column(String, nullable=True)
+    cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+    claims: Mapped[list[str]] = mapped_column(postgresql.JSONB(), nullable=True)
+    additional_data: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+
+    # Relationships
+    primary_message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        foreign_keys=[primary_question_id],
+    )
+
+    parent_sub_step: Mapped["ResearchAgentIterationSubStep"] = relationship(
+        "ResearchAgentIterationSubStep",
+        foreign_keys=[parent_question_id],
+        remote_side="ResearchAgentIterationSubStep.id",
     )
