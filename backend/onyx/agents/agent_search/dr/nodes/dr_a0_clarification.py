@@ -41,6 +41,9 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
+from onyx.llm.utils import check_number_of_tokens
+from onyx.llm.utils import get_max_input_tokens
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
@@ -259,6 +262,19 @@ def clarifier(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
 
+    llm_provider = graph_config.tooling.primary_llm.config.model_provider
+    llm_model_name = graph_config.tooling.primary_llm.config.model_name
+
+    llm_tokenizer = get_tokenizer(
+        model_name=llm_model_name,
+        provider_type=llm_provider,
+    )
+
+    max_input_tokens = get_max_input_tokens(
+        model_name=llm_model_name,
+        model_provider=llm_provider,
+    )
+
     use_tool_calling_llm = graph_config.tooling.using_tool_calling_llm
     db_session = graph_config.persistence.db_session
 
@@ -316,6 +332,16 @@ def clarifier(
         if graph_config.inputs.files
         else ""
     )
+
+    uploaded_context_tokens = check_number_of_tokens(
+        uploaded_context, llm_tokenizer.encode
+    )
+
+    if uploaded_context_tokens > 0.5 * max_input_tokens:
+        raise ValueError(
+            f"Uploaded context is too long. {uploaded_context_tokens} tokens, "
+            f"but for this model we only allow {0.5 * max_input_tokens} tokens for uploaded context"
+        )
 
     if len(available_tools) == 1:
         # Closer is always there, therefore 'len(available_tools) == 1' above
