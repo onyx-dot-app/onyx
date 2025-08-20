@@ -125,7 +125,7 @@ class LangflowTool(Tool):
     def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
         request_body = {"input_value": kwargs['question']}
 
-        url = self.base_url + f"api/v1/run/{self.pipeline_id}"
+        url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
         response = requests.request(method, url, json=request_body, headers={"x-api-key": LANGFLOW_API_KEY})
         yield ToolResponse(
