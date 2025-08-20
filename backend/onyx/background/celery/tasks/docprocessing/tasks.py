@@ -804,6 +804,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             primary_cc_pair_ids = standard_cc_pair_ids + user_file_cc_pair_ids
 
             # Get CC pairs for secondary search settings
+            secondary_cc_pair_ids: list[int] = []
             secondary_search_settings = get_secondary_search_settings(db_session)
             if secondary_search_settings:
                 # Include paused CC pairs during embedding swap
@@ -852,10 +853,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                 tenant_id=tenant_id,
             )
 
+            # Secondary indexing (only if secondary search settings exist and background reindex is enabled)
             if (
-                secondary_cc_pair_ids
-                and secondary_search_settings
+                secondary_search_settings
                 and secondary_search_settings.background_reindex_enabled
+                and secondary_cc_pair_ids
             ):
                 tasks_created += _kickoff_indexing_tasks(
                     celery_app=self.app,
@@ -867,9 +869,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     lock_beat=lock_beat,
                     tenant_id=tenant_id,
                 )
-            else:
-                task_logger.warning(
-                    "Secondary search settings are not live, skipping indexing attempts"
+            elif (
+                secondary_search_settings
+                and not secondary_search_settings.background_reindex_enabled
+            ):
+                task_logger.info(
+                    f"Skipping secondary indexing: "
+                    f"background_reindex_enabled=False "
+                    f"for search_settings={secondary_search_settings.id}"
                 )
 
         # 2/3: VALIDATE
