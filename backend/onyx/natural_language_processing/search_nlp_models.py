@@ -269,10 +269,11 @@ class CloudEmbedding:
         if not model:
             model = DEFAULT_VERTEX_MODEL
 
+        service_account_info = json.loads(self.api_key)
         credentials = service_account.Credentials.from_service_account_info(
-            json.loads(self.api_key)
+            service_account_info
         )
-        project_id = json.loads(self.api_key)["project_id"]
+        project_id = service_account_info["project_id"]
         vertexai.init(project=project_id, credentials=credentials)
         client = TextEmbeddingModel.from_pretrained(model)
 
@@ -715,11 +716,16 @@ class EmbeddingModel:
             # Route between direct API calls and model server calls
             if self.provider_type is not None:
                 # For API providers, make direct API call
-                response = asyncio.run(
-                    self._make_direct_api_call(
-                        embed_request, tenant_id=tenant_id, request_id=request_id
+                loop = asyncio.new_event_loop()
+                try:
+                    asyncio.set_event_loop(loop)
+                    response = loop.run_until_complete(
+                        self._make_direct_api_call(
+                            embed_request, tenant_id=tenant_id, request_id=request_id
+                        )
                     )
-                )
+                finally:
+                    loop.close()
             else:
                 # For local models, use model server
                 response = self._make_model_server_request(
@@ -919,7 +925,14 @@ class RerankingModel:
         # Route between direct API calls and model server calls
         if self.provider_type is not None:
             # For API providers, make direct API call
-            return asyncio.run(self._make_direct_rerank_call(query, passages))
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(
+                    self._make_direct_rerank_call(query, passages)
+                )
+            finally:
+                loop.close()
         else:
             # For local models, use model server
             if self.rerank_server_endpoint is None:

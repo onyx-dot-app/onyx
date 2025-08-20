@@ -1,7 +1,6 @@
 __pycache__/
 .mypy_cache
 .idea/
-venv/
 site_crawls/
 .ipynb_checkpoints/
 api_keys.py
