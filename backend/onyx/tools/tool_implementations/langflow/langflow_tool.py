@@ -147,10 +147,15 @@ class LangflowTool(Tool):
         prompt_builder.update_system_prompt(
             default_build_system_message(self.prompt_config, self.llm_config)
         )
+        message, _ = prompt_builder.user_message_and_token_cnt
+        if isinstance(message.content, str):
+            message = message.content
+        else:
+            message = ""
         prompt_builder.update_user_prompt(
             HumanMessage(
                 content=build_user_message_for_langflow_tool(
-                    query=prompt_builder.get_user_message_content(),
+                    query=message,
                     tool_name=self.name,
                     *tool_responses
                 )
