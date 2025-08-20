@@ -62,6 +62,8 @@ _RETRY_TRIES = 10 if INDEXING_ONLY else 2
 _OPENAI_MAX_INPUT_LEN = 2048
 # Cohere allows up to 96 embeddings in a single embedding calling
 _COHERE_MAX_INPUT_LEN = 96
+# gemini-embedding-001 max batch size is 1
+_GEMINI_EMBEDDING_MAX_BATCH_SIZE = 1
 
 # Authentication error string constants
 _AUTH_ERROR_401 = "401"
@@ -216,7 +218,11 @@ class CloudEmbedding:
         return embeddings
 
     async def _embed_vertex(
-        self, texts: list[str], model: str | None, embedding_type: str
+        self,
+        texts: list[str],
+        model: str | None,
+        embedding_type: str,
+        reduced_dimension: int | None = None,
     ) -> list[Embedding]:
         if not model:
             model = DEFAULT_VERTEX_MODEL
@@ -230,17 +236,29 @@ class CloudEmbedding:
 
         inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
 
-        # Split into batches of 25 texts
-        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        # gemini-embedding-001 max batch size is 1. otherwise use default
+        max_texts_per_batch = (
+            _GEMINI_EMBEDDING_MAX_BATCH_SIZE
+            if "gemini-embedding-001" in model
+            else VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        )
+
         batches = [
             inputs[i : i + max_texts_per_batch]
             for i in range(0, len(inputs), max_texts_per_batch)
         ]
 
         # Dispatch all embedding calls asynchronously at once
-        tasks = [
-            client.get_embeddings_async(batch, auto_truncate=True) for batch in batches
-        ]
+        tasks = []
+        for batch in batches:
+            # Only pass output_dimensionality if reduced_dimension is specified
+            if reduced_dimension is not None:
+                task = client.get_embeddings_async(
+                    batch, auto_truncate=True, output_dimensionality=reduced_dimension
+                )
+            else:
+                task = client.get_embeddings_async(batch, auto_truncate=True)
+            tasks.append(task)
 
         # Wait for all tasks to complete in parallel
         results = await asyncio.gather(*tasks)
@@ -296,7 +314,9 @@ class CloudEmbedding:
             elif self.provider == EmbeddingProvider.VOYAGE:
                 return await self._embed_voyage(texts, model_name, embedding_type)
             elif self.provider == EmbeddingProvider.GOOGLE:
-                return await self._embed_vertex(texts, model_name, embedding_type)
+                return await self._embed_vertex(
+                    texts, model_name, embedding_type, reduced_dimension
+                )
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:

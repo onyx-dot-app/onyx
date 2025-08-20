@@ -267,8 +267,22 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     embedding_models: [
       {
         provider_type: EmbeddingProvider.GOOGLE,
+        model_name: "gemini-embedding-001",
+        description:
+          'Google\'s latest text embedding model. Default is 3072 dimensions. Configure dimension reduction in "Advanced" tab. Recommended, smaller dimensions are 1536 or 768.',
+        pricePerMillion: 0.15,
+        model_dim: 3072,
+        normalize: false,
+        query_prefix: "",
+        passage_prefix: "",
+        index_name: "",
+        api_key: null,
+        api_url: null,
+      },
+      {
+        provider_type: EmbeddingProvider.GOOGLE,
         model_name: "text-embedding-005",
-        description: "Google's most recent text embedding model.",
+        description: "Google's previous generation text embedding model.",
         pricePerMillion: 0.025,
         model_dim: 768,
         normalize: false,

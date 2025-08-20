@@ -1526,7 +1526,7 @@ class SearchSettings(Base):
     # section here:
     # https://platform.openai.com/docs/guides/embeddings#embedding-models
     # If not specified, will just use the model_dim without any reduction.
-    # NOTE: this is only currently available for OpenAI models
+    # NOTE: this is currently available for OpenAI and Google embedding models
     reduced_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Mini and Large Chunks (large chunk also checks for model max context)

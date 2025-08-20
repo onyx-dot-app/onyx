@@ -129,10 +129,14 @@ const AdvancedEmbeddingFormPage = forwardRef<
                 (value) => value === null || value === undefined || value >= 256
               )
               .test(
-                "openai",
-                "Reduced Dimensions is only supported for OpenAI embedding models",
+                "supported-dim-reduction-providers",
+                "Reduced Dimensions is only supported for OpenAI and Google embedding models",
                 (value) => {
-                  return embeddingProviderType === "openai" || value === null;
+                  return (
+                    embeddingProviderType === "openai" ||
+                    embeddingProviderType === "google" ||
+                    value === null
+                  );
                 }
               ),
           })}
@@ -206,11 +210,13 @@ const AdvancedEmbeddingFormPage = forwardRef<
                           value === null || value === undefined || value >= 256
                       )
                       .test(
-                        "openai",
-                        "Reduced Dimensions is only supported for OpenAI embedding models",
+                        "supported-dim-reduction-providers",
+                        "Reduced Dimensions is only supported for OpenAI and Google embedding models",
                         (value) => {
                           return (
-                            embeddingProviderType === "openai" || value === null
+                            embeddingProviderType === "openai" ||
+                            embeddingProviderType === "google" ||
+                            value === null
                           );
                         }
                       ),
@@ -354,7 +360,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
                 description="Number of dimensions to reduce the embedding to. 
               Will reduce memory usage but may reduce accuracy. 
               If not specified, will just use the selected model's default dimensionality without any reduction. 
-              Currently only supported for OpenAI embedding models"
+              Currently supported for OpenAI and Google embedding models"
                 optional={true}
                 label="Reduced Dimension"
                 name="reduced_dimension"
