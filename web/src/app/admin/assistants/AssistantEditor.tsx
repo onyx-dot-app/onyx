@@ -607,6 +607,8 @@ export function AssistantEditor({
               name: message.message,
             }));
 
+          console.log("test values", values);
+
           // don't set groups if marked as public
           const groups = values.is_public ? [] : values.selectedGroups;
           const submissionData: PersonaUpsertParameters = {
