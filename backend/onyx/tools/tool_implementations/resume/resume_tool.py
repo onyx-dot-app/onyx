@@ -34,6 +34,7 @@ os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 class ResumeResponseSummary(BaseModel):
     tool_result: dict
+    tool_name: str
 
 
 class ResumeTool(Tool):
@@ -48,6 +49,7 @@ class ResumeTool(Tool):
         self.template_file = template_file
         # self.template_name = template_name
 
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -55,7 +57,7 @@ class ResumeTool(Tool):
         return {
             "type": "function",
             "function": {
-                "name": self.name(),
+                "name": self.name,
                 "description": resume_tool_description,
                 "parameters": {
                     "type": "document",
@@ -91,7 +93,7 @@ class ResumeTool(Tool):
                     content=TOOL_ARG_USER_PROMPT.format(
                         history=history,
                         query=query,
-                        tool_name=self.name(),
+                        tool_name=self.name,
                         tool_description=resume_tool_description,
                         tool_args=self.tool_definition()["function"]["parameters"],
                     )
@@ -118,7 +120,7 @@ class ResumeTool(Tool):
 
         # pretend like nothing happened if not parse-able
         logger.error(
-            f"Failed to parse args for '{self.name()}' tool. Received: {args_result_str}"
+            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
         )
         return None
 
@@ -160,7 +162,7 @@ class ResumeTool(Tool):
 
         yield ToolResponse(
             id=RESUME_RESPONSE_SUMMARY_ID,
-            response=ResumeResponseSummary(tool_result={"text": output_file_url}),
+            response=ResumeResponseSummary(tool_result={"text": output_file_url}, tool_name=self.name),
         )
         os.remove(os.path.join(DOWNLOAD_FOLDER, output_file_name))
 

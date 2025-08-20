@@ -24,6 +24,7 @@ LANGFLOW_RESPONSE_SUMMARY_ID = "langflow_response_summary"
 
 class LangflowResponseSummary(BaseModel):
     tool_result: dict
+    tool_name: str
 
 
 class LangflowTool(Tool):
@@ -130,7 +131,7 @@ class LangflowTool(Tool):
         response = requests.request(method, url, json=request_body, headers={"x-api-key": LANGFLOW_API_KEY})
         yield ToolResponse(
             id=LANGFLOW_RESPONSE_SUMMARY_ID,
-            response=LangflowResponseSummary(tool_result=response.json()),
+            response=LangflowResponseSummary(tool_result=response.json(), tool_name=self.name),
         )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
