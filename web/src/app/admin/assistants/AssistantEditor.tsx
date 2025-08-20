@@ -110,6 +110,10 @@ function findLangflowTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "LangflowTool");
 }
 
+function findDocFormatterTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "DocFormatter");
+}
+
 function findImageGenerationTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
 }
@@ -234,6 +238,7 @@ export function AssistantEditor({
 
   const searchTool = findSearchTool(tools);
   const langflowTool = findLangflowTool(tools);
+  const docFormatterTool = findDocFormatterTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
   const knowledgeMapTool = findKnowledgeMapTool(tools);
@@ -245,6 +250,7 @@ export function AssistantEditor({
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
       tool.in_code_tool_id !== langflowTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== docFormatterTool?.in_code_tool_id &&
       tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== knowledgeMapTool?.in_code_tool_id
   );
@@ -253,6 +259,7 @@ export function AssistantEditor({
     ...customTools,
     ...(searchTool ? [searchTool] : []),
     ...(langflowTool ? [langflowTool] : []),
+    ...(docFormatterTool ? [docFormatterTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
     ...(knowledgeMapTool ? [knowledgeMapTool] : []),
@@ -576,6 +583,9 @@ export function AssistantEditor({
           const langflowToolEnabled = langflowTool
             ? enabledTools.includes(langflowTool.id)
             : false;
+          const docFormatterToolEnabled = docFormatterTool
+            ? enabledTools.includes(docFormatterTool.id)
+            : false;
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
             : false;
@@ -697,7 +707,19 @@ export function AssistantEditor({
               : false;
           }
 
+          function docFormatterToolEnabled() {
+            return docFormatterTool &&
+              values.enabled_tools_map[docFormatterTool.id]
+              ? true
+              : false;
+          }
+
           console.log("TEST LANGFLOW", langflowTool, langflowToolEnabled());
+          console.log(
+            "TEST LANGFLOW",
+            docFormatterTool,
+            docFormatterToolEnabled()
+          );
 
           function knowledgeMapToolEnabled() {
             return knowledgeMapTool &&
@@ -1162,6 +1184,32 @@ export function AssistantEditor({
                                 name="use_default"
                                 label="Использовать инструмент для всех запросов"
                                 subtext="Если включено, все запросы после ввода будут отправляться в инструмент без предварительной проверки необходимости его использования"
+                              />
+                            </>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {docFormatterTool && (
+                      <>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${docFormatterTool.id}`}
+                          label="Doc Formatter"
+                          subtext="Инструмент резюме"
+                          onChange={() => {
+                            toggleToolInValues(docFormatterTool.id);
+                          }}
+                        />
+
+                        {docFormatterToolEnabled() && (
+                          <div className="pl-4 border-l-2 ml-4 border-border flex flex-col gap-4 mb-4">
+                            <>
+                              <TextFormField
+                                name="pipeline_id"
+                                label="Id пайплайна"
+                                placeholder="Введите идентификатор пайплайна"
+                                subtext="Идентификатор пайплайна Langflow"
                               />
                             </>
                           </div>

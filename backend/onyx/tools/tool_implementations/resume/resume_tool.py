@@ -38,7 +38,7 @@ class ResumeResponseSummary(BaseModel):
 
 class ResumeTool(Tool):
     NAME = "resume_tool"
-    _DISPLAY_NAME = "Форматирование Резюме"
+    _DISPLAY_NAME = "Doc Formatter"
 
     def __init__(self, db_session: Session, pipeline_id: str, docs: list, template_file: bytes):  # , template_name: str
         self.db_session = db_session
