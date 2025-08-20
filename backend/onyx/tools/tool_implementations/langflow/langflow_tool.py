@@ -34,7 +34,7 @@ class LangflowTool(Tool):
     def __init__(self, db_session: Session, pipeline_id: str, prompt_config: PromptConfig, llm_config: LLMConfig):
         self.db_session = db_session
         self.pipeline_id = pipeline_id
-        self.base_url = LANGFLOW_BASE_URL + "/api/v1/"
+        self.base_url = LANGFLOW_BASE_URL
         self.prompt_config = prompt_config
         self.llm_config = llm_config
 
