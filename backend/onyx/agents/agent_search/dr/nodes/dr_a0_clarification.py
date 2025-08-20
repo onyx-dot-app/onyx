@@ -35,6 +35,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
+from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.db.connector import fetch_unique_document_sources
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
@@ -80,6 +81,15 @@ def _get_available_tools(
 ) -> dict[str, OrchestratorTool]:
 
     available_tools: dict[str, OrchestratorTool] = {}
+
+    kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
+    persona = graph_config.inputs.persona
+
+    if persona:
+        include_kg = persona.name == TMP_DRALPHA_PERSONA_NAME and kg_enabled
+    else:
+        include_kg = False
+
     for tool in graph_config.tooling.tools:
         tool_info = OrchestratorTool(
             tool_id=tool.id,
@@ -107,7 +117,7 @@ def _get_available_tools(
             tool_info.path = DRPath.INTERNAL_SEARCH
         elif (
             isinstance(tool, KnowledgeGraphTool)
-            and kg_enabled
+            and include_kg
             and len(active_source_types) > 0
         ):
             tool_info.llm_path = DRPath.KNOWLEDGE_GRAPH.value

@@ -72,10 +72,9 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
     ),
     InCodeToolInfo(
         cls=KnowledgeGraphTool,
-        description=(
-            "The Knowledge Graph Search Action allows the assistant to search the knowledge graph for information."
-            "This tool should only be used by the Deep Research Agent, not via tool calling."
-        ),
+        description="""The Knowledge Graph Search Action allows the assistant to search the \
+    Knowledge Graph for information. This tool can (for now) only be active in the KG Beta Assistant, \
+    and it requires the Knowledge Graph to be enabled.""",
         in_code_tool_id=KnowledgeGraphTool.__name__,
         display_name=KnowledgeGraphTool._DISPLAY_NAME,
     ),

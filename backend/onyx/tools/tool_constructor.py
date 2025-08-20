@@ -310,8 +310,9 @@ def construct_tools(
             # Handle KG Tool
             elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
                 if persona.name != TMP_DRALPHA_PERSONA_NAME:
+                    # TODO: remove this after the beta period
                     raise ValueError(
-                        f"Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
+                        f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
                     )
                 tool_dict[db_tool_model.id] = [
                     KnowledgeGraphTool(tool_id=db_tool_model.id)
@@ -325,7 +326,8 @@ def construct_tools(
             tool_dict[db_tool_model.id] = cast(
                 list[Tool],
                 build_custom_tools_from_openapi_schema_and_headers(
-                    db_tool_model.openapi_schema,
+                    tool_id=db_tool_model.id,
+                    openapi_schema=db_tool_model.openapi_schema,
                     dynamic_schema_info=DynamicSchemaInfo(
                         chat_session_id=custom_tool_config.chat_session_id,
                         message_id=custom_tool_config.message_id,
