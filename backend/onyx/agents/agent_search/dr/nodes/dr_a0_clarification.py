@@ -37,6 +37,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.db.connector import fetch_unique_document_sources
+from onyx.file_store.models import ChatFileType
+from onyx.file_store.models import InMemoryChatFile
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
@@ -159,6 +161,21 @@ def _get_available_tools(
     )
 
     return available_tools
+
+
+def _construct_uploaded_context(files: list[InMemoryChatFile]) -> str:
+    """Construct the uploaded context from the files."""
+    file_contents = []
+    for file in files:
+        if file.file_type in (
+            ChatFileType.DOC,
+            ChatFileType.PLAIN_TEXT,
+            ChatFileType.CSV,
+        ):
+            file_contents.append(file.content.decode("utf-8"))
+    if len(file_contents) > 0:
+        return "Uploaded context:\n\n\n" + "\n\n".join(file_contents)
+    return ""
 
 
 def _get_existing_clarification_request(
@@ -294,6 +311,12 @@ def clarifier(
         or "(No chat history yet available)"
     )
 
+    uploaded_context = (
+        _construct_uploaded_context(graph_config.inputs.files)
+        if graph_config.inputs.files
+        else ""
+    )
+
     if len(available_tools) == 1:
         # Closer is always there, therefore 'len(available_tools) == 1' above
         answer_prompt = GENERAL_DR_ANSWER_PROMPT.build(
@@ -346,7 +369,9 @@ def clarifier(
 
     elif not use_tool_calling_llm:
         decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
-            question=original_question, chat_history_string=chat_history_string
+            question=original_question,
+            chat_history_string=chat_history_string,
+            uploaded_context=uploaded_context or "",
         )
 
         initial_decision_tokens, _, _ = run_with_timeout(
@@ -382,7 +407,9 @@ def clarifier(
     else:
 
         decision_prompt = DECISION_PROMPT_W_TOOL_CALLING.build(
-            question=original_question, chat_history_string=chat_history_string
+            question=original_question,
+            chat_history_string=chat_history_string,
+            uploaded_context=uploaded_context or "",
         )
 
         stream = graph_config.tooling.primary_llm.stream(
@@ -580,4 +607,5 @@ def clarifier(
         active_source_types_descriptions="\n".join(active_source_types_descriptions),
         assistant_system_prompt=assistant_system_prompt,
         assistant_task_prompt=assistant_task_prompt,
+        uploaded_context=uploaded_context,
     )

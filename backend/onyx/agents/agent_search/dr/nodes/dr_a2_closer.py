@@ -253,6 +253,8 @@ def closer(
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
 
+    uploaded_context = state.uploaded_context or ""
+
     clarification = state.clarification
     prompt_question = get_prompt_question(base_question, clarification)
 
@@ -341,6 +343,7 @@ def closer(
         base_question=prompt_question,
         iteration_responses_string=iteration_responses_string,
         chat_history_string=chat_history_string,
+        uploaded_context=uploaded_context,
     )
 
     all_context_llmdocs = [

@@ -71,6 +71,8 @@ def orchestrator(
     )
     available_tools = state.available_tools or {}
 
+    uploaded_context = state.uploaded_context or ""
+
     questions = [
         f"{iteration_response.tool}: {iteration_response.question}"
         for iteration_response in state.iteration_responses
@@ -126,6 +128,7 @@ def orchestrator(
                 answer_history_string=answer_history_string,
                 iteration_nr=str(iteration_nr),
                 remaining_time_budget=str(remaining_time_budget),
+                uploaded_context=uploaded_context,
             )
 
             reasoning_tokens: list[str] = [""]
@@ -199,6 +202,7 @@ def orchestrator(
             iteration_nr=str(iteration_nr),
             remaining_time_budget=str(remaining_time_budget),
             reasoning_result=reasoning_result,
+            uploaded_context=uploaded_context,
         )
 
         if remaining_time_budget > 0:
@@ -241,6 +245,7 @@ def orchestrator(
             plan_generation_prompt = base_plan_prompt.build(
                 question=prompt_question,
                 chat_history_string=chat_history_string,
+                uploaded_context=uploaded_context,
             )
 
             try:
@@ -303,6 +308,7 @@ def orchestrator(
             chat_history_string=chat_history_string,
             remaining_time_budget=str(remaining_time_budget),
             gaps=gaps_str,
+            uploaded_context=uploaded_context,
         )
 
         if remaining_time_budget > 0:

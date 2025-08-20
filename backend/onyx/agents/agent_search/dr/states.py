@@ -45,6 +45,7 @@ class OrchestrationSetup(OrchestrationUpdate):
     active_source_types_descriptions: str | None = None
     assistant_system_prompt: str | None = None
     assistant_task_prompt: str | None = None
+    uploaded_context: str | None = None
 
 
 class AnswerUpdate(LoggerUpdate):

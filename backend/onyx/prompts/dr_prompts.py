@@ -206,7 +206,12 @@ You have these ---num_available_tools--- tools available, \
 
 ---kg_types_descriptions---
 
-Here is the question that you must device a plan for answering:
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
+Most importantly, here is the question that you must device a plan for answering:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
@@ -264,7 +269,12 @@ to answer the user question IN FULL.
 
 Note: the current time is ---current_time---.
 
-Here is the overall question that you need to answer:
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
+Most importantly, here is the question that you must device a plan for answering:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
@@ -346,6 +356,12 @@ Here are the previous sub-questions/sub-tasks and corresponding retrieved docume
 {SEPARATOR_LINE}
 ---answer_history_string---
 {SEPARATOR_LINE}
+
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
 
 And finally, here is the reasoning from the previous iteration on why more research (i.e., tool calls) \
 is needed:
@@ -465,6 +481,11 @@ Here is the high-level plan:
 Here is the answer history so far (if any):
 {SEPARATOR_LINE}
 ---answer_history_string---
+{SEPARATOR_LINE}
+
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
 {SEPARATOR_LINE}
 
 Again, to avoid duplication here is the list of previous questions and the tools that were used to answer them:
@@ -805,6 +826,11 @@ to answer the question:
 ---chat_history_string---
 {SEPARATOR_LINE}
 
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
 GUIDELINES:
   - please look at the high-level plan and try to evaluate whether the information gathered so far \
 sufficiently covers the steps with enough detail so that we can answer the higher-level problem \
@@ -899,6 +925,10 @@ to answer the question:
 ---chat_history_string---
 {SEPARATOR_LINE}
 
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
 
 GUIDANCE:
  - note that the sub-answers (if available) to the sub-questions are designed to be high-level, mostly \
@@ -1193,6 +1223,11 @@ Here is the chat history (if any):
 ---chat_history_string---
 {SEPARATOR_LINE}
 
+Here is the uploaded context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
 Here is the question:
 {SEPARATOR_LINE}
 ---question---
@@ -1219,6 +1254,11 @@ DECISION_PROMPT_W_TOOL_CALLING = PromptTemplate(
 Here is the chat history (if any):
 {SEPARATOR_LINE}
 ---chat_history_string---
+{SEPARATOR_LINE}
+
+Here is the uploaded context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
 {SEPARATOR_LINE}
 
 Here is the question:
