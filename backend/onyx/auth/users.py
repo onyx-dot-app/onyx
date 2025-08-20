@@ -68,6 +68,7 @@ from onyx.auth.schemas import UserUpdateWithRole
 from onyx.configs.app_configs import AUTH_BACKEND
 from onyx.configs.app_configs import AUTH_COOKIE_EXPIRE_TIME_SECONDS
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import DEFAULT_NEW_USER_ROLE
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import PASSWORD_MAX_LENGTH
@@ -315,7 +316,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     self.user_db = tenant_user_db
 
                 if hasattr(user_create, "role"):
-                    user_create.role = UserRole.BASIC
+                    # Default to configured role, unless first user or whitelisted admin
+                    user_create.role = DEFAULT_NEW_USER_ROLE
 
                     user_count = await get_user_count()
                     if (

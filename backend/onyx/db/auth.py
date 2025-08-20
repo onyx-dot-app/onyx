@@ -16,6 +16,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.schemas import UserRole
+from onyx.configs.app_configs import DEFAULT_NEW_USER_ROLE
 from onyx.db.api_key import get_api_key_email_pattern
 from onyx.db.engine.async_sql_engine import get_async_session
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
@@ -93,7 +94,7 @@ class SQLAlchemyUserAdminDB(SQLAlchemyUserDatabase[UP, ID]):
         if user_count == 0 or create_dict["email"] in get_default_admin_user_emails():
             create_dict["role"] = UserRole.ADMIN
         else:
-            create_dict["role"] = UserRole.BASIC
+            create_dict["role"] = DEFAULT_NEW_USER_ROLE
         return await super().create(create_dict)
 
 

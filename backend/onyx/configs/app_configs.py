@@ -6,6 +6,7 @@ from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
+from onyx.auth.schemas import UserRole
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentIndexType
 from onyx.configs.constants import QueryHistoryType
@@ -129,6 +130,15 @@ OAUTH_CLIENT_SECRET = (
 OPENID_CONFIG_URL = os.environ.get("OPENID_CONFIG_URL") or ""
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
+
+# Default role assigned to newly created users (unless first user or explicit admin seeding)
+_DEFAULT_NEW_USER_ROLE_RAW = os.environ.get(
+    "DEFAULT_NEW_USER_ROLE", UserRole.BASIC.value
+)
+try:
+    DEFAULT_NEW_USER_ROLE = UserRole(_DEFAULT_NEW_USER_ROLE_RAW)
+except Exception:
+    DEFAULT_NEW_USER_ROLE = UserRole.BASIC
 
 # Duration (in seconds) for which the FastAPI Users JWT token remains valid in the user's browser.
 # By default, this is set to match the Redis expiry time for consistency.
