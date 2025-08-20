@@ -12,6 +12,8 @@ import { Hoverable } from "@/components/Hoverable";
 import { IconType } from "react-icons";
 import { FiRefreshCw } from "react-icons/fi";
 import LLMPopover from "./input/LLMPopover";
+import { useUser } from "@/components/user/UserProvider";
+import { UserRole } from "@/lib/types";
 
 export default function RegenerateOption({
   selectedAssistant,
@@ -26,6 +28,7 @@ export default function RegenerateOption({
 }) {
   const { llmProviders } = useChatContext();
   const llmManager = useLlmManager(llmProviders);
+  const { user } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const toggleDropdownVisible = (isVisible: boolean) => {
     setIsOpen(isVisible);
@@ -33,35 +36,39 @@ export default function RegenerateOption({
   };
 
   return (
-    <LLMPopover
-      llmManager={llmManager}
-      llmProviders={llmProviders}
-      requiresImageGeneration={false}
-      currentAssistant={selectedAssistant}
-      currentModelName={overriddenModel}
-      trigger={
-        <div onClick={() => toggleDropdownVisible(!isOpen)}>
-          {!overriddenModel ? (
-            <Hoverable size={16} icon={FiRefreshCw as IconType} />
-          ) : (
-            <Hoverable
-              size={16}
-              icon={FiRefreshCw as IconType}
-              hoverText={getDisplayNameForModel(overriddenModel)}
-            />
-          )}
-        </div>
-      }
-      onSelect={(value) => {
-        const { name, provider, modelName } = parseLlmDescriptor(
-          value as string
-        );
-        regenerate({
-          name: name,
-          provider: provider,
-          modelName: modelName,
-        });
-      }}
-    />
+    <>
+      {(user?.role === UserRole.ADMIN || user?.role === UserRole.PRO_USER) && (
+        <LLMPopover
+          llmManager={llmManager}
+          llmProviders={llmProviders}
+          requiresImageGeneration={false}
+          currentAssistant={selectedAssistant}
+          currentModelName={overriddenModel}
+          trigger={
+            <div onClick={() => toggleDropdownVisible(!isOpen)}>
+              {!overriddenModel ? (
+                <Hoverable size={16} icon={FiRefreshCw as IconType} />
+              ) : (
+                <Hoverable
+                  size={16}
+                  icon={FiRefreshCw as IconType}
+                  hoverText={getDisplayNameForModel(overriddenModel)}
+                />
+              )}
+            </div>
+          }
+          onSelect={(value) => {
+            const { name, provider, modelName } = parseLlmDescriptor(
+              value as string
+            );
+            regenerate({
+              name: name,
+              provider: provider,
+              modelName: modelName,
+            });
+          }}
+        />
+      )}
+    </>
   );
 }

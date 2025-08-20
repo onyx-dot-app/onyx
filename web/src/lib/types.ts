@@ -17,6 +17,7 @@ interface UserPreferences {
 
 export enum UserRole {
   LIMITED = "limited",
+  PRO_USER = "pro_user",
   BASIC = "basic",
   ADMIN = "admin",
   CURATOR = "curator",
@@ -26,6 +27,7 @@ export enum UserRole {
 }
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
+  [UserRole.PRO_USER]: "Pro User",
   [UserRole.BASIC]: "Basic",
   [UserRole.ADMIN]: "Admin",
   [UserRole.GLOBAL_CURATOR]: "Global Curator",

@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { SubLabel } from "@/components/Field";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LLMSelector } from "@/components/llm/LLMSelector";
+import { UserRole } from "@/lib/types";
 import {
   Select,
   SelectContent,
@@ -426,36 +427,39 @@ export function UserSettingsModal({
                     }}
                   />
                 </div>
-                <div>
-                  <h3 className="text-lg font-medium">Default Model</h3>
-                  <LLMSelector
-                    userSettings
-                    llmProviders={llmProviders}
-                    currentLlm={
-                      defaultModel
-                        ? structureValue(
-                            parseLlmDescriptor(defaultModel).provider,
-                            "",
-                            parseLlmDescriptor(defaultModel).modelName
-                          )
-                        : null
-                    }
-                    requiresImageGeneration={false}
-                    onSelect={(selected) => {
-                      if (selected === null) {
-                        handleChangedefaultModel(null);
-                      } else {
-                        const { modelName, provider, name } =
-                          parseLlmDescriptor(selected);
-                        if (modelName && name) {
-                          handleChangedefaultModel(
-                            structureValue(provider, "", modelName)
-                          );
-                        }
+                {(user?.role === UserRole.ADMIN ||
+                  user?.role === UserRole.PRO_USER) && (
+                  <div>
+                    <h3 className="text-lg font-medium">Default Model</h3>
+                    <LLMSelector
+                      userSettings
+                      llmProviders={llmProviders}
+                      currentLlm={
+                        defaultModel
+                          ? structureValue(
+                              parseLlmDescriptor(defaultModel).provider,
+                              "",
+                              parseLlmDescriptor(defaultModel).modelName
+                            )
+                          : null
                       }
-                    }}
-                  />
-                </div>
+                      requiresImageGeneration={false}
+                      onSelect={(selected) => {
+                        if (selected === null) {
+                          handleChangedefaultModel(null);
+                        } else {
+                          const { modelName, provider, name } =
+                            parseLlmDescriptor(selected);
+                          if (modelName && name) {
+                            handleChangedefaultModel(
+                              structureValue(provider, "", modelName)
+                            );
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="pt-4 border-t border-border">
                   {!showDeleteConfirmation ? (
                     <div className="space-y-3">

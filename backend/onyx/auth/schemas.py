@@ -14,11 +14,13 @@ class UserRole(str, Enum):
     - Global Curator can perform admin actions
         for all groups they are a member of
     - Limited can access a limited set of basic api endpoints
+    - Pro User can access premium features (e.g. model selection) but has no admin capabilities
     - Slack are users that have used onyx via slack but dont have a web login
     - External permissioned users that have been picked up during the external permissions sync process but don't have a web login
     """
 
     LIMITED = "limited"
+    PRO_USER = "pro_user"
     BASIC = "basic"
     ADMIN = "admin"
     CURATOR = "curator"
