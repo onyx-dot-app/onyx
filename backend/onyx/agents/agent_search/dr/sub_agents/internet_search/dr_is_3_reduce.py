@@ -55,7 +55,6 @@ def is_reducer(
     write_custom_event(
         current_step_nr,
         SearchToolStart(
-            type="internal_search_tool_start",
             is_internet_search=True,
         ),
         writer,
@@ -66,7 +65,6 @@ def is_reducer(
         SearchToolDelta(
             queries=queries,
             documents=retrieved_search_docs,
-            type="internal_search_tool_delta",
         ),
         writer,
     )

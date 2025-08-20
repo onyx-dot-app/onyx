@@ -10,6 +10,8 @@ import { LightBulbIcon } from "@/components/icons/icons";
 
 const THINKING_MIN_DURATION_MS = 1000; // 1 second minimum for "Thinking" state
 
+const THINKING_STATUS = "Thinking";
+
 function constructCurrentReasoningState(packets: ReasoningPacket[]) {
   const hasStart = packets.some(
     (p) => p.obj.type === PacketType.REASONING_START
@@ -94,11 +96,9 @@ export const ReasoningRenderer: MessageRenderer<ReasoningPacket, {}> = ({
     return { icon: null, status: null, content: <></> };
   }
 
-  const status = hasEnd ? "Thought for X seconds" : "Thinking...";
-
   return {
     icon: LightBulbIcon,
-    status,
+    status: THINKING_STATUS,
     content: <>{content}</>,
   };
 };

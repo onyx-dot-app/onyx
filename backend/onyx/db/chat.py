@@ -104,7 +104,7 @@ def _replace_d_citations_with_links(
     Replace [D<integer>] patterns with [<integer>](<link from final document with index <integer>-1>).
     """
 
-    def replace_citation(match):
+    def replace_citation(match: re.Match[str]) -> str:
         # Extract the number from the match (e.g., "D1" -> "1")
         d_number = match.group(1)
         try:
@@ -297,7 +297,6 @@ def create_search_packets(
         Packet(
             ind=step_nr,
             obj=SearchToolStart(
-                type="internal_search_tool_start",
                 is_internet_search=is_internet_search,
             ),
         )
@@ -307,7 +306,6 @@ def create_search_packets(
         Packet(
             ind=step_nr,
             obj=SearchToolDelta(
-                type="internal_search_tool_delta",
                 queries=search_queries,
                 documents=saved_search_docs,
             ),
@@ -317,9 +315,7 @@ def create_search_packets(
     packets.append(
         Packet(
             ind=step_nr,
-            obj=SectionEnd(
-                type="section_end",
-            ),
+            obj=SectionEnd(),
         )
     )
 

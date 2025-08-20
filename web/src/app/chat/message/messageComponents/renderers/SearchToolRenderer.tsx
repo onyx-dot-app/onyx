@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { FiSearch } from "react-icons/fi";
+import { FiSearch, FiGlobe } from "react-icons/fi";
 import {
   PacketType,
   SearchToolPacket,
@@ -30,6 +30,7 @@ const constructCurrentSearchState = (
   results: OnyxDocument[];
   isSearching: boolean;
   isComplete: boolean;
+  isInternetSearch: boolean;
 } => {
   // Check for new specific search tool packets first
   const searchStart = packets.find(
@@ -59,8 +60,9 @@ const constructCurrentSearchState = (
 
   const isSearching = Boolean(searchStart && !searchEnd);
   const isComplete = Boolean(searchStart && searchEnd);
+  const isInternetSearch = searchStart?.is_internet_search || false;
 
-  return { queries, results, isSearching, isComplete };
+  return { queries, results, isSearching, isComplete, isInternetSearch };
 };
 
 export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
@@ -69,7 +71,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   renderType,
   animate,
 }) => {
-  const { queries, results, isSearching, isComplete } =
+  const { queries, results, isSearching, isComplete, isInternetSearch } =
     constructCurrentSearchState(packets);
 
   // Track search timing for minimum display duration
@@ -144,22 +146,24 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   }, []);
 
   const status = useMemo(() => {
+    const searchType = isInternetSearch ? "the internet" : "internal documents";
+
     // If we have documents to show and we're in the searched state, show "Searched"
     if (results.length > 0) {
       // If we're still showing as searching (before transition), show "Searching"
       if (shouldShowAsSearching) {
-        return "Searching internal documents";
+        return `Searching ${searchType}`;
       }
       // Otherwise show "Searched"
-      return "Searched internal documents";
+      return `Searched ${searchType}`;
     }
 
     // Handle states based on timing
     if (shouldShowAsSearched) {
-      return "Searched internal documents";
+      return `Searched ${searchType}`;
     }
     if (isSearching || isComplete || shouldShowAsSearching) {
-      return "Searching internal documents";
+      return `Searching ${searchType}`;
     }
     return null;
   }, [
@@ -168,19 +172,23 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     shouldShowAsSearching,
     shouldShowAsSearched,
     results.length,
+    isInternetSearch,
   ]);
+
+  // Determine the icon based on search type
+  const icon = isInternetSearch ? FiGlobe : FiSearch;
 
   // Don't render anything if search hasn't started
   if (queries.length === 0) {
     return {
-      icon: FiSearch,
+      icon,
       status: null,
       content: <div></div>,
     };
   }
 
   return {
-    icon: FiSearch,
+    icon,
     status,
     content: (
       <div className="flex flex-col">
@@ -192,7 +200,13 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
                 {queries.slice(0, queriesToShow).map((query, index) => (
                   <div key={index} className="text-xs">
                     <SourceChip2
-                      icon={<FiSearch size={10} />}
+                      icon={
+                        isInternetSearch ? (
+                          <FiGlobe size={10} />
+                        ) : (
+                          <FiSearch size={10} />
+                        )
+                      }
                       title={truncateString(query, MAX_TITLE_LENGTH)}
                     />
                   </div>
@@ -219,48 +233,81 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
           {results.length > 0 && (
             <>
               <div className="text-xs font-medium mt-2 mb-1 ml-1">
-                Documents
+                {isInternetSearch ? "Results" : "Documents"}
               </div>
-              <div className="flex flex-wrap gap-2 ml-1">
-                {results.slice(0, resultsToShow).map((result, index) => (
+              <div className="flex flex-col gap-2 ml-1">
+                {/* Always show the first/latest result prominently */}
+                {results[0] && (
                   <div
-                    key={result.document_id}
                     className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                    style={{ animationDelay: `${index * 100}ms` }}
+                    style={{ animationDelay: `0ms` }}
                   >
-                    <SourceChip2
-                      icon={<ResultIcon doc={result} size={10} />}
-                      title={truncateString(
-                        result.semantic_identifier || "",
-                        MAX_TITLE_LENGTH
-                      )}
-                      onClick={() => {
-                        window.open(result.link, "_blank");
-                      }}
-                    />
+                    <div className="text-sm">
+                      <SourceChip2
+                        icon={<ResultIcon doc={results[0]} size={12} />}
+                        title={truncateString(
+                          results[0]?.semantic_identifier || "",
+                          MAX_TITLE_LENGTH + 10
+                        )}
+                        onClick={() => {
+                          if (results[0]?.link) {
+                            window.open(results[0].link, "_blank");
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
-                ))}
-                {/* Show a blurb if there are more results than we are displaying */}
-                {results.length > resultsToShow && (
-                  <div
-                    className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                    style={{
-                      animationDelay: `${
-                        Math.min(resultsToShow, results.length) * 100
-                      }ms`,
-                    }}
-                  >
-                    <SourceChip2
-                      title={`${results.length - resultsToShow} more...`}
-                      onClick={() => {
-                        setResultsToShow((prevResults) =>
-                          Math.min(
-                            prevResults + RESULTS_PER_EXPANSION,
-                            results.length
-                          )
-                        );
-                      }}
-                    />
+                )}
+
+                {/* Show remaining results in smaller size */}
+                {results.length > 1 && (
+                  <div className="flex flex-wrap gap-2">
+                    {results.slice(1, resultsToShow).map((result, index) => (
+                      <div
+                        key={result.document_id}
+                        className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                        style={{ animationDelay: `${(index + 1) * 100}ms` }}
+                      >
+                        <div className="text-xs">
+                          <SourceChip2
+                            icon={<ResultIcon doc={result} size={10} />}
+                            title={truncateString(
+                              result.semantic_identifier || "",
+                              MAX_TITLE_LENGTH
+                            )}
+                            onClick={() => {
+                              window.open(result.link, "_blank");
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Show a blurb if there are more results than we are displaying */}
+                    {results.length > resultsToShow && (
+                      <div
+                        className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                        style={{
+                          animationDelay: `${
+                            Math.min(resultsToShow - 1, results.length - 1) *
+                            100
+                          }ms`,
+                        }}
+                      >
+                        <div className="text-xs">
+                          <SourceChip2
+                            title={`${results.length - resultsToShow} more...`}
+                            onClick={() => {
+                              setResultsToShow((prevResults) =>
+                                Math.min(
+                                  prevResults + RESULTS_PER_EXPANSION,
+                                  results.length
+                                )
+                              );
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

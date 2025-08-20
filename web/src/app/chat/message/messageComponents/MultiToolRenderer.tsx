@@ -54,6 +54,7 @@ function MultiToolRenderer({
   onAllToolsDisplayed?: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isStreamingExpanded, setIsStreamingExpanded] = useState(false);
 
   const toolGroups = useMemo(() => {
     return packetGroups.filter(
@@ -72,6 +73,13 @@ function MultiToolRenderer({
     }
   }, [allToolsDisplayed, onAllToolsDisplayed]);
 
+  // Preserve expanded state when transitioning from streaming to complete
+  useEffect(() => {
+    if (isComplete && isStreamingExpanded) {
+      setIsExpanded(true);
+    }
+  }, [isComplete, isStreamingExpanded]);
+
   // If still processing, show tools progressively with timing
   if (!isComplete) {
     // Get the tools to display based on visibleTools
@@ -83,13 +91,20 @@ function MultiToolRenderer({
       return null;
     }
 
-    // Show only the latest tool visually, but render all for completion tracking
-    const shouldShowOnlyLatest = !isExpanded && toolsToDisplay.length > 1;
+    // Show only the latest tool visually when collapsed, but render all for completion tracking
+    const shouldShowOnlyLatest =
+      !isStreamingExpanded && toolsToDisplay.length > 1;
     const latestToolIndex = toolsToDisplay.length - 1;
 
     return (
       <div className="mb-4 relative border border-border-medium rounded-lg p-4">
         <div className="relative">
+          {/* Show current step header when expanded */}
+          {isStreamingExpanded && (
+            <div className="mb-3 text-sm text-text-700">
+              Step {toolsToDisplay.length} of {toolGroups.length}
+            </div>
+          )}
           <div>
             {toolsToDisplay.map((toolGroup, index) => {
               if (!toolGroup) return null;
@@ -115,9 +130,84 @@ function MultiToolRenderer({
                       }
                     }}
                     animate
-                    useShortRenderer={true}
+                    useShortRenderer={!isStreamingExpanded}
                   >
                     {({ icon, content, status }) => {
+                      // When expanded, show full renderer style similar to complete state
+                      if (isStreamingExpanded) {
+                        const finalIcon = icon ? icon({ size: 14 }) : null;
+
+                        return (
+                          <div className="relative">
+                            {/* Connector line */}
+                            {!isLastItem && (
+                              <div
+                                className="absolute w-px bg-background-300 z-0"
+                                style={{
+                                  left: "10px",
+                                  top: "20px",
+                                  bottom: "0",
+                                }}
+                              />
+                            )}
+
+                            {/* Main row with icon and content */}
+                            <div
+                              className={`flex items-start gap-2 ${STANDARD_TEXT_COLOR} relative z-10`}
+                            >
+                              {/* Icon column */}
+                              <div className="flex flex-col items-center w-5">
+                                <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
+                                  {finalIcon}
+                                </div>
+                              </div>
+
+                              {/* Content with padding */}
+                              <div
+                                className={`flex-1 ${
+                                  !isLastItem ? "pb-3" : ""
+                                }`}
+                              >
+                                <div className="flex mb-1">
+                                  <div
+                                    className={`text-sm flex items-center gap-1 ${
+                                      toolsToDisplay.length > 1 && index === 0
+                                        ? "cursor-pointer hover:text-text-900 transition-colors"
+                                        : ""
+                                    }`}
+                                    onClick={
+                                      toolsToDisplay.length > 1 && index === 0
+                                        ? () =>
+                                            setIsStreamingExpanded(
+                                              !isStreamingExpanded
+                                            )
+                                        : undefined
+                                    }
+                                  >
+                                    {status}
+                                    {toolsToDisplay.length > 1 &&
+                                      index === 0 && (
+                                        <div className="ml-1 transition-transform duration-300 ease-in-out">
+                                          {isStreamingExpanded ? (
+                                            <FiChevronDown size={14} />
+                                          ) : (
+                                            <FiChevronRight size={14} />
+                                          )}
+                                        </div>
+                                      )}
+                                  </div>
+                                </div>
+
+                                <div className="text-xs text-text-600">
+                                  {content}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Short renderer style (original streaming view)
                       return (
                         <div className={`relative ${STANDARD_TEXT_COLOR}`}>
                           {/* Connector line for non-last items */}
@@ -132,9 +222,30 @@ function MultiToolRenderer({
                             />
                           )}
 
-                          <div className="text-sm flex items-center gap-1 loading-text">
+                          <div
+                            className={`text-sm flex items-center gap-1 loading-text ${
+                              toolsToDisplay.length > 1 && isLastItem
+                                ? "cursor-pointer hover:text-text-900 transition-colors"
+                                : ""
+                            }`}
+                            onClick={
+                              toolsToDisplay.length > 1 && isLastItem
+                                ? () =>
+                                    setIsStreamingExpanded(!isStreamingExpanded)
+                                : undefined
+                            }
+                          >
                             {icon ? icon({ size: 14 }) : null}
                             {status}
+                            {toolsToDisplay.length > 1 && isLastItem && (
+                              <div className="ml-1 transition-transform duration-300 ease-in-out">
+                                {isStreamingExpanded ? (
+                                  <FiChevronDown size={14} />
+                                ) : (
+                                  <FiChevronRight size={14} />
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div
