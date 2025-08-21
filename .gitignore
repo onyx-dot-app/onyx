@@ -21,8 +21,19 @@ backend/tests/regression/search_quality/*.json
 # secret files
 .env
 jira_test_env
+settings.json
 
 # others
 /deployment/data/nginx/app.conf
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
+
+# Local .terraform directories
+**/.terraform/*
+
+# Local .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Local .terraform.lock.hcl file
+.terraform.lock.hcl

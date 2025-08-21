@@ -23,6 +23,9 @@ DISABLE_LLM_DOC_RELEVANCE=False
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically)
 OAUTH_CLIENT_ID=<REPLACE THIS>
 OAUTH_CLIENT_SECRET=<REPLACE THIS>
+OPENID_CONFIG_URL=<REPLACE THIS>
+SAML_CONF_DIR=/<ABSOLUTE PATH TO ONYX>/onyx/backend/ee/onyx/configs/saml_config
+
 # Generally not useful for dev, we don't generally want to set up an SMTP server for dev
 REQUIRE_EMAIL_VERIFICATION=False
 

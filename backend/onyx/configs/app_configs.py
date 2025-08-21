@@ -108,7 +108,11 @@ _VALID_EMAIL_DOMAINS_STR = (
     os.environ.get("VALID_EMAIL_DOMAINS", "") or _VALID_EMAIL_DOMAIN
 )
 VALID_EMAIL_DOMAINS = (
-    [domain.strip() for domain in _VALID_EMAIL_DOMAINS_STR.split(",")]
+    [
+        domain.strip().lower()
+        for domain in _VALID_EMAIL_DOMAINS_STR.split(",")
+        if domain.strip()
+    ]
     if _VALID_EMAIL_DOMAINS_STR
     else []
 )

@@ -9,6 +9,9 @@ interface RichTextSubtextProps {
  * Component that renders text with clickable links.
  * Detects URLs in the text and converts them to clickable links.
  * Also supports markdown-style links like [text](url).
+ * NOTE: we should be careful not to use this component in a way that displays text from external sources
+ * because it could be used to create links to malicious sites. Right now it's just used to make links
+ * to our docs in connector setup pages
  */
 export function RichTextSubtext({
   text,
