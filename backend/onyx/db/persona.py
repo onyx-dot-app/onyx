@@ -253,6 +253,8 @@ def create_update_persona(
             is_default_persona=create_persona_request.is_default_persona,
             user_file_ids=create_persona_request.user_file_ids,
             user_folder_ids=create_persona_request.user_folder_ids,
+            pipeline_id=create_persona_request.pipeline_id,
+            template_file=create_persona_request.template_file,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -447,6 +449,8 @@ def upsert_persona(
     user_folder_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
+    pipeline_id: str | None = None,
+    template_file: bytes | None = None,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -590,6 +594,12 @@ def upsert_persona(
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
 
+        if pipeline_id is not None:
+            existing_persona.pipeline_id = pipeline_id
+
+        if template_file is not None:
+            existing_persona.template_file = template_file
+
         persona = existing_persona
 
     else:
@@ -630,6 +640,8 @@ def upsert_persona(
             user_folders=user_folders or [],
             user_files=user_files or [],
             labels=labels or [],
+            pipeline_id=pipeline_id,
+            template_file=template_file,
         )
         db_session.add(new_persona)
         persona = new_persona
