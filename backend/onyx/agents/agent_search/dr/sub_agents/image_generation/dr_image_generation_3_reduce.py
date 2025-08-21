@@ -40,9 +40,7 @@ def is_reducer(
     # Write the results to the stream
     write_custom_event(
         current_step_nr,
-        ImageGenerationToolStart(
-            type="image_generation_tool_start",
-        ),
+        ImageGenerationToolStart(),
         writer,
     )
 
@@ -50,7 +48,6 @@ def is_reducer(
         current_step_nr,
         ImageGenerationToolDelta(
             images={},
-            type="image_generation_tool_delta",
         ),
         writer,
     )

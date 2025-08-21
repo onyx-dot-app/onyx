@@ -25,6 +25,8 @@ from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
 from onyx.server.query_and_chat.streaming_models import CustomToolDelta
 from onyx.server.query_and_chat.streaming_models import CustomToolStart
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
+from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
@@ -367,6 +369,8 @@ AnswerPacket = (
     | ReasoningDelta
     | SearchToolStart
     | SearchToolDelta
+    | ImageGenerationToolStart
+    | ImageGenerationToolDelta
     | OnyxAnswerPiece
     | CitationStart
     | CitationDelta

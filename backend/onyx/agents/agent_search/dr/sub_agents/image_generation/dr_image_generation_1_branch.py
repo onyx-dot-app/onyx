@@ -17,13 +17,13 @@ def image_generation_branch(
     state: SubAgentInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> LoggerUpdate:
     """
-    LangGraph node to perform a standard search as part of the DR process.
+    LangGraph node to perform a image generation as part of the DR process.
     """
 
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
 
-    logger.debug(f"Search start for Basic Search {iteration_nr} at {datetime.now()}")
+    logger.debug(f"Image generation start {iteration_nr} at {datetime.now()}")
 
     return LoggerUpdate(
         log_messages=[
