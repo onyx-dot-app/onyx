@@ -105,7 +105,7 @@ export const updatePersonaLabel = (
 function buildPersonaUpsertRequest(
   creationRequest: PersonaUpsertParameters,
   uploaded_image_id: string | null,
-  template_file_id: string | null
+  template_file_id: any
 ): PersonaUpsertRequest {
   const {
     name,
@@ -187,6 +187,14 @@ export async function uploadFile(file: File): Promise<string | null> {
   return responseJson.file_id;
 }
 
+const toBase64 = (file: File) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+  });
+
 export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
@@ -199,7 +207,7 @@ export async function createPersona(
     }
   }
   if (personaUpsertParams.template_file) {
-    template_file = await uploadFile(personaUpsertParams.template_file);
+    template_file = await toBase64(personaUpsertParams.template_file);
     if (!template_file) {
       return null;
     }
@@ -230,7 +238,7 @@ export async function updatePersona(
     }
   }
   if (personaUpsertParams.template_file) {
-    template_file = await uploadFile(personaUpsertParams.template_file);
+    template_file = await toBase64(personaUpsertParams.template_file);
     if (!template_file) {
       return null;
     }
