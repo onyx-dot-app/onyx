@@ -33,7 +33,7 @@ interface PersonaUpsertRequest {
   user_folder_ids: number[] | null;
   pipeline_id?: string;
   use_default?: boolean;
-  template_file?: File | null;
+  template_file?: string | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -104,7 +104,8 @@ export const updatePersonaLabel = (
 
 function buildPersonaUpsertRequest(
   creationRequest: PersonaUpsertParameters,
-  uploaded_image_id: string | null
+  uploaded_image_id: string | null,
+  template_file_id: string | null
 ): PersonaUpsertRequest {
   const {
     name,
@@ -165,7 +166,7 @@ function buildPersonaUpsertRequest(
     user_folder_ids: user_folder_ids ?? null,
     pipeline_id,
     use_default,
-    template_file,
+    template_file: template_file_id,
   };
 }
 
@@ -190,9 +191,16 @@ export async function createPersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
   let fileId = null;
+  let template_file = null;
   if (personaUpsertParams.uploaded_image) {
     fileId = await uploadFile(personaUpsertParams.uploaded_image);
     if (!fileId) {
+      return null;
+    }
+  }
+  if (personaUpsertParams.template_file) {
+    template_file = await uploadFile(personaUpsertParams.template_file);
+    if (!template_file) {
       return null;
     }
   }
@@ -202,7 +210,7 @@ export async function createPersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
+      buildPersonaUpsertRequest(personaUpsertParams, fileId, template_file)
     ),
   });
 
@@ -214,9 +222,16 @@ export async function updatePersona(
   personaUpsertParams: PersonaUpsertParameters
 ): Promise<Response | null> {
   let fileId = null;
+  let template_file = null;
   if (personaUpsertParams.uploaded_image) {
     fileId = await uploadFile(personaUpsertParams.uploaded_image);
     if (!fileId) {
+      return null;
+    }
+  }
+  if (personaUpsertParams.template_file) {
+    template_file = await uploadFile(personaUpsertParams.template_file);
+    if (!template_file) {
       return null;
     }
   }
@@ -227,7 +242,7 @@ export async function updatePersona(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(
-      buildPersonaUpsertRequest(personaUpsertParams, fileId)
+      buildPersonaUpsertRequest(personaUpsertParams, fileId, template_file)
     ),
   });
 
