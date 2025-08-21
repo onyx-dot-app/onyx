@@ -6,9 +6,7 @@ import {
 } from "../../../services/streamingModels";
 import { MessageRenderer } from "../interfaces";
 
-import { LightBulbIcon } from "@/components/icons/icons";
-
-const THINKING_MIN_DURATION_MS = 1000; // 1 second minimum for "Thinking" state
+const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
 
 const THINKING_STATUS = "Thinking";
 
@@ -97,9 +95,10 @@ export const ReasoningRenderer: MessageRenderer<ReasoningPacket, {}> = ({
   }
 
   return {
-    icon: LightBulbIcon,
+    icon: null,
     status: THINKING_STATUS,
     content: <>{content}</>,
+    expandedText: content,
   };
 };
 

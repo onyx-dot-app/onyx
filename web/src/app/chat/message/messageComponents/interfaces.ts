@@ -29,6 +29,11 @@ export interface RendererResult {
   icon: IconType | OnyxIconType | null;
   status: string | null;
   content: JSX.Element;
+
+  // can be used to override the look on the "expanded" view
+  // used for things that should just show text w/o an icon or header
+  // e.g. ReasoningRenderer
+  expandedText?: string;
 }
 
 export type MessageRenderer<

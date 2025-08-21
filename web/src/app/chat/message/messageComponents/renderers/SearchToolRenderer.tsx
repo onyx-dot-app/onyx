@@ -78,7 +78,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const [searchStartTime, setSearchStartTime] = useState<number | null>(null);
   const [shouldShowAsSearching, setShouldShowAsSearching] = useState(false);
 
-  const [shouldShowAsSearched, setShouldShowAsSearched] = useState(false);
+  const [shouldShowAsSearched, setShouldShowAsSearched] = useState(isComplete);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const completionHandledRef = useRef(false);
@@ -191,7 +191,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     icon,
     status,
     content: (
-      <div className="flex flex-col">
+      <div className="flex flex-col mt-1.5">
         <div className="flex flex-col">
           {queries.length > 0 && (
             <>
@@ -235,79 +235,52 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               <div className="text-xs font-medium mt-2 mb-1 ml-1">
                 {isInternetSearch ? "Results" : "Documents"}
               </div>
-              <div className="flex flex-col gap-2 ml-1">
-                {/* Always show the first/latest result prominently */}
-                {results[0] && (
+              <div className="flex flex-wrap gap-2 ml-1">
+                {results.slice(0, resultsToShow).map((result, index) => (
                   <div
+                    key={result.document_id}
                     className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                    style={{ animationDelay: `0ms` }}
+                    style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <div className="text-sm">
+                    <div className="text-xs">
                       <SourceChip2
-                        icon={<ResultIcon doc={results[0]} size={12} />}
+                        icon={<ResultIcon doc={result} size={10} />}
                         title={truncateString(
-                          results[0]?.semantic_identifier || "",
-                          MAX_TITLE_LENGTH + 10
+                          result.semantic_identifier || "",
+                          MAX_TITLE_LENGTH
                         )}
                         onClick={() => {
-                          if (results[0]?.link) {
-                            window.open(results[0].link, "_blank");
+                          if (result.link) {
+                            window.open(result.link, "_blank");
                           }
                         }}
                       />
                     </div>
                   </div>
-                )}
-
-                {/* Show remaining results in smaller size */}
-                {results.length > 1 && (
-                  <div className="flex flex-wrap gap-2">
-                    {results.slice(1, resultsToShow).map((result, index) => (
-                      <div
-                        key={result.document_id}
-                        className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                        style={{ animationDelay: `${(index + 1) * 100}ms` }}
-                      >
-                        <div className="text-xs">
-                          <SourceChip2
-                            icon={<ResultIcon doc={result} size={10} />}
-                            title={truncateString(
-                              result.semantic_identifier || "",
-                              MAX_TITLE_LENGTH
-                            )}
-                            onClick={() => {
-                              window.open(result.link, "_blank");
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                    {/* Show a blurb if there are more results than we are displaying */}
-                    {results.length > resultsToShow && (
-                      <div
-                        className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                        style={{
-                          animationDelay: `${
-                            Math.min(resultsToShow - 1, results.length - 1) *
-                            100
-                          }ms`,
+                ))}
+                {/* Show a blurb if there are more results than we are displaying */}
+                {results.length > resultsToShow && (
+                  <div
+                    className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                    style={{
+                      animationDelay: `${
+                        Math.min(resultsToShow, results.length) * 100
+                      }ms`,
+                    }}
+                  >
+                    <div className="text-xs">
+                      <SourceChip2
+                        title={`${results.length - resultsToShow} more...`}
+                        onClick={() => {
+                          setResultsToShow((prevResults) =>
+                            Math.min(
+                              prevResults + RESULTS_PER_EXPANSION,
+                              results.length
+                            )
+                          );
                         }}
-                      >
-                        <div className="text-xs">
-                          <SourceChip2
-                            title={`${results.length - resultsToShow} more...`}
-                            onClick={() => {
-                              setResultsToShow((prevResults) =>
-                                Math.min(
-                                  prevResults + RESULTS_PER_EXPANSION,
-                                  results.length
-                                )
-                              );
-                            }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

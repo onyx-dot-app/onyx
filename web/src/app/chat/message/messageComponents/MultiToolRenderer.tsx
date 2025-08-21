@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import {
-  FiCheck,
   FiCheckCircle,
   FiChevronDown,
   FiChevronRight,
+  FiCircle,
 } from "react-icons/fi";
 import { Packet } from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
@@ -11,6 +11,85 @@ import { renderMessageComponent } from "./renderMessageComponent";
 import { isToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
+
+// Shared component for expanded tool rendering
+function ExpandedToolItem({
+  icon,
+  content,
+  status,
+  isLastItem,
+  showClickableToggle = false,
+  onToggleClick,
+  defaultIconColor = "text-text-300",
+  expandedText,
+}: {
+  icon: ((props: { size: number }) => JSX.Element) | null;
+  content: JSX.Element | string;
+  status: string | null;
+  isLastItem: boolean;
+  showClickableToggle?: boolean;
+  onToggleClick?: () => void;
+  defaultIconColor?: string;
+  expandedText?: string;
+}) {
+  const finalIcon = icon ? (
+    icon({ size: 14 })
+  ) : (
+    <FiCircle className={`w-2 h-2 fill-current ${defaultIconColor}`} />
+  );
+
+  return (
+    <div className="relative">
+      {/* Connector line */}
+      {!isLastItem && (
+        <div
+          className="absolute w-px bg-background-300 z-0"
+          style={{
+            left: "10px",
+            top: "20px",
+            bottom: "0",
+          }}
+        />
+      )}
+
+      {/* Main row with icon and content */}
+      <div
+        className={`flex items-start gap-2 ${STANDARD_TEXT_COLOR} relative z-10`}
+      >
+        {/* Icon column */}
+        <div className="flex flex-col items-center w-5">
+          <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
+            {finalIcon}
+          </div>
+        </div>
+
+        {/* Content with padding */}
+        <div className={`flex-1 ${!isLastItem ? "pb-4" : ""}`}>
+          {status && !expandedText && (
+            <div className="flex">
+              <div
+                className={`text-sm flex items-center gap-1 ${
+                  showClickableToggle
+                    ? "cursor-pointer hover:text-text-900 transition-colors"
+                    : ""
+                }`}
+                onClick={showClickableToggle ? onToggleClick : undefined}
+              >
+                {status}
+              </div>
+            </div>
+          )}
+
+          <div
+            className={`${expandedText ? "text-sm" : "text-xs"} text-text-600`}
+          >
+            {expandedText || content}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // React component wrapper to avoid hook count issues in map loops
 export function RendererComponent({
@@ -99,12 +178,6 @@ function MultiToolRenderer({
     return (
       <div className="mb-4 relative border border-border-medium rounded-lg p-4">
         <div className="relative">
-          {/* Show current step header when expanded */}
-          {isStreamingExpanded && (
-            <div className="mb-3 text-sm text-text-700">
-              Step {toolsToDisplay.length} of {toolGroups.length}
-            </div>
-          )}
           <div>
             {toolsToDisplay.map((toolGroup, index) => {
               if (!toolGroup) return null;
@@ -132,78 +205,23 @@ function MultiToolRenderer({
                     animate
                     useShortRenderer={!isStreamingExpanded}
                   >
-                    {({ icon, content, status }) => {
+                    {({ icon, content, status, expandedText }) => {
                       // When expanded, show full renderer style similar to complete state
                       if (isStreamingExpanded) {
-                        const finalIcon = icon ? icon({ size: 14 }) : null;
-
                         return (
-                          <div className="relative">
-                            {/* Connector line */}
-                            {!isLastItem && (
-                              <div
-                                className="absolute w-px bg-background-300 z-0"
-                                style={{
-                                  left: "10px",
-                                  top: "20px",
-                                  bottom: "0",
-                                }}
-                              />
-                            )}
-
-                            {/* Main row with icon and content */}
-                            <div
-                              className={`flex items-start gap-2 ${STANDARD_TEXT_COLOR} relative z-10`}
-                            >
-                              {/* Icon column */}
-                              <div className="flex flex-col items-center w-5">
-                                <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
-                                  {finalIcon}
-                                </div>
-                              </div>
-
-                              {/* Content with padding */}
-                              <div
-                                className={`flex-1 ${
-                                  !isLastItem ? "pb-3" : ""
-                                }`}
-                              >
-                                <div className="flex mb-1">
-                                  <div
-                                    className={`text-sm flex items-center gap-1 ${
-                                      toolsToDisplay.length > 1 && index === 0
-                                        ? "cursor-pointer hover:text-text-900 transition-colors"
-                                        : ""
-                                    }`}
-                                    onClick={
-                                      toolsToDisplay.length > 1 && index === 0
-                                        ? () =>
-                                            setIsStreamingExpanded(
-                                              !isStreamingExpanded
-                                            )
-                                        : undefined
-                                    }
-                                  >
-                                    {status}
-                                    {toolsToDisplay.length > 1 &&
-                                      index === 0 && (
-                                        <div className="ml-1 transition-transform duration-300 ease-in-out">
-                                          {isStreamingExpanded ? (
-                                            <FiChevronDown size={14} />
-                                          ) : (
-                                            <FiChevronRight size={14} />
-                                          )}
-                                        </div>
-                                      )}
-                                  </div>
-                                </div>
-
-                                <div className="text-xs text-text-600">
-                                  {content}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                          <ExpandedToolItem
+                            icon={icon}
+                            content={content}
+                            status={status}
+                            isLastItem={isLastItem}
+                            showClickableToggle={
+                              toolsToDisplay.length > 1 && index === 0
+                            }
+                            onToggleClick={() =>
+                              setIsStreamingExpanded(!isStreamingExpanded)
+                            }
+                            expandedText={expandedText}
+                          />
                         );
                       }
 
@@ -223,7 +241,7 @@ function MultiToolRenderer({
                           )}
 
                           <div
-                            className={`text-sm flex items-center gap-1 loading-text ${
+                            className={`text-base flex items-center gap-1 loading-text mb-2 ${
                               toolsToDisplay.length > 1 && isLastItem
                                 ? "cursor-pointer hover:text-text-900 transition-colors"
                                 : ""
@@ -249,7 +267,7 @@ function MultiToolRenderer({
                           </div>
 
                           <div
-                            className={`relative z-10 mt-1 text-xs text-text-600 ${
+                            className={`relative z-10 mt-1 text-sm text-text-600 ${
                               !isLastItem ? "mb-3" : ""
                             }`}
                           >
@@ -303,7 +321,8 @@ function MultiToolRenderer({
         >
           <div>
             {toolGroups.map((toolGroup, index) => {
-              const isLastItem = index === toolGroups.length - 1;
+              // Don't mark as last item if we're going to show the Done node
+              const isLastItem = false; // Always draw connector line since Done node follows
 
               return (
                 <RendererComponent
@@ -320,52 +339,16 @@ function MultiToolRenderer({
                   animate
                   useShortRenderer={false}
                 >
-                  {({ icon, content, status }) => {
-                    const finalIcon = icon ? icon({ size: 14 }) : null;
-
-                    return (
-                      <div className="relative">
-                        {/* Connector line drawn BEFORE content so it's behind everything */}
-                        {/* Now all tools get a connector line since we have a Done node at the end */}
-                        <div
-                          className="absolute w-px bg-background-300 z-0"
-                          style={{
-                            left: "10px", // Half of icon width (20px / 2)
-                            top: "20px", // Below icon (h-5 = 20px)
-                            bottom: "0", // Stop at the bottom of this container, not beyond
-                          }}
-                        />
-
-                        {/* Main row with icon and content */}
-                        <div
-                          className={`flex items-start gap-2 ${STANDARD_TEXT_COLOR} relative z-10`}
-                        >
-                          {/* Icon column */}
-                          <div className="flex flex-col items-center w-5">
-                            {/* Icon with background to cover the line */}
-                            <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
-                              {finalIcon}
-                            </div>
-                          </div>
-
-                          {/* Content with padding */}
-                          <div
-                            className={`flex-1 ${!isLastItem ? "pb-3" : ""}`}
-                          >
-                            {
-                              <div className="flex mb-1">
-                                <div className="text-sm">{status}</div>
-                              </div>
-                            }
-
-                            <div className="text-xs text-text-600">
-                              {content}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }}
+                  {({ icon, content, status, expandedText }) => (
+                    <ExpandedToolItem
+                      icon={icon}
+                      content={content}
+                      status={status}
+                      isLastItem={isLastItem}
+                      defaultIconColor="text-text-500"
+                      expandedText={expandedText}
+                    />
+                  )}
                 </RendererComponent>
               );
             })}
@@ -378,14 +361,14 @@ function MultiToolRenderer({
                   className="absolute w-px bg-background-300 z-0"
                   style={{
                     left: "10px",
-                    top: "-10px",
-                    height: "20px",
+                    top: "-12px",
+                    height: "32px",
                   }}
                 />
 
                 {/* Main row with icon and content */}
                 <div
-                  className={`flex items-start gap-2 ${STANDARD_TEXT_COLOR} relative z-10 pb-3 mt-2`}
+                  className={`flex items-start gap-2 ${STANDARD_TEXT_COLOR} relative z-10 pb-3`}
                 >
                   {/* Icon column */}
                   <div className="flex flex-col items-center w-5">
