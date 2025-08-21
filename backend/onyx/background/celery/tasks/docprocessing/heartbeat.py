@@ -5,6 +5,9 @@ from sqlalchemy import update
 from onyx.configs.constants import INDEXING_WORKER_HEARTBEAT_INTERVAL
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import IndexAttempt
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.Event]:
@@ -21,9 +24,15 @@ def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.
                         .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
                     )
                     db_session.commit()
+                    logger.debug(
+                        "Updated heartbeat counter for index attempt %s",
+                        index_attempt_id,
+                    )
             except Exception:
-                # Silently continue if heartbeat fails
-                pass
+                logger.exception(
+                    "Failed to update heartbeat counter for index attempt %s",
+                    index_attempt_id,
+                )
 
     thread = threading.Thread(target=heartbeat_loop, daemon=True)
     thread.start()
