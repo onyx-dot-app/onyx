@@ -147,17 +147,21 @@ class LangflowTool(Tool):
         prompt_builder.update_system_prompt(
             default_build_system_message(self.prompt_config, self.llm_config)
         )
-        message, _ = prompt_builder.user_message_and_token_cnt
-        if isinstance(message.content, str):
-            message = message.content
-        else:
-            message = ""
+
+        tool_summary = tool_responses[0].response if tool_responses else None
+        tool_result = cast(LangflowResponseSummary, tool_summary).tool_result if tool_summary else {}
+        query = prompt_builder.get_user_message_content()
+
+        logger.info(tool_result)
+        logger.info(query)
+        logger.info(tool_responses)
+
         prompt_builder.update_user_prompt(
             HumanMessage(
                 content=build_user_message_for_langflow_tool(
-                    query=message,
+                    query=query,
                     tool_name=self.name,
-                    *tool_responses
+                    tool_result=tool_result,
                 )
             )
         )
@@ -168,13 +172,12 @@ class LangflowTool(Tool):
 def build_user_message_for_langflow_tool(
         query: str,
         tool_name: str,
-        *args: ToolResponse,
+        tool_result: dict,
 ) -> str:
-    tool_run_summary = cast(LangflowResponseSummary, args[0].response).tool_result
     return f"""
 Here's the result from the {tool_name} tool:
 
-{tool_run_summary}
+{tool_result}
 
 Now respond to the following:
 
