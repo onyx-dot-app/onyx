@@ -32,11 +32,11 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
-        {{- toYaml (default .Values.celery_shared.podSecurityContext .Values.celery_worker_user_files_indexing.podSecurityContext) | nindent 8 }}
+        {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
       containers:
         - name: celery-worker-user-files-indexing
           securityContext:
-            {{- toYaml (default .Values.celery_shared.securityContext .Values.celery_worker_user_files_indexing.securityContext) | nindent 12 }}
+            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
