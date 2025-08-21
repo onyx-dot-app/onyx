@@ -38,6 +38,8 @@ export interface MessageStart extends BaseObj {
   id: string;
   type: "message_start";
   content: string;
+
+  final_documents: OnyxDocument[] | null;
 }
 
 export interface MessageDelta extends BaseObj {

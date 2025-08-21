@@ -98,6 +98,7 @@ import {
   ImageGenerationToolDelta,
   CitationDelta,
   StreamingCitation,
+  MessageStart,
 } from "../services/streamingModels";
 
 const TEMP_USER_MESSAGE_ID = -1;
@@ -661,18 +662,8 @@ export function useChatController({
 
             // Check if the packet contains document information
             const packetObj = (packet as Packet).obj;
-            if (
-              packetObj.type === "internal_search_tool_delta" ||
-              packetObj.type === "image_generation_tool_delta"
-            ) {
-              const toolDelta = packetObj as
-                | SearchToolDelta
-                | ImageGenerationToolDelta;
-              if ("documents" in toolDelta && toolDelta.documents) {
-                documents = toolDelta.documents;
-                setSelectedMessageForDocDisplay(newAssistantMessageId);
-              }
-            } else if (packetObj.type === "citation_delta") {
+
+            if (packetObj.type === "citation_delta") {
               const citationDelta = packetObj as CitationDelta;
               if (citationDelta.citations) {
                 citations = Object.fromEntries(
@@ -681,6 +672,12 @@ export function useChatController({
                     c.citation_num,
                   ])
                 );
+              }
+            } else if (packetObj.type === "message_start") {
+              const messageStart = packetObj as MessageStart;
+              if (messageStart.final_documents) {
+                documents = messageStart.final_documents;
+                setSelectedMessageForDocDisplay(newAssistantMessageId);
               }
             }
           } else {
