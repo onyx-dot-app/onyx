@@ -49,9 +49,10 @@ module "postgres" {
   subnet_ids    = local.private_subnets
   ingress_cidrs = [local.vpc_cidr_block]
 
-  username = var.postgres_username
-  password = var.postgres_password
-  tags     = local.merged_tags
+  username         = var.postgres_username
+  password         = var.postgres_password
+  tags             = local.merged_tags
+  iam_auth_enabled = var.enable_rds_iam_auth
 }
 
 module "s3" {
@@ -69,6 +70,11 @@ module "eks" {
   subnet_ids      = concat(local.private_subnets, local.public_subnets)
   tags            = local.merged_tags
   s3_bucket_names = [local.bucket_name]
+
+  # Wire RDS IAM connection for the same IRSA service account used by apps
+  enable_rds_iam_for_service_account = var.enable_rds_iam_auth
+  rds_dbi_resource_id                = module.postgres.dbi_resource_id
+  rds_db_username                    = var.postgres_username
 
   # These variables must be defined in variables.tf or passed in via parent module
   public_cluster_enabled  = var.public_cluster_enabled

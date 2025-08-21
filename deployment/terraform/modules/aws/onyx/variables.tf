@@ -87,6 +87,12 @@ variable "redis_auth_token" {
   sensitive   = true
 }
 
+variable "enable_rds_iam_auth" {
+  type        = bool
+  description = "Enable AWS IAM authentication for the RDS Postgres instance"
+  default     = false
+}
+
 # WAF Configuration Variables
 variable "waf_rate_limit_requests_per_5_minutes" {
   type        = number

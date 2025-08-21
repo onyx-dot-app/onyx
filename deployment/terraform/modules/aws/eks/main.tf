@@ -147,3 +147,35 @@ resource "kubernetes_service_account" "s3_access" {
     }
   }
 }
+
+# Optionally grant the IRSA role permissions to connect to RDS using IAM auth
+resource "aws_iam_policy" "rds_iam_connect_policy" {
+  count       = var.enable_rds_iam_for_service_account && var.rds_dbi_resource_id != null && var.rds_db_username != null ? 1 : 0
+  name        = "${module.eks.cluster_name}-rds-iam-connect-policy"
+  description = "Allow EKS service account to connect to RDS using IAM auth"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "rds-db:connect"
+        ],
+        Resource = [
+          "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${var.rds_dbi_resource_id}/${var.rds_db_username}"
+        ]
+      }
+    ]
+  })
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+resource "aws_iam_role_policy_attachment" "attach_rds_iam_connect" {
+  count      = var.enable_rds_iam_for_service_account && var.rds_dbi_resource_id != null && var.rds_db_username != null ? 1 : 0
+  role       = module.irsa-s3-access[0].iam_role_name
+  policy_arn = aws_iam_policy.rds_iam_connect_policy[0].arn
+  depends_on = [module.irsa-s3-access]
+}

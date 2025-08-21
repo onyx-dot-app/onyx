@@ -125,3 +125,21 @@ variable "irsa_service_account_name" {
   description = "Name of the IRSA-enabled Kubernetes service account for S3 access"
   default     = "onyx-s3-access"
 }
+
+variable "enable_rds_iam_for_service_account" {
+  type        = bool
+  description = "Whether to attach RDS IAM access to the IRSA service account (grants rds-db:connect)"
+  default     = false
+}
+
+variable "rds_dbi_resource_id" {
+  type        = string
+  description = "DB instance resource ID used to build rds-db ARN for IAM authentication"
+  default     = null
+}
+
+variable "rds_db_username" {
+  type        = string
+  description = "Database username to allow via rds-db:connect"
+  default     = null
+}
