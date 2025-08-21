@@ -31,9 +31,9 @@ settings.json
 # Local .terraform directories
 **/.terraform/*
 
-# .tfstate files
+# Local .tfstate files
 *.tfstate
 *.tfstate.*
 
-# .terraform.lock.hcl file
+# Local .terraform.lock.hcl file
 .terraform.lock.hcl
