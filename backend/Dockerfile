@@ -30,14 +30,6 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     apt-get clean
 
-# Create non-root user early
-RUN set -eux; \
-    groupadd -g 1001 onyx; \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx; \
-    mkdir -p /app /var/log/onyx; \
-    chown -R onyx:onyx /app /var/log/onyx; \
-    chmod 755 /var/log/onyx
-
 # ----------------------------
 # Builder stage: deps + compilation
 # ----------------------------
@@ -99,16 +91,26 @@ RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
 WORKDIR /app
 
+# Create non-root user for security best practices
+RUN groupadd -g 1001 onyx && \
+    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
+    chown -R onyx:onyx /app && \
+    mkdir -p /var/log/onyx && \
+    chmod 755 /var/log/onyx && \
+    chown onyx:onyx /var/log/onyx && \
+    chown -R onyx:onyx /home/onyx/
+
 # Copy the virtual environment from builder
 COPY --from=builder /venv /venv
 
-# Copy Playwright browsers and dependencies
-COPY --from=builder /root/.cache /root/.cache
+# Copy Playwright browsers and dependencies to user directory
+COPY --from=builder --chown=onyx:onyx /root/.cache /home/onyx/.cache
 COPY --from=builder /usr/bin/supervisord /usr/bin/supervisord
 
-# Set PATH to use venv
+# Set PATH to use venv and Playwright browsers path
 ENV PATH="/venv/bin:$PATH" \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PLAYWRIGHT_BROWSERS_PATH=/home/onyx/.cache/ms-playwright
 
 # Copy application files with proper ownership
 COPY --chown=onyx:onyx ee /app/ee
@@ -127,14 +129,6 @@ COPY --chown=onyx:onyx scripts/force_delete_connector_by_id.py /app/scripts/forc
 # Copy supervisor configs
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY supervisord.conf /usr/etc/supervisord.conf
-
-# Create non-root user for security best practices
-RUN groupadd -g 1001 onyx && \
-    useradd -u 1001 -g onyx -m -s /bin/bash onyx && \
-    chown -R onyx:onyx /app && \
-    mkdir -p /var/log/onyx && \
-    chmod 755 /var/log/onyx && \
-    chown onyx:onyx /var/log/onyx
 
 # Default command which does nothing
 # This container is used by api server and background which specify their own CMD
