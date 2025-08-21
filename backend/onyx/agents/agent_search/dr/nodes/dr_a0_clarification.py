@@ -17,6 +17,7 @@ from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchAnswerPurpose
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import ClarificationGenerationResponse
+from onyx.agents.agent_search.dr.models import DecisionResponse
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.models import OrchestratorTool
@@ -44,6 +45,7 @@ from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.llm.utils import check_number_of_tokens
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.prompts.dr_prompts import ANSWER_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
@@ -235,7 +237,7 @@ _ARTIFICIAL_ALL_ENCOMPASSING_TOOL = {
     "function": {
         "name": "run_any_knowledge_retrieval_and_any_action_tool",
         "description": "Use this tool to get any external information \
-that is relevant to the question, or for any action to be taken.",
+that is relevant to the question, or for any action to be taken, including image generation.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -259,6 +261,7 @@ def clarifier(
     """
 
     node_start_time = datetime.now()
+    current_step_nr = 0
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
 
@@ -292,6 +295,10 @@ def clarifier(
         graph_config, kg_enabled, active_source_types
     )
 
+    available_tool_descriptions_str = "\n -" + "\n -".join(
+        [tool.description for tool in available_tools.values()]
+    )
+
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
@@ -301,6 +308,13 @@ def clarifier(
     active_source_types_descriptions = [
         DocumentSourceDescription[source_type] for source_type in active_source_types
     ]
+
+    if len(active_source_types_descriptions) > 0:
+        active_source_type_descriptions_str = "\n -" + "\n -".join(
+            active_source_types_descriptions
+        )
+    else:
+        active_source_type_descriptions_str = ""
 
     if graph_config.inputs.persona and len(graph_config.inputs.persona.prompts) > 0:
         assistant_system_prompt = (
@@ -398,29 +412,88 @@ def clarifier(
             question=original_question,
             chat_history_string=chat_history_string,
             uploaded_context=uploaded_context or "",
+            active_source_type_descriptions_str=active_source_type_descriptions_str,
+            available_tool_descriptions_str=available_tool_descriptions_str,
         )
 
-        initial_decision_tokens, _, _ = run_with_timeout(
-            80,
-            lambda: stream_llm_answer(
-                llm=graph_config.tooling.primary_llm,
-                prompt=create_question_prompt(
-                    assistant_system_prompt + EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
-                    decision_prompt + assistant_task_prompt,
-                ),
-                event_name="basic_response",
-                writer=writer,
-                agent_answer_level=0,
-                agent_answer_question_num=0,
-                agent_answer_type="agent_level_answer",
-                timeout_override=60,
-                max_tokens=None,
+        llm_decision = invoke_llm_json(
+            llm=graph_config.tooling.primary_llm,
+            prompt=create_question_prompt(
+                EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
+                decision_prompt,
             ),
+            schema=DecisionResponse,
         )
 
-        initial_decision_str = cast(str, merge_content(*initial_decision_tokens))
+        if llm_decision.decision == "LLM":
 
-        if len(initial_decision_str.replace(" ", "")) > 0:
+            write_custom_event(
+                current_step_nr,
+                MessageStart(
+                    content="",
+                    final_documents=[],
+                ),
+                writer,
+            )
+
+            answer_prompt = ANSWER_PROMPT_WO_TOOL_CALLING.build(
+                question=original_question,
+                chat_history_string=chat_history_string,
+                uploaded_context=uploaded_context or "",
+                active_source_type_descriptions_str=active_source_type_descriptions_str,
+                available_tool_descriptions_str=available_tool_descriptions_str,
+            )
+
+            answer_tokens, _, _ = run_with_timeout(
+                80,
+                lambda: stream_llm_answer(
+                    llm=graph_config.tooling.primary_llm,
+                    prompt=create_question_prompt(
+                        assistant_system_prompt,
+                        answer_prompt + assistant_task_prompt,
+                    ),
+                    event_name="basic_response",
+                    writer=writer,
+                    answer_piece="message_delta",
+                    agent_answer_level=0,
+                    agent_answer_question_num=0,
+                    agent_answer_type="agent_level_answer",
+                    timeout_override=60,
+                    ind=current_step_nr,
+                    context_docs=None,
+                    replace_citations=True,
+                    max_tokens=None,
+                ),
+            )
+
+            write_custom_event(
+                current_step_nr,
+                SectionEnd(
+                    type="section_end",
+                ),
+                writer,
+            )
+            current_step_nr += 1
+
+            answer_str = cast(str, merge_content(*answer_tokens))
+
+            write_custom_event(
+                current_step_nr,
+                OverallStop(),
+                writer,
+            )
+
+            update_db_session_with_messages(
+                db_session=db_session,
+                chat_message_id=message_id,
+                chat_session_id=str(graph_config.persistence.chat_session_id),
+                is_agentic=graph_config.behavior.use_agentic_search,
+                message=answer_str,
+                update_parent_message=True,
+                research_answer_purpose=ResearchAnswerPurpose.ANSWER,
+            )
+            db_session.commit()
+
             return OrchestrationSetup(
                 original_question=original_question,
                 chat_history_string="",
@@ -436,6 +509,7 @@ def clarifier(
             question=original_question,
             chat_history_string=chat_history_string,
             uploaded_context=uploaded_context or "",
+            active_source_type_descriptions_str=active_source_type_descriptions_str,
         )
 
         stream = graph_config.tooling.primary_llm.stream(
@@ -620,6 +694,7 @@ def clarifier(
         tools_used=[next_tool],
         query_list=[],
         iteration_nr=0,
+        current_step_nr=current_step_nr,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

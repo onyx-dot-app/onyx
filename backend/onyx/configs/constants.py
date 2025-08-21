@@ -530,12 +530,12 @@ NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS = NUM_DAYS_TO_KEEP_CHECKPOINTS + 1
 DocumentSourceDescription: dict[DocumentSource, str] = {
     # Special case, document passed in via Onyx APIs without specifying a source type
     DocumentSource.INGESTION_API: "ingestion_api",
-    DocumentSource.SLACK: "slack channels",
-    DocumentSource.WEB: "web pages",
+    DocumentSource.SLACK: "slack channels for discussions and collaboration",
+    DocumentSource.WEB: "indexed web pages",
     DocumentSource.GOOGLE_DRIVE: "google drive documents (docs, sheets, etc.)",
     DocumentSource.GMAIL: "email messages",
     DocumentSource.REQUESTTRACKER: "requesttracker",
-    DocumentSource.GITHUB: "github data",
+    DocumentSource.GITHUB: "github data (issues, PRs)",
     DocumentSource.GITBOOK: "gitbook data",
     DocumentSource.GITLAB: "gitlab data",
     DocumentSource.GURU: "guru data",

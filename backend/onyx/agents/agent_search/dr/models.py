@@ -27,6 +27,11 @@ class ClarificationGenerationResponse(BaseModel):
     clarification_question: str
 
 
+class DecisionResponse(BaseModel):
+    reasoning: str
+    decision: str
+
+
 class QueryEvaluationResponse(BaseModel):
     reasoning: str
     query_permitted: bool

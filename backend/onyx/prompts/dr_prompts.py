@@ -1212,7 +1212,6 @@ Here is the chat history (if any):
 ---chat_history_string---
 {SEPARATOR_LINE}
 
-ANSWER:
 """
 )
 
@@ -1228,25 +1227,57 @@ Here is the uploaded context (if any):
 ---uploaded_context---
 {SEPARATOR_LINE}
 
-Here is the question:
+Available tools:
+{SEPARATOR_LINE}
+---available_tool_descriptions_str---
+{SEPARATOR_LINE}
+(Note, whether a tool call )
+
+Here are the types of documents that are available for the searches (if any):
+{SEPARATOR_LINE}
+---active_source_type_descriptions_str---
+{SEPARATOR_LINE}
+
+And finally and most importantly, here is the question that would need to be answered eventually:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
 
-If the question can be answered COMPLETELY by you directly using your knowledge alone, \
-answer/address the question directly (just do it, don't say 'I can answer that directly' or similar. But \
-properly format the answer if useful for the user). \
-Otherwise, if any kind of external information/actions/tools/knowledge would instrumentally help \
-to answer the question, keep the answer empty and stop immediately. Do not explain why you \
-wouyld need the external information/actions/tools/knowledge, just stop immediately.
+Please answer as a json dictionary in the following format:
+{{
+"reasoning": "<one sentence why you think a tool call would or would notbe needed to answer the question>",
+"decision": "<respond eith with 'LLM' IF NO TOOL CALL IS NEEDED and you could/should answer the question \
+directly, or with 'TOOL' IF A TOOL CALL IS NEEDED>"
+}}
 
-ANSWER:
+"""
+)
+
+ANSWER_PROMPT_WO_TOOL_CALLING = PromptTemplate(
+    f"""
+Here is the chat history (if any):
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
+Here is the uploaded context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
+And finally and most importantly, here is the question:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+Please answer the question directly.
+
 """
 )
 
 EVAL_SYSTEM_PROMPT_W_TOOL_CALLING = """
-You may also \
-use tools to get additional information.
+You may also choose to use tools to get additional information. But if the answer is \
+obvious public knowledge that you know, you can also just answer directly.
 """
 
 DECISION_PROMPT_W_TOOL_CALLING = PromptTemplate(
@@ -1261,7 +1292,12 @@ Here is the uploaded context (if any):
 ---uploaded_context---
 {SEPARATOR_LINE}
 
-Here is the question:
+Here are the types of documents that are available for the searches (if any):
+{SEPARATOR_LINE}
+---active_source_type_descriptions_str---
+{SEPARATOR_LINE}
+
+And finally and most importantly, here is the question:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
