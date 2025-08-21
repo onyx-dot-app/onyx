@@ -40,6 +40,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_DECISION_SYSTEM_PROMPT_PREFIX = "Here are general instructions by the user, which \
+may or may not influence the decision what to do next:\n\n"
+
 
 def orchestrator(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
@@ -58,7 +61,10 @@ def orchestrator(
     plan_of_record = state.plan_of_record
     clarification = state.clarification
     assistant_system_prompt = state.assistant_system_prompt
-    assistant_task_prompt = state.assistant_task_prompt
+
+    decision_system_prompt = _DECISION_SYSTEM_PROMPT_PREFIX + assistant_system_prompt
+
+    state.assistant_task_prompt
     iteration_nr = state.iteration_nr + 1
     current_step_nr = state.current_step_nr
 
@@ -138,8 +144,7 @@ def orchestrator(
                 lambda: stream_llm_answer(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        reasoning_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt, reasoning_prompt
                     ),
                     event_name="basic_response",
                     writer=writer,
@@ -210,8 +215,8 @@ def orchestrator(
                 orchestrator_action = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        decision_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt,
+                        decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
                     timeout_override=35,
@@ -252,8 +257,8 @@ def orchestrator(
                 plan_of_record = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        plan_generation_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt,
+                        plan_generation_prompt,
                     ),
                     schema=OrchestrationPlan,
                     timeout_override=25,
@@ -316,8 +321,8 @@ def orchestrator(
                 orchestrator_action = invoke_llm_json(
                     llm=graph_config.tooling.primary_llm,
                     prompt=create_question_prompt(
-                        assistant_system_prompt,
-                        decision_prompt + (assistant_task_prompt or ""),
+                        decision_system_prompt,
+                        decision_prompt,
                     ),
                     schema=OrchestratorDecisonsNoPlan,
                     timeout_override=15,
@@ -392,9 +397,8 @@ def orchestrator(
             lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=create_question_prompt(
-                    assistant_system_prompt,
-                    orchestration_next_step_purpose_prompt
-                    + (assistant_task_prompt or ""),
+                    decision_system_prompt,
+                    orchestration_next_step_purpose_prompt,
                 ),
                 event_name="basic_response",
                 writer=writer,
