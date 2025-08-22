@@ -35,7 +35,7 @@ class InternetSearchResult(BaseModel):
 class ProviderType(Enum):
     """Enum for internet search provider types"""
 
-    BING = "bing"
+    GOOGLE = "google"
     EXA = "exa"
 
 

@@ -3,8 +3,9 @@ from typing import Any
 import requests
 from pydantic import BaseModel
 
-from onyx.configs.chat_configs import BING_API_KEY
 from onyx.configs.chat_configs import EXA_API_KEY
+from onyx.configs.chat_configs import GOOGLE_CLOUD_API_KEY
+from onyx.configs.chat_configs import GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.tools.tool_implementations.internet_search.models import InternetSearchResult
 from onyx.tools.tool_implementations.internet_search.models import ProviderConfig
@@ -16,23 +17,21 @@ logger = setup_logger()
 
 
 PROVIDER_CONFIGS = {
-    ProviderType.BING.value: ProviderConfig(
-        api_key=BING_API_KEY or "",
-        api_base="https://api.bing.microsoft.com/v7.0/search",
+    ProviderType.GOOGLE.value: ProviderConfig(
+        api_key=GOOGLE_CLOUD_API_KEY or "",
+        api_base=f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_CLOUD_API_KEY}&cx={GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID}",
         headers={
-            "Ocp-Apim-Subscription-Key": BING_API_KEY or "",
             "Content-Type": "application/json",
         },
         query_param_name="q",
         num_results_param="count",
         search_params={},
         request_method="GET",
-        results_path=["webPages", "value"],
+        results_path=["items"],
         result_mapping={
-            "title": "name",
-            "link": "url",
-            "full_content": "snippet",
-            "published_date": "datePublished",
+            "title": "title",
+            "link": "link",
+            "snippet": "snippet",
         },
     ),
     ProviderType.EXA.value: ProviderConfig(
@@ -234,7 +233,7 @@ def get_default_provider() -> InternetSearchProvider | None:
     """Get the default internet search provider"""
     providers = get_available_providers()
 
-    for provider_type in [ProviderType.BING, ProviderType.EXA]:
+    for provider_type in [ProviderType.GOOGLE, ProviderType.EXA]:
         if provider_type.value in providers:
             return providers[provider_type.value]
 
