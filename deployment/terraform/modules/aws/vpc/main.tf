@@ -20,7 +20,7 @@ module "vpc" {
   map_public_ip_on_launch = true
 
   enable_nat_gateway   = true
-  single_nat_gateway   = false
+  single_nat_gateway   = true
   enable_dns_hostnames = true
 
   public_subnet_tags = {
