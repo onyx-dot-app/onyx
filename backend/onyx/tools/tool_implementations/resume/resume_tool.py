@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder, default_build_system_message
-from onyx.configs.app_configs import LANGFLOW_API_KEY
+from onyx.configs.app_configs import LANGFLOW_API_KEY, LANGFLOW_BASE_URL
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
@@ -46,7 +46,7 @@ class ResumeTool(Tool):
     def __init__(self, db_session: Session, pipeline_id: str, docs: list, template_file: str, prompt_config, llm_config):  # , template_name: str
         self.db_session = db_session
         self.pipeline_id = pipeline_id
-        self.base_url = FLOWISE_BASE_URL
+        self.base_url = LANGFLOW_BASE_URL
         self.docs = docs
         self.template_file = template_file
         self.prompt_config = prompt_config
