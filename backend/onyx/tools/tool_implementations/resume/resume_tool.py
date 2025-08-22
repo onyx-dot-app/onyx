@@ -8,9 +8,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder, default_build_system_message
 from onyx.configs.app_configs import FLOWISE_BASE_URL, FLOWISE_API_KEY
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.tools.message import ToolCallSummary
 from onyx.utils.special_types import JSON_ro
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
@@ -41,17 +43,27 @@ class ResumeTool(Tool):
     NAME = "resume_tool"
     _DISPLAY_NAME = "Doc Formatter"
 
-    def __init__(self, db_session: Session, pipeline_id: str, docs: list, template_file: bytes):  # , template_name: str
+    def __init__(self, db_session: Session, pipeline_id: str, docs: list, template_file: str, prompt_config, llm_config):  # , template_name: str
         self.db_session = db_session
         self.pipeline_id = pipeline_id
         self.base_url = FLOWISE_BASE_URL
         self.docs = docs
         self.template_file = template_file
+        self.prompt_config = prompt_config
+        self.llm_config = llm_config
         # self.template_name = template_name
 
     @property
     def name(self) -> str:
         return self.NAME
+
+    @property
+    def description(self) -> str:
+        return ""
+
+    @property
+    def display_name(self) -> str:
+        return self._DISPLAY_NAME
 
     def tool_definition(self) -> dict:
         return {
@@ -169,17 +181,47 @@ class ResumeTool(Tool):
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         return cast(ResumeResponseSummary, args[0].response).tool_result
 
+    def build_next_prompt(
+        self,
+        prompt_builder: AnswerPromptBuilder,
+        tool_call_summary: ToolCallSummary,
+        tool_responses: list[ToolResponse],
+        using_tool_calling_llm: bool,
+    ) -> AnswerPromptBuilder:
+        prompt_builder.update_system_prompt(
+            default_build_system_message(self.prompt_config, self.llm_config)
+        )
+
+        tool_summary = tool_responses[0].response if tool_responses else None
+        tool_result = cast(ResumeResponseSummary, tool_summary).tool_result if tool_summary else {}
+        query = prompt_builder.get_user_message_content()
+
+        logger.info(tool_result)
+        logger.info(query)
+        logger.info(tool_responses)
+
+        prompt_builder.update_user_prompt(
+            HumanMessage(
+                content=build_user_message_for_resume_tool(
+                    query=query,
+                    tool_name=self.name,
+                    tool_result=tool_result,
+                )
+            )
+        )
+
+        return prompt_builder
+
 
 def build_user_message_for_resume_tool(
         query: str,
         tool_name: str,
-        *args: ToolResponse,
+    tool_result: dict,
 ) -> str:
-    tool_run_summary = cast(ResumeResponseSummary, args[0].response).tool_result
     return f"""
 Here's the result from the {tool_name} tool:
 
-{tool_run_summary}
+{tool_result}
 
 Now respond to the following:
 

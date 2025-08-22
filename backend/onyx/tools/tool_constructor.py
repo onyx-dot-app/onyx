@@ -261,6 +261,8 @@ def construct_tools(
                         pipeline_id=persona.pipeline_id,
                         docs=user_file_files,
                         template_file=template_file_name,
+                        prompt_config=prompt_config,
+                        llm_config=llm.config
                     )
                 ]
 
