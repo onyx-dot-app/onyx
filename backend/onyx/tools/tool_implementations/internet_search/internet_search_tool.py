@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
@@ -45,6 +46,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.internet_search.models import (
     InternetSearchResponseSummary,
 )
+from onyx.tools.tool_implementations.internet_search.models import InternetSearchResult
 from onyx.tools.tool_implementations.internet_search.providers import (
     get_default_provider,
 )
@@ -224,13 +226,17 @@ class InternetSearchTool(Tool[None]):
             INTERNET_QUERY_FIELD: rephrased_query,
         }
 
-    def _perform_search(self, query: str, token_budget: int) -> list[Document]:
+    def _perform_search_v2(
+        self, query: str, token_budget: int
+    ) -> list[InternetSearchResult]:
         if not self.provider:
             raise RuntimeError("Internet search provider is not configured")
 
-        logger.info(
-            f"Performing internet search with {self.provider.name} provider: {query}"
-        )
+        return self.provider.search(query, token_budget)
+
+    def _perform_search(self, query: str, token_budget: int) -> list[Document]:
+        if not self.provider:
+            raise RuntimeError("Internet search provider is not configured")
 
         results = self.provider.search(query, token_budget)
 
@@ -363,9 +369,106 @@ class InternetSearchTool(Tool[None]):
 
         return sections
 
+    def _truncate_search_result_content(
+        self, content: str, max_chars: int = 10000
+    ) -> str:
+        """Truncate search result content to a maximum number of characters"""
+        if len(content) <= max_chars:
+            return content
+        return content[:max_chars] + "..."
+
+    def _dummy_inference_section_from_internet_search_result(
+        self, result: InternetSearchResult
+    ) -> InferenceSection:
+        truncated_content = self._truncate_search_result_content(result.full_content)
+        return InferenceSection(
+            center_chunk=InferenceChunk(
+                chunk_id=0,
+                blurb=result.title,
+                content=truncated_content,
+                source_links={0: result.link},
+                section_continuation=False,
+                document_id="INTERNET_SEARCH_DOC_" + result.link,
+                source_type=DocumentSource.WEB,
+                semantic_identifier=result.link,
+                title=result.title,
+                boost=1,
+                recency_bias=1.0,
+                score=1.0,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+                doc_summary=truncated_content,
+                chunk_context=truncated_content,
+                updated_at=result.published_date,
+                image_file_id=None,
+            ),
+            chunks=[],
+            combined_content=truncated_content,
+        )
+
+    def _llm_doc_from_internet_search_result(
+        self, result: InternetSearchResult
+    ) -> LlmDoc:
+        truncated_content = self._truncate_search_result_content(result.full_content)
+        return LlmDoc(
+            document_id="INTERNET_SEARCH_DOC_" + result.link,
+            content=truncated_content,
+            blurb=result.title,
+            semantic_identifier=result.link,
+            source_type=DocumentSource.WEB,
+            metadata={},
+            updated_at=(
+                result.published_date
+                if result.published_date
+                else datetime.now(timezone.utc)
+            ),
+            link=result.link,
+            source_links={0: result.link},
+            match_highlights=None,
+        )
+
+    def _search_results_to_llm_docs(
+        self, search_results: list[InternetSearchResult]
+    ) -> list[LlmDoc]:
+        return [
+            self._llm_doc_from_internet_search_result(result)
+            for result in search_results
+        ]
+
+    def runV2(
+        self, override_kwargs: None = None, **llm_kwargs: str
+    ) -> Generator[ToolResponse, None, None]:
+        query = cast(str, llm_kwargs[INTERNET_QUERY_FIELD])
+        token_budget = compute_max_document_tokens(
+            prompt_config=self.prompt_config,
+            llm_config=self.llm.config,
+            actual_user_input=query,
+            tool_token_count=self.contextual_pruning_config.tool_num_tokens,
+        )
+
+        search_results = self._perform_search_v2(query, token_budget)
+        inference_sections = [
+            self._dummy_inference_section_from_internet_search_result(result)
+            for result in search_results
+        ]
+        yield ToolResponse(
+            id=INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
+            response=InternetSearchResponseSummary(
+                query=query,
+                top_sections=inference_sections,
+            ),
+        )
+        llm_docs = [
+            self._llm_doc_from_internet_search_result(result)
+            for result in search_results
+        ]
+        yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
+
     def run(
         self, override_kwargs: None = None, **llm_kwargs: str
     ) -> Generator[ToolResponse, None, None]:
+        time.time()
         search_settings = get_current_search_settings(db_session=self.db_session)
         embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
             search_settings=search_settings
@@ -384,7 +487,11 @@ class InternetSearchTool(Tool[None]):
         )
 
         # Token budget can be used with search APIs that return LLM context strings
+        search_start_time = time.time()
         search_results = self._perform_search(query, token_budget)
+        time.time() - search_start_time
+
+        processing_start_time = time.time()
         chunks_with_embeddings = self._chunk_and_embed_results(
             search_results, embedding_model
         )
@@ -406,7 +513,7 @@ class InternetSearchTool(Tool[None]):
             )
         else:
             pruned_sections = sections
-
+        time.time() - processing_start_time
         yield ToolResponse(
             id=INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
             response=InternetSearchResponseSummary(

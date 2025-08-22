@@ -75,10 +75,8 @@ def internet_search(
     # Update search parameters
     internet_search_tool.max_chunks = 10
     internet_search_tool.provider.num_results = 10
-
     retrieved_docs: list[InferenceSection] = []
-
-    for tool_response in internet_search_tool.run(internet_search_query=search_query):
+    for tool_response in internet_search_tool.runV2(internet_search_query=search_query):
         # get retrieved docs to send to the rest of the graph
         if tool_response.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
             response = cast(SearchResponseSummary, tool_response.response)
@@ -100,7 +98,6 @@ def internet_search(
     logger.debug(
         f"Search end/LLM start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
-
     # Built prompt
 
     if research_type == ResearchType.DEEP:
