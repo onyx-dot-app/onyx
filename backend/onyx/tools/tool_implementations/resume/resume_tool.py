@@ -148,9 +148,9 @@ class ResumeTool(Tool):
         os.remove(os.path.join(DOWNLOAD_FOLDER, template_file_name))
         return file_name
 
-    def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
-        request_body = {"input_value": kwargs['question']}
-        logger.info(kwargs)
+    def run(self, override_kwargs: Any | None = None, **llm_kwargs: Any) -> Generator[ToolResponse, None, None]:
+        request_body = {"input_value": llm_kwargs['query']}
+        logger.info(llm_kwargs)
 
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
