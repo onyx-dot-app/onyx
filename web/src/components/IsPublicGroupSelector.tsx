@@ -93,15 +93,25 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             disabled={!isAdmin}
             subtext={
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
-                {i18n.t(k.IF_SET_THEN_THIS)} {objectName}{" "}
+                {i18n.t(k.IF_SET_THEN_THIS)}{" "}
+                {objectName === "document set"
+                  ? "набор документов"
+                  : objectName}{" "}
                 {i18n.t(k.WILL_BE_USABLE_BY)}{" "}
                 <b>
-                  {i18n.t(k.ALL1)} {publicToWhom}
+                  {i18n.t(k.ALL1)}{" "}
+                  {publicToWhom === "Users" ? "пользователей" : publicToWhom}
                 </b>
                 {i18n.t(k.OTHERWISE_ONLY)} <b>{i18n.t(k.ADMINS)}</b>{" "}
-                {i18n.t(k.AND)} <b>{publicToWhom}</b>{" "}
+                {i18n.t(k.AND)}{" "}
+                <b>
+                  {publicToWhom === "Users" ? "Пользователи" : publicToWhom}
+                </b>{" "}
                 {i18n.t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}
-                {objectName} {i18n.t(k.E_G_VIA_A_USER_GROUP_WILL_H)}
+                {objectName === "document set"
+                  ? "набору документов"
+                  : objectName}{" "}
+                {i18n.t(k.E_G_VIA_A_USER_GROUP_WILL_H)}
               </span>
             }
           />

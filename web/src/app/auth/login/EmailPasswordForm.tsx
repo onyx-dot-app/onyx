@@ -57,10 +57,10 @@ export function EmailPasswordForm({
         }}
         validationSchema={Yup.object().shape({
           email: Yup.string()
-            .email()
-            .required()
+            .email("Поле заполнено некорректно")
+            .required("Поле обязательно")
             .transform((value) => value.toLowerCase()),
-          password: Yup.string().required(),
+          password: Yup.string().required("Поле обязательно"),
         })}
         onSubmit={async (values) => {
           // Ensure email is lowercase

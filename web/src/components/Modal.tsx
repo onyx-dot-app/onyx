@@ -92,7 +92,6 @@ export function Modal({
           flex
           flex-col
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
-          overflow-auto
         `}
       >
         {onOutsideClick && !hideCloseButton && (
