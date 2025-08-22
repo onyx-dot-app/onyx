@@ -98,43 +98,7 @@ class ResumeTool(Tool):
             force_run: bool = True,
     ) -> dict[str, Any] | None:
 
-        args_result = llm.invoke(
-            [
-                SystemMessage(content=TOOL_ARG_SYSTEM_PROMPT),
-                HumanMessage(
-                    content=TOOL_ARG_USER_PROMPT.format(
-                        history=history,
-                        query=query,
-                        tool_name=self.name,
-                        tool_description=resume_tool_description,
-                        tool_args=self.tool_definition()["function"]["parameters"],
-                    )
-                ),
-            ]
-        )
-        args_result_str = cast(str, args_result.content)
-        try:
-            return json.loads(args_result_str.strip())
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```
-        try:
-            return json.loads(args_result_str.strip("```"))
-        except json.JSONDecodeError:
-            pass
-
-        # try removing ```json
-        try:
-            return json.loads(args_result_str.strip("```").strip("json"))
-        except json.JSONDecodeError:
-            pass
-
-        # pretend like nothing happened if not parse-able
-        logger.error(
-            f"Failed to parse args for '{self.name}' tool. Received: {args_result_str}"
-        )
-        return None
+        return {"question": query}
 
     def download_word(self, data, template_file_name) -> str:
         minio_get_object_template(template_file_name)
@@ -151,7 +115,7 @@ class ResumeTool(Tool):
     def run(self, override_kwargs: Any | None = None, **llm_kwargs: Any) -> Generator[ToolResponse, None, None]:
         logger.info(llm_kwargs)
         logger.info(override_kwargs)
-        request_body = {"input_value": llm_kwargs['query']}
+        request_body = {"input_value": llm_kwargs['question']}
 
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
