@@ -153,8 +153,6 @@ class ResumeTool(Tool):
         tool_responses: list[ToolResponse],
         using_tool_calling_llm: bool,
     ) -> AnswerPromptBuilder:
-        return prompt_builder
-
         prompt_builder.update_system_prompt(
             default_build_system_message(self.prompt_config, self.llm_config)
         )
