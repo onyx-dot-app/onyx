@@ -149,8 +149,9 @@ class ResumeTool(Tool):
         return file_name
 
     def run(self, override_kwargs: Any | None = None, **llm_kwargs: Any) -> Generator[ToolResponse, None, None]:
-        request_body = {"input_value": llm_kwargs['query']}
         logger.info(llm_kwargs)
+        logger.info(override_kwargs)
+        request_body = {"input_value": llm_kwargs['query']}
 
         url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
         method = "POST"
