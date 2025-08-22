@@ -18,7 +18,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def custom_tool_reducer(
+def generic_internal_tool_reducer(
     state: SubAgentMainState,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
@@ -57,7 +57,7 @@ def custom_tool_reducer(
                 tool_name=new_update.tool,
                 response_type=new_update.response_type,
                 data=new_update.data,
-                file_ids=new_update.file_ids,
+                file_ids=[],
             ),
             writer,
         )

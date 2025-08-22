@@ -15,15 +15,12 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.prompts.dr_prompts import CUSTOM_TOOL_PREP_PROMPT
 from onyx.prompts.dr_prompts import CUSTOM_TOOL_USE_PROMPT
-from onyx.tools.tool_implementations.custom.custom_tool import CUSTOM_TOOL_RESPONSE_ID
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
-from onyx.tools.tool_implementations.custom.custom_tool import CustomToolCallSummary
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def custom_tool_act(
+def generic_internal_tool_act(
     state: BranchInput,
     config: RunnableConfig,
     writer: StreamWriter = lambda _: None,
@@ -39,9 +36,12 @@ def custom_tool_act(
     if not state.available_tools:
         raise ValueError("available_tools is not set")
 
-    custom_tool_info = state.available_tools[state.tools_used[-1]]
-    custom_tool_name = custom_tool_info.llm_path
-    custom_tool = cast(CustomTool, custom_tool_info.tool_object)
+    generic_internal_tool_info = state.available_tools[state.tools_used[-1]]
+    generic_internal_tool_name = generic_internal_tool_info.llm_path
+    generic_internal_tool = generic_internal_tool_info.tool_object
+
+    if generic_internal_tool is None:
+        raise ValueError("generic_internal_tool is not set")
 
     branch_query = state.branch_question
     if not branch_query:
@@ -51,7 +51,7 @@ def custom_tool_act(
     base_question = graph_config.inputs.prompt_builder.raw_user_query
 
     logger.debug(
-        f"Tool call start for {custom_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"Tool call start for {generic_internal_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
     # get tool call args
@@ -61,11 +61,11 @@ def custom_tool_act(
         tool_use_prompt = CUSTOM_TOOL_PREP_PROMPT.build(
             query=branch_query,
             base_question=base_question,
-            tool_description=custom_tool_info.description,
+            tool_description=generic_internal_tool_info.description,
         )
         tool_calling_msg = graph_config.tooling.primary_llm.invoke(
             tool_use_prompt,
-            tools=[custom_tool.tool_definition()],
+            tools=[generic_internal_tool.tool_definition()],
             tool_choice="required",
             timeout_override=40,
         )
@@ -81,7 +81,7 @@ def custom_tool_act(
 
     if tool_args is None:
         # get tool call args from non-tool-calling LLM or for failed tool-calling LLM
-        tool_args = custom_tool.get_args_for_non_tool_calling_llm(
+        tool_args = generic_internal_tool.get_args_for_non_tool_calling_llm(
             query=branch_query,
             history=[],
             llm=graph_config.tooling.primary_llm,
@@ -92,29 +92,13 @@ def custom_tool_act(
         raise ValueError("Failed to obtain tool arguments from LLM")
 
     # run the tool
-    response_summary: CustomToolCallSummary | None = None
-    for tool_response in custom_tool.run(**tool_args):
-        if tool_response.id == CUSTOM_TOOL_RESPONSE_ID:
-            response_summary = cast(CustomToolCallSummary, tool_response.response)
-            break
-
-    if not response_summary:
-        raise ValueError("Custom tool did not return a valid response summary")
-
-    # summarise tool result
-    if not response_summary.response_type:
-        raise ValueError("Response type is not returned.")
-
-    if response_summary.response_type == "json":
-        tool_result_str = json.dumps(response_summary.tool_result, ensure_ascii=False)
-    elif response_summary.response_type in {"image", "csv"}:
-        tool_result_str = f"{response_summary.response_type} files: {response_summary.tool_result.file_ids}"
-    else:
-        tool_result_str = str(response_summary.tool_result)
+    tool_responses = list(generic_internal_tool.run(**tool_args))
+    final_data = generic_internal_tool.final_result(*tool_responses)
+    tool_result_str = json.dumps(final_data, ensure_ascii=False)
 
     tool_str = (
-        f"Tool used: {custom_tool_name}\n"
-        f"Description: {custom_tool_info.description}\n"
+        f"Tool used: {generic_internal_tool_name}\n"
+        f"Description: {generic_internal_tool_info.description}\n"
         f"Result: {tool_result_str}"
     )
 
@@ -127,22 +111,15 @@ def custom_tool_act(
         ).content
     ).strip()
 
-    # get file_ids:
-    file_ids = None
-    if response_summary.response_type in {"image", "csv"} and hasattr(
-        response_summary.tool_result, "file_ids"
-    ):
-        file_ids = response_summary.tool_result.file_ids
-
     logger.debug(
-        f"Tool call end for {custom_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"Tool call end for {generic_internal_tool_name} {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
-                tool=custom_tool_name,
-                tool_id=custom_tool_info.tool_id,
+                tool=generic_internal_tool_name,
+                tool_id=generic_internal_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
                 question=branch_query,
@@ -151,9 +128,8 @@ def custom_tool_act(
                 cited_documents={},
                 reasoning="",
                 additional_data=None,
-                response_type=response_summary.response_type,
-                data=response_summary.tool_result,
-                file_ids=file_ids,
+                response_type="string",
+                data=answer_string,
             )
         ],
         log_messages=[

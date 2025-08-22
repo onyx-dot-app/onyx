@@ -1304,6 +1304,15 @@ And finally and most importantly, here is the question:
 """
 )
 
+
+DEFAULLT_DECISION_PROMPT = """
+You are an Assistant who is great at deciding which tool to use next in order to \
+to gather information to answer a user question/request. Some information may be provided \
+and your task will be to decide which tools to use and which requests should be sent \
+to them.
+"""
+
+
 """
 # We do not want to be too aggressive here because for example questions about other users is
 # usually fine (i.e. 'what did my team work on last week?') with permissions handled within \

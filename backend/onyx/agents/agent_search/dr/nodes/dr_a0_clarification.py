@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import merge_content
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
+from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
@@ -38,6 +39,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import DocumentSourceDescription
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.db.connector import fetch_unique_document_sources
+from onyx.db.models import Tool
+from onyx.db.tools import get_tools
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.kg.utils.extraction_utils import get_entity_types_str
@@ -57,7 +60,6 @@ from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
-from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -82,6 +84,7 @@ def _format_tool_name(tool_name: str) -> str:
 
 
 def _get_available_tools(
+    db_session: Session,
     graph_config: GraphConfig,
     kg_enabled: bool,
     active_source_types: list[DocumentSource],
@@ -97,49 +100,59 @@ def _get_available_tools(
     else:
         include_kg = False
 
-    for tool in graph_config.tooling.tools:
-        tool_info = OrchestratorTool(
-            tool_id=tool.id,
-            name=tool.name,
-            llm_path=_format_tool_name(tool.name),
-            path=DRPath.GENERIC_TOOL,
-            description=tool.description,
-            metadata={},
-            cost=1.0,
-            tool_object=tool,
-        )
+    tool_dict: dict[int, Tool] = {tool.id: tool for tool in get_tools(db_session)}
 
-        if isinstance(tool, CustomTool):
-            # tool_info.metadata["summary_signature"] = CUSTOM_TOOL_RESPONSE_ID
-            pass
-        elif isinstance(tool, InternetSearchTool):
-            # tool_info.metadata["summary_signature"] = (
-            #     INTERNET_SEARCH_RESPONSE_SUMMARY_ID
-            # )
-            tool_info.llm_path = DRPath.INTERNET_SEARCH.value
-            tool_info.path = DRPath.INTERNET_SEARCH
+    for tool in graph_config.tooling.tools:
+
+        tool_db_info = tool_dict.get(tool.id)
+        if tool_db_info:
+            incode_tool_id = tool_db_info.in_code_tool_id
+        else:
+            raise ValueError(f"Tool {tool.name} is not found in the database")
+
+        if isinstance(tool, InternetSearchTool):
+            llm_path = DRPath.INTERNET_SEARCH.value
+            path = DRPath.INTERNET_SEARCH
         elif isinstance(tool, SearchTool) and len(active_source_types) > 0:
             # tool_info.metadata["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
-            tool_info.llm_path = DRPath.INTERNAL_SEARCH.value
-            tool_info.path = DRPath.INTERNAL_SEARCH
+            llm_path = DRPath.INTERNAL_SEARCH.value
+            path = DRPath.INTERNAL_SEARCH
         elif (
             isinstance(tool, KnowledgeGraphTool)
             and include_kg
             and len(active_source_types) > 0
         ):
-            tool_info.llm_path = DRPath.KNOWLEDGE_GRAPH.value
-            tool_info.path = DRPath.KNOWLEDGE_GRAPH
+            llm_path = DRPath.KNOWLEDGE_GRAPH.value
+            path = DRPath.KNOWLEDGE_GRAPH
         elif isinstance(tool, ImageGenerationTool):
-            tool_info.llm_path = DRPath.IMAGE_GENERATION.value
-            tool_info.path = DRPath.IMAGE_GENERATION
+            llm_path = DRPath.IMAGE_GENERATION.value
+            path = DRPath.IMAGE_GENERATION
+        elif incode_tool_id:
+            # if incode tool id is found, it is a generic internal tool
+            llm_path = DRPath.GENERIC_INTERNAL_TOOL.value
+            path = DRPath.GENERIC_INTERNAL_TOOL
         else:
-            logger.warning(
-                f"Tool {tool.name} ({type(tool)}) is not supported/available"
-            )
-            continue
+            # otherwise it is a custom tool
+            llm_path = DRPath.GENERIC_TOOL.value
+            path = DRPath.GENERIC_TOOL
 
-        tool_info.description = TOOL_DESCRIPTION.get(tool_info.path, tool.description)
-        tool_info.cost = AVERAGE_TOOL_COSTS[tool_info.path]
+        if path not in {DRPath.GENERIC_INTERNAL_TOOL, DRPath.GENERIC_TOOL}:
+            description = TOOL_DESCRIPTION.get(path, tool.description)
+            cost = AVERAGE_TOOL_COSTS[path]
+        else:
+            description = tool.description
+            cost = 1.0
+
+        tool_info = OrchestratorTool(
+            tool_id=tool.id,
+            name=tool.name,
+            llm_path=llm_path,
+            path=path,
+            description=description,
+            metadata={},
+            cost=cost,
+            tool_object=tool,
+        )
 
         # TODO: handle custom tools with same name as other tools (e.g., CLOSER)
         available_tools[tool_info.llm_path] = tool_info
@@ -236,8 +249,9 @@ _ARTIFICIAL_ALL_ENCOMPASSING_TOOL = {
     "type": "function",
     "function": {
         "name": "run_any_knowledge_retrieval_and_any_action_tool",
-        "description": "Use this tool to get any external information \
-that is relevant to the question, or for any action to be taken, including image generation.",
+        "description": "Use this tool to get ANY external information \
+that is relevant to the question, or for any action to be taken, including image generation. In fact, \
+ANY tool mentioned can be accessed through this generic tool.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -292,7 +306,7 @@ def clarifier(
     active_source_types = fetch_unique_document_sources(db_session)
 
     available_tools = _get_available_tools(
-        graph_config, kg_enabled, active_source_types
+        db_session, graph_config, kg_enabled, active_source_types
     )
 
     available_tool_descriptions_str = "\n -" + "\n -".join(

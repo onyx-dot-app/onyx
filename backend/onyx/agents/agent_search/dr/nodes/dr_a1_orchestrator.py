@@ -32,6 +32,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
+from onyx.prompts.dr_prompts import DEFAULLT_DECISION_PROMPT
 from onyx.prompts.dr_prompts import SUFFICIENT_INFORMATION_STRING
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
@@ -62,9 +63,15 @@ def orchestrator(
     clarification = state.clarification
     assistant_system_prompt = state.assistant_system_prompt
 
-    decision_system_prompt = _DECISION_SYSTEM_PROMPT_PREFIX + assistant_system_prompt
+    if assistant_system_prompt:
+        decision_system_prompt: str = (
+            DEFAULLT_DECISION_PROMPT
+            + _DECISION_SYSTEM_PROMPT_PREFIX
+            + assistant_system_prompt
+        )
+    else:
+        decision_system_prompt = DEFAULLT_DECISION_PROMPT
 
-    state.assistant_task_prompt
     iteration_nr = state.iteration_nr + 1
     current_step_nr = state.current_step_nr
 

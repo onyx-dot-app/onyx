@@ -83,7 +83,9 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         [
             InCodeToolInfo(
                 cls=OktaProfileTool,
-                description="The Okta Profile Action allows the assistant to fetch user information from Okta.",
+                description="The Okta Profile Action allows the assistant to fetch the current user's information from Okta. \
+It could include the user's name, email, phone number, address as well as other information like who they report to and \
+who reports to them.",
                 in_code_tool_id=OktaProfileTool.__name__,
                 display_name=OktaProfileTool._DISPLAY_NAME,
             )

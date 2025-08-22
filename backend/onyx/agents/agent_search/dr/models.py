@@ -90,6 +90,9 @@ class IterationAnswer(BaseModel):
     background_info: str | None = None
     claims: list[str] | None = None
     additional_data: dict[str, str] | None = None
+    response_type: str | None = None
+    data: dict | list | str | int | float | bool | None = None
+    file_ids: list[str] | None = None
 
 
 class AggregatedDRContext(BaseModel):

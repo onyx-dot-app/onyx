@@ -23,6 +23,8 @@ from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
@@ -368,6 +370,8 @@ AnswerPacket = (
     | OnyxAnswerPiece
     | CitationStart
     | CitationDelta
+    | CustomToolStart
+    | CustomToolDelta
     | OverallStop
 )
 
