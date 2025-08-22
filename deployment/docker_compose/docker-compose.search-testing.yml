@@ -74,7 +74,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - log_store:/var/log
+      - log_store:/var/log/onyx
     logging:
       driver: json-file
       options:
