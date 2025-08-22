@@ -93,6 +93,12 @@ variable "enable_rds_iam_auth" {
   default     = false
 }
 
+variable "rds_db_connect_arn" {
+  type        = string
+  description = "Full rds-db:connect ARN to pass to the EKS module. Required when enable_rds_iam_auth is true."
+  default     = null
+}
+
 # WAF Configuration Variables
 variable "waf_rate_limit_requests_per_5_minutes" {
   type        = number

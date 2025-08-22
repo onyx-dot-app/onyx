@@ -150,7 +150,7 @@ resource "kubernetes_service_account" "s3_access" {
 
 # Optionally grant the IRSA role permissions to connect to RDS using IAM auth
 resource "aws_iam_policy" "rds_iam_connect_policy" {
-  count       = var.enable_rds_iam_for_service_account && var.rds_dbi_resource_id != null && var.rds_db_username != null ? 1 : 0
+  count       = var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null ? 1 : 0
   name        = "${module.eks.cluster_name}-rds-iam-connect-policy"
   description = "Allow EKS service account to connect to RDS using IAM auth"
 
@@ -163,18 +163,15 @@ resource "aws_iam_policy" "rds_iam_connect_policy" {
           "rds-db:connect"
         ],
         Resource = [
-          "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${var.rds_dbi_resource_id}/${var.rds_db_username}"
+          var.rds_db_connect_arn
         ]
       }
     ]
   })
 }
 
-data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
 module "irsa-rds-connect" {
-  count   = var.enable_rds_iam_for_service_account && var.rds_dbi_resource_id != null && var.rds_db_username != null ? 1 : 0
+  count   = var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null ? 1 : 0
   source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
   version = "4.7.0"
 
@@ -190,7 +187,7 @@ module "irsa-rds-connect" {
 }
 
 resource "kubernetes_service_account" "rds_connect" {
-  count = var.enable_rds_iam_for_service_account && var.rds_dbi_resource_id != null && var.rds_db_username != null ? 1 : 0
+  count = var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null ? 1 : 0
   metadata {
     name      = var.rds_irsa_service_account_name
     namespace = var.irsa_service_account_namespace

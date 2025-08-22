@@ -73,8 +73,8 @@ module "eks" {
 
   # Wire RDS IAM connection for the same IRSA service account used by apps
   enable_rds_iam_for_service_account = var.enable_rds_iam_auth
-  rds_dbi_resource_id                = module.postgres.dbi_resource_id
   rds_db_username                    = var.postgres_username
+  rds_db_connect_arn                 = var.rds_db_connect_arn
 
   # These variables must be defined in variables.tf or passed in via parent module
   public_cluster_enabled  = var.public_cluster_enabled
