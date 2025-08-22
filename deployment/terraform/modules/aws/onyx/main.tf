@@ -52,7 +52,7 @@ module "postgres" {
   username         = var.postgres_username
   password         = var.postgres_password
   tags             = local.merged_tags
-  iam_auth_enabled = var.enable_rds_iam_auth
+  enable_rds_iam_auth = var.enable_rds_iam_auth
 }
 
 module "s3" {
