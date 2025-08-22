@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder, default_build_system_message
-from onyx.configs.app_configs import FLOWISE_BASE_URL, FLOWISE_API_KEY
+from onyx.configs.app_configs import LANGFLOW_API_KEY
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.tools.message import ToolCallSummary
