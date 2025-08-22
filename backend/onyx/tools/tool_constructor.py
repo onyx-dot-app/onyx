@@ -249,8 +249,7 @@ def construct_tools(
                     )
                 ]
             elif tool_cls.__name__ == ResumeTool.__name__:
-                random_characters = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-                template_file_name = f'resume_{random_characters}.docx'
+                template_file_name = f'resume_{persona.name}.docx'
                 template_file_name, persona.template_file = minio_put_template_bytes(
                     template_file_name,
                     persona.template_file

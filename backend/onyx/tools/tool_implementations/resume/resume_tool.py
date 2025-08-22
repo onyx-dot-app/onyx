@@ -149,15 +149,14 @@ class ResumeTool(Tool):
         return file_name
 
     def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
-        document_name = self.docs[0]['name']
-        logger.info(document_name)
-        document_bytes = minio_get_bytes(document_name)
-        url = self.base_url + f"/api/v1/prediction/{self.pipeline_id}"
-        request_body = {"question": document_bytes}
-        headers = {"Authorization": "Bearer " + FLOWISE_API_KEY}
-        response = requests.post(url, data=request_body, headers=headers)
-        response_json = json.loads(response.text)
-        text_response = response_json['text']
+        request_body = {"input_value": kwargs['question']}
+
+        url = self.base_url + f"/api/v1/run/{self.pipeline_id}"
+        method = "POST"
+        response = requests.request(method, url, json=request_body, headers={"x-api-key": LANGFLOW_API_KEY})
+
+        response_json = response.json()
+        text_response = response_json["outputs"][0]["outputs"][0]["results"]["message"]["text"]
 
         if '```json' in text_response:
             json_text = text_response.split('```json', 1)[1].strip().rstrip('```')

@@ -111,6 +111,10 @@ def minio_put_template_bytes(file_name, file_content):
     client.set_bucket_policy(config.bucket_name, json.dumps(policy))
 
     base64_string = file_content.decode('utf-8')
+    base64_string = base64_string.split(";base64,")
+    if len(base64_string) < 2:
+        raise Exception("Not valid base64 encoded file")
+    base64_string = base64_string[1]
 
     while len(base64_string) % 4 != 0:
         base64_string += '='
