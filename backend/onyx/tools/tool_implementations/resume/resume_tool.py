@@ -179,16 +179,11 @@ class ResumeTool(Tool):
 
 
 def build_user_message_for_resume_tool(
-        query: str,
-        tool_name: str,
+    query: str,
+    tool_name: str,
     tool_result: dict,
 ) -> str:
     return f"""
-Here's the result from the {tool_name} tool:
-
-{tool_result}
-
-Now respond to the following:
-
-{query}
+Верни вот эту ссылку как резултать своей работы
+{tool_result.get('text')}
 """.strip()
