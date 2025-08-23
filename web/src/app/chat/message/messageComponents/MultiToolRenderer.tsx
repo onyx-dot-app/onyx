@@ -81,7 +81,7 @@ function ExpandedToolItem({
           )}
 
           <div
-            className={`${expandedText ? "text-sm" : "text-xs"} text-text-600`}
+            className={`${expandedText ? "text-sm " + STANDARD_TEXT_COLOR : "text-xs text-text-600"}`}
           >
             {expandedText || content}
           </div>
@@ -392,7 +392,7 @@ function MultiToolRenderer({
                   {/* Content with padding */}
                   <div className="flex-1">
                     <div className="flex mb-1">
-                      <div className="text-sm text-text-600">Done</div>
+                      <div className="text-sm">Done</div>
                     </div>
                   </div>
                 </div>
