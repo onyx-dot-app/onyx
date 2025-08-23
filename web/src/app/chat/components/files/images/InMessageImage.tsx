@@ -74,7 +74,9 @@ export function InMessageImage({ fileId }: { fileId: string }) {
             bg-black/80 
             hover:bg-black 
             text-white 
-            rounded-full 
+            dark:text-black
+            dark:hover:bg-white
+            rounded-lg
             opacity-0 
             group-hover:opacity-100 
             transition-all 

@@ -373,15 +373,26 @@ function MultiToolRenderer({
                   {/* Icon column */}
                   <div className="flex flex-col items-center w-5">
                     {/* Dot with background to cover the line */}
-                    <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 bg-background rounded-full">
-                      <FiCheckCircle className="w-3 h-3 text-text-700 rounded-full" />
+                    <div
+                      className="
+                        flex-shrink-0 
+                        flex 
+                        items-center 
+                        justify-center 
+                        w-5 
+                        h-5 
+                        bg-background 
+                        rounded-full
+                      "
+                    >
+                      <FiCheckCircle className="w-3 h-3 rounded-full" />
                     </div>
                   </div>
 
                   {/* Content with padding */}
                   <div className="flex-1">
                     <div className="flex mb-1">
-                      <div className="text-sm text-text-700">Done</div>
+                      <div className="text-sm text-text-600">Done</div>
                     </div>
                   </div>
                 </div>
