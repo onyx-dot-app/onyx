@@ -122,8 +122,8 @@ variable "irsa_service_account_namespace" {
 
 variable "irsa_service_account_name" {
   type        = string
-  description = "Name of the IRSA-enabled Kubernetes service account for S3 access"
-  default     = "onyx-s3-access"
+  description = "Name of the IRSA-enabled Kubernetes service account for workload access (S3 + optional RDS)"
+  default     = "onyx-workload-access"
 }
 
 variable "enable_rds_iam_for_service_account" {
@@ -142,10 +142,4 @@ variable "rds_db_connect_arn" {
   type        = string
   description = "Full rds-db:connect ARN to allow (required when enable_rds_iam_for_service_account is true)"
   default     = null
-}
-
-variable "rds_irsa_service_account_name" {
-  type        = string
-  description = "Name of the IRSA-enabled Kubernetes service account for RDS IAM auth"
-  default     = "onyx-rds-access"
 }

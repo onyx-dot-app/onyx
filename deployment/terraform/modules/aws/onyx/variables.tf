@@ -87,9 +87,9 @@ variable "redis_auth_token" {
   sensitive   = true
 }
 
-variable "enable_rds_iam_auth" {
+variable "enable_iam_auth" {
   type        = bool
-  description = "Enable AWS IAM authentication for the RDS Postgres instance"
+  description = "Enable AWS IAM authentication for the RDS Postgres instance and wire IRSA policies"
   default     = false
 }
 
