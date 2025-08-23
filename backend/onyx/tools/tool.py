@@ -40,6 +40,13 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
     def display_name(self) -> str:
         raise NotImplementedError
 
+    # Added to make tools work better with LLMs in prompts. Should be unique
+    # TODO: looks at ways how to best ensure uniqueness.
+    # TODO: extra review regarding coding style
+    @property
+    def llm_name(self) -> str:
+        return self.display_name
+
     """For LLMs which support explicit tool calling"""
 
     @abc.abstractmethod
