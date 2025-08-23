@@ -119,13 +119,8 @@ export function AIMessage({
       }
 
       // Documents from tool deltas
-      if (
-        packet.obj.type === PacketType.SEARCH_TOOL_DELTA ||
-        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
-      ) {
-        const toolDelta = packet.obj as
-          | SearchToolDelta
-          | ImageGenerationToolDelta;
+      if (packet.obj.type === PacketType.SEARCH_TOOL_DELTA) {
+        const toolDelta = packet.obj as SearchToolDelta;
         if ("documents" in toolDelta && toolDelta.documents) {
           for (const doc of toolDelta.documents) {
             if (doc.document_id) {
@@ -138,7 +133,9 @@ export function AIMessage({
       // check if final answer is coming
       if (
         packet.obj.type === PacketType.MESSAGE_START ||
-        packet.obj.type === PacketType.MESSAGE_DELTA
+        packet.obj.type === PacketType.MESSAGE_DELTA ||
+        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START ||
+        packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
       ) {
         finalAnswerComingRef.current = true;
       }

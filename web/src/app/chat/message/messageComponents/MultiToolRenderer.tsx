@@ -267,7 +267,7 @@ function MultiToolRenderer({
                           </div>
 
                           <div
-                            className={`relative z-10 mt-1 text-sm text-text-600 ${
+                            className={`relative z-10 text-sm text-text-600 ${
                               !isLastItem ? "mb-3" : ""
                             }`}
                           >

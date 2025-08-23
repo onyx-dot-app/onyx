@@ -25,13 +25,19 @@ export function isStreamingComplete(packets: Packet[]) {
 }
 
 export function isFinalAnswerComing(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.MESSAGE_START);
+  return packets.some(
+    (packet) =>
+      packet.obj.type === PacketType.MESSAGE_START ||
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
+  );
 }
 
 export function isFinalAnswerComplete(packets: Packet[]) {
   // Find the first MESSAGE_START packet and get its index
   const messageStartPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.MESSAGE_START
+    (packet) =>
+      packet.obj.type === PacketType.MESSAGE_START ||
+      packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_START
   );
 
   if (!messageStartPacket) {
