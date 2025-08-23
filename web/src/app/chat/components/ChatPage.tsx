@@ -28,8 +28,8 @@ import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { FeedbackModal } from "./modal/FeedbackModal";
 import { ShareChatSessionModal } from "./modal/ShareChatSessionModal";
 import { FiArrowDown } from "react-icons/fi";
-import { ChatIntro } from "./ChatIntro";
-import { StarterMessages } from "../../../components/assistants/StarterMessage";
+// import { ChatIntro } from "./ChatIntro";
+// import { StarterMessages } from "../../../components/assistants/StarterMessage";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
@@ -51,6 +51,7 @@ import TextView from "@/components/chat/TextView";
 import { Modal } from "@/components/Modal";
 import { useSendMessageToParent } from "@/lib/extension/utils";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
+import { Logo } from "@/components/logo/Logo";
 
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
@@ -731,6 +732,29 @@ export function ChatPage({
     );
   };
 
+  // Determine whether to show the centered input (no messages yet)
+  const showCenteredInput = useMemo(() => {
+    return (
+      messageHistory.length === 0 &&
+      !isFetchingChatMessages &&
+      !loadingError &&
+      !submittedMessage
+    );
+  }, [
+    messageHistory.length,
+    isFetchingChatMessages,
+    loadingError,
+    submittedMessage,
+  ]);
+
+  const inputContainerClasses = useMemo(() => {
+    return `absolute pointer-events-none z-10 w-full transition-transform duration-200 ease-out ${
+      showCenteredInput
+        ? "bottom-0 translate-y-[-45vh]"
+        : "bottom-0 translate-y-0"
+    }`;
+  }, [showCenteredInput]);
+
   return (
     <>
       <HealthCheckBanner />
@@ -1060,24 +1084,8 @@ export function ChatPage({
                           {messageHistory.length === 0 &&
                             !isFetchingChatMessages &&
                             !loadingError &&
-                            !submittedMessage && (
-                              <div className="h-full w-[95%] mx-auto flex flex-col justify-center items-center">
-                                <ChatIntro selectedPersona={liveAssistant} />
-
-                                <StarterMessages
-                                  currentPersona={liveAssistant}
-                                  onSubmit={(messageOverride) =>
-                                    onSubmit({
-                                      message: messageOverride,
-                                      selectedFiles: selectedFiles,
-                                      selectedFolders: selectedFolders,
-                                      currentMessageFiles: currentMessageFiles,
-                                      useAgentSearch: deepResearchEnabled,
-                                    })
-                                  }
-                                />
-                              </div>
-                            )}
+                            !submittedMessage &&
+                            null}
                           <div
                             style={{ overflowAnchor: "none" }}
                             key={chatSessionId}
@@ -1238,11 +1246,8 @@ export function ChatPage({
                             <div ref={endDivRef} />
                           </div>
                         </div>
-                        <div
-                          ref={inputRef}
-                          className="absolute pointer-events-none bottom-0 z-10 w-full"
-                        >
-                          {aboveHorizon && (
+                        <div ref={inputRef} className={inputContainerClasses}>
+                          {!showCenteredInput && aboveHorizon && (
                             <div className="mx-auto w-fit !pointer-events-none flex sticky justify-center">
                               <button
                                 onClick={() => clientScrollToBottom()}
@@ -1254,11 +1259,22 @@ export function ChatPage({
                           )}
 
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
+                            {showCenteredInput && (
+                              <div className="flex justify-center mb-6 transition-opacity duration-300">
+                                <Logo
+                                  height={48}
+                                  width={48}
+                                  className="mx-auto"
+                                />
+                              </div>
+                            )}
                             <ChatInputBar
                               deepResearchEnabled={deepResearchEnabled}
                               setDeepResearchEnabled={() =>
                                 toggleDeepResearch()
                               }
+                              chatSessionId={existingChatSessionId}
+                              assistantId={selectedAssistant?.id}
                               toggleDocumentSidebar={toggleDocumentSidebar}
                               availableSources={sources}
                               availableDocumentSets={documentSets}
@@ -1296,7 +1312,8 @@ export function ChatPage({
                               handleFileUpload={handleMessageSpecificFileUpload}
                               textAreaRef={textAreaRef}
                             />
-                            {enterpriseSettings &&
+                            {!showCenteredInput &&
+                              enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (
                                 <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
                                   <div className="text-sm text-text-500 max-w-searchbar-max px-4 text-center">
@@ -1308,7 +1325,8 @@ export function ChatPage({
                                   </div>
                                 </div>
                               )}
-                            {enterpriseSettings &&
+                            {!showCenteredInput &&
+                              enterpriseSettings &&
                               enterpriseSettings.use_custom_logotype && (
                                 <div className="hidden lg:block absolute right-0 bottom-0">
                                   <img

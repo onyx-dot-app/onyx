@@ -184,6 +184,7 @@ def construct_tools(
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    allowed_tool_ids: list[int] | None = None,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
@@ -194,6 +195,10 @@ def construct_tools(
         user_oauth_token = user.oauth_accounts[0].access_token
 
     for db_tool_model in persona.tools:
+        # If allowed_tool_ids is specified, skip tools not in the allowed list
+        if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
+            continue
+
         if db_tool_model.in_code_tool_id:
             tool_cls = get_built_in_tool_by_id(
                 db_tool_model.in_code_tool_id, db_session

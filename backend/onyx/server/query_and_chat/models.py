@@ -144,6 +144,9 @@ class CreateChatMessageRequest(ChunkContext):
 
     skip_gen_ai_answer_generation: bool = False
 
+    # List of allowed tool IDs to restrict tool usage. If not provided, all tools available to the persona will be used.
+    allowed_tool_ids: list[int] | None = None
+
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
         if self.search_doc_ids is None and self.retrieval_options is None:

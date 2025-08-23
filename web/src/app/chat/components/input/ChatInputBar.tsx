@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { FiPlusCircle, FiPlus, FiFilter } from "react-icons/fi";
+import { FiPlus, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
@@ -17,12 +17,6 @@ import {
   StopGeneratingIcon,
 } from "@/components/icons/icons";
 import { OnyxDocument, SourceMetadata } from "@/lib/search/interfaces";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ChatState } from "@/app/chat/interfaces";
 import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
@@ -33,11 +27,11 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
 import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmProviderText";
 import { DeepResearchToggle } from "./DeepResearchToggle";
+import { ActionToggle } from "./ActionManagement";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -115,6 +109,9 @@ interface ChatInputBarProps {
   retrievalEnabled: boolean;
   deepResearchEnabled: boolean;
   setDeepResearchEnabled: (deepResearchEnabled: boolean) => void;
+  chatSessionId: string | null;
+  assistantId: number | undefined;
+  placeholder?: string;
 }
 
 export function ChatInputBar({
@@ -143,6 +140,9 @@ export function ChatInputBar({
   llmManager,
   deepResearchEnabled,
   setDeepResearchEnabled,
+  chatSessionId,
+  assistantId,
+  placeholder,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const {
@@ -486,7 +486,10 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`How can ${selectedAssistant.name} help you today`}
+              placeholder={
+                placeholder ||
+                `How can ${selectedAssistant.name} help you today`
+              }
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -668,7 +671,7 @@ export function ChatInputBar({
                   }}
                   tooltipContent={"Upload files and attach user files"}
                 />
-
+                {/* 
                 {retrievalEnabled && (
                   <FilterPopup
                     availableSources={availableSources}
@@ -686,6 +689,10 @@ export function ChatInputBar({
                       tooltipContent: "Filter your search",
                     }}
                   />
+                )} */}
+
+                {retrievalEnabled && (
+                  <ActionToggle selectedAssistant={selectedAssistant} />
                 )}
 
                 {retrievalEnabled &&
