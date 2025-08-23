@@ -40,7 +40,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("iteration_nr", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("purpose", sa.String(), nullable=True),
         sa.Column("reasoning", sa.String(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
@@ -64,7 +69,12 @@ def upgrade() -> None:
         ),
         sa.Column("iteration_nr", sa.Integer(), nullable=False),
         sa.Column("iteration_sub_step_nr", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.Column("sub_step_instructions", sa.String(), nullable=True),
         sa.Column(
             "sub_step_tool_id",
@@ -76,6 +86,7 @@ def upgrade() -> None:
         sa.Column("sub_answer", sa.String(), nullable=True),
         sa.Column("cited_doc_results", postgresql.JSONB(), nullable=True),
         sa.Column("claims", postgresql.JSONB(), nullable=True),
+        sa.Column("generated_images", postgresql.JSONB(), nullable=True),
         sa.Column("additional_data", postgresql.JSONB(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )

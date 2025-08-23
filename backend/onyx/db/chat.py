@@ -21,6 +21,9 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.dr.enums import ResearchType
+from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
+    GeneratedImage,
+)
 from onyx.agents.agent_search.shared_graph_utils.models import CombinedAgentMetrics
 from onyx.agents.agent_search.shared_graph_utils.models import (
     SubQuestionAnswerResults,
@@ -253,7 +256,7 @@ def create_reasoning_packets(reasoning_text: str, step_nr: int) -> list[Packet]:
 
 
 def create_image_generation_packets(
-    images: list[dict[str, str]] | None, step_nr: int
+    images: list[GeneratedImage], step_nr: int
 ) -> list[Packet]:
     packets: list[Packet] = []
 
@@ -1367,8 +1370,8 @@ def translate_db_message_to_packets(
                     step_nr += 1
 
                 sub_steps = research_iteration.sub_steps
-                tasks = []
-                tool_call_ids = []
+                tasks: list[str] = []
+                tool_call_ids: list[int] = []
                 cited_docs: list[SavedSearchDoc] = []
 
                 for sub_step in sub_steps:
@@ -1400,6 +1403,7 @@ def translate_db_message_to_packets(
 
                         cited_docs.extend(saved_search_docs)
                     else:
+                        # @Joachim what is this?
                         packet_list.extend(
                             create_reasoning_packets(
                                 _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
@@ -1420,6 +1424,7 @@ def translate_db_message_to_packets(
 
                 else:
                     # TODO: replace with isinstance, resolving circular imports
+                    # @Joachim what is this?
                     tool_id = tool_call_ids[0]
                     if not tool_id:
                         raise ValueError("Tool ID is required")
@@ -1444,20 +1449,15 @@ def translate_db_message_to_packets(
 
                     elif tool_name == "ImageGenerationTool":
 
-                        if len(tasks) > 1:
-                            packet_list.extend(
-                                create_reasoning_packets(
-                                    _CANNOT_SHOW_STEP_RESULTS_STR, step_nr
-                                )
-                            )
-                            step_nr += 1
+                        if sub_step.generated_images is None:
+                            raise ValueError("No generated images found")
 
-                        else:
-                            images = cited_docs[0]
-                            packet_list.extend(
-                                create_image_generation_packets(images, step_nr)
+                        packet_list.extend(
+                            create_image_generation_packets(
+                                sub_step.generated_images.images, step_nr
                             )
-                            step_nr += 1
+                        )
+                        step_nr += 1
 
                     else:
                         raise ValueError(f"Unknown tool name: {tool_name}")

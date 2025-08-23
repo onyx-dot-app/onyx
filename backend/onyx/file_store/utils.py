@@ -330,6 +330,10 @@ def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
     return run_functions_tuples_in_parallel(funcs)
 
 
+def build_frontend_file_url(file_id: str) -> str:
+    return f"/api/chat/file/{file_id}"
+
+
 def load_all_persona_files_for_chat(
     persona_id: int, db_session: Session
 ) -> tuple[list[InMemoryChatFile], list[int]]:

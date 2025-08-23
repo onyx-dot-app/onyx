@@ -3,6 +3,7 @@ from datetime import datetime
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentMainState
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentUpdate
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -10,7 +11,6 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.utils.logger import setup_logger
 
@@ -36,18 +36,16 @@ def is_reducer(
     new_updates = [
         update for update in branch_updates if update.iteration_nr == current_iteration
     ]
+    generated_images: list[GeneratedImage] = []
+    for update in new_updates:
+        if update.generated_images:
+            generated_images.extend(update.generated_images)
 
     # Write the results to the stream
     write_custom_event(
         current_step_nr,
-        ImageGenerationToolStart(),
-        writer,
-    )
-
-    write_custom_event(
-        current_step_nr,
         ImageGenerationToolDelta(
-            images={},
+            images=generated_images,
         ),
         writer,
     )

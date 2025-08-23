@@ -7,6 +7,7 @@ from typing import Union
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.context.search.models import SavedSearchDoc
 
 
@@ -65,7 +66,7 @@ class ImageGenerationToolStart(BaseObj):
 class ImageGenerationToolDelta(BaseObj):
     type: Literal["image_generation_tool_delta"] = "image_generation_tool_delta"
 
-    images: list[dict[str, str]] | None = None
+    images: list[GeneratedImage]
 
 
 class CustomToolStart(BaseObj):

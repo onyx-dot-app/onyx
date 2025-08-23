@@ -42,6 +42,9 @@ from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy import PrimaryKeyConstraint
 
+from onyx.agents.agent_search.dr.sub_agents.image_generation.models import (
+    GeneratedImageFullResult,
+)
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
 from onyx.configs.constants import (
@@ -3376,7 +3379,9 @@ class ResearchAgentIteration(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE")
     )
     iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     purpose: Mapped[str] = mapped_column(String, nullable=True)
 
     reasoning: Mapped[str] = mapped_column(String, nullable=True)
@@ -3414,16 +3419,31 @@ class ResearchAgentIterationSubStep(Base):
     )
     iteration_nr: Mapped[int] = mapped_column(Integer, nullable=False)
     iteration_sub_step_nr: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
-    sub_step_instructions: Mapped[str] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    sub_step_instructions: Mapped[str | None] = mapped_column(String, nullable=True)
     sub_step_tool_id: Mapped[int | None] = mapped_column(
         ForeignKey("tool.id"), nullable=True
     )
-    reasoning: Mapped[str] = mapped_column(String, nullable=True)
-    sub_answer: Mapped[str] = mapped_column(String, nullable=True)
+
+    # for all step-types
+    reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
+    sub_answer: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # for search-based step-types
     cited_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
-    claims: Mapped[list[str]] = mapped_column(postgresql.JSONB(), nullable=True)
-    additional_data: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    claims: Mapped[list[str] | None] = mapped_column(postgresql.JSONB(), nullable=True)
+
+    # for image generation step-types
+    generated_images: Mapped[GeneratedImageFullResult | None] = mapped_column(
+        PydanticType(GeneratedImageFullResult), nullable=True
+    )
+
+    # for custom step-types
+    additional_data: Mapped[JSON_ro | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
 
     # Relationships
     primary_message: Mapped["ChatMessage"] = relationship(

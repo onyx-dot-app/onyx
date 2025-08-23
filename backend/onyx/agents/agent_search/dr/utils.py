@@ -151,24 +151,14 @@ def aggregate_context(
         output_strings.append("\n---\n")
 
         # save global iteration response
-        global_iteration_responses.append(
-            IterationAnswer(
-                tool=iteration_response.tool,
-                tool_id=iteration_response.tool_id,
-                iteration_nr=iteration_response.iteration_nr,
-                parallelization_nr=iteration_response.parallelization_nr,
-                question=iteration_response.question,
-                reasoning=iteration_response.reasoning,
-                answer=answer_str,
-                cited_documents={
-                    global_citations[doc.center_chunk.document_id]: doc
-                    for doc in iteration_response.cited_documents.values()
-                },
-                background_info=iteration_response.background_info,
-                claims=claims,
-                additional_data=iteration_response.additional_data,
-            )
-        )
+        iteration_response_copy = iteration_response.model_copy()
+        iteration_response_copy.answer = answer_str
+        iteration_response_copy.claims = claims
+        iteration_response_copy.cited_documents = {
+            global_citations[doc.center_chunk.document_id]: doc
+            for doc in iteration_response.cited_documents.values()
+        }
+        global_iteration_responses.append(iteration_response_copy)
 
     # add document contents if requested
     if include_documents:
@@ -278,7 +268,7 @@ def update_db_session_with_messages(
     token_count: int | None = None,
     rephrased_query: str | None = None,
     prompt_id: int | None = None,
-    citations: dict[str | int, int] | None = None,
+    citations: dict[int, int] | None = None,
     error: str | None = None,
     alternate_assistant_id: int | None = None,
     overridden_model: str | None = None,

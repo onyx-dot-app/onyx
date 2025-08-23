@@ -4,6 +4,7 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.models import GeneratedImage
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
@@ -11,6 +12,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.file_store.utils import build_frontend_file_url
+from onyx.file_store.utils import save_files
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     IMAGE_GENERATION_RESPONSE_ID,
 )
@@ -59,29 +62,46 @@ def image_generation(
     )
 
     # Generate images using the image generation tool
-    generated_images: list[ImageGenerationResponse] = []
+    image_generation_responses: list[ImageGenerationResponse] = []
 
     for tool_response in image_tool.run(prompt=branch_query):
         if tool_response.id == IMAGE_GENERATION_RESPONSE_ID:
             response = cast(list[ImageGenerationResponse], tool_response.response)
-            generated_images = response
+            image_generation_responses = response
             break
+
+    # save images to file store
+    file_ids = save_files(
+        urls=[img.url for img in image_generation_responses if img.url],
+        base64_files=[
+            img.image_data for img in image_generation_responses if img.image_data
+        ],
+    )
+
+    final_generated_images = [
+        GeneratedImage(
+            file_id=file_id,
+            url=build_frontend_file_url(file_id),
+            revised_prompt=img.revised_prompt,
+        )
+        for file_id, img in zip(file_ids, image_generation_responses)
+    ]
 
     logger.debug(
         f"Image generation complete for {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
     # Create answer string describing the generated images
-    if generated_images:
+    if final_generated_images:
         image_descriptions = []
-        for i, img in enumerate(generated_images, 1):
+        for i, img in enumerate(final_generated_images, 1):
             image_descriptions.append(f"Image {i}: {img.revised_prompt}")
 
         answer_string = (
-            f"Generated {len(generated_images)} image(s) based on the request: {branch_query}\n\n"
+            f"Generated {len(final_generated_images)} image(s) based on the request: {branch_query}\n\n"
             + "\n".join(image_descriptions)
         )
-        reasoning = f"Used image generation tool to create {len(generated_images)} image(s) based on the user's request."
+        reasoning = f"Used image generation tool to create {len(final_generated_images)} image(s) based on the user's request."
     else:
         answer_string = f"Failed to generate images for request: {branch_query}"
         reasoning = "Image generation tool did not return any results."
@@ -98,11 +118,7 @@ def image_generation(
                 claims=[],
                 cited_documents={},
                 reasoning=reasoning,
-                additional_data=(
-                    {"generated_images": str(len(generated_images))}
-                    if generated_images
-                    else None
-                ),
+                generated_images=final_generated_images,
             )
         ],
         log_messages=[

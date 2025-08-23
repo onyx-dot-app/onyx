@@ -213,7 +213,7 @@ export function AIMessage({
                   <div className="max-w-message-max break-words">
                     <div
                       ref={markdownRef}
-                      className="overflow-x-visible max-w-content-max focus:outline-none cursor-text select-text"
+                      className="overflow-x-visible max-w-content-max focus:outline-none select-text"
                       onCopy={(e) => handleCopy(e, markdownRef)}
                     >
                       {groupedPackets.length === 0 ? (
@@ -221,14 +221,14 @@ export function AIMessage({
                         <BlinkingDot />
                       ) : (
                         (() => {
-                          // Separate tool groups from final answer groups
+                          // Simple split: tools vs non-tools
                           const toolGroups = groupedPackets.filter(
                             (group) =>
                               group.packets[0] && isToolPacket(group.packets[0])
                           ) as { ind: number; packets: Packet[] }[];
-                          // display final answer only if all tools are fully displayed
-                          // OR if there are no tools at all (in which case show immediately)
-                          const finalAnswerGroups =
+
+                          // Non-tools include messages AND image generation
+                          const nonToolGroups =
                             allToolsFullyDisplayed || toolGroups.length === 0
                               ? groupedPackets.filter(
                                   (group) =>
@@ -239,7 +239,7 @@ export function AIMessage({
 
                           return (
                             <>
-                              {/* Render all tool groups together using MultiToolRenderer */}
+                              {/* Render tool groups in multi-tool renderer */}
                               {toolGroups.length > 0 && (
                                 <MultiToolRenderer
                                   packetGroups={toolGroups}
@@ -254,15 +254,20 @@ export function AIMessage({
                                 />
                               )}
 
-                              {/* Render final answer groups directly using renderMessageComponent */}
-                              {finalAnswerGroups.map((group) => (
+                              {/* Render non-tool groups (messages + image generation) in main area */}
+                              {nonToolGroups.map((group) => (
                                 <RendererComponent
                                   key={group.ind}
                                   packets={group.packets}
                                   chatState={chatState}
                                   onComplete={() => {
-                                    // Final answer completed
-                                    setDisplayComplete(true);
+                                    // Check if this was the last group
+                                    const isLastGroup =
+                                      group ===
+                                      nonToolGroups[nonToolGroups.length - 1];
+                                    if (isLastGroup) {
+                                      setDisplayComplete(true);
+                                    }
                                   }}
                                   animate={false}
                                 >
