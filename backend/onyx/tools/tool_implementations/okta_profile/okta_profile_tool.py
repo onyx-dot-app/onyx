@@ -39,7 +39,9 @@ class OIDCConfig(BaseModel):
 
 class OktaProfileTool(BaseTool):
     _NAME = "get_okta_profile"
-    _DESCRIPTION = "This tool is used to get the user's profile information."
+    _DESCRIPTION = """The Okta Profile Action allows the assistant to fetch the current \
+user's information from Okta. It could include the user's name, email, phone number, \
+address as well as other information like who they report to and who reports to them."""
     _DISPLAY_NAME = "Okta Profile"
 
     def __init__(

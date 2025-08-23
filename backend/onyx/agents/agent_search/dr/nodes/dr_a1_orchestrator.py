@@ -230,10 +230,10 @@ def orchestrator(
                     # max_tokens=2500,
                 )
                 next_step = orchestrator_action.next_step
-                next_tool = next_step.tool
+                next_tool_name = next_step.tool
                 query_list = [q for q in (next_step.questions or [])]
 
-                tool_calls_string = create_tool_call_string(next_tool, query_list)
+                tool_calls_string = create_tool_call_string(next_tool_name, query_list)
 
             except Exception as e:
                 logger.error(f"Error in approach extraction: {e}")
@@ -336,16 +336,19 @@ def orchestrator(
                     # max_tokens=1500,
                 )
                 next_step = orchestrator_action.next_step
-                next_tool = next_step.tool
+                next_tool_name = next_step.tool
+
+                next_tool = available_tools[next_tool_name].path
+
                 query_list = [q for q in (next_step.questions or [])]
                 reasoning_result = orchestrator_action.reasoning
 
-                tool_calls_string = create_tool_call_string(next_tool, query_list)
+                tool_calls_string = create_tool_call_string(next_tool_name, query_list)
             except Exception as e:
                 logger.error(f"Error in approach extraction: {e}")
                 raise e
 
-            remaining_time_budget -= available_tools[next_tool].cost
+            remaining_time_budget -= available_tools[next_tool_name].cost
         else:
             reasoning_result = "Time to wrap up."
 
@@ -434,7 +437,7 @@ def orchestrator(
     purpose = cast(str, merge_content(*purpose_tokens))
 
     return OrchestrationUpdate(
-        tools_used=[next_tool],
+        tools_used=[next_tool_name],
         query_list=query_list or [],
         iteration_nr=iteration_nr,
         current_step_nr=current_step_nr,
