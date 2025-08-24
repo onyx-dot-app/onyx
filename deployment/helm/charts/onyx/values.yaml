@@ -635,7 +635,9 @@ configMap:
   SESSION_EXPIRE_TIME_SECONDS: "86400"
   # Can be something like onyx.app, as an extra double-check
   VALID_EMAIL_DOMAINS: ""
-  # For sending verification emails, if unspecified then defaults to 'smtp.gmail.com'
+  # For sending verification emails, true or false
+  REQUIRE_EMAIL_VERIFICATION: ""
+  # If unspecified then defaults to 'smtp.gmail.com'
   SMTP_SERVER: ""
   # For sending verification emails, if unspecified then defaults to '587'
   SMTP_PORT: ""
