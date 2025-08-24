@@ -52,6 +52,7 @@ SMART_CHIP_CHAR = "\ue907"
 WEB_VIEW_LINK_KEY = "webViewLink"
 
 MAX_RETRIEVER_EMAILS = 20
+CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
 
 # Mapping of Google Drive mime types to export formats
 GOOGLE_MIME_TYPES_TO_EXPORT = {
@@ -106,13 +107,13 @@ def download_request(
     # For other file types, download the file
     # Use the correct API call for downloading files
     request = service.files().get_media(fileId=file_id)
-    return _donwload_request(request, file_id, size_threshold)
+    return _download_request(request, file_id, size_threshold)
 
 
-def _donwload_request(request: Any, file_id: str, size_threshold: int) -> bytes:
+def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
     response_bytes = io.BytesIO()
     downloader = MediaIoBaseDownload(
-        response_bytes, request, chunksize=size_threshold * 2
+        response_bytes, request, chunksize=size_threshold + CHUNK_SIZE_BUFFER
     )
     done = False
     while not done:
@@ -176,7 +177,7 @@ def _download_and_extract_sections_basic(
         request = service.files().export_media(
             fileId=file_id, mimeType=export_mime_type
         )
-        response = _donwload_request(request, file_id, size_threshold)
+        response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
             return []
