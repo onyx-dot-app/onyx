@@ -66,6 +66,8 @@ from onyx.server.query_and_chat.models import SubQuestionDetail
 from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
 from onyx.server.query_and_chat.streaming_models import CitationStart
+from onyx.server.query_and_chat.streaming_models import CustomToolDelta
+from onyx.server.query_and_chat.streaming_models import CustomToolStart
 from onyx.server.query_and_chat.streaming_models import EndStepPacketList
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
 from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
@@ -272,6 +274,49 @@ def create_image_generation_packets(
             ind=step_nr,
             obj=ImageGenerationToolDelta(
                 type="image_generation_tool_delta", images=images
+            ),
+        ),
+    )
+
+    packets.append(
+        Packet(
+            ind=step_nr,
+            obj=SectionEnd(
+                type="section_end",
+            ),
+        )
+    )
+
+    return packets
+
+
+def create_custom_tool_packets(
+    tool_name: str,
+    response_type: str,
+    step_nr: int,
+    data: dict | list | str | int | float | bool | None = None,
+    file_ids: list[str] | None = None,
+) -> list[Packet]:
+    packets: list[Packet] = []
+
+    packets.append(
+        Packet(
+            ind=step_nr,
+            obj=CustomToolStart(type="custom_tool_start", tool_name=tool_name),
+        )
+    )
+
+    packets.append(
+        Packet(
+            ind=step_nr,
+            obj=CustomToolDelta(
+                type="custom_tool_delta",
+                tool_name=tool_name,
+                response_type=response_type,
+                # For non-file responses
+                data=data,
+                # For file-based responses like image/csv
+                file_ids=file_ids,
             ),
         ),
     )
@@ -1459,8 +1504,27 @@ def translate_db_message_to_packets(
                         )
                         step_nr += 1
 
+                    elif tool_name == "OktaProfileTool":
+                        packet_list.extend(
+                            create_custom_tool_packets(
+                                tool_name=tool_name,
+                                response_type="text",
+                                step_nr=step_nr,
+                                data=sub_step.sub_answer,
+                            )
+                        )
+                        step_nr += 1
+
                     else:
-                        raise ValueError(f"Unknown tool name: {tool_name}")
+                        packet_list.extend(
+                            create_custom_tool_packets(
+                                tool_name=tool_name,
+                                response_type="text",
+                                step_nr=step_nr,
+                                data=sub_step.sub_answer,
+                            )
+                        )
+                        step_nr += 1
 
         packet_list.extend(
             create_message_packets(
