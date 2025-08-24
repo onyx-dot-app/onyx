@@ -514,6 +514,7 @@ def clarifier(
                 original_question=original_question,
                 chat_history_string="",
                 tools_used=[DRPath.END.value],
+                available_tools=available_tools,
                 query_list=[],
                 assistant_system_prompt=assistant_system_prompt,
                 assistant_task_prompt=assistant_task_prompt,
@@ -571,6 +572,7 @@ def clarifier(
                 chat_history_string="",
                 tools_used=[DRPath.END.value],
                 query_list=[],
+                available_tools=available_tools,
                 assistant_system_prompt=assistant_system_prompt,
                 assistant_task_prompt=assistant_task_prompt,
             )

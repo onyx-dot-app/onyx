@@ -20,12 +20,10 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
 
     if next_tool_name in available_tools:
         next_tool_path = available_tools[next_tool_name].path
+    elif next_tool_name == DRPath.END.value:
+        return END
     else:
         return DRPath.ORCHESTRATOR
-
-    # handle END
-    if next_tool_path == DRPath.END:
-        return END
 
     # handle invalid paths
     if next_tool_path == DRPath.CLARIFIER:

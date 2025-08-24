@@ -21,6 +21,7 @@ from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import create_tool_call_string
 from onyx.agents.agent_search.dr.utils import get_prompt_question
+from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -45,6 +46,19 @@ _DECISION_SYSTEM_PROMPT_PREFIX = "Here are general instructions by the user, whi
 may or may not influence the decision what to do next:\n\n"
 
 
+def _get_implied_next_tool_based_on_tool_call_history(
+    tools_used: list[str],
+) -> str | None:
+    """
+    Identify the next tool based on the tool call history. Initially, we only support
+    special handling of the image generation tool.
+    """
+    if tools_used[-1] == DRPath.IMAGE_GENERATION.value:
+        return DRPath.END.value
+    else:
+        return None
+
+
 def orchestrator(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> OrchestrationUpdate:
@@ -58,6 +72,14 @@ def orchestrator(
     question = state.original_question
     if not question:
         raise ValueError("Question is required for orchestrator")
+
+    db_session = graph_config.persistence.db_session
+    message_id = graph_config.persistence.message_id
+    chat_session_id = str(graph_config.persistence.chat_session_id)
+
+    state.original_question
+
+    available_tools = state.available_tools
 
     plan_of_record = state.plan_of_record
     clarification = state.clarification
@@ -82,6 +104,52 @@ def orchestrator(
         aggregate_context(state.iteration_responses, include_documents=True).context
         or "(No answer history yet available)"
     )
+
+    # Identify early exit condition based on tool call history
+
+    next_tool_based_on_tool_call_history = (
+        _get_implied_next_tool_based_on_tool_call_history(state.tools_used)
+    )
+
+    if next_tool_based_on_tool_call_history == DRPath.END.value:
+        update_db_session_with_messages(
+            db_session=db_session,
+            chat_message_id=message_id,
+            chat_session_id=chat_session_id,
+            is_agentic=graph_config.behavior.use_agentic_search,
+            message="",
+            update_parent_message=True,
+            research_answer_purpose=None,
+        )
+
+        db_session.commit()
+
+        return OrchestrationUpdate(
+            tools_used=[next_tool_based_on_tool_call_history],
+            query_list=[],
+            iteration_nr=iteration_nr,
+            current_step_nr=current_step_nr,
+            log_messages=[
+                get_langgraph_node_log_string(
+                    graph_component="main",
+                    node_name="orchestrator",
+                    node_start_time=node_start_time,
+                )
+            ],
+            plan_of_record=plan_of_record,
+            remaining_time_budget=remaining_time_budget,
+            iteration_instructions=[
+                IterationInstructions(
+                    iteration_nr=iteration_nr,
+                    plan=plan_of_record.plan if plan_of_record else None,
+                    reasoning="",
+                    purpose="",
+                )
+            ],
+        )
+
+    # no early exit forced. Continue.
+
     available_tools = state.available_tools or {}
 
     uploaded_context = state.uploaded_context or ""
