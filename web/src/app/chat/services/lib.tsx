@@ -1,15 +1,8 @@
 import {
-  AnswerPiecePacket,
   OnyxDocument,
   Filters,
   DocumentInfoPacket,
   StreamStopInfo,
-  ProSearchPacket,
-  SubQueryPiece,
-  AgentAnswerPiece,
-  SubQuestionPiece,
-  ExtendedToolResponse,
-  RefinedAnswerImprovement,
 } from "@/lib/search/interfaces";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ChatState, FeedbackType } from "@/app/chat/interfaces";
@@ -25,7 +18,6 @@ import {
   RetrievalType,
   StreamingError,
   ToolCallMetadata,
-  AgenticMessageResponseIDInfo,
   UserKnowledgeFilePacket,
 } from "../interfaces";
 import { MinimalPersonaSnapshot } from "../../admin/assistants/interfaces";
@@ -161,13 +153,6 @@ export type PacketType =
   | StreamingError
   | MessageResponseIDInfo
   | StreamStopInfo
-  | ProSearchPacket
-  | SubQueryPiece
-  | AgentAnswerPiece
-  | SubQuestionPiece
-  | ExtendedToolResponse
-  | RefinedAnswerImprovement
-  | AgenticMessageResponseIDInfo
   | UserKnowledgeFilePacket
   | Packet;
 

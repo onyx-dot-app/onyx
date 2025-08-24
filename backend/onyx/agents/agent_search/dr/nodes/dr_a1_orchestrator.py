@@ -411,9 +411,7 @@ def orchestrator(
 
         write_custom_event(
             current_step_nr,
-            ReasoningStart(
-                type="reasoning_start",
-            ),
+            ReasoningStart(),
             writer,
         )
 
@@ -421,7 +419,6 @@ def orchestrator(
             current_step_nr,
             ReasoningDelta(
                 reasoning=reasoning_result,
-                type="reasoning_delta",
             ),
             writer,
         )
@@ -453,9 +450,7 @@ def orchestrator(
 
         write_custom_event(
             current_step_nr,
-            ReasoningStart(
-                type="reasoning_start",
-            ),
+            ReasoningStart(),
             writer,
         )
 

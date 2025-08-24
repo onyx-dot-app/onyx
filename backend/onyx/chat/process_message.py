@@ -1,11 +1,10 @@
+import re
 import time
 import traceback
 from collections.abc import Callable
-from collections.abc import Generator
 from collections.abc import Iterator
 from typing import cast
 from typing import Protocol
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -14,24 +13,17 @@ from onyx.chat.answer import Answer
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.chat_utils import create_temporary_persona
 from onyx.chat.chat_utils import process_kg_commands
-from onyx.chat.models import AgenticMessageResponseIDInfo
-from onyx.chat.models import AgentMessageIDInfo
-from onyx.chat.models import AllCitations
-from onyx.chat.models import AnswerPostInfo
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
-from onyx.chat.models import ChatOnyxBotResponse
+from onyx.chat.models import ChatBasicResponse
 from onyx.chat.models import CitationConfig
 from onyx.chat.models import DocumentPruningConfig
-from onyx.chat.models import LLMRelevanceFilterResponse
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
-from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import StreamingError
-from onyx.chat.models import SubQuestionKey
 from onyx.chat.models import UserKnowledgeFilePacket
-from onyx.chat.packet_proccessing.process_streamed_packets import ChatPacket
 from onyx.chat.packet_proccessing.process_streamed_packets import (
     process_streamed_packets,
 )
@@ -43,15 +35,13 @@ from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.chat_configs import DISABLE_LLM_CHOOSE_SEARCH
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import SELECTED_SECTIONS_MAX_WINDOW_PERCENTAGE
-from onyx.configs.constants import AGENT_SEARCH_INITIAL_KEY
-from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
-from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.retrieval.search_runner import (
     inference_sections_from_ids,
 )
@@ -63,8 +53,6 @@ from onyx.db.chat import get_db_search_doc_by_id
 from onyx.db.chat import get_doc_query_identifiers_from_model
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
-from onyx.db.chat import translate_db_message_to_chat_message_detail
-from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
@@ -77,7 +65,6 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_all_chat_files
 from onyx.kg.models import KGException
@@ -88,9 +75,12 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
+from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
+from onyx.server.query_and_chat.streaming_models import MessageDelta
+from onyx.server.query_and_chat.streaming_models import MessageStart
+from onyx.server.query_and_chat.streaming_models import Packet
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import SearchToolOverrideKwargs
@@ -113,11 +103,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-
-COMMON_TOOL_RESPONSE_TYPES = {
-    "image": ChatFileType.IMAGE,
-    "csv": ChatFileType.CSV,
-}
 
 
 class PartialResponse(Protocol):
@@ -238,9 +223,6 @@ def _get_persona_for_chat_session(
     return persona
 
 
-ChatPacketStream = Iterator[ChatPacket]
-
-
 def stream_chat_message_objects(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
@@ -263,7 +245,7 @@ def stream_chat_message_objects(
     # messages.
     # NOTE: is not stored in the database at all.
     single_message_history: str | None = None,
-) -> ChatPacketStream:
+) -> AnswerStream:
     """Streams in order:
     1. [conditional] Retrieved documents if a search needs to be run
     2. [conditional] LLM selected chunk indices if LLM chunk filtering is turned on
@@ -551,57 +533,6 @@ def stream_chat_message_objects(
             reserved_assistant_message_id=reserved_message_id,
         )
 
-        overridden_model = (
-            new_msg_req.llm_override.model_version if new_msg_req.llm_override else None
-        )
-
-        def create_response(
-            message: str,
-            rephrased_query: str | None,
-            reference_docs: list[DbSearchDoc] | None,
-            files: list[FileDescriptor],
-            token_count: int,
-            citations: dict[int, int] | None,
-            error: str | None,
-            tool_call: ToolCall | None,
-        ) -> ChatMessage:
-
-            is_kg_beta = parent_message.chat_session.persona.name.startswith(
-                TMP_DRALPHA_PERSONA_NAME
-            )
-            is_basic_search = tool_call and tool_call.tool_name == SearchTool._NAME
-            is_agentic_overwrite = new_msg_req.use_agentic_search and not (
-                is_kg_beta and is_basic_search
-            )
-
-            if is_kg_beta:
-                is_agentic_overwrite = False
-
-            return create_new_chat_message(
-                chat_session_id=chat_session_id,
-                parent_message=(
-                    final_msg
-                    if existing_assistant_message_id is None
-                    else parent_message
-                ),
-                prompt_id=prompt_id,
-                overridden_model=overridden_model,
-                message=message,
-                rephrased_query=rephrased_query,
-                token_count=token_count,
-                message_type=MessageType.ASSISTANT,
-                alternate_assistant_id=new_msg_req.alternate_assistant_id,
-                error=error,
-                reference_docs=reference_docs,
-                files=files,
-                citations=citations,
-                tool_call=tool_call,
-                db_session=db_session,
-                commit=False,
-                reserved_message_id=reserved_message_id,
-                is_agentic=is_agentic_overwrite,
-            )
-
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
         if new_msg_req.persona_override_config:
             prompt_config = PromptConfig(
@@ -782,123 +713,6 @@ def stream_chat_message_objects(
         return
 
 
-def _post_llm_answer_processing(
-    answer: Answer,
-    info_by_subq: dict[SubQuestionKey, AnswerPostInfo],
-    tool_dict: dict[int, list[Tool]],
-    partial_response: PartialResponse,
-    llm_tokenizer_encode_func: Callable[[str], list[int]],
-    db_session: Session,
-    chat_session_id: UUID,
-) -> Generator[ChatPacket, None, None]:
-    """
-    Stores messages in the db and yields some final packets to the frontend
-    """
-    # Post-LLM answer processing
-    try:
-        tool_name_to_tool_id: dict[str, int] = {}
-        for tool_id, tool_list in tool_dict.items():
-            for tool in tool_list:
-                tool_name_to_tool_id[tool.name] = tool_id
-
-        # Saving Gen AI answer and responding with message info
-
-        basic_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
-        info = (
-            info_by_subq[basic_key]
-            if basic_key in info_by_subq
-            else info_by_subq[
-                SubQuestionKey(
-                    level=AGENT_SEARCH_INITIAL_KEY[0],
-                    question_num=AGENT_SEARCH_INITIAL_KEY[1],
-                )
-            ]
-        )
-        gen_ai_response_message = partial_response(
-            message=answer.llm_answer,
-            rephrased_query=info.rephrased_query,
-            reference_docs=info.reference_db_search_docs,
-            files=info.ai_message_files,
-            token_count=len(llm_tokenizer_encode_func(answer.llm_answer)),
-            citations=(
-                info.message_specific_citations.citation_map
-                if info.message_specific_citations
-                else None
-            ),
-            error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
-            tool_call=(
-                ToolCall(
-                    tool_id=(
-                        tool_name_to_tool_id.get(info.tool_result.tool_name, 0)
-                        if info.tool_result
-                        else None
-                    ),
-                    tool_name=info.tool_result.tool_name if info.tool_result else None,
-                    tool_arguments=(
-                        info.tool_result.tool_args if info.tool_result else None
-                    ),
-                    tool_result=(
-                        info.tool_result.tool_result if info.tool_result else None
-                    ),
-                )
-                if info.tool_result
-                else None
-            ),
-        )
-
-        # add answers for levels >= 1, where each level has the previous as its parent. Use
-        # the answer_by_level method in answer.py to get the answers for each level
-        next_level = 1
-        prev_message = gen_ai_response_message
-        agent_answers = answer.llm_answer_by_level()
-        agentic_message_ids = []
-        while next_level in agent_answers:
-            next_answer = agent_answers[next_level]
-            info = info_by_subq[
-                SubQuestionKey(
-                    level=next_level, question_num=AGENT_SEARCH_INITIAL_KEY[1]
-                )
-            ]
-            next_answer_message = create_new_chat_message(
-                chat_session_id=chat_session_id,
-                parent_message=prev_message,
-                message=next_answer,
-                prompt_id=None,
-                token_count=len(llm_tokenizer_encode_func(next_answer)),
-                message_type=MessageType.ASSISTANT,
-                db_session=db_session,
-                files=info.ai_message_files,
-                reference_docs=info.reference_db_search_docs,
-                citations=(
-                    info.message_specific_citations.citation_map
-                    if info.message_specific_citations
-                    else None
-                ),
-                error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
-                is_agentic=True,
-            )
-            agentic_message_ids.append(
-                AgentMessageIDInfo(level=next_level, message_id=next_answer_message.id)
-            )
-            next_level += 1
-            prev_message = next_answer_message
-
-        logger.debug("Committing messages")
-        # Explicitly update the timestamp on the chat session
-        update_chat_session_updated_at_timestamp(chat_session_id, db_session)
-        db_session.commit()  # actually save user / assistant message
-
-        yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)
-
-        yield translate_db_message_to_chat_message_detail(gen_ai_response_message)
-    except Exception as e:
-        error_msg = str(e)
-        logger.exception(error_msg)
-
-        # Frontend will erase whatever answer and show this instead
-        yield StreamingError(error="Failed to parse LLM output")
-
-
 @log_generator_function_time()
 def stream_chat_message(
     new_msg_req: CreateChatMessageRequest,
@@ -926,28 +740,54 @@ def stream_chat_message(
             yield get_json_line(obj.model_dump())
 
 
+def remove_answer_citations(answer: str) -> str:
+    pattern = r"\s*\[\[\d+\]\]\(http[s]?://[^\s]+\)"
+
+    return re.sub(pattern, "", answer)
+
+
 @log_function_time()
-def gather_stream_for_slack(
-    packets: ChatPacketStream,
-) -> ChatOnyxBotResponse:
-    response = ChatOnyxBotResponse()
-
+def gather_stream(
+    packets: AnswerStream,
+) -> ChatBasicResponse:
     answer = ""
+    citations: list[CitationInfo] = []
+    error_msg: str | None = None
+    message_id: int | None = None
+    top_documents: list[SavedSearchDoc] = []
+
     for packet in packets:
-        if isinstance(packet, OnyxAnswerPiece) and packet.answer_piece:
-            answer += packet.answer_piece
-        elif isinstance(packet, QADocsResponse):
-            response.docs = packet
+        if isinstance(packet, Packet):
+            # Handle the different packet object types
+            if isinstance(packet.obj, MessageStart):
+                # MessageStart contains the initial content and final documents
+                if packet.obj.content:
+                    answer += packet.obj.content
+                if packet.obj.final_documents:
+                    top_documents = packet.obj.final_documents
+            elif isinstance(packet.obj, MessageDelta):
+                # MessageDelta contains incremental content updates
+                if packet.obj.content:
+                    answer += packet.obj.content
+            elif isinstance(packet.obj, CitationDelta):
+                # CitationDelta contains citation information
+                if packet.obj.citations:
+                    citations.extend(packet.obj.citations)
         elif isinstance(packet, StreamingError):
-            response.error_msg = packet.error
-        elif isinstance(packet, ChatMessageDetail):
-            response.chat_message_id = packet.message_id
-        elif isinstance(packet, LLMRelevanceFilterResponse):
-            response.llm_selected_doc_indices = packet.llm_selected_doc_indices
-        elif isinstance(packet, AllCitations):
-            response.citations = packet.citations
+            error_msg = packet.error
+        elif isinstance(packet, MessageResponseIDInfo):
+            message_id = packet.reserved_assistant_message_id
 
-    if answer:
-        response.answer = answer
+    if message_id is None:
+        raise ValueError("Message ID is required")
 
-    return response
+    return ChatBasicResponse(
+        answer=answer,
+        answer_citationless=remove_answer_citations(answer),
+        cited_documents={
+            citation.citation_num: citation.document_id for citation in citations
+        },
+        message_id=message_id,
+        error_msg=error_msg,
+        top_documents=top_documents,
+    )

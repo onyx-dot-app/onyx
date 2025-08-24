@@ -17,25 +17,12 @@ from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import RetrievalDocs
+from onyx.context.search.models import SavedSearchDoc
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import PromptOverride
-from onyx.server.query_and_chat.streaming_models import CitationDelta
 from onyx.server.query_and_chat.streaming_models import CitationInfo
-from onyx.server.query_and_chat.streaming_models import CitationStart
-from onyx.server.query_and_chat.streaming_models import CustomToolDelta
-from onyx.server.query_and_chat.streaming_models import CustomToolStart
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolDelta
-from onyx.server.query_and_chat.streaming_models import ImageGenerationToolStart
-from onyx.server.query_and_chat.streaming_models import MessageDelta
-from onyx.server.query_and_chat.streaming_models import MessageStart
-from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import Packet
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
-from onyx.server.query_and_chat.streaming_models import ReasoningStart
-from onyx.server.query_and_chat.streaming_models import SearchToolDelta
-from onyx.server.query_and_chat.streaming_models import SearchToolStart
-from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.server.query_and_chat.streaming_models import SubQuestionIdentifier
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
@@ -110,10 +97,6 @@ class LLMRelevanceFilterResponse(BaseModel):
     llm_selected_doc_indices: list[int]
 
 
-class FinalUsedContextDocsResponse(BaseModel):
-    final_context_docs: list[LlmDoc]
-
-
 class RelevanceAnalysis(BaseModel):
     relevant: bool
     content: str | None = None
@@ -154,15 +137,6 @@ class MessageResponseIDInfo(BaseModel):
     reserved_assistant_message_id: int
 
 
-class AgentMessageIDInfo(BaseModel):
-    level: int
-    message_id: int
-
-
-class AgenticMessageResponseIDInfo(BaseModel):
-    agentic_message_ids: list[AgentMessageIDInfo]
-
-
 class StreamingError(BaseModel):
     error: str
     stack_trace: str | None = None
@@ -176,16 +150,6 @@ class ThreadMessage(BaseModel):
     message: str
     sender: str | None = None
     role: MessageType = MessageType.USER
-
-
-class ChatOnyxBotResponse(BaseModel):
-    answer: str | None = None
-    citations: list[CitationInfo] | None = None
-    docs: QADocsResponse | None = None
-    llm_selected_doc_indices: list[int] | None = None
-    error_msg: str | None = None
-    chat_message_id: int | None = None
-    answer_valid: bool = True  # Reflexion result, default True if Reflexion not run
 
 
 class FileChatDisplay(BaseModel):
@@ -357,28 +321,6 @@ AgentSearchPacket = Union[
     | RefinedAnswerImprovement
 ]
 
-AnswerPacket = (
-    AnswerQuestionPossibleReturn
-    | AgentSearchPacket
-    | ToolCallKickoff
-    | ToolResponse
-    | MessageStart
-    | MessageDelta
-    | SectionEnd
-    | ReasoningStart
-    | ReasoningDelta
-    | SearchToolStart
-    | SearchToolDelta
-    | ImageGenerationToolStart
-    | ImageGenerationToolDelta
-    | OnyxAnswerPiece
-    | CitationStart
-    | CitationDelta
-    | CustomToolStart
-    | CustomToolDelta
-    | OverallStop
-)
-
 
 ResponsePart = (
     OnyxAnswerPiece
@@ -390,7 +332,15 @@ ResponsePart = (
     | AgentSearchPacket
 )
 
-AnswerStream = Iterator[Packet]
+AnswerStreamPart = (
+    Packet
+    | StreamStopInfo
+    | MessageResponseIDInfo
+    | StreamingError
+    | UserKnowledgeFilePacket
+)
+
+AnswerStream = Iterator[AnswerStreamPart]
 
 
 class AnswerPostInfo(BaseModel):
@@ -405,15 +355,14 @@ class AnswerPostInfo(BaseModel):
         arbitrary_types_allowed = True
 
 
-class SubQuestionKey(BaseModel):
-    level: int
-    question_num: int
+class ChatBasicResponse(BaseModel):
+    # This is built piece by piece, any of these can be None as the flow could break
+    answer: str
+    answer_citationless: str
 
-    def __hash__(self) -> int:
-        return hash((self.level, self.question_num))
+    top_documents: list[SavedSearchDoc]
 
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, SubQuestionKey) and (
-            self.level,
-            self.question_num,
-        ) == (other.level, other.question_num)
+    error_msg: str | None
+    message_id: int
+    # this is a map of the citation number to the document id
+    cited_documents: dict[int, str]

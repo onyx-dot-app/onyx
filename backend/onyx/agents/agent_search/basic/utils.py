@@ -64,6 +64,7 @@ def process_llm_stream(
         elif should_stream_answer:
             for response_part in answer_handler.handle_response_part(message, []):
 
+                # only stream out answer parts
                 if (
                     hasattr(response_part, "answer_piece")
                     and generate_final_answer
@@ -88,16 +89,7 @@ def process_llm_stream(
 
                     write_custom_event(
                         ind,
-                        MessageDelta(
-                            content=response_part.answer_piece, type="message_delta"
-                        ),
-                        writer,
-                    )
-
-                else:
-                    write_custom_event(
-                        ind,
-                        response_part,
+                        MessageDelta(content=response_part.answer_piece),
                         writer,
                     )
 

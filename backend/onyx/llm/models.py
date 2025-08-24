@@ -84,4 +84,5 @@ class PreviousMessage(BaseModel):
             files=[],
             tool_call=None,
             refined_answer_improvement=None,
+            research_answer_purpose=None,
         )

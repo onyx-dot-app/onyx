@@ -1,53 +1,29 @@
 "use client";
 
-import { v4 as uuidv4 } from "uuid";
-
 import {
   buildChatUrl,
   nameChatSession,
   updateLlmOverrideForChatSession,
 } from "../services/lib";
 
-import {
-  AgentAnswerPiece,
-  DocumentInfoPacket,
-  RefinedAnswerImprovement,
-  StreamStopInfo,
-  SubQueryPiece,
-  SubQuestionPiece,
-} from "@/lib/search/interfaces";
-
-import { AnswerPiecePacket } from "@/lib/search/interfaces";
+import { StreamStopInfo } from "@/lib/search/interfaces";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getLastSuccessfulMessageId,
   getLatestMessageChain,
   MessageTreeState,
-  removeMessage,
-  setMessageAsLatest,
   upsertMessages,
 } from "../services/messageTree";
-import {
-  MinimalPersonaSnapshot,
-  Persona,
-} from "@/app/admin/assistants/interfaces";
-import {
-  SEARCH_PARAM_NAMES,
-  shouldSubmitOnLoad,
-} from "../services/searchParams";
+import { MinimalPersonaSnapshot } from "@/app/admin/assistants/interfaces";
+import { SEARCH_PARAM_NAMES } from "../services/searchParams";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { SEARCH_TOOL_NAME } from "../components/tools/constants";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
-  AgenticMessageResponseIDInfo,
-  BackendChatSession,
   BackendMessage,
   ChatFileType,
   ChatSessionSharedStatus,
-  ChatState,
   CitationMap,
-  DocumentsResponse,
   FileChatDisplay,
   FileDescriptor,
   Message,
@@ -72,7 +48,6 @@ import {
 } from "../services/currentMessageFIFO";
 import { buildFilters } from "@/lib/search/utils";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { constructSubQuestions } from "../services/constructSubQuestions";
 import {
   ReadonlyURLSearchParams,
   usePathname,

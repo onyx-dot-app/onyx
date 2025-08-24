@@ -178,15 +178,6 @@ export interface MessageResponseIDInfo {
   reserved_assistant_message_id: number;
 }
 
-export interface AgentMessageIDInfo {
-  level: number;
-  message_id: number;
-}
-
-export interface AgenticMessageResponseIDInfo {
-  agentic_message_ids: AgentMessageIDInfo[];
-}
-
 export interface UserKnowledgeFilePacket {
   user_files: FileDescriptor[];
 }
@@ -238,7 +229,6 @@ export interface PromptData {
   prompt: string;
   content: string;
 }
-// We need to update the constructSubQuestions function so it can take in either SubQueryDetail or SubQuestionDetail and given current state of subQuestions, build it up
 
 /**
  * // Start of Selection
