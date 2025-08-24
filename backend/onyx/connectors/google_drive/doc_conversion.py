@@ -97,18 +97,31 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     return is_valid_image_type(mime_type)
 
 
-def download_request(service: GoogleDriveService, file_id: str) -> bytes:
+def download_request(
+    service: GoogleDriveService, file_id: str, size_threshold: int
+) -> bytes:
     """
     Download the file from Google Drive.
     """
     # For other file types, download the file
     # Use the correct API call for downloading files
     request = service.files().get_media(fileId=file_id)
+    return _donwload_request(request, file_id, size_threshold)
+
+
+def _donwload_request(request: Any, file_id: str, size_threshold: int) -> bytes:
     response_bytes = io.BytesIO()
-    downloader = MediaIoBaseDownload(response_bytes, request)
+    downloader = MediaIoBaseDownload(
+        response_bytes, request, chunksize=size_threshold * 2
+    )
     done = False
     while not done:
-        _, done = downloader.next_chunk()
+        download_progress, done = downloader.next_chunk()
+        if download_progress.resumable_progress > size_threshold:
+            logger.warning(
+                f"File {file_id} exceeds size threshold of {size_threshold}. Skipping2."
+            )
+            return bytes()
 
     response = response_bytes.getvalue()
     if not response:
@@ -121,6 +134,7 @@ def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
     allow_images: bool,
+    size_threshold: int,
 ) -> list[TextSection | ImageSection]:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
@@ -132,7 +146,7 @@ def _download_and_extract_sections_basic(
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
     def response_call() -> bytes:
-        return download_request(service, file_id)
+        return download_request(service, file_id, size_threshold)
 
     if is_gdrive_image_mime_type(mime_type):
         # Skip images if not explicitly enabled
@@ -162,13 +176,7 @@ def _download_and_extract_sections_basic(
         request = service.files().export_media(
             fileId=file_id, mimeType=export_mime_type
         )
-        response_bytes = io.BytesIO()
-        downloader = MediaIoBaseDownload(response_bytes, request)
-        done = False
-        while not done:
-            _, done = downloader.next_chunk()
-
-        response = response_bytes.getvalue()
+        response = _donwload_request(request, file_id, size_threshold)
         if not response:
             logger.warning(f"Failed to export {file_name} as {export_mime_type}")
             return []
@@ -467,7 +475,7 @@ def _convert_drive_item_to_document(
                             " aligning with basic sections"
                         )
                         basic_sections = _download_and_extract_sections_basic(
-                            file, _get_drive_service(), allow_images
+                            file, _get_drive_service(), allow_images, size_threshold
                         )
                         sections = align_basic_advanced(basic_sections, doc_sections)
 
@@ -478,7 +486,7 @@ def _convert_drive_item_to_document(
         # Not Google Doc, attempt basic extraction
         else:
             sections = _download_and_extract_sections_basic(
-                file, _get_drive_service(), allow_images
+                file, _get_drive_service(), allow_images, size_threshold
             )
 
         # If we still don't have any sections, skip this file
