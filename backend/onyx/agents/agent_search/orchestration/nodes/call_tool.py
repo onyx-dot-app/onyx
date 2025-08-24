@@ -25,7 +25,7 @@ class ToolCallException(Exception):
 
 
 def emit_packet(packet: AnswerPacket, writer: StreamWriter) -> None:
-    write_custom_event("basic_response", packet, writer)
+    write_custom_event(0, packet, writer)
 
 
 def call_tool(

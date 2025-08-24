@@ -271,6 +271,7 @@ def choose_tool(
         should_stream_answer
         and not agent_config.behavior.skip_gen_ai_answer_generation,
         writer,
+        ind=0,
     ).ai_message_chunk
 
     if tool_message is None:

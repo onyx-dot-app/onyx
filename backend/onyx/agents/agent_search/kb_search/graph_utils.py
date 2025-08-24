@@ -1,26 +1,13 @@
 import re
-from time import sleep
-
-from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.agents.agent_search.kb_search.models import KGExpandedGraphObjects
 from onyx.agents.agent_search.kb_search.states import SubQuestionAnswerResults
 from onyx.agents.agent_search.kb_search.step_definitions import (
-    BASIC_SEARCH_STEP_DESCRIPTIONS,
-)
-from onyx.agents.agent_search.kb_search.step_definitions import (
     KG_SEARCH_STEP_DESCRIPTIONS,
 )
 from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import StreamStopReason
-from onyx.chat.models import StreamType
-from onyx.chat.models import SubQueryPiece
-from onyx.chat.models import SubQuestionPiece
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.db.document import get_kg_doc_info_for_entity_name
@@ -98,165 +85,6 @@ def create_minimal_connected_query_graph(
     Return the original entities and relationships.
     """
     return KGExpandedGraphObjects(entities=entities, relationships=relationships)
-
-
-def stream_write_kg_search_description(
-    writer: StreamWriter, step_nr: int, level: int = 0
-) -> None:
-
-    write_custom_event(
-        "decomp_qs",
-        SubQuestionPiece(
-            sub_question=KG_SEARCH_STEP_DESCRIPTIONS[step_nr].description,
-            level=level,
-            level_question_num=step_nr,
-        ),
-        writer,
-    )
-
-    # Give the frontend a brief moment to catch up
-    sleep(0.2)
-
-
-def stream_write_kg_search_activities(
-    writer: StreamWriter, step_nr: int, level: int = 0
-) -> None:
-    for activity_nr, activity in enumerate(
-        KG_SEARCH_STEP_DESCRIPTIONS[step_nr].activities
-    ):
-        write_custom_event(
-            "subqueries",
-            SubQueryPiece(
-                sub_query=activity,
-                level=level,
-                level_question_num=step_nr,
-                query_id=activity_nr + 1,
-            ),
-            writer,
-        )
-
-
-def stream_write_basic_search_activities(
-    writer: StreamWriter, step_nr: int, level: int = 0
-) -> None:
-    for activity_nr, activity in enumerate(
-        BASIC_SEARCH_STEP_DESCRIPTIONS[step_nr].activities
-    ):
-        write_custom_event(
-            "subqueries",
-            SubQueryPiece(
-                sub_query=activity,
-                level=level,
-                level_question_num=step_nr,
-                query_id=activity_nr + 1,
-            ),
-            writer,
-        )
-
-
-def stream_write_kg_search_answer_explicit(
-    writer: StreamWriter, step_nr: int, answer: str, level: int = 0
-) -> None:
-    write_custom_event(
-        "sub_answers",
-        AgentAnswerPiece(
-            answer_piece=answer,
-            level=level,
-            level_question_num=step_nr,
-            answer_type="agent_sub_answer",
-        ),
-        writer,
-    )
-
-
-def stream_write_kg_search_structure(writer: StreamWriter, level: int = 0) -> None:
-    for step_nr, step_detail in KG_SEARCH_STEP_DESCRIPTIONS.items():
-
-        write_custom_event(
-            "decomp_qs",
-            SubQuestionPiece(
-                sub_question=step_detail.description,
-                level=level,
-                level_question_num=step_nr,
-            ),
-            writer,
-        )
-
-    for step_nr in KG_SEARCH_STEP_DESCRIPTIONS.keys():
-
-        write_custom_event(
-            "stream_finished",
-            StreamStopInfo(
-                stop_reason=StreamStopReason.FINISHED,
-                stream_type=StreamType.SUB_QUESTIONS,
-                level=level,
-                level_question_num=step_nr,
-            ),
-            writer,
-        )
-
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.SUB_QUESTIONS,
-        level=0,
-    )
-
-    write_custom_event("stream_finished", stop_event, writer)
-
-
-def stream_write_basic_search_structure(writer: StreamWriter, level: int = 0) -> None:
-    for step_nr, step_detail in BASIC_SEARCH_STEP_DESCRIPTIONS.items():
-        write_custom_event(
-            "decomp_qs",
-            SubQuestionPiece(
-                sub_question=step_detail.description,
-                level=level,
-                level_question_num=step_nr,
-            ),
-            writer,
-        )
-
-    for step_nr in BASIC_SEARCH_STEP_DESCRIPTIONS:
-        write_custom_event(
-            "stream_finished",
-            StreamStopInfo(
-                stop_reason=StreamStopReason.FINISHED,
-                stream_type=StreamType.SUB_QUESTIONS,
-                level=level,
-                level_question_num=step_nr,
-            ),
-            writer,
-        )
-
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.SUB_QUESTIONS,
-        level=0,
-    )
-
-    write_custom_event("stream_finished", stop_event, writer)
-
-
-def stream_kg_search_close_step_answer(
-    writer: StreamWriter, step_nr: int, level: int = 0
-) -> None:
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.SUB_ANSWER,
-        level=level,
-        level_question_num=step_nr,
-    )
-    write_custom_event("stream_finished", stop_event, writer)
-
-
-def stream_write_kg_search_close_steps(writer: StreamWriter, level: int = 0) -> None:
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.SUB_QUESTIONS,
-        level=level,
-    )
-
-    write_custom_event("stream_finished", stop_event, writer)
 
 
 def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:

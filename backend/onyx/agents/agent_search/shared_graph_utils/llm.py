@@ -95,7 +95,7 @@ def stream_llm_answer(
             if ind is None:
                 raise ValueError("index is required when answer_piece is message_delta")
 
-            if replace_citations:
+            if replace_citations and context_docs:
                 processed_token = citation_processor.process_token(content)
 
                 if isinstance(processed_token, tuple):

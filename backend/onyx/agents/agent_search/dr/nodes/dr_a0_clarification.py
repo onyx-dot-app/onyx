@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from typing import Any
 from typing import cast
 
 from langchain_core.messages import HumanMessage
@@ -70,6 +71,8 @@ from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import
     KnowledgeGraphTool,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.utils.b64 import get_image_type
+from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -183,7 +186,7 @@ def _get_available_tools(
     return available_tools
 
 
-def _construct_uploaded_context(files: list[InMemoryChatFile]) -> str:
+def _construct_uploaded_text_context(files: list[InMemoryChatFile]) -> str:
     """Construct the uploaded context from the files."""
     file_contents = []
     for file in files:
@@ -196,6 +199,59 @@ def _construct_uploaded_context(files: list[InMemoryChatFile]) -> str:
     if len(file_contents) > 0:
         return "Uploaded context:\n\n\n" + "\n\n".join(file_contents)
     return ""
+
+
+def _construct_uploaded_image_context(
+    files: list[InMemoryChatFile] | None = None,
+    img_urls: list[str] | None = None,
+    b64_imgs: list[str] | None = None,
+) -> list[dict[str, Any]] | None:
+    """Construct the uploaded image context from the files."""
+    # Only include image files for user messages
+    if files is None:
+        return None
+
+    img_files = [file for file in files if file.file_type == ChatFileType.IMAGE]
+
+    img_urls = img_urls or []
+    b64_imgs = b64_imgs or []
+
+    if not (img_files or img_urls or b64_imgs):
+        return None
+
+    return cast(
+        list[dict[str, Any]],
+        [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": (
+                        f"data:{get_image_type_from_bytes(file.content)};"
+                        f"base64,{file.to_base64()}"
+                    ),
+                },
+            }
+            for file in img_files
+        ]
+        + [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{get_image_type(b64_img)};base64,{b64_img}",
+                },
+            }
+            for b64_img in b64_imgs
+        ]
+        + [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": url,
+                },
+            }
+            for url in img_urls
+        ],
+    )
 
 
 def _get_existing_clarification_request(
@@ -357,14 +413,14 @@ def clarifier(
         or "(No chat history yet available)"
     )
 
-    uploaded_context = (
-        _construct_uploaded_context(graph_config.inputs.files)
+    uploaded_text_context = (
+        _construct_uploaded_text_context(graph_config.inputs.files)
         if graph_config.inputs.files
         else ""
     )
 
     uploaded_context_tokens = check_number_of_tokens(
-        uploaded_context, llm_tokenizer.encode
+        uploaded_text_context, llm_tokenizer.encode
     )
 
     if uploaded_context_tokens > 0.5 * max_input_tokens:
@@ -372,6 +428,10 @@ def clarifier(
             f"Uploaded context is too long. {uploaded_context_tokens} tokens, "
             f"but for this model we only allow {0.5 * max_input_tokens} tokens for uploaded context"
         )
+
+    uploaded_image_context = _construct_uploaded_image_context(
+        graph_config.inputs.files
+    )
 
     if len(available_tools) == 1:
         # Closer is always there, therefore 'len(available_tools) == 1' above
@@ -427,7 +487,7 @@ def clarifier(
         decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
             question=original_question,
             chat_history_string=chat_history_string,
-            uploaded_context=uploaded_context or "",
+            uploaded_context=uploaded_text_context or "",
             active_source_type_descriptions_str=active_source_type_descriptions_str,
             available_tool_descriptions_str=available_tool_descriptions_str,
         )
@@ -455,7 +515,7 @@ def clarifier(
             answer_prompt = ANSWER_PROMPT_WO_TOOL_CALLING.build(
                 question=original_question,
                 chat_history_string=chat_history_string,
-                uploaded_context=uploaded_context or "",
+                uploaded_context=uploaded_text_context or "",
                 active_source_type_descriptions_str=active_source_type_descriptions_str,
                 available_tool_descriptions_str=available_tool_descriptions_str,
             )
@@ -525,7 +585,7 @@ def clarifier(
         decision_prompt = DECISION_PROMPT_W_TOOL_CALLING.build(
             question=original_question,
             chat_history_string=chat_history_string,
-            uploaded_context=uploaded_context or "",
+            uploaded_context=uploaded_text_context or "",
             active_source_type_descriptions_str=active_source_type_descriptions_str,
         )
 
@@ -533,6 +593,7 @@ def clarifier(
             prompt=create_question_prompt(
                 assistant_system_prompt + EVAL_SYSTEM_PROMPT_W_TOOL_CALLING,
                 decision_prompt + assistant_task_prompt,
+                uploaded_image_context=uploaded_image_context,
             ),
             tools=([_ARTIFICIAL_ALL_ENCOMPASSING_TOOL]),
             tool_choice=(None),
@@ -726,5 +787,6 @@ def clarifier(
         active_source_types_descriptions="\n".join(active_source_types_descriptions),
         assistant_system_prompt=assistant_system_prompt,
         assistant_task_prompt=assistant_task_prompt,
-        uploaded_context=uploaded_context,
+        uploaded_test_context=uploaded_text_context,
+        uploaded_image_context=uploaded_image_context,
     )

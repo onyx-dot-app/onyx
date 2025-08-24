@@ -78,6 +78,7 @@ def basic_use_tool_response(
             stream,
             True,
             writer,
+            0,  # new ind variable for new flow. This is a legacy flow anyway however.
             final_search_results=final_search_results,
             # when the search tool is called with specific doc ids, initial search
             # results are not output. But, we still want i.e. citations to be processed.

@@ -1,15 +1,11 @@
 from datetime import datetime
 from typing import cast
 
-from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.access.access import get_acl_for_user
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_close_steps,
-)
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import FinalAnswerUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -18,17 +14,12 @@ from onyx.agents.agent_search.shared_graph_utils.calculations import (
     get_answer_generation_documents,
 )
 from onyx.agents.agent_search.shared_graph_utils.llm import get_answer_from_llm
-from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import ExtendedToolResponse
-from onyx.configs.kg_configs import KG_MAX_TOKENS_ANSWER_GENERATION
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.configs.kg_configs import KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION
-from onyx.configs.kg_configs import KG_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -38,7 +29,6 @@ from onyx.tools.tool_implementations.search.search_tool import IndexFilters
 from onyx.tools.tool_implementations.search.search_tool import SearchQueryInfo
 from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -73,9 +63,6 @@ def generate_answer(
     # Close out previous streams of steps
 
     # DECLARE STEPS DONE
-
-    if state.individual_flow:
-        stream_write_kg_search_close_steps(writer)
 
     ## MAIN ANSWER
 
@@ -134,17 +121,8 @@ def generate_answer(
         get_section_relevance=lambda: relevance_list,
         search_tool=graph_config.tooling.search_tool,
     ):
-        if state.individual_flow:
-            write_custom_event(
-                "tool_response",
-                ExtendedToolResponse(
-                    id=tool_response.id,
-                    response=tool_response.response,
-                    level=0,
-                    level_question_num=0,  # 0, 0 is the base question
-                ),
-                writer,
-            )
+        # original document streaming
+        pass
 
     # continue with the answer generation
 
@@ -207,37 +185,15 @@ def generate_answer(
     else:
         raise ValueError("No research results or introductory answer provided")
 
-    msg = [
-        HumanMessage(
-            content=output_format_prompt,
-        )
-    ]
     try:
-        if state.individual_flow:
 
-            stream_results, _, _ = run_with_timeout(
-                KG_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
-                lambda: stream_llm_answer(
-                    llm=graph_config.tooling.primary_llm,
-                    prompt=msg,
-                    event_name="initial_agent_answer",
-                    writer=writer,
-                    agent_answer_level=0,
-                    agent_answer_question_num=0,
-                    agent_answer_type="agent_level_answer",
-                    timeout_override=KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
-                    max_tokens=KG_MAX_TOKENS_ANSWER_GENERATION,
-                ),
-            )
-            final_answer = "".join(stream_results)
-        else:
-            final_answer = get_answer_from_llm(
-                llm=graph_config.tooling.primary_llm,
-                prompt=output_format_prompt,
-                stream=False,
-                json_string_flag=False,
-                timeout_override=KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
-            )
+        final_answer = get_answer_from_llm(
+            llm=graph_config.tooling.primary_llm,
+            prompt=output_format_prompt,
+            stream=False,
+            json_string_flag=False,
+            timeout_override=KG_TIMEOUT_CONNECT_LLM_INITIAL_ANSWER_GENERATION,
+        )
 
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")

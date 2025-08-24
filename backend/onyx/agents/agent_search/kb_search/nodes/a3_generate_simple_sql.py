@@ -8,15 +8,6 @@ from langgraph.types import StreamWriter
 from sqlalchemy import text
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_kg_search_close_step_answer,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_activities,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_answer_explicit,
-)
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import KGRelationshipDetection
 from onyx.agents.agent_search.kb_search.states import KGSearchType
@@ -227,9 +218,6 @@ def generate_simple_sql(
     sql_statement_display: str | None = None
 
     ## STEP 3 - articulate goals
-
-    if state.individual_flow:
-        stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     if graph_config.tooling.search_tool is None:
         raise ValueError("Search tool is not set")
@@ -536,21 +524,6 @@ def generate_simple_sql(
         step_answer = f"Reasoning: {reasoning} \n \n SQL Query: {sql_statement}"
 
         main_sql_statement = sql_statement
-
-    if reasoning and state.individual_flow:
-        stream_write_kg_search_answer_explicit(
-            writer, step_nr=_KG_STEP_NR, answer=reasoning
-        )
-
-    if sql_statement_display and state.individual_flow:
-        stream_write_kg_search_answer_explicit(
-            writer,
-            step_nr=_KG_STEP_NR,
-            answer=f" \n Generated SQL: {sql_statement_display}",
-        )
-
-    if state.individual_flow:
-        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     # Update path if too many, or no results were retrieved from sql
     if main_sql_statement and (

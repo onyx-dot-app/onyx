@@ -7,18 +7,6 @@ from langgraph.types import StreamWriter
 from pydantic import ValidationError
 
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_kg_search_close_step_answer,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_activities,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_answer_explicit,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_kg_search_structure,
-)
 from onyx.agents.agent_search.kb_search.models import KGQuestionEntityExtractionResult
 from onyx.agents.agent_search.kb_search.models import (
     KGQuestionRelationshipExtractionResult,
@@ -79,12 +67,6 @@ def extract_ert(
 
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
-
-    if state.individual_flow:
-        # Stream structure of substeps out to the UI
-        stream_write_kg_search_structure(writer)
-
-        stream_write_kg_search_activities(writer, _KG_STEP_NR)
 
     # Create temporary views. TODO: move into parallel step, if ultimately materialized
     tenant_id = get_current_tenant_id()
@@ -245,12 +227,6 @@ def extract_ert(
 
     step_answer = f"""Entities and relationships have been extracted from query - \n \
 Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_string}"""
-
-    if state.individual_flow:
-        stream_write_kg_search_answer_explicit(writer, step_nr=1, answer=step_answer)
-
-        # Finish Step 1
-        stream_kg_search_close_step_answer(writer, _KG_STEP_NR)
 
     return EntityRelationshipExtractionUpdate(
         entities_types_str=all_entity_types,

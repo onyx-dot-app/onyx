@@ -11,7 +11,6 @@ from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
-from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
 from onyx.agents.agent_search.run_graph import run_dr_graph
@@ -149,8 +148,6 @@ class Answer:
         if self.graph_config.inputs.persona:
             run_langgraph = run_dr_graph
 
-        elif self.graph_config.behavior.use_agentic_search:
-            run_langgraph = run_agent_search_graph
         elif (
             self.graph_config.inputs.persona
             and USE_DIV_CON_AGENT

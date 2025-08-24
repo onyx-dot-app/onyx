@@ -27,4 +27,5 @@ class DRPath(str, Enum):
     IMAGE_GENERATION = "Image Generation"
     GENERIC_INTERNAL_TOOL = "Generic Internal Tool"
     CLOSER = "Closer"
+    LOGGER = "Logger"
     END = "End"

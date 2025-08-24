@@ -1,3 +1,4 @@
+from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
@@ -7,6 +8,7 @@ from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.nodes.dr_a0_clarification import clarifier
 from onyx.agents.agent_search.dr.nodes.dr_a1_orchestrator import orchestrator
 from onyx.agents.agent_search.dr.nodes.dr_a2_closer import closer
+from onyx.agents.agent_search.dr.nodes.dr_a3_logger import logging
 from onyx.agents.agent_search.dr.states import MainInput
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_graph_builder import (
@@ -27,11 +29,8 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.dr_is_graph_builder 
 from onyx.agents.agent_search.dr.sub_agents.kg_search.dr_kg_search_graph_builder import (
     dr_kg_search_graph_builder,
 )
-from onyx.utils.logger import setup_logger
 
 # from onyx.agents.agent_search.dr.sub_agents.basic_search.dr_basic_search_2_act import search
-
-logger = setup_logger()
 
 
 def dr_graph_builder() -> StateGraph:
@@ -66,6 +65,7 @@ def dr_graph_builder() -> StateGraph:
     graph.add_node(DRPath.GENERIC_INTERNAL_TOOL, generic_internal_tool_graph)
 
     graph.add_node(DRPath.CLOSER, closer)
+    graph.add_node(DRPath.LOGGER, logging)
 
     ### Add edges ###
 
@@ -83,5 +83,6 @@ def dr_graph_builder() -> StateGraph:
     graph.add_edge(start_key=DRPath.GENERIC_INTERNAL_TOOL, end_key=DRPath.ORCHESTRATOR)
 
     graph.add_conditional_edges(DRPath.CLOSER, completeness_router)
+    graph.add_edge(start_key=DRPath.LOGGER, end_key=END)
 
     return graph

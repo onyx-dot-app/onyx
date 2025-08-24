@@ -1371,12 +1371,12 @@ def translate_db_message_to_packets(
 
                 sub_steps = research_iteration.sub_steps
                 tasks: list[str] = []
-                tool_call_ids: list[int] = []
+                tool_call_ids: list[int | None] = []
                 cited_docs: list[SavedSearchDoc] = []
 
                 for sub_step in sub_steps:
 
-                    tasks.append(sub_step.sub_step_instructions)
+                    tasks.append(sub_step.sub_step_instructions or "")
                     tool_call_ids.append(sub_step.sub_step_tool_id)
 
                     sub_step_cited_docs = sub_step.cited_doc_results

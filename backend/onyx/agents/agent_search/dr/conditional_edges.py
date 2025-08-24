@@ -22,6 +22,8 @@ def decision_router(state: MainState) -> list[Send | Hashable] | DRPath | str:
         next_tool_path = available_tools[next_tool_name].path
     elif next_tool_name == DRPath.END.value:
         return END
+    elif next_tool_name == DRPath.LOGGER.value:
+        return DRPath.LOGGER
     else:
         return DRPath.ORCHESTRATOR
 
@@ -54,4 +56,4 @@ def completeness_router(state: MainState) -> DRPath | str:
 
     if next_path == DRPath.ORCHESTRATOR.value:
         return DRPath.ORCHESTRATOR
-    return END
+    return DRPath.LOGGER

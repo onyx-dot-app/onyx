@@ -21,7 +21,6 @@ from onyx.agents.agent_search.dr.states import OrchestrationUpdate
 from onyx.agents.agent_search.dr.utils import aggregate_context
 from onyx.agents.agent_search.dr.utils import create_tool_call_string
 from onyx.agents.agent_search.dr.utils import get_prompt_question
-from onyx.agents.agent_search.dr.utils import update_db_session_with_messages
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.llm import stream_llm_answer
@@ -54,7 +53,7 @@ def _get_implied_next_tool_based_on_tool_call_history(
     special handling of the image generation tool.
     """
     if tools_used[-1] == DRPath.IMAGE_GENERATION.value:
-        return DRPath.END.value
+        return DRPath.LOGGER.value
     else:
         return None
 
@@ -73,9 +72,9 @@ def orchestrator(
     if not question:
         raise ValueError("Question is required for orchestrator")
 
-    db_session = graph_config.persistence.db_session
-    message_id = graph_config.persistence.message_id
-    chat_session_id = str(graph_config.persistence.chat_session_id)
+    graph_config.persistence.db_session
+    graph_config.persistence.message_id
+    str(graph_config.persistence.chat_session_id)
 
     state.original_question
 
@@ -105,27 +104,17 @@ def orchestrator(
         or "(No answer history yet available)"
     )
 
+    next_tool_name = None
+
     # Identify early exit condition based on tool call history
 
     next_tool_based_on_tool_call_history = (
         _get_implied_next_tool_based_on_tool_call_history(state.tools_used)
     )
 
-    if next_tool_based_on_tool_call_history == DRPath.END.value:
-        update_db_session_with_messages(
-            db_session=db_session,
-            chat_message_id=message_id,
-            chat_session_id=chat_session_id,
-            is_agentic=graph_config.behavior.use_agentic_search,
-            message="",
-            update_parent_message=True,
-            research_answer_purpose=None,
-        )
-
-        db_session.commit()
-
+    if next_tool_based_on_tool_call_history == DRPath.LOGGER.value:
         return OrchestrationUpdate(
-            tools_used=[next_tool_based_on_tool_call_history],
+            tools_used=[DRPath.LOGGER.value],
             query_list=[],
             iteration_nr=iteration_nr,
             current_step_nr=current_step_nr,
@@ -152,7 +141,7 @@ def orchestrator(
 
     available_tools = state.available_tools or {}
 
-    uploaded_context = state.uploaded_context or ""
+    uploaded_context = state.uploaded_test_context or ""
 
     questions = [
         f"{iteration_response.tool}: {iteration_response.question}"
@@ -503,6 +492,9 @@ def orchestrator(
         raise e
 
     purpose = cast(str, merge_content(*purpose_tokens))
+
+    if not next_tool_name:
+        raise ValueError("The next step has not been defined. This should not happen.")
 
     return OrchestrationUpdate(
         tools_used=[next_tool_name],
