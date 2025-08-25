@@ -241,8 +241,15 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     Extract text from a PDF. For embedded images, a more complex approach is needed.
     This is a minimal approach returning text only.
     """
-    text, _, _ = read_pdf_file(file, pdf_pass)
-    return text
+    try:
+        text, _, _ = read_pdf_file(file, pdf_pass)
+        return text
+    except Exception as e:
+        if "EmptyFileError" in str(e) or "Cannot read an empty file" in str(e):
+            logger.warning("PDF file appears to be empty or unreadable")
+        else:
+            logger.exception("Failed to extract text from PDF")
+        return ""
 
 
 def read_pdf_file(
@@ -254,6 +261,19 @@ def read_pdf_file(
     metadata: dict[str, Any] = {}
     extracted_images: list[tuple[bytes, str]] = []
     try:
+        # Check if file is empty or at end
+        current_pos = file.tell()
+        file.seek(0, 2)  # Seek to end
+        file_size = file.tell()
+        file.seek(current_pos)  # Restore original position
+
+        if file_size == 0:
+            logger.warning("PDF file is empty, returning empty result")
+            return "", metadata, []
+
+        # Reset file pointer to beginning
+        file.seek(0)
+
         pdf_reader = PdfReader(file)
 
         if pdf_reader.is_encrypted and pdf_pass is not None:
@@ -302,8 +322,17 @@ def read_pdf_file(
 
     except PdfStreamError:
         logger.exception("Invalid PDF file")
-    except Exception:
-        logger.exception("Failed to read PDF")
+    except Exception as e:
+        if "EmptyFileError" in str(e) or "Cannot read an empty file" in str(e):
+            logger.warning("PDF file appears to be empty or unreadable")
+        else:
+            logger.exception("Failed to read PDF")
+    finally:
+        # Ensure file pointer is reset
+        try:
+            file.seek(0)
+        except Exception:
+            pass
 
     return "", metadata, []
 
