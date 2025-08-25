@@ -72,10 +72,6 @@ def orchestrator(
     if not question:
         raise ValueError("Question is required for orchestrator")
 
-    graph_config.persistence.db_session
-    graph_config.persistence.message_id
-    str(graph_config.persistence.chat_session_id)
-
     state.original_question
 
     available_tools = state.available_tools
@@ -257,12 +253,30 @@ def orchestrator(
                     ],
                 )
 
+        # for Thoightful mode, we force a tool if requested an available
+        available_tools_for_decision = available_tools
+        force_use_tool = graph_config.tooling.force_use_tool
+        if iteration_nr == 1 and force_use_tool and force_use_tool.force_use:
+
+            forced_tool_name = force_use_tool.tool_name
+
+            available_tool_dict = {
+                available_tool.tool_object.name: available_tool
+                for _, available_tool in available_tools.items()
+                if available_tool.tool_object
+            }
+
+            if forced_tool_name in available_tool_dict.keys():
+                forced_tool = available_tool_dict[forced_tool_name]
+
+                available_tools_for_decision = {forced_tool.name: forced_tool}
+
         base_decision_prompt = get_dr_prompt_orchestration_templates(
             DRPromptPurpose.NEXT_STEP,
             ResearchType.THOUGHTFUL,
             entity_types_string=all_entity_types,
             relationship_types_string=all_relationship_types,
-            available_tools=available_tools,
+            available_tools=available_tools_for_decision,
         )
         decision_prompt = base_decision_prompt.build(
             question=question,
