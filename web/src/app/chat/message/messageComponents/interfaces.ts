@@ -33,7 +33,7 @@ export interface RendererResult {
   // can be used to override the look on the "expanded" view
   // used for things that should just show text w/o an icon or header
   // e.g. ReasoningRenderer
-  expandedText?: string;
+  expandedText?: JSX.Element;
 }
 
 export type MessageRenderer<

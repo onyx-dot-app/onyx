@@ -4,6 +4,7 @@ import { ChatPacket, PacketType } from "../../../services/streamingModels";
 import { MessageRenderer, FullChatState } from "../interfaces";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
 import { useMarkdownRenderer } from "../markdownUtils";
+import { BlinkingDot } from "../../BlinkingDot";
 
 // Control the rate of packet streaming (packets per second)
 const PACKET_DELAY_MS = 10;
@@ -104,6 +105,6 @@ export const MessageTextRenderer: MessageRenderer<
   return children({
     icon: null,
     status: null,
-    content: renderedContent,
+    content: content.length > 0 ? renderedContent : <BlinkingDot />,
   });
 };

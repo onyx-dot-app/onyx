@@ -101,8 +101,7 @@ export const ReasoningRenderer: MessageRenderer<
     icon: null,
     status: THINKING_STATUS,
     content: renderedContent,
-    // in the expanded mode, it looks ugly to show bullet points, etc.
-    expandedText: content,
+    expandedText: renderedContent,
   });
 };
 

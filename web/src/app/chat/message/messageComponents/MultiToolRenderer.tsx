@@ -30,7 +30,7 @@ function ExpandedToolItem({
   showClickableToggle?: boolean;
   onToggleClick?: () => void;
   defaultIconColor?: string;
-  expandedText?: string;
+  expandedText?: JSX.Element | string;
 }) {
   const finalIcon = icon ? (
     icon({ size: 14 })
