@@ -40,6 +40,7 @@ class SubAgentMainState(
 class BranchInput(SubAgentInput):
     parallelization_nr: int = 0
     branch_question: str | None = None
+    current_step_nr: int | None = None
 
 
 class CustomToolBranchInput(LoggerUpdate):

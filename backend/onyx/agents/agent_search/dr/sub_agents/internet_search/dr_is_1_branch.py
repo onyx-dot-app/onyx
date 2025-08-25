@@ -24,11 +24,12 @@ def is_branch(
 
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
+    current_step_nr = state.current_step_nr
 
     logger.debug(f"Search start for Internet Search {iteration_nr} at {datetime.now()}")
 
     write_custom_event(
-        iteration_nr,
+        current_step_nr,
         SearchToolStart(
             is_internet_search=True,
         ),

@@ -51,6 +51,7 @@ def basic_search(
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
     parallelization_nr = state.parallelization_nr
+    current_step_nr = state.current_step_nr
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
 
@@ -89,7 +90,7 @@ def basic_search(
                 assistant_system_prompt, base_search_processing_prompt
             ),
             schema=BaseSearchProcessingResponse,
-            timeout_override=5,
+            timeout_override=15,
             # max_tokens=100,
         )
     except Exception as e:
@@ -100,7 +101,7 @@ def basic_search(
 
     # give back the query so we can render it in the UI
     write_custom_event(
-        iteration_nr,
+        current_step_nr,
         SearchToolDelta(
             queries=[rewritten_query],
             documents=[],
@@ -156,7 +157,7 @@ def basic_search(
 
     # render the retrieved docs in the UI
     write_custom_event(
-        iteration_nr,
+        current_step_nr,
         SearchToolDelta(
             queries=[],
             documents=convert_inference_sections_to_search_docs(

@@ -45,6 +45,10 @@ def internet_search(
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
     parallelization_nr = state.parallelization_nr
+    current_step_nr = state.current_step_nr
+
+    if not current_step_nr:
+        raise ValueError("Current step number is not set. This should not happen.")
 
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
@@ -55,7 +59,7 @@ def internet_search(
 
     # Write the query to the stream. The start is handled in dr_is_1_branch.py.
     write_custom_event(
-        iteration_nr,
+        current_step_nr,
         SearchToolDelta(
             queries=[search_query],
             documents=[],
@@ -162,7 +166,7 @@ def internet_search(
         }
 
     write_custom_event(
-        iteration_nr,
+        current_step_nr,
         SearchToolDelta(
             queries=[],
             documents=convert_inference_sections_to_search_docs(

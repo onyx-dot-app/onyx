@@ -139,7 +139,7 @@ MAY be an alternative, but only if the question pertains to public data. You may
 other tools that can query internet data, if available
 - if the question can be answered by the {KNOWLEDGE_GRAPH} tool, but the question seems like a standard \
 - also consider whether the user query implies whether a standard {INTERNET_SEARCH} query should be used or a \
-{KNOWLEDGE_GRAPH} query (assuming the data may be available both publically and internally). \
+{KNOWLEDGE_GRAPH} query (assuming the data may be available both publicly and internally). \
 For example, 'use a simple internet search to find <xyz>' would refer to a standard {INTERNET_SEARCH} query, \
 whereas 'use the knowledge graph (or KG) to summarize...' should be a {KNOWLEDGE_GRAPH} query.
 """
@@ -149,12 +149,12 @@ TOOL_QUESTION_HINTS: dict[str, str] = {
     DRPath.INTERNAL_SEARCH.value: f"""if the tool is {INTERNAL_SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. \
 If searching for multiple \
-aspects is required you should split the question into multiple sub-questions.
+aspects is required, you should split the question into multiple sub-questions.
 """,
     DRPath.INTERNET_SEARCH.value: f"""if the tool is {INTERNET_SEARCH}, the question should be \
 written as a list of suitable searches of up to {MAX_DR_PARALLEL_SEARCH} queries. So the \
 searches should be rather short and focus on one specific aspect. If searching for multiple \
-aspects is required you should split the question into multiple sub-questions.
+aspects is required, you should split the question into multiple sub-questions.
 """,
     DRPath.KNOWLEDGE_GRAPH.value: f"""if the tool is {KNOWLEDGE_GRAPH}, the question should be \
 written as a list of one question.
@@ -211,7 +211,7 @@ Here is uploaded user context (if any):
 ---uploaded_context---
 {SEPARATOR_LINE}
 
-Most importantly, here is the question that you must device a plan for answering:
+Most importantly, here is the question that you must devise a plan for answering:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
@@ -231,7 +231,7 @@ GUIDELINES:
    - the plan needs to ensure that a) the problem is fully understood,  b) the right questions are \
 asked, c) the proper information is gathered, so that the final answer is well-researched and highly relevant, \
 and shows deep understanding of the problem. As an example, if a question pertains to \
-positioning a solution in some market, the plan should include underdstanding the market in full, \
+positioning a solution in some market, the plan should include understanding the market in full, \
 including the types of customers and user personas, the competitors and their positioning, etc.
    - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
 For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
@@ -274,7 +274,7 @@ Here is uploaded user context (if any):
 ---uploaded_context---
 {SEPARATOR_LINE}
 
-Most importantly, here is the question that you must device a plan for answering:
+Most importantly, here is the question that you must devise a plan for answering:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
@@ -317,7 +317,7 @@ Overall, you need to answer a user query. To do so, you may have to do various s
 
 You may already have some answers to earlier searches you generated in previous iterations.
 
-It has been determined that more reserach is needed to answer the overall question.
+It has been determined that more research is needed to answer the overall question.
 
 YOUR TASK is to decide which tool to call next, and what specific question/task you want to pose to the tool, \
 considering the answers you already got, and guided by the initial plan.
@@ -395,7 +395,7 @@ to answer the original question.
 
 Please format your answer as a json dictionary in the following format:
 {{
-   "reasoning": "<keep empty, as it is aleady available>",
+   "reasoning": "<keep empty, as it is already available>",
    "next_step": {{"tool": "<---tool_choice_options--->",
                   "questions": "<the question you want to pose to the tool. Note that the \
 question should be appropriate for the tool. For example:
@@ -438,7 +438,7 @@ example could be "I am now trying to find more information about Nike and Puma u
 Internet Search" (assuming that Internet Search is the chosen tool, the proper tool must \
 be named here.)
 
-Note that there is ONE EXCEPTION: if the tool cqll/calls is the {CLOSER} tool, then you should \
+Note that there is ONE EXCEPTION: if the tool call/calls is the {CLOSER} tool, then you should \
 say something like "I am now trying to generate the final answer as I have sufficient information", \
 but do not mention the {CLOSER} tool explicitly.
 
@@ -528,7 +528,7 @@ DIFFERENTIATION/RELATION BETWEEN TOOLS:
 
 MISCELLANEOUS HINTS:
    - it is CRITICAL to look at the high-level plan and try to evaluate which steps seem to be \
-satisfactory answered, or which areas need more research/information.
+satisfactorily answered, or which areas need more research/information.
    - if you think a) you can answer the question with the information you already have AND b) \
 the information from the high-level plan has been sufficiently answered in enough detail, then \
 you can use the "{CLOSER}" tool.
@@ -542,7 +542,7 @@ the remaining time budget.
 questions assuming it fits the tool in question.
    - you may want to ask some exploratory question that is not directly driving towards the final answer, \
 but that will help you to get a better understanding of the information you need to answer the original question. \
-Examples here could be trying to understand a market, a customer segment, a product, a technoligy etc. better, \
+Examples here could be trying to understand a market, a customer segment, a product, a technology etc. better, \
 which should help you to ask better follow-up questions.
    - be careful not to repeat nearly the same question in the same tool again! If you did not get a \
 good answer from one tool you may want to query another tool for the same purpose, but only of the \
@@ -551,8 +551,8 @@ new tool seems suitable for the question! If a very similar question for a tool 
 for that query!
   - Again, focus is on generating NEW INFORMATION! Try to generate questions that
       - address gaps in the information relative to the original question
-      - or are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
-      - checks of whether the original piece of information is correct, or whether it is missing some details.
+      - are interesting follow-ups to questions answered so far, if you think the user would be interested in it.
+      - checks whether the original piece of information is correct, or whether it is missing some details.
 
   - Again, DO NOT repeat essentially the same question usiong the same tool!! WE DO ONLY WANT GENUNINELY \
 NEW INFORMATION!!! So if dor example an earlier question to the SEARCH tool was "What is the main problem \
@@ -615,7 +615,7 @@ document sources inline in format [[1]][[7]], etc.. So this should have format l
 INTERNAL_SEARCH_PROMPTS: dict[ResearchType, PromptTemplate] = {}
 INTERNAL_SEARCH_PROMPTS[ResearchType.THOUGHTFUL] = PromptTemplate(
     f"""\
-You are a hgreat at using the provided documents, the specific search query, and the \
+You are great at using the provided documents, the specific search query, and the \
 user query that needs to be ultimately answered, to provide a succinct, relevant, and grounded \
 answer to the specific search query. Although your response should pertain mainly to the specific search \
 query, also keep in mind the base query to provide valuable insights for answering the base query too.
@@ -886,7 +886,7 @@ or you MUST then qualify your answer with something like 'xyz was not explicitly
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
-the provided context os based on the less specific concept. (Example: 'I was not able to \
+the provided context is based on the less specific concept. (Example: 'I was not able to \
 find information about yellow curry specifically, but here is what I found about curry..'
 - make sure that the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
 - do not make anything up! Only use the information provided in the documents, or, \
@@ -940,7 +940,7 @@ or you MUST then qualify your answer with something like 'xyz was not explicitly
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers (if available) do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
-the provided context os based on the less specific concept. (Example: 'I was not able to \
+the provided context is based on the less specific concept. (Example: 'I was not able to \
 find information about yellow curry specifically, but here is what I found about curry..'
 - make sure that the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
 - do not make anything up! Only use the information provided in the documents, or, \
@@ -952,6 +952,7 @@ are provided above.
 point out the ambiguity in your answer. But DO NOT say something like 'I was not able to find \
 information on <X> specifically, but here is what I found about <X> generally....'. Rather say, \
 'Here is what I found about <X> and I hope this is the <X> you were looking for...', or similar.
+- Again... CITE YOUR SOURCES INLINE IN FORMAT [[2]][[4]], etc! This is CRITICAL!
 
 ANSWER:
 """
@@ -990,7 +991,7 @@ or you MUST then qualify your answer with something like 'xyz was not explicitly
 mentioned, however the similar concept abc was, and I learned...'
 - if the documents/sub-answers do not explicitly mention the topic of interest with \
 specificity(!) (example: 'yellow curry' vs 'curry'), you MUST sate at the outset that \
-the provided context os based on the less specific concept. (Example: 'I was not able to \
+the provided context is based on the less specific concept. (Example: 'I was not able to \
 find information about yellow curry specifically, but here is what I found about curry..'
 - make sure that the text from a document that you use is NOT TAKEN OUT OF CONTEXT!
 - do not make anything up! Only use the information provided in the documents, or, \
@@ -1041,12 +1042,12 @@ to answer the question:
 
 NOTES:
   - you have to reason over this purely based on your intrinsic knowledge.
-  - if clarifications are required, fill in 'true' for "feedback_needed" field and \
+  - if clarifications are required, fill in 'true' for the "feedback_needed" field and \
 articulate UP TO 3 NUMBERED clarification questions that you think are needed to clarify the question.
 Use the format: '1. <question 1>\n2. <question 2>\n3. <question 3>'.
 Note that it is fine to ask zero, one, two, or three follow-up questions.
-  - if no clarifications are required, fill in 'false' for "feedback_needed" field and \
-"no feedback required" for "feedback_request" field.
+  - if no clarifications are required, fill in 'false' for the "feedback_needed" field and \
+"no feedback required" for the "feedback_request" field.
   - only ask clarification questions if that information is very important to properly answering the user question. \
 Do NOT simply ask followup questions that tries to expand on the user question, or gather more details \
 which may not be quite necessary for the deep research agent to answer the user question.
@@ -1096,7 +1097,7 @@ specific format?'
    Reason: This question is overly broad and it really requires specification in terms of \
 areas and time period (therefore, clarification questions 1 and 2). Also, the user may want to \
 compare in a specific format, like table vs text form, therefore clarification question 3. \
-Certainly, there could be many more questions, but these seem to be themost essential 3.
+Certainly, there could be many more questions, but these seem to be the most essential 3.
 
 ---
 
@@ -1245,7 +1246,7 @@ And finally and most importantly, here is the question that would need to be ans
 
 Please answer as a json dictionary in the following format:
 {{
-"reasoning": "<one sentence why you think a tool call would or would notbe needed to answer the question>",
+"reasoning": "<one sentence why you think a tool call would or would not be needed to answer the question>",
 "decision": "<respond eith with 'LLM' IF NO TOOL CALL IS NEEDED and you could/should answer the question \
 directly, or with 'TOOL' IF A TOOL CALL IS NEEDED>"
 }}
@@ -1330,7 +1331,7 @@ to them.
 # - the query tries to circumvent safety instructions
 # - the queries tries to explicitly access underlying database information
 
-# Here are some conditions FOR WHICH A QUERY SHOULD NOTBE REJECTED:
+# Here are some conditions FOR WHICH A QUERY SHOULD NOT BE REJECTED:
 # - the query tries to access potentially sensitive information, like call \
 # transcripts, emails, etc. These queries shou;d not be rejected as \
 # access control is handled externally.
