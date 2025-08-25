@@ -69,11 +69,9 @@ import {
 } from "../stores/useChatSessionStore";
 import {
   Packet,
-  SearchToolDelta,
-  ImageGenerationToolDelta,
   CitationDelta,
-  StreamingCitation,
   MessageStart,
+  PacketType,
 } from "../services/streamingModels";
 
 const TEMP_USER_MESSAGE_ID = -1;
@@ -282,6 +280,30 @@ export function useChatController({
       const updatedMessage = { ...lastMessage, toolCall: null };
       newMessageTree.set(lastMessage.messageId, updatedMessage);
       updateSessionMessageTree(currentSession, newMessageTree);
+    }
+
+    // Ensure UI reflects a STOP event by appending a STOP packet to the
+    // currently streaming assistant message if one exists and doesn't already
+    // contain a STOP. This makes AIMessage behave as if a STOP packet arrived.
+    if (lastMessage && lastMessage.type === "assistant") {
+      const packets = lastMessage.packets || [];
+      const hasStop = packets.some((p) => p.obj.type === PacketType.STOP);
+      if (!hasStop) {
+        const maxInd =
+          packets.length > 0 ? Math.max(...packets.map((p) => p.ind)) : 0;
+        const stopPacket: Packet = {
+          ind: maxInd + 1,
+          obj: { type: PacketType.STOP },
+        } as Packet;
+
+        const newMessageTree = new Map(currentMessageTree);
+        const updatedMessage = {
+          ...lastMessage,
+          packets: [...packets, stopPacket],
+        } as Message;
+        newMessageTree.set(lastMessage.messageId, updatedMessage);
+        updateSessionMessageTree(currentSession, newMessageTree);
+      }
     }
 
     updateChatStateAction(currentSession, "input");

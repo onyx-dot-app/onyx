@@ -77,6 +77,7 @@ export function RendererComponent({
   chatState,
   onComplete,
   animate,
+  stopPacketSeen,
   useShortRenderer = false,
   children,
 }: {
@@ -84,6 +85,7 @@ export function RendererComponent({
   chatState: FullChatState;
   onComplete: () => void;
   animate: boolean;
+  stopPacketSeen: boolean;
   useShortRenderer?: boolean;
   children: (result: RendererResult) => JSX.Element;
 }) {
@@ -101,6 +103,7 @@ export function RendererComponent({
       onComplete={onComplete}
       animate={animate}
       renderType={renderType}
+      stopPacketSeen={stopPacketSeen}
     >
       {children}
     </RendererFn>

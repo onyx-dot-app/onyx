@@ -205,7 +205,6 @@ def get_answer_stream(
         new_msg_req=request,
         user=user,
         db_session=db_session,
-        include_contexts=query_request.return_contexts,
     )
 
     return packets

@@ -165,7 +165,6 @@ class OneShotQARequest(ChunkContext):
     prompt_id: int | None = None
     retrieval_options: RetrievalDetails = Field(default_factory=RetrievalDetails)
     rerank_settings: RerankingDetails | None = None
-    return_contexts: bool = False
 
     # allows the caller to specify the exact search query they want to use
     # can be used if the message sent to the LLM / query should not be the same

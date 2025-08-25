@@ -45,5 +45,6 @@ export type MessageRenderer<
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
+  stopPacketSeen: boolean;
   children: (result: RendererResult) => JSX.Element;
 }>;

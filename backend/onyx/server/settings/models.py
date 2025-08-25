@@ -48,7 +48,7 @@ class Settings(BaseModel):
     gpu_enabled: bool | None = None
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
-    pro_search_enabled: bool | None = None
+    deep_research_enabled: bool | None = None
 
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False

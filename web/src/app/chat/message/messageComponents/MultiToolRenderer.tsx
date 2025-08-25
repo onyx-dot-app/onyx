@@ -99,12 +99,14 @@ function MultiToolRenderer({
   chatState,
   isComplete,
   isFinalAnswerComing,
+  stopPacketSeen,
   onAllToolsDisplayed,
 }: {
   packetGroups: { ind: number; packets: Packet[] }[];
   chatState: FullChatState;
   isComplete: boolean;
   isFinalAnswerComing: boolean;
+  stopPacketSeen: boolean;
   onAllToolsDisplayed?: () => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -178,6 +180,7 @@ function MultiToolRenderer({
                       }
                     }}
                     animate
+                    stopPacketSeen
                     useShortRenderer={!isStreamingExpanded}
                   >
                     {({ icon, content, status, expandedText }) => {
@@ -312,6 +315,7 @@ function MultiToolRenderer({
                     }
                   }}
                   animate
+                  stopPacketSeen
                   useShortRenderer={false}
                 >
                   {({ icon, content, status, expandedText }) => (

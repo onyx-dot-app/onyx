@@ -184,7 +184,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   if (queries.length === 0) {
     return children({
       icon,
-      status: null,
+      status: status,
       content: <div></div>,
     });
   }

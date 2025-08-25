@@ -285,6 +285,7 @@ export function AIMessage({
                                   isFinalAnswerComing={
                                     finalAnswerComingRef.current
                                   }
+                                  stopPacketSeen={stopPacketSeen}
                                   onAllToolsDisplayed={() =>
                                     setFinalAnswerComing(true)
                                   }
@@ -306,6 +307,7 @@ export function AIMessage({
                                     }
                                   }}
                                   animate={false}
+                                  stopPacketSeen={stopPacketSeen}
                                 >
                                   {({ content }) => <div>{content}</div>}
                                 </RendererComponent>

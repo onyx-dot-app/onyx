@@ -239,7 +239,6 @@ def stream_chat_message_objects(
     is_connected: Callable[[], bool] | None = None,
     enforce_chat_session_id_for_search_docs: bool = True,
     bypass_acl: bool = False,
-    include_contexts: bool = False,
     # a string which represents the history of a conversation. Used in cases like
     # Slack threads where the conversation cannot be represented by a chain of User/Assistant
     # messages.

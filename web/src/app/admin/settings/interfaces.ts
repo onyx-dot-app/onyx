@@ -17,11 +17,12 @@ export interface Settings {
   notifications: Notification[];
   needs_reindexing: boolean;
   gpu_enabled: boolean;
-  pro_search_enabled?: boolean;
   application_status: ApplicationStatus;
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
   query_history_type: QueryHistoryType;
+
+  deep_research_enabled?: boolean;
 
   // Image processing settings
   image_extraction_and_analysis_enabled?: boolean;

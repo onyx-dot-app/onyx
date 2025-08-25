@@ -11,14 +11,12 @@ from onyx.auth.users import current_user
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.chat.models import ChatBasicResponse
-from onyx.chat.models import LlmDoc
 from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.chat_configs import CHAT_TARGET_CHUNK_PERCENTAGE
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import OptionalSearchSetting
 from onyx.context.search.models import RetrievalDetails
-from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_or_create_root_message
@@ -33,23 +31,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
-
-
-def _get_final_context_doc_indices(
-    final_context_docs: list[LlmDoc] | None,
-    top_docs: list[SavedSearchDoc] | None,
-) -> list[int] | None:
-    """
-    this function returns a list of indices of the simple search docs
-    that were actually fed to the LLM.
-    """
-    if final_context_docs is None or top_docs is None:
-        return None
-
-    final_context_doc_ids = {doc.document_id for doc in final_context_docs}
-    return [
-        i for i, doc in enumerate(top_docs) if doc.document_id in final_context_doc_ids
-    ]
 
 
 @router.post("/send-message-simple-api")
