@@ -71,6 +71,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   onComplete,
   renderType,
   animate,
+  children,
 }) => {
   const { queries, results, isSearching, isComplete, isInternetSearch } =
     constructCurrentSearchState(packets);
@@ -181,14 +182,14 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
 
   // Don't render anything if search hasn't started
   if (queries.length === 0) {
-    return {
+    return children({
       icon,
       status: null,
       content: <div></div>,
-    };
+    });
   }
 
-  return {
+  return children({
     icon,
     status,
     content: (
@@ -293,5 +294,5 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
         </div>
       </div>
     ),
-  };
+  });
 };

@@ -35,7 +35,8 @@ import {
   isToolPacket,
 } from "../../services/packetUtils";
 import { useMessageSwitching } from "./hooks/useMessageSwitching";
-import MultiToolRenderer, { RendererComponent } from "./MultiToolRenderer";
+import MultiToolRenderer from "./MultiToolRenderer";
+import { RendererComponent } from "./renderMessageComponent";
 
 export function AIMessage({
   rawPackets,

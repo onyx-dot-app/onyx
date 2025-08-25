@@ -11,7 +11,7 @@ const PACKET_DELAY_MS = 10;
 export const MessageTextRenderer: MessageRenderer<
   ChatPacket,
   FullChatState
-> = ({ packets, state, onComplete, renderType, animate }) => {
+> = ({ packets, state, onComplete, renderType, animate, children }) => {
   // If we're animating and the final answer is already complete, show more packets initially
   const initialPacketCount = animate
     ? packets.length > 0
@@ -101,9 +101,9 @@ export const MessageTextRenderer: MessageRenderer<
 
   const { renderedContent } = useMarkdownRenderer(content, state);
 
-  return {
+  return children({
     icon: null,
     status: null,
     content: renderedContent,
-  };
+  });
 };

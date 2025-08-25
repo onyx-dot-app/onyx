@@ -38,7 +38,7 @@ function constructCurrentReasoningState(packets: ReasoningPacket[]) {
 export const ReasoningRenderer: MessageRenderer<
   ReasoningPacket,
   FullChatState
-> = ({ packets, state, onComplete, animate }) => {
+> = ({ packets, state, onComplete, animate, children }) => {
   const { hasStart, hasEnd, content } = useMemo(
     () => constructCurrentReasoningState(packets),
     [packets]
@@ -94,16 +94,16 @@ export const ReasoningRenderer: MessageRenderer<
   const { renderedContent } = useMarkdownRenderer(content, state, "text-sm");
 
   if (!hasStart && !hasEnd && content.length === 0) {
-    return { icon: null, status: null, content: <></> };
+    return children({ icon: null, status: null, content: <></> });
   }
 
-  return {
+  return children({
     icon: null,
     status: THINKING_STATUS,
     content: renderedContent,
     // in the expanded mode, it looks ugly to show bullet points, etc.
     expandedText: content,
-  };
+  });
 };
 
 export default ReasoningRenderer;

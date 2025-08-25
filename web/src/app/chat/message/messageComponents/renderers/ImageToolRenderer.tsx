@@ -42,7 +42,7 @@ function constructCurrentImageState(packets: ImageGenerationToolPacket[]) {
 export const ImageToolRenderer: MessageRenderer<
   ImageGenerationToolPacket,
   {}
-> = ({ packets, onComplete, renderType }) => {
+> = ({ packets, onComplete, renderType, children }) => {
   const { prompt, images, isGenerating, isComplete, error } =
     constructCurrentImageState(packets);
 
@@ -67,7 +67,7 @@ export const ImageToolRenderer: MessageRenderer<
     // Full rendering with title header and content below
     // Loading state - when generating
     if (isGenerating) {
-      return {
+      return children({
         icon: FiImage,
         status: "Generating images...",
         content: (
@@ -77,12 +77,12 @@ export const ImageToolRenderer: MessageRenderer<
             </div>
           </div>
         ),
-      };
+      });
     }
 
     // Complete state - show images
     if (isComplete) {
-      return {
+      return children({
         icon: FiImage,
         status: `Generated ${images.length} image${
           images.length !== 1 ? "s" : ""
@@ -108,20 +108,20 @@ export const ImageToolRenderer: MessageRenderer<
             )}
           </div>
         ),
-      };
+      });
     }
 
     // Fallback (shouldn't happen in normal flow)
-    return {
+    return children({
       icon: FiImage,
       status: status,
       content: <div></div>,
-    };
+    });
   }
 
   // Highlight/Short rendering
   if (isGenerating) {
-    return {
+    return children({
       icon: FiImage,
       status: "Generating image...",
       content: (
@@ -140,11 +140,11 @@ export const ImageToolRenderer: MessageRenderer<
           <span>Generating image...</span>
         </div>
       ),
-    };
+    });
   }
 
   if (error) {
-    return {
+    return children({
       icon: FiImage,
       status: "Image generation failed",
       content: (
@@ -152,11 +152,11 @@ export const ImageToolRenderer: MessageRenderer<
           Image generation failed
         </div>
       ),
-    };
+    });
   }
 
   if (isComplete && images.length > 0) {
-    return {
+    return children({
       icon: FiImage,
       status: `Generated ${images.length} image${images.length > 1 ? "s" : ""}`,
       content: (
@@ -165,14 +165,14 @@ export const ImageToolRenderer: MessageRenderer<
           {images.length > 1 ? "s" : ""}
         </div>
       ),
-    };
+    });
   }
 
-  return {
+  return children({
     icon: FiImage,
     status: "Image generation",
     content: (
       <div className="text-sm text-muted-foreground">Image generation</div>
     ),
-  };
+  });
 };

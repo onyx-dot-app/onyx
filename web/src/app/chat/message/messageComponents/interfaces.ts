@@ -39,16 +39,11 @@ export interface RendererResult {
 export type MessageRenderer<
   T extends Packet,
   S extends Partial<FullChatState>,
-> = ({
-  packets,
-  state,
-  onComplete,
-  renderType,
-  animate,
-}: {
+> = React.ComponentType<{
   packets: T[];
   state: S;
   onComplete: () => void;
   renderType: RenderType;
   animate: boolean;
-}) => RendererResult;
+  children: (result: RendererResult) => JSX.Element;
+}>;

@@ -7,7 +7,7 @@ import {
 } from "react-icons/fi";
 import { Packet } from "@/app/chat/services/streamingModels";
 import { FullChatState, RendererResult } from "./interfaces";
-import { renderMessageComponent } from "./renderMessageComponent";
+import { RendererComponent } from "./renderMessageComponent";
 import { isToolPacket } from "../../services/packetUtils";
 import { useToolDisplayTiming } from "./hooks/useToolDisplayTiming";
 import { STANDARD_TEXT_COLOR } from "./constants";
@@ -92,31 +92,6 @@ function ExpandedToolItem({
 }
 
 // React component wrapper to avoid hook count issues in map loops
-export function RendererComponent({
-  packets,
-  chatState,
-  onComplete,
-  animate,
-  useShortRenderer = false,
-  children,
-}: {
-  packets: Packet[];
-  chatState: FullChatState;
-  onComplete: () => void;
-  animate: boolean;
-  useShortRenderer?: boolean;
-  children: (result: RendererResult) => JSX.Element;
-}) {
-  const result = renderMessageComponent(
-    { packets },
-    chatState,
-    onComplete,
-    animate,
-    useShortRenderer
-  );
-
-  return children(result);
-}
 
 // Multi-tool renderer component for grouped tools
 function MultiToolRenderer({
@@ -189,7 +164,7 @@ function MultiToolRenderer({
 
               return (
                 <div
-                  key={index}
+                  key={toolGroup.ind}
                   style={{ display: isVisible ? "block" : "none" }}
                 >
                   <RendererComponent
@@ -326,7 +301,7 @@ function MultiToolRenderer({
 
               return (
                 <RendererComponent
-                  key={index}
+                  key={toolGroup.ind}
                   packets={toolGroup.packets}
                   chatState={chatState}
                   onComplete={() => {
