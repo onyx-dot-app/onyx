@@ -588,7 +588,7 @@ minio:
 
 ingress:
   enabled: false
-  className: ""
+  className: "nginx"
   api:
     host: onyx.local
   webserver:

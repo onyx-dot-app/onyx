@@ -4,24 +4,28 @@ kind: Ingress
 metadata:
   name: {{ include "onyx-stack.fullname" . }}-ingress-api
   annotations:
-    kubernetes.io/ingress.class: nginx
+  {{- with .Values.ingress.api.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
-    cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
 spec:
+  ingressClassName: {{ .Values.ingress.className | quote }}
   rules:
     - host: {{ .Values.ingress.api.host }}
       http:
         paths:
-          - path: /api(/|$)(.*)
-            pathType: Prefix
+          - path: {{ .Values.ingress.api.path | default "/api(/|$)(.*)" }}
+            pathType: {{ .Values.ingress.api.pathType | default "ImplementationSpecific" }}
             backend:
               service:
                 name: {{ include "onyx-stack.fullname" . }}-api-service
                 port:
                   number: {{ .Values.api.service.servicePort }}
+  {{- if .Values.ingress.api.tlsSecretName }}
   tls:
     - hosts:
         - {{ .Values.ingress.api.host }}
-      secretName: {{ include "onyx-stack.fullname" . }}-ingress-api-tls
+      secretName: {{ .Values.ingress.api.tlsSecretName }}
+  {{- end }}
 {{- end }}
