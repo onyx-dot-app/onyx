@@ -737,6 +737,7 @@ def acquire_document_locks(db_session: Session, document_ids: list[str]) -> bool
     return True
 
 
+# TODO: Remove this constansts and prepare_to_modify_documents when we remove the old indexing pipeline
 _NUM_LOCK_ATTEMPTS = 10
 _LOCK_RETRY_DELAY = 10
 
