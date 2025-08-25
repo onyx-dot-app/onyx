@@ -10,6 +10,7 @@ from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.db.document import get_access_info_for_document
 from onyx.db.document import get_access_info_for_documents
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -124,3 +125,20 @@ def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> b
         ),
     )
     return _source_should_fetch_permissions_during_indexing_func(source)
+
+
+def get_access_for_user_files(
+    user_file_ids: list[str],
+    db_session: Session,
+) -> dict[str, DocumentAccess]:
+    user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
+    return {
+        user_file.id: DocumentAccess.build(
+            user_emails=[user_file.user.email],
+            user_groups=[],
+            is_public=False,
+            external_user_emails=[],
+            external_user_group_ids=[],
+        )
+        for user_file in user_files
+    }

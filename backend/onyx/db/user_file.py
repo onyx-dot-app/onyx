@@ -1,0 +1,30 @@
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from onyx.db.models import UserFile
+
+
+def fetch_chunk_counts_for_user_files(
+    user_file_ids: list[int],
+    db_session: Session,
+) -> list[tuple[str, int]]:
+    """
+    Return a list of (user_file_id, chunk_count) tuples.
+    If a user_file_id is not found in the database, it will be returned with a chunk_count of 0.
+    """
+    stmt = select(UserFile.id, UserFile.chunk_count).where(
+        UserFile.id.in_(user_file_ids)
+    )
+
+    results = db_session.execute(stmt).all()
+
+    # Create a dictionary of user_file_id to chunk_count
+    chunk_counts = {str(row.id): row.chunk_count or 0 for row in results}
+
+    # Return a list of tuples, preserving `None` for documents not found or with
+    # an unknown chunk count. Callers should handle the `None` case and fall
+    # back to an existence check against the vector DB if necessary.
+    return [
+        (user_file_id, chunk_counts.get(user_file_id, 0))
+        for user_file_id in user_file_ids
+    ]

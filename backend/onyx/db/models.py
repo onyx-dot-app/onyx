@@ -62,6 +62,7 @@ from onyx.db.enums import (
     SyncType,
     SyncStatus,
     MCPAuthenticationType,
+    UserFileStatus,
 )
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
@@ -3302,7 +3303,7 @@ class UserDocument(str, Enum):
 class UserFile(Base):
     __tablename__ = "user_file"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",
@@ -3329,6 +3330,13 @@ class UserFile(Base):
     cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
         "ConnectorCredentialPair", back_populates="user_file"
     )
+    status: Mapped[UserFileStatus] = mapped_column(
+        Enum(UserFileStatus, native_enum=False),
+        nullable=False,
+        default=UserFileStatus.PROCESSING,
+    )
+    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    boost: Mapped[int] = mapped_column(Integer, nullable=False, default=DEFAULT_BOOST)
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
