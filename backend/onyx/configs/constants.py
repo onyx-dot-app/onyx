@@ -345,6 +345,9 @@ class OnyxCeleryQueues:
     # Indexing queue
     USER_FILES_INDEXING = "user_files_indexing"
 
+    # User file processing queue
+    USER_FILE_PROCESSING = "user_file_processing"
+
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
@@ -391,6 +394,10 @@ class OnyxRedisLocks:
 
     # KG processing
     KG_PROCESSING_LOCK = "da_lock:kg_processing"
+
+    # User file processing
+    USER_FILE_PROCESSING_BEAT_LOCK = "da_lock:check_user_file_processing_beat"
+    USER_FILE_PROCESSING_LOCK_PREFIX = "da_lock:user_file_processing"
 
 
 class OnyxRedisSignals:
@@ -460,7 +467,9 @@ class OnyxCeleryTask:
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
     CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
-
+    # User file processing
+    CHECK_FOR_USER_FILE_PROCESSING = "check_for_user_file_processing"
+    PROCESS_SINGLE_USER_FILE = "process_single_user_file"
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
     CLEANUP_CHECKPOINT = "cleanup_checkpoint"
