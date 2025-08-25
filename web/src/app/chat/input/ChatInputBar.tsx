@@ -29,7 +29,7 @@ import { UnconfiguredLlmProviderText } from "@/components/chat/UnconfiguredLlmPr
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
-import { DocumentSetSummary, Tag } from "@/lib/types";
+import { DocumentSetSummary, Tag, UserRole } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
@@ -850,12 +850,15 @@ export function ChatInputBar({
                   tooltipContent={"Upload files and attach user files"}
                 />
 
-                <LLMPopover
-                  llmProviders={llmProviders}
-                  llmManager={llmManager}
-                  requiresImageGeneration={false}
-                  currentAssistant={selectedAssistant}
-                />
+                {(user?.role === UserRole.ADMIN ||
+                  user?.role === UserRole.PRO_USER) && (
+                  <LLMPopover
+                    llmProviders={llmProviders}
+                    llmManager={llmManager}
+                    requiresImageGeneration={false}
+                    currentAssistant={selectedAssistant}
+                  />
+                )}
 
                 {retrievalEnabled && (
                   <FilterPopup
