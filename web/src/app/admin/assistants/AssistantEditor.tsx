@@ -1241,6 +1241,11 @@ export function AssistantEditor({
                                 <CameraIcon size={14} />
                                 Загрузить файл шаблона
                               </Button>
+                              {values.template_file && (
+                                <div className="text-sm text-neutral-600 dark:text-neutral-300 mb-2">
+                                  {values.template_file.name}
+                                </div>
+                              )}
                             </>
                           </div>
                         )}
