@@ -57,11 +57,3 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
-          {{- with .Values.api.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.api.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}

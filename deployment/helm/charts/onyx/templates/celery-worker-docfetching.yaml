@@ -32,11 +32,11 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
       securityContext:
-        {{- toYaml .Values.celery_shared.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.celery_worker_docfetching.podSecurityContext | nindent 8 }}
       containers:
         - name: celery-worker-docfetching
           securityContext:
-            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+            {{- toYaml .Values.celery_worker_docfetching.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -46,12 +46,12 @@ spec:
               "onyx.background.celery.versioned_apps.docfetching",
               "worker",
               "--pool=threads",
-              "--concurrency=2",
+              "--concurrency=12",
               "--prefetch-multiplier=1",
               "--loglevel=INFO",
               "--hostname=docfetching@%n",
               "-Q",
-              "connector_doc_fetching,user_files_indexing",
+              "connector_doc_fetching",
             ]
           resources:
             {{- toYaml .Values.celery_worker_docfetching.resources | nindent 12 }}
@@ -60,10 +60,6 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
-          {{- with .Values.celery_worker_docfetching.volumeMounts }}
-          volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           startupProbe:
             {{ .Values.celery_shared.startupProbe | toYaml | nindent 12}}
           readinessProbe:
@@ -85,8 +81,4 @@ spec:
                 - >
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
-                    --filename /tmp/onyx_k8s_docfetching_liveness.txt
-      {{- with .Values.celery_worker_docfetching.volumes }}
-      volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }} 
+                    --filename /tmp/onyx_k8s_docfetching_liveness.txt 

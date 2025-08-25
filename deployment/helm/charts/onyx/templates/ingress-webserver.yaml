@@ -3,11 +3,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "onyx-stack.fullname" . }}-ingress-webserver
+  {{- with .Values.ingress.webserver.annotations }}
   annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
-    kubernetes.io/tls-acme: "true"
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.webserver.host }}
       http:

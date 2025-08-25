@@ -6,7 +6,7 @@ metadata:
     {{- include "onyx-stack.labels" . | nindent 4 }}
 data:
   INTERNAL_URL: "http://{{ include "onyx-stack.fullname" . }}-api-service:{{ .Values.api.service.port | default 8080 }}"
-  POSTGRES_HOST: {{ .Release.Name }}-postgresql
+  POSTGRES_HOST: {{ include "onyx-stack.postgresHost" . | quote }}
   VESPA_HOST: {{ .Values.vespa.name }}.{{ .Values.vespa.service.name }}.{{ .Release.Namespace }}.svc.cluster.local
   REDIS_HOST: {{ .Release.Name }}-redis-master
   MODEL_SERVER_HOST: "{{ include "onyx-stack.fullname" . }}-inference-model-service"
