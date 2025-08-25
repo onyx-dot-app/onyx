@@ -29,6 +29,7 @@ import { MessageSwitcher } from "../MessageSwitcher";
 import { BlinkingDot } from "../BlinkingDot";
 import {
   getTextContent,
+  isDisplayPacket,
   isFinalAnswerComing,
   isStreamingComplete,
   isToolPacket,
@@ -53,13 +54,21 @@ export function AIMessage({
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
 
-  const [allToolsFullyDisplayed, setAllToolsFullyDisplayed] = useState(
+  const [finalAnswerComing, _setFinalAnswerComing] = useState(
     isFinalAnswerComing(rawPackets) || isStreamingComplete(rawPackets)
   );
+  const setFinalAnswerComing = (value: boolean) => {
+    _setFinalAnswerComing(value);
+    finalAnswerComingRef.current = value;
+  };
 
-  const [displayComplete, setDisplayComplete] = useState(
+  const [displayComplete, _setDisplayComplete] = useState(
     isStreamingComplete(rawPackets)
   );
+  const setDisplayComplete = (value: boolean) => {
+    _setDisplayComplete(value);
+    displayCompleteRef.current = value;
+  };
 
   // Incremental packet processing state
   const lastProcessedIndexRef = useRef<number>(0);
@@ -69,6 +78,7 @@ export function AIMessage({
   const groupedPacketsMapRef = useRef<Map<number, Packet[]>>(new Map());
   const groupedPacketsRef = useRef<{ ind: number; packets: Packet[] }[]>([]);
   const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
+  const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
 
   // Reset incremental state when switching messages or when stream resets
   useEffect(() => {
@@ -79,6 +89,7 @@ export function AIMessage({
     groupedPacketsMapRef.current = new Map();
     groupedPacketsRef.current = [];
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
+    displayCompleteRef.current = isStreamingComplete(rawPackets);
   }, [messageId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
@@ -138,6 +149,19 @@ export function AIMessage({
         packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
       ) {
         finalAnswerComingRef.current = true;
+      }
+
+      // handles case where we get a Message packet from Claude, and then tool
+      // calling packets
+      if (
+        finalAnswerComingRef.current &&
+        !displayCompleteRef.current &&
+        isToolPacket(packet, false)
+      ) {
+        console.log("final answer reverted");
+        console.log("packet", packet);
+        setFinalAnswerComing(false);
+        setDisplayComplete(false);
       }
     }
 
@@ -225,14 +249,19 @@ export function AIMessage({
                           ) as { ind: number; packets: Packet[] }[];
 
                           // Non-tools include messages AND image generation
-                          const nonToolGroups =
-                            allToolsFullyDisplayed || toolGroups.length === 0
+                          const displayGroups =
+                            finalAnswerComing || toolGroups.length === 0
                               ? groupedPackets.filter(
                                   (group) =>
                                     group.packets[0] &&
-                                    !isToolPacket(group.packets[0])
+                                    isDisplayPacket(group.packets[0])
                                 )
                               : [];
+
+                          const lastDisplayGroup =
+                            displayGroups.length > 0
+                              ? displayGroups[displayGroups.length - 1]
+                              : null;
 
                           return (
                             <>
@@ -241,28 +270,27 @@ export function AIMessage({
                                 <MultiToolRenderer
                                   packetGroups={toolGroups}
                                   chatState={chatState}
-                                  isComplete={allToolsFullyDisplayed}
+                                  isComplete={finalAnswerComing}
                                   isFinalAnswerComing={
                                     finalAnswerComingRef.current
                                   }
                                   onAllToolsDisplayed={() =>
-                                    setAllToolsFullyDisplayed(true)
+                                    setFinalAnswerComing(true)
                                   }
                                 />
                               )}
 
                               {/* Render non-tool groups (messages + image generation) in main area */}
-                              {nonToolGroups.map((group) => (
+                              {lastDisplayGroup && (
                                 <RendererComponent
-                                  key={group.ind}
-                                  packets={group.packets}
+                                  key={lastDisplayGroup.ind}
+                                  packets={lastDisplayGroup.packets}
                                   chatState={chatState}
                                   onComplete={() => {
-                                    // Check if this was the last group
-                                    const isLastGroup =
-                                      group ===
-                                      nonToolGroups[nonToolGroups.length - 1];
-                                    if (isLastGroup) {
+                                    // if we've reverted to final answer not coming, don't set display complete
+                                    // this happens when using claude and a tool calling packet comes after
+                                    // some message packets
+                                    if (finalAnswerComingRef.current) {
                                       setDisplayComplete(true);
                                     }
                                   }}
@@ -270,7 +298,7 @@ export function AIMessage({
                                 >
                                   {({ content }) => <div>{content}</div>}
                                 </RendererComponent>
-                              ))}
+                              )}
                             </>
                           );
                         })()

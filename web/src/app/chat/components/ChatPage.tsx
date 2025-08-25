@@ -760,7 +760,7 @@ export function ChatPage({
       {(settingsToggled || userSettingsToggled) && (
         <UserSettingsModal
           setPopup={setPopup}
-          setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
+          updateCurrentLlmToModelName={llmManager.updateCurrentLlmToModelName}
           defaultModel={user?.preferences.default_model!}
           llmProviders={llmProviders}
           onClose={() => {

@@ -12,6 +12,7 @@ import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { truncateString } from "@/lib/utils";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { SourceChip2 } from "@/app/chat/components/SourceChip2";
+import { BlinkingDot } from "../../BlinkingDot";
 
 const INITIAL_RESULTS_TO_SHOW = 3;
 const RESULTS_PER_EXPANSION = 10;
@@ -200,13 +201,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
                 {queries.slice(0, queriesToShow).map((query, index) => (
                   <div key={index} className="text-xs">
                     <SourceChip2
-                      icon={
-                        isInternetSearch ? (
-                          <FiGlobe size={10} />
-                        ) : (
-                          <FiSearch size={10} />
-                        )
-                      }
+                      icon={<FiSearch size={10} />}
                       title={truncateString(query, MAX_TITLE_LENGTH)}
                     />
                   </div>
@@ -230,62 +225,64 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               </div>
             </>
           )}
-          {results.length > 0 && (
-            <>
-              <div className="text-xs font-medium mt-2 mb-1 ml-1">
-                {isInternetSearch ? "Results" : "Documents"}
-              </div>
-              <div className="flex flex-wrap gap-2 ml-1">
-                {results.slice(0, resultsToShow).map((result, index) => (
-                  <div
-                    key={result.document_id}
-                    className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="text-xs">
-                      <SourceChip2
-                        icon={<ResultIcon doc={result} size={10} />}
-                        title={truncateString(
-                          result.semantic_identifier || "",
-                          MAX_TITLE_LENGTH
-                        )}
-                        onClick={() => {
-                          if (result.link) {
-                            window.open(result.link, "_blank");
-                          }
-                        }}
-                      />
-                    </div>
+
+          <>
+            <div className="text-xs font-medium mt-2 mb-1 ml-1">
+              {isInternetSearch ? "Results" : "Documents"}
+            </div>
+            <div className="flex flex-wrap gap-2 ml-1">
+              {results.slice(0, resultsToShow).map((result, index) => (
+                <div
+                  key={result.document_id}
+                  className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <div className="text-xs">
+                    <SourceChip2
+                      icon={<ResultIcon doc={result} size={10} />}
+                      title={truncateString(
+                        result.semantic_identifier || "",
+                        MAX_TITLE_LENGTH
+                      )}
+                      onClick={() => {
+                        if (result.link) {
+                          window.open(result.link, "_blank");
+                        }
+                      }}
+                    />
                   </div>
-                ))}
-                {/* Show a blurb if there are more results than we are displaying */}
-                {results.length > resultsToShow && (
-                  <div
-                    className="animate-in fade-in slide-in-from-bottom-1 duration-300"
-                    style={{
-                      animationDelay: `${
-                        Math.min(resultsToShow, results.length) * 100
-                      }ms`,
-                    }}
-                  >
-                    <div className="text-xs">
-                      <SourceChip2
-                        title={`${results.length - resultsToShow} more...`}
-                        onClick={() => {
-                          setResultsToShow((prevResults) =>
-                            Math.min(
-                              prevResults + RESULTS_PER_EXPANSION,
-                              results.length
-                            )
-                          );
-                        }}
-                      />
-                    </div>
+                </div>
+              ))}
+              {/* Show a blurb if there are more results than we are displaying */}
+              {results.length > resultsToShow && (
+                <div
+                  className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+                  style={{
+                    animationDelay: `${
+                      Math.min(resultsToShow, results.length) * 100
+                    }ms`,
+                  }}
+                >
+                  <div className="text-xs">
+                    <SourceChip2
+                      title={`${results.length - resultsToShow} more...`}
+                      onClick={() => {
+                        setResultsToShow((prevResults) =>
+                          Math.min(
+                            prevResults + RESULTS_PER_EXPANSION,
+                            results.length
+                          )
+                        );
+                      }}
+                    />
                   </div>
-                )}
-              </div>
-            </>
-          )}
+                </div>
+              )}
+
+              {/* If no results, show a loading state */}
+              {results.length === 0 && <BlinkingDot />}
+            </div>
+          </>
         </div>
       </div>
     ),

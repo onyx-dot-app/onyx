@@ -485,6 +485,7 @@ export interface LlmDescriptor {
 export interface LlmManager {
   currentLlm: LlmDescriptor;
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
+  updateCurrentLlmToModelName: (modelName: string) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
@@ -622,7 +623,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.provider };
+        return { ...model, provider: provider.provider, name: provider.name };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -637,6 +638,11 @@ export function useLlmManager(
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
     setCurrentLlm(newLlm);
+    setUserHasManuallyOverriddenLLM(true);
+  };
+
+  const updateCurrentLlmToModelName = (modelName: string) => {
+    setCurrentLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 
@@ -715,6 +721,7 @@ export function useLlmManager(
     updateModelOverrideBasedOnChatSession,
     currentLlm,
     updateCurrentLlm,
+    updateCurrentLlmToModelName,
     temperature,
     updateTemperature,
     imageFilesPresent,

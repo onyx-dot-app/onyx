@@ -488,7 +488,6 @@ export function useChatController({
     resetInputBar();
 
     let answer = "";
-    let second_level_answer = "";
 
     const stopReason: StreamStopReason | null = null;
     let query: string | null = null;
@@ -502,7 +501,6 @@ export function useChatController({
     let error: string | null = null;
     let stackTrace: string | null = null;
 
-    let sub_questions: SubQuestionDetail[] = [];
     let finalMessage: BackendMessage | null = null;
     let toolCall: ToolCallMetadata | null = null;
     let files: FileDescriptor[] = [];
@@ -518,7 +516,6 @@ export function useChatController({
       );
 
       const stack = new CurrentMessageFIFO();
-
       updateCurrentMessageFIFO(stack, {
         signal: controller.signal,
         message: currMessage,
