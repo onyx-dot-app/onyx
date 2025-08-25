@@ -606,6 +606,10 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 # exception without aborting the attempt.
 INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
 
+# Maximum number of user file connector credential pairs to index in a single batch
+# Setting this number too high may overload the indexing process
+USER_FILE_INDEXING_LIMIT = int(os.environ.get("USER_FILE_INDEXING_LIMIT") or 100)
+
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(

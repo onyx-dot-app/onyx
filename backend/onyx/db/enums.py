@@ -72,6 +72,9 @@ class IndexModelStatus(str, PyEnum):
     def is_current(self) -> bool:
         return self == IndexModelStatus.PRESENT
 
+    def is_future(self) -> bool:
+        return self == IndexModelStatus.FUTURE
+
 
 class ChatSessionSharedStatus(str, PyEnum):
     PUBLIC = "public"
@@ -92,6 +95,13 @@ class ConnectorCredentialPairStatus(str, PyEnum):
             ConnectorCredentialPairStatus.ACTIVE,
             ConnectorCredentialPairStatus.SCHEDULED,
             ConnectorCredentialPairStatus.INITIAL_INDEXING,
+        ]
+
+    @classmethod
+    def indexable_statuses(self) -> list["ConnectorCredentialPairStatus"]:
+        # Superset of active statuses for indexing model swaps
+        return self.active_statuses() + [
+            ConnectorCredentialPairStatus.PAUSED,
         ]
 
     def is_active(self) -> bool:
