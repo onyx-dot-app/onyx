@@ -49,7 +49,7 @@ export function TruncatedText({
   }, [text]);
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <span

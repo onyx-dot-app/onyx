@@ -144,7 +144,7 @@ export function ToolTipDetails({
   children: string | JSX.Element;
 }) {
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger type="button">
           <FiInfo size={12} />
@@ -708,7 +708,7 @@ export const BooleanFormField = ({
   return (
     <div>
       <label className="flex items-center text-sm cursor-pointer">
-        <TooltipProvider>
+        <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger>
               <CheckboxField

@@ -269,7 +269,7 @@ function ActionForm({
             {isOAuthEnabled ? (
               <div className="flex flex-col gap-y-2">
                 <div className="flex items-center space-x-2">
-                  <TooltipProvider>
+                  <TooltipProvider delayDuration={300}>
                     <Tooltip>
                       <TooltipTrigger>
                         <div

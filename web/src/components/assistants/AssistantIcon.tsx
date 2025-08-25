@@ -127,7 +127,7 @@ export function AssistantIcon({
   const style = { width: dimension, height: dimension };
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div className={className + " text-[#000] dark:text-[#fff]"}>

@@ -120,7 +120,7 @@ const EditRow = ({
 
   return (
     <div className="relative flex">
-      <TooltipProvider>
+      <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
             <div

@@ -34,7 +34,7 @@ export function IndexAttemptStatus({
     );
     if (errorMsg) {
       badge = (
-        <TooltipProvider>
+        <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="cursor-pointer">{icon}</div>

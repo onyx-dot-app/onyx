@@ -20,7 +20,7 @@ export const HoverPopup = ({
   direction = "bottom",
 }: HoverPopupProps) => {
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div>{mainContent}</div>

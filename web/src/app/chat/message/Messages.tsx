@@ -1159,7 +1159,7 @@ export const HumanMessage = ({
                       isHovered &&
                       !isEditing &&
                       (!files || files.length === 0) ? (
-                        <TooltipProvider delayDuration={1000}>
+                        <TooltipProvider delayDuration={300}>
                           <Tooltip>
                             <TooltipTrigger>
                               <HoverableIcon

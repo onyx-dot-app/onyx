@@ -229,7 +229,7 @@ export function SearchSummary({
           </div>
 
           {handleSearchQueryEdit && (
-            <TooltipProvider delayDuration={1000}>
+            <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button

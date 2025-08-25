@@ -473,7 +473,7 @@ export function FederatedConnectorForm({
             <Badge variant="outline" className="text-xs">
               Federated
             </Badge>
-            <TooltipProvider>
+            <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="cursor-help" size={16} />

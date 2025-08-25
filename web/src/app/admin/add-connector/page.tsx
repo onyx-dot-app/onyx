@@ -94,7 +94,7 @@ function SourceTileTooltipWrapper({
   }
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
           <div>

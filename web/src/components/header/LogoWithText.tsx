@@ -82,7 +82,7 @@ export default function LogoWithText({
         </div>
       )}
       {page == "chat" && !showArrow && (
-        <TooltipProvider delayDuration={1000}>
+        <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
               <Link

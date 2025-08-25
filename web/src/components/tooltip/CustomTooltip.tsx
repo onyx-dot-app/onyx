@@ -45,7 +45,7 @@ export const CustomTooltip = ({
   medium,
   wrap,
   showTick = false,
-  delay = 500,
+  delay = 300,
   position = "bottom",
   disabled = false,
   className,

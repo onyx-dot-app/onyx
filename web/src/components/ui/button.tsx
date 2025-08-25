@@ -145,7 +145,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     if (tooltip) {
       return (
-        <TooltipProvider>
+        <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
               <div className={disabled ? "cursor-not-allowed" : ""}>

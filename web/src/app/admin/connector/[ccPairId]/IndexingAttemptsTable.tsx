@@ -79,7 +79,7 @@ export function IndexingAttemptsTable({
             <TableHead className="whitespace-nowrap">New Docs</TableHead>
             <TableHead>
               <div className="w-fit whitespace-nowrap">
-                <TooltipProvider>
+                <TooltipProvider delayDuration={300}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="flex items-center">
@@ -142,7 +142,7 @@ export function IndexingAttemptsTable({
                   <div className="flex items-center">
                     {indexAttempt.total_docs_indexed}
                     {indexAttempt.from_beginning && (
-                      <TooltipProvider>
+                      <TooltipProvider delayDuration={300}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="cursor-help flex items-center">

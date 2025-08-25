@@ -23,7 +23,7 @@ export function TokenDisplay({
 }: TokenDisplayProps) {
   return (
     <div className="flex items-center">
-      <TooltipProvider>
+      <TooltipProvider delayDuration={300}>
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="flex items-center space-x-3 bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-1.5">
