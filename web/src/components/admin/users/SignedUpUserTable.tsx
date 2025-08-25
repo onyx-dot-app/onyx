@@ -184,7 +184,7 @@ const SignedUpUserTable = ({
             {Object.entries(USER_ROLE_LABELS)
               .filter(([role]) => role !== UserRole.EXT_PERM_USER)
               .map(([role, label]) => (
-                <div
+                <label
                   key={role}
                   className="flex items-center space-x-2 px-2 py-1.5 cursor-pointer hover:bg-background-200"
                   onClick={() => toggleRole(role as UserRole)}
@@ -194,8 +194,8 @@ const SignedUpUserTable = ({
                     checked={filters.roles?.includes(role as UserRole) || false}
                     onChange={(e) => e.stopPropagation()}
                   />
-                  <label className="text-sm font-normal">{label}</label>
-                </div>
+                  <span className="text-sm font-normal">{label}</span>
+                </label>
               ))}
           </SelectContent>
         </Select>

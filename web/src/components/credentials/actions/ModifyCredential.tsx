@@ -96,12 +96,14 @@ const CredentialSelectionTable = ({
                 >
                   <td className="min-w-[60px] p-2">
                     {!selected ? (
-                      <input
-                        type="radio"
-                        name="credentialSelection"
-                        onChange={() => handleSelectCredential(credential.id)}
-                        className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-                      />
+                      <label className="flex items-center justify-center cursor-pointer w-full h-full py-2">
+                        <input
+                          type="radio"
+                          name="credentialSelection"
+                          onChange={() => handleSelectCredential(credential.id)}
+                          className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
+                        />
+                      </label>
                     ) : (
                       <Badge>selected</Badge>
                     )}
