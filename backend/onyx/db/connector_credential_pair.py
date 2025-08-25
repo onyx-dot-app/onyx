@@ -145,7 +145,7 @@ def get_connector_credential_pairs_for_user(
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
 
     if not include_user_files:
-        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file.is_(False))
 
     if order_by_desc:
         stmt = stmt.order_by(desc(ConnectorCredentialPair.id))
