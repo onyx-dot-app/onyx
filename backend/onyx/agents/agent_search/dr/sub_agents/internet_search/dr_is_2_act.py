@@ -7,6 +7,7 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
+from onyx.agents.agent_search.dr.models import SurfaceSearchAnswer
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
 from onyx.agents.agent_search.dr.utils import extract_document_citations
@@ -21,12 +22,11 @@ from onyx.chat.models import LlmDoc
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
+    InternetSearchOnlyTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
+    InternetUrlOpenTool,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -65,28 +65,86 @@ def internet_search(
         raise ValueError("available_tools is not set")
 
     is_tool_info = state.available_tools[state.tools_used[-1]]
-    internet_search_tool = cast(InternetSearchTool, is_tool_info.tool_object)
+    # Find the search and URL opening tools
+    search_tool = None
+    url_open_tool = None
+    for tool_info in state.available_tools.values():
+        if isinstance(tool_info.tool_object, InternetSearchOnlyTool):
+            search_tool = cast(InternetSearchOnlyTool, tool_info.tool_object)
+        elif isinstance(tool_info.tool_object, InternetUrlOpenTool):
+            url_open_tool = cast(InternetUrlOpenTool, tool_info.tool_object)
 
-    if internet_search_tool.provider is None:
-        raise ValueError(
-            "internet_search_tool.provider is not set. This should not happen."
-        )
+    if search_tool is None:
+        raise ValueError("search_tool is not set")
+    if url_open_tool is None:
+        raise ValueError("url_open_tool is not set")
 
-    # Update search parameters
-    internet_search_tool.max_chunks = 10
-    internet_search_tool.provider.num_results = 10
+    # Fetch search results (fetch more results, like 10)
+    search_results = []
+    try:
+        for tool_response in search_tool.run(internet_search_query=search_query):
+            if tool_response.id == "internet_search_results":
+                search_results = tool_response.response["results"]
+                break
+    except Exception as e:
+        logger.error(f"Error performing search: {e}")
+
+    if not search_results:
+        logger.warning("No search results found")
+
+    # Step 2: Agent decides which URLs to open
+    search_results_text = "\n\n".join(
+        [
+            f"{i+1}. {result['title']}\n   URL: {result['link']}\n"
+            for i, result in enumerate(search_results)
+        ]
+    )
+    agent_decision_prompt = f"""
+You are an intelligent agent tasked with gathering information from the internet to answer: "{base_question}"
+
+You have performed a search and received the following results:
+
+{search_results_text}
+
+Your task is to:
+1. Analyze which URLs are most relevant to the original question
+2. Decide how many URLs to open (consider time and relevance)
+3. Determine if you need to perform additional searches with different queries
+
+Based on the search results above, please make your decision and return a JSON object with this structure:
+
+{{
+    "urls_to_open": ["<url1>", "<url2>", "<url3>"],
+    "need_additional_search": <true/false>,
+    "additional_search_query": "<if need_additional_search is true, provide a refined search query>",
+    "reasoning": "<overall reasoning for your decisions>"
+}}
+
+Guidelines:
+- Select 2-4 most relevant URLs to open
+- Only suggest additional searches if the current results don't seem sufficient
+- Consider the title, snippet, and URL when making decisions
+- Focus on quality over quantity
+"""
+    agent_decision = invoke_llm_json(
+        llm=graph_config.tooling.primary_llm,
+        prompt=create_question_prompt(
+            assistant_system_prompt,
+            agent_decision_prompt + (assistant_task_prompt or ""),
+        ),
+        schema=SurfaceSearchAnswer,
+        timeout_override=30,
+    )
+    # Open URLs and fetch content
     retrieved_docs: list[InferenceSection] = []
-    for tool_response in internet_search_tool.runV2(internet_search_query=search_query):
-        # get retrieved docs to send to the rest of the graph
-        if tool_response.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
-            response = cast(SearchResponseSummary, tool_response.response)
-            retrieved_docs = response.top_sections
+    urls_to_open = agent_decision.urls_to_open
+    for tool_response in url_open_tool.run(urls=",".join(urls_to_open)):
+        if tool_response.id == "url_content":
+            url_content = tool_response.response
+            retrieved_docs = url_content["documents"]
             break
 
-    # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
-
     document_texts_list = []
-
     for doc_num, retrieved_doc in enumerate(retrieved_docs[:15]):
         if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
             raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")

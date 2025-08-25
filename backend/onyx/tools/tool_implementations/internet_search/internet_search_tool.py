@@ -82,6 +82,379 @@ Do not use this tool if:
 - The user is asking for information about their work or company.
 """
 
+INTERNET_SEARCH_ONLY_TOOL_DESCRIPTION = """
+This tool searches the internet and returns search results with titles, snippets, and URLs.
+Use this tool to find relevant web pages, then use the URL opening tool to fetch content from specific pages.
+
+Do not use this tool if:
+- The user is asking for information about their work or company.
+"""
+
+INTERNET_URL_OPEN_TOOL_DESCRIPTION = """
+This tool opens a specific URL and fetches its content.
+Use this tool after performing a search to get detailed content from specific web pages.
+"""
+
+
+class InternetSearchOnlyTool(Tool[None]):
+    """Tool that only performs search and returns results with metadata"""
+
+    _NAME = "run_internet_search_only"
+    _DISPLAY_NAME = "Internet Search Only"
+    _DESCRIPTION = INTERNET_SEARCH_ONLY_TOOL_DESCRIPTION
+    provider: InternetSearchProvider | None
+
+    def __init__(
+        self,
+        tool_id: int,
+        db_session: Session,
+        persona: Persona,
+        prompt_config: PromptConfig,
+        llm: LLM,
+        document_pruning_config: DocumentPruningConfig,
+        answer_style_config: AnswerStyleConfig,
+        provider: str | None = None,
+        num_results: int = NUM_INTERNET_SEARCH_RESULTS,
+    ) -> None:
+        self.db_session = db_session
+        self.persona = persona
+        self.prompt_config = prompt_config
+        self.llm = llm
+
+        self.provider = (
+            get_provider_by_name(provider) if provider else get_default_provider()
+        )
+
+        if not self.provider:
+            raise ValueError("No internet search providers are configured")
+
+        self.provider.num_results = num_results
+        self.answer_style_config = answer_style_config
+
+        self._id = tool_id
+
+    @property
+    def id(self) -> int:
+        return self._id
+
+    @property
+    def name(self) -> str:
+        return self._NAME
+
+    @property
+    def description(self) -> str:
+        return self._DESCRIPTION
+
+    @property
+    def display_name(self) -> str:
+        return self._DISPLAY_NAME
+
+    def tool_definition(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        INTERNET_QUERY_FIELD: {
+                            "type": "string",
+                            "description": "What to search for on the internet",
+                        },
+                    },
+                    "required": [INTERNET_QUERY_FIELD],
+                },
+            },
+        }
+
+    def get_args_for_non_tool_calling_llm(
+        self,
+        query: str,
+        history: list[PreviousMessage],
+        llm: LLM,
+        force_run: bool = False,
+    ) -> dict[str, Any] | None:
+        if not force_run and not check_if_need_search(
+            query, history, llm, search_type=SearchType.INTERNET
+        ):
+            return None
+
+        rephrased_query = history_based_query_rephrase(
+            query=query,
+            history=history,
+            llm=llm,
+            prompt_template=INTERNET_SEARCH_QUERY_REPHRASE,
+        )
+        return {
+            INTERNET_QUERY_FIELD: rephrased_query,
+        }
+
+    def _perform_search(
+        self, query: str, token_budget: int
+    ) -> list[InternetSearchResult]:
+        if not self.provider:
+            raise RuntimeError("Internet search provider is not configured")
+
+        return self.provider.search(query, token_budget)
+
+    def run(
+        self, override_kwargs: None = None, **llm_kwargs: str
+    ) -> Generator[ToolResponse, None, None]:
+        query = cast(str, llm_kwargs[INTERNET_QUERY_FIELD])
+        token_budget = compute_max_document_tokens(
+            prompt_config=self.prompt_config,
+            llm_config=self.llm.config,
+            actual_user_input=query,
+            tool_token_count=0,  # No additional tokens for this tool
+        )
+
+        search_results = self._perform_search(query, token_budget)
+
+        # Return search results with metadata for the agent to choose from
+        yield ToolResponse(
+            id="internet_search_results",
+            response={
+                "query": query,
+                "results": [
+                    {
+                        "title": result.title,
+                        "link": result.link,
+                        "published_date": (
+                            result.published_date.isoformat()
+                            if result.published_date
+                            else None
+                        ),
+                    }
+                    for result in search_results
+                ],
+            },
+        )
+
+    def final_result(self, *args: ToolResponse) -> JSON_ro:
+        """Extract the search results from tool responses"""
+        search_results = next(
+            arg.response for arg in args if arg.id == "internet_search_results"
+        )
+        return search_results
+
+    def build_tool_message_content(
+        self, *args: ToolResponse
+    ) -> str | list[str | dict[str, Any]]:
+        """Build tool message content for LLMs that support tool calling"""
+        search_results_response = next(
+            response for response in args if response.id == "internet_search_results"
+        )
+        search_results = cast(dict[str, Any], search_results_response.response)
+
+        return json.dumps(search_results)
+
+    def build_next_prompt(
+        self,
+        prompt_builder: AnswerPromptBuilder,
+        tool_call_summary: ToolCallSummary,
+        tool_responses: list[ToolResponse],
+        using_tool_calling_llm: bool,
+    ) -> AnswerPromptBuilder:
+        """Build the next prompt for the LLM using the search results"""
+        return build_next_prompt_for_search_like_tool(
+            prompt_builder=prompt_builder,
+            tool_call_summary=tool_call_summary,
+            tool_responses=tool_responses,
+            using_tool_calling_llm=using_tool_calling_llm,
+            answer_style_config=self.answer_style_config,
+            prompt_config=self.prompt_config,
+            context_type="internet search results",
+        )
+
+
+class InternetUrlOpenTool(Tool[None]):
+    """Tool that opens a specific URL and fetches its content"""
+
+    _NAME = "open_internet_url"
+    _DISPLAY_NAME = "Open Internet URL"
+    _DESCRIPTION = INTERNET_URL_OPEN_TOOL_DESCRIPTION
+    provider: InternetSearchProvider | None
+
+    def __init__(
+        self,
+        tool_id: int,
+        db_session: Session,
+        persona: Persona,
+        prompt_config: PromptConfig,
+        llm: LLM,
+        document_pruning_config: DocumentPruningConfig,
+        answer_style_config: AnswerStyleConfig,
+        provider: str | None = None,
+    ) -> None:
+        self.db_session = db_session
+        self.persona = persona
+        self.prompt_config = prompt_config
+        self.llm = llm
+        self.answer_style_config = answer_style_config
+        self._id = tool_id
+        self.provider = (
+            get_provider_by_name(provider) if provider else get_default_provider()
+        )
+
+        if not self.provider:
+            raise ValueError("No internet search providers are configured")
+
+    @property
+    def id(self) -> int:
+        return self._id
+
+    @property
+    def name(self) -> str:
+        return self._NAME
+
+    @property
+    def description(self) -> str:
+        return self._DESCRIPTION
+
+    @property
+    def display_name(self) -> str:
+        return self._DISPLAY_NAME
+
+    def tool_definition(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "urls": {
+                            "type": "string",
+                            "description": """
+                            Comma-separated list of URLs or JSON array of URLs to open and fetch content from.
+                            Example: 'https://example1.com,https://example2.com' or '[\"https://example1.com\",\"https://example2.com\"]'"
+                            """,
+                        },
+                    },
+                    "required": ["urls"],
+                },
+            },
+        }
+
+    def get_args_for_non_tool_calling_llm(
+        self,
+        query: str,
+        history: list[PreviousMessage],
+        llm: LLM,
+        force_run: bool = False,
+    ) -> dict[str, Any] | None:
+        """For LLMs that don't support tool calling - extract URLs from query"""
+        # This tool requires explicit URL input, so we don't auto-detect
+        # Users must provide URLs directly
+        return None
+
+    def contents(self, urls: list[str]) -> list[InternetSearchResult]:
+        if not self.provider:
+            raise RuntimeError("Internet search provider is not configured")
+        return self.provider.contents(urls)
+
+    def run(
+        self, override_kwargs: None = None, **llm_kwargs: str
+    ) -> Generator[ToolResponse, None, None]:
+        urls = cast(str, llm_kwargs["urls"])
+
+        # Parse URLs - can be comma-separated string or JSON array
+        if urls.startswith("[") and urls.endswith("]"):
+            # JSON array format
+            import json
+
+            url_list = json.loads(urls)
+        else:
+            # Comma-separated format
+            url_list = [url.strip() for url in urls.split(",") if url.strip()]
+
+        # Fetch content from all URLs
+        content_results = self.contents(url_list)
+
+        # Process each result
+        documents = [
+            self._dummy_inference_section_from_internet_search_result(result)
+            for result in content_results
+        ]
+        yield ToolResponse(
+            id="url_content",
+            response={"documents": documents, "total_fetched": len(documents)},
+        )
+
+    def final_result(self, *args: ToolResponse) -> JSON_ro:
+        """Extract the URL content from tool responses"""
+        url_content = next(arg.response for arg in args if arg.id == "url_content")
+        return url_content
+
+    def build_tool_message_content(
+        self, *args: ToolResponse
+    ) -> str | list[str | dict[str, Any]]:
+        """Build tool message content for LLMs that support tool calling"""
+        url_content_response = next(
+            response for response in args if response.id == "url_content"
+        )
+        url_content = cast(dict[str, Any], url_content_response.response)
+
+        return json.dumps(url_content)
+
+    def build_next_prompt(
+        self,
+        prompt_builder: AnswerPromptBuilder,
+        tool_call_summary: ToolCallSummary,
+        tool_responses: list[ToolResponse],
+        using_tool_calling_llm: bool,
+    ) -> AnswerPromptBuilder:
+        """Build the next prompt for the LLM using the URL content"""
+        return build_next_prompt_for_search_like_tool(
+            prompt_builder=prompt_builder,
+            tool_call_summary=tool_call_summary,
+            tool_responses=tool_responses,
+            using_tool_calling_llm=using_tool_calling_llm,
+            answer_style_config=self.answer_style_config,
+            prompt_config=self.prompt_config,
+            context_type="URL content",
+        )
+
+    def _dummy_inference_section_from_internet_search_result(
+        self, result: InternetSearchResult
+    ) -> InferenceSection:
+        truncated_content = self._truncate_search_result_content(result.full_content)
+        return InferenceSection(
+            center_chunk=InferenceChunk(
+                chunk_id=0,
+                blurb=result.title,
+                content=truncated_content,
+                source_links={0: result.link},
+                section_continuation=False,
+                document_id="INTERNET_SEARCH_DOC_" + result.link,
+                source_type=DocumentSource.WEB,
+                semantic_identifier=result.link,
+                title=result.title,
+                boost=1,
+                recency_bias=1.0,
+                score=1.0,
+                hidden=False,
+                metadata={},
+                match_highlights=[],
+                doc_summary=truncated_content,
+                chunk_context=truncated_content,
+                updated_at=result.published_date,
+                image_file_id=None,
+            ),
+            chunks=[],
+            combined_content=truncated_content,
+        )
+
+    def _truncate_search_result_content(
+        self, content: str, max_chars: int = 10000
+    ) -> str:
+        """Truncate search result content to a maximum number of characters"""
+        if len(content) <= max_chars:
+            return content
+        return content[:max_chars] + "..."
+
 
 class InternetSearchTool(Tool[None]):
     _NAME = "run_internet_search"

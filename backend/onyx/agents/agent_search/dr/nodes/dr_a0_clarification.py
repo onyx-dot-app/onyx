@@ -60,7 +60,13 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchOnlyTool,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetUrlOpenTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -94,7 +100,6 @@ def _get_available_tools(
         include_kg = persona.name == TMP_DRALPHA_PERSONA_NAME and kg_enabled
     else:
         include_kg = False
-
     for tool in graph_config.tooling.tools:
         tool_info = OrchestratorTool(
             tool_id=tool.id,
@@ -116,6 +121,12 @@ def _get_available_tools(
             # )
             tool_info.llm_path = DRPath.INTERNET_SEARCH.value
             tool_info.path = DRPath.INTERNET_SEARCH
+        elif isinstance(tool, InternetSearchOnlyTool):
+            tool_info.llm_path = DRPath.INTERNET_SEARCH_ONLY.value
+            tool_info.path = DRPath.INTERNET_SEARCH_ONLY
+        elif isinstance(tool, InternetUrlOpenTool):
+            tool_info.llm_path = DRPath.INTERNET_URL_OPEN.value
+            tool_info.path = DRPath.INTERNET_URL_OPEN
         elif isinstance(tool, SearchTool) and len(active_source_types) > 0:
             # tool_info.metadata["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
             tool_info.llm_path = DRPath.INTERNAL_SEARCH.value

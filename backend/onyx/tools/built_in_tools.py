@@ -14,6 +14,8 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
+    InternetSearchOnlyTool,
+    InternetUrlOpenTool,
 )
 from onyx.tools.tool_implementations.internet_search.providers import (
     get_available_providers,
@@ -54,7 +56,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
     ),
-    # Show internet search tool if any providers are available
+    # Show internet search tools if any providers are available
     *(
         [
             InCodeToolInfo(
@@ -65,7 +67,25 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 ),
                 in_code_tool_id=InternetSearchTool.__name__,
                 display_name=InternetSearchTool._DISPLAY_NAME,
-            )
+            ),
+            InCodeToolInfo(
+                cls=InternetSearchOnlyTool,
+                description=(
+                    "The Internet Search Only Action allows the assistant "
+                    "to search the internet and return search results with metadata."
+                ),
+                in_code_tool_id=InternetSearchOnlyTool.__name__,
+                display_name=InternetSearchOnlyTool._DISPLAY_NAME,
+            ),
+            InCodeToolInfo(
+                cls=InternetUrlOpenTool,
+                description=(
+                    "The Internet URL Open Action allows the assistant "
+                    "to open specific URLs and fetch their content."
+                ),
+                in_code_tool_id=InternetUrlOpenTool.__name__,
+                display_name=InternetUrlOpenTool._DISPLAY_NAME,
+            ),
         ]
         if (bool(get_available_providers()))
         else []

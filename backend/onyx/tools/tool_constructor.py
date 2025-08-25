@@ -44,7 +44,13 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchOnlyTool,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetUrlOpenTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -278,6 +284,48 @@ def construct_tools(
                     raise ValueError(
                         "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
                     )
+
+            # Handle Internet Search Only Tool
+            elif tool_cls.__name__ == InternetSearchOnlyTool.__name__:
+                if not internet_search_tool_config:
+                    internet_search_tool_config = InternetSearchToolConfig()
+
+                try:
+                    tool_dict[db_tool_model.id] = [
+                        InternetSearchOnlyTool(
+                            tool_id=db_tool_model.id,
+                            db_session=db_session,
+                            persona=persona,
+                            prompt_config=prompt_config,
+                            llm=llm,
+                            document_pruning_config=internet_search_tool_config.document_pruning_config,
+                            answer_style_config=internet_search_tool_config.answer_style_config,
+                            provider=None,  # Will use default provider
+                            num_results=NUM_INTERNET_SEARCH_RESULTS,
+                        )
+                    ]
+                except ValueError as e:
+                    logger.error(f"Failed to initialize Internet Search Only Tool: {e}")
+                    raise ValueError(
+                        "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
+                    )
+
+            # Handle Internet URL Open Tool
+            elif tool_cls.__name__ == InternetUrlOpenTool.__name__:
+                if not internet_search_tool_config:
+                    internet_search_tool_config = InternetSearchToolConfig()
+
+                tool_dict[db_tool_model.id] = [
+                    InternetUrlOpenTool(
+                        tool_id=db_tool_model.id,
+                        db_session=db_session,
+                        persona=persona,
+                        prompt_config=prompt_config,
+                        llm=llm,
+                        document_pruning_config=internet_search_tool_config.document_pruning_config,
+                        answer_style_config=internet_search_tool_config.answer_style_config,
+                    )
+                ]
 
             # Handle Okta Profile Tool
             elif tool_cls.__name__ == OktaProfileTool.__name__:

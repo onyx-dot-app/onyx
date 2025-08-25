@@ -37,6 +37,13 @@ class OrchestrationClarificationInfo(BaseModel):
     clarification_response: str | None = None
 
 
+class SurfaceSearchAnswer(BaseModel):
+    urls_to_open: list[str]
+    need_additional_search: bool
+    additional_search_query: str
+    reasoning: str
+
+
 class SearchAnswer(BaseModel):
     reasoning: str
     answer: str

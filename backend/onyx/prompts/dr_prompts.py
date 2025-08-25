@@ -17,6 +17,8 @@ KNOWLEDGE_GRAPH = DRPath.KNOWLEDGE_GRAPH.value
 INTERNAL_SEARCH = DRPath.INTERNAL_SEARCH.value
 CLOSER = DRPath.CLOSER.value
 INTERNET_SEARCH = DRPath.INTERNET_SEARCH.value
+INTERNET_SEARCH_ONLY = DRPath.INTERNET_SEARCH_ONLY.value
+INTERNET_URL_OPEN = DRPath.INTERNET_URL_OPEN.value
 
 
 DONE_STANDARD: dict[str, str] = {}
@@ -58,6 +60,22 @@ TOOL_DESCRIPTION[
 This tool is used to answer questions that can be answered using the information \
 that is public on the internet. The {INTERNET_SEARCH} tool DOES support parallel calls of up to \
 {MAX_DR_PARALLEL_SEARCH} queries. \
+"""
+
+TOOL_DESCRIPTION[
+    DRPath.INTERNET_SEARCH_ONLY
+] = f"""\
+This tool searches the internet and returns search results with titles, snippets, and URLs. \
+Use this tool to find relevant web pages, then use the URL opening tool to fetch content from specific pages. \
+The {INTERNET_SEARCH_ONLY} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. \
+"""
+
+TOOL_DESCRIPTION[
+    DRPath.INTERNET_URL_OPEN
+] = f"""\
+This tool opens a specific URL and fetches its content. \
+Use this tool after performing a search to get detailed content from specific web pages. \
+The {INTERNET_URL_OPEN} tool DOES support parallel calls of up to {MAX_DR_PARALLEL_SEARCH} queries. \
 """
 
 TOOL_DESCRIPTION[

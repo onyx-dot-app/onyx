@@ -44,10 +44,10 @@ PROVIDER_CONFIGS = {
         query_param_name="query",
         num_results_param="num_results",
         search_params={
-            "type": "auto",
+            "type": "fast",
             "contents": {
-                "text": True,
-                "livecrawl": "preferred",
+                "text": False,
+                "livecrawl": "never",
             },
         },
         request_method="POST",
@@ -155,13 +155,8 @@ class InternetSearchProvider(BaseModel):
             link_key = self.config.result_mapping.get("link", "")
             link = web_source.get(link_key, "") if link_key else ""
 
-            full_content_key = self.config.result_mapping.get("full_content", "")
-            full_content = (
-                web_source.get(full_content_key, "") if full_content_key else ""
-            )
-
             # Skip result if any required fields are missing (published_date is optional)
-            if not title or not link or not full_content:
+            if not title or not link:
                 logger.warning("Skipping result with missing required fields")
                 continue
 
@@ -184,7 +179,7 @@ class InternetSearchProvider(BaseModel):
                 title=title,
                 link=link,
                 published_date=published_date,
-                full_content=full_content,
+                full_content="",
                 rag_context=global_values.get("rag_context", ""),
             )
             results.append(internet_search_result)
@@ -208,6 +203,22 @@ class InternetSearchProvider(BaseModel):
         except Exception as e:
             logger.error(f"{self.name} search failed: {e}")
             return []
+
+    @retry_builder(tries=3, delay=1, backoff=2)
+    def contents(self, urls: list[str]) -> list[InternetSearchResult]:
+        payload = {
+            "urls": urls,
+            "text": True,
+        }
+        response = requests.post(
+            "https://api.exa.ai/contents",
+            headers=self.config.headers,
+            json=payload,
+            timeout=30,
+        )
+        response.raise_for_status()
+
+        return self._extract_results(response.json())
 
 
 def get_available_providers() -> dict[str, InternetSearchProvider]:
