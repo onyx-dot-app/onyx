@@ -55,7 +55,6 @@ from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
 from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING
-from onyx.prompts.dr_prompts import GENERAL_DR_ANSWER_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
 from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
@@ -433,73 +432,27 @@ def clarifier(
         graph_config.inputs.files
     )
 
-    if len(available_tools) == 1:
-        # Closer is always there, therefore 'len(available_tools) == 1' above
-        answer_prompt = GENERAL_DR_ANSWER_PROMPT.build(
-            question=original_question, chat_history_string=chat_history_string
-        )
+    if not use_tool_calling_llm or len(available_tools) == 1:
+        if len(available_tools) > 1:
+            decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
+                question=original_question,
+                chat_history_string=chat_history_string,
+                uploaded_context=uploaded_text_context or "",
+                active_source_type_descriptions_str=active_source_type_descriptions_str,
+                available_tool_descriptions_str=available_tool_descriptions_str,
+            )
 
-        stream = graph_config.tooling.primary_llm.stream(
-            prompt=create_question_prompt(
-                assistant_system_prompt, answer_prompt + assistant_task_prompt
-            ),
-            tools=None,
-            tool_choice=(None),
-            structured_response_format=None,
-        )
-
-        full_response = process_llm_stream(
-            messages=stream,
-            should_stream_answer=True,
-            writer=writer,
-            ind=0,
-            generate_final_answer=True,
-            chat_message_id=str(graph_config.persistence.chat_session_id),
-        )
-
-        if isinstance(full_response.full_answer, str):
-            full_answer = full_response.full_answer
+            llm_decision = invoke_llm_json(
+                llm=graph_config.tooling.primary_llm,
+                prompt=create_question_prompt(
+                    EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
+                    decision_prompt,
+                ),
+                schema=DecisionResponse,
+            )
         else:
-            full_answer = None
-
-        update_db_session_with_messages(
-            db_session=db_session,
-            chat_message_id=message_id,
-            chat_session_id=str(graph_config.persistence.chat_session_id),
-            is_agentic=graph_config.behavior.use_agentic_search,
-            message=full_answer,
-            update_parent_message=True,
-            research_answer_purpose=ResearchAnswerPurpose.ANSWER,
-        )
-
-        db_session.commit()
-
-        return OrchestrationSetup(
-            original_question=original_question,
-            chat_history_string="",
-            tools_used=[DRPath.END.value],
-            query_list=[],
-            assistant_system_prompt=assistant_system_prompt,
-            assistant_task_prompt=assistant_task_prompt,
-        )
-
-    elif not use_tool_calling_llm:
-        decision_prompt = DECISION_PROMPT_WO_TOOL_CALLING.build(
-            question=original_question,
-            chat_history_string=chat_history_string,
-            uploaded_context=uploaded_text_context or "",
-            active_source_type_descriptions_str=active_source_type_descriptions_str,
-            available_tool_descriptions_str=available_tool_descriptions_str,
-        )
-
-        llm_decision = invoke_llm_json(
-            llm=graph_config.tooling.primary_llm,
-            prompt=create_question_prompt(
-                EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING,
-                decision_prompt,
-            ),
-            schema=DecisionResponse,
-        )
+            # if there is only one tool (Closer), we don't need to decide. It's an LLM answer
+            llm_decision = DecisionResponse(decision="LLM", reasoning="")
 
         if llm_decision.decision == "LLM":
 
