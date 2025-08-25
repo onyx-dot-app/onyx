@@ -108,17 +108,18 @@ export const MessageTextRenderer: MessageRenderer<
       .join("");
   }, [animate, displayedPacketCount, fullContent, packets]);
 
-  const { renderedContent } = useMarkdownRenderer(content, state);
+  const { renderedContent } = useMarkdownRenderer(
+    // the [*]() is a hack to show a blinking dot when the packet is not complete
+    stopPacketSeen ? content : content + " [*]() ",
+    state
+  );
 
   return children({
     icon: null,
     status: null,
     content:
       content.length > 0 || packets.length > 0 ? (
-        <div className="flex items-center gap-x-2">
-          {renderedContent}
-          {!stopPacketSeen && <BlinkingDot />}
-        </div>
+        renderedContent
       ) : (
         <BlinkingDot />
       ),
