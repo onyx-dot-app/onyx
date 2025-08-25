@@ -35,7 +35,7 @@ export function FailedReIndexAttempts({
 
   return (
     <div className="mt-6 mb-8 p-4 border border-red-300 rounded-lg bg-red-50">
-      <Text className="text-red-700 font-semibold mb-2">
+      <Text className="text-red-700 dark:text-red-400 font-semibold mb-2">
         Failed Re-indexing Attempts
       </Text>
       <Text className="text-red-600 mb-4">

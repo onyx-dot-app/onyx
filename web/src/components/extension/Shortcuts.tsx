@@ -36,15 +36,15 @@ export const ShortCut = ({
   const [faviconError, setFaviconError] = useState(false);
 
   return (
-    <div className="w-24 h-24 flex-none rounded-xl shadow-lg relative group transition-all duration-300 ease-in-out hover:scale-105 bg-[#fff]/10 backdrop-blur-sm">
+    <div className="w-24 h-24 flex-none rounded-xl shadow-lg relative group transition-all duration-300 ease-in-out hover:scale-105 bg-white/10 backdrop-blur-sm">
       <button
         onClick={(e) => {
           e.stopPropagation();
           onEdit(shortCut);
         }}
-        className="absolute top-1 right-1 p-1 bg-[#fff]/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        className="absolute top-1 right-1 p-1 bg-white/20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
       >
-        <PencilIcon className="w-3 h-3 text-[#fff]" />
+        <PencilIcon className="w-3 h-3 text-white" />
       </button>
       <div
         onClick={() => window.open(shortCut.url, "_blank")}
@@ -61,10 +61,10 @@ export const ShortCut = ({
               onError={() => setFaviconError(true)}
             />
           ) : (
-            <QuestionMarkIcon size={32} className="text-[#fff] w-full h-full" />
+            <QuestionMarkIcon size={32} className="text-white w-full h-full" />
           )}
         </div>
-        <h1 className="text-[#fff] w-full text-center font-semibold text-sm truncate px-2">
+        <h1 className="text-white w-full text-center font-semibold text-sm truncate px-2">
           {shortCut.name}
         </h1>
       </div>
@@ -80,10 +80,10 @@ export const AddShortCut = ({
   return (
     <button
       onClick={openShortCutModal}
-      className="w-24 h-24 flex-none rounded-xl bg-[#fff]/10 hover:bg-[#fff]/20 backdrop-blur-sm transition-all duration-300 ease-in-out flex flex-col items-center justify-center"
+      className="w-24 h-24 flex-none rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-sm transition-all duration-300 ease-in-out flex flex-col items-center justify-center"
     >
-      <PlusIcon className="w-8 h-8 text-[#fff] mb-2" />
-      <h1 className="text-[#fff] text-xs font-medium">New Bookmark</h1>
+      <PlusIcon className="w-8 h-8 text-white mb-2" />
+      <h1 className="text-white text-xs font-medium">New Bookmark</h1>
     </button>
   );
 };
@@ -145,7 +145,7 @@ export const NewShortCutModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95%] sm:max-w-[425px] bg-background-900 border-none text-[#fff]">
+      <DialogContent className="max-w-[95%] sm:max-w-[425px] bg-background-900 border-none text-white">
         <DialogHeader>
           <DialogTitle>
             {editingShortcut ? "Edit Shortcut" : "Add New Shortcut"}
@@ -169,7 +169,7 @@ export const NewShortCutModal = ({
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-background-800 border-background-700 text-[#fff]"
+                className="w-full bg-background-800 border-background-700 text-white"
                 placeholder="Enter shortcut name"
               />
             </div>
@@ -184,7 +184,7 @@ export const NewShortCutModal = ({
                 id="url"
                 value={url}
                 onChange={handleUrlChange}
-                className={`bg-background-800 border-background-700 text-[#fff] ${
+                className={`bg-background-800 border-background-700 text-white ${
                   !isValidUrl && url ? "border-red-500" : ""
                 }`}
                 placeholder="https://example.com"
@@ -216,7 +216,7 @@ export const NewShortCutModal = ({
           <DialogFooter>
             <Button
               type="submit"
-              className="bg-blue-600 hover:bg-blue-700 text-[#fff]"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
               disabled={!isValidUrl || !name}
             >
               {editingShortcut ? "Save Changes" : "Add Shortcut"}

@@ -340,7 +340,7 @@ const SubQuestionDisplay: React.FC<{
             className="flex -mx-2 rounded-md px-2 hover:bg-background-100 dark:hover:bg-neutral-800 items-start py-1.5 my-.5 cursor-pointer"
             onClick={() => setToggled(!toggled)}
           >
-            <div className="text-black text-base font-medium leading-normal flex-grow pr-2">
+            <div className="text-strong dark:text-white text-base font-medium leading-normal flex-grow pr-2">
               {subQuestion?.question || temporaryDisplay?.question}
             </div>
             <ChevronDown
@@ -407,7 +407,7 @@ const SubQuestionDisplay: React.FC<{
                               );
                             })
                           ) : (
-                            <div className="text-black text-sm font-medium">
+                            <div className="text-strong dark:text-white text-sm font-medium">
                               No sources found
                             </div>
                           )}

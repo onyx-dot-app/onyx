@@ -45,7 +45,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
   return (
     <>
       <div
-        className="group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-3 px-4 transition-all ease-in-out"
+        className="group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 py-3 px-4 transition-all ease-in-out"
         onClick={(e) => {
           if (!(e.target as HTMLElement).closest(".action-menu")) {
             e.preventDefault();
@@ -55,7 +55,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
       >
         <div className="flex items-center flex-1 min-w-0">
           <div className="flex items-center gap-3 w-[40%]">
-            <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
+            <FolderIcon className="h-5 w-5 text-neutral-700 dark:text-neutral-300 shrink-0 fill-neutral-700 dark:fill-neutral-300" />
             {folder.name.length > 50 ? (
               <TooltipProvider>
                 <Tooltip>

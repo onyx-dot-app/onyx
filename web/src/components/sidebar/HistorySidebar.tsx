@@ -130,7 +130,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
       >
         <AssistantIcon assistant={assistant} size={16} className="flex-none" />
         <TruncatedText
-          className="text-base mr-4 text-left w-fit line-clamp-1 text-ellipsis text-black dark:text-[#D4D4D4]"
+          className="text-base mr-4 text-left w-fit line-clamp-1 text-ellipsis text-strong dark:text-neutral-300"
           text={assistant.name}
         />
 
@@ -267,8 +267,8 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             w-full
             border-r 
             dark:border-none
-            dark:text-[#D4D4D4]
-            dark:bg-[#000]
+            dark:text-neutral-300
+            dark:bg-neutral-950
             border-sidebar-border 
             flex 
             flex-col relative
@@ -339,7 +339,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
           )}
           <div className="h-full  relative overflow-x-hidden overflow-y-auto">
-            <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
+            <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-neutral-300 items-center font-normal leading-normal">
               Assistants
             </div>
             <DndContext
@@ -408,7 +408,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               <button
                 aria-label="Explore Assistants"
                 onClick={() => setShowAssistantsModal(true)}
-                className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
+                className="w-full cursor-pointer text-base text-strong dark:text-neutral-300 hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
               >
                 Explore Assistants
               </button>

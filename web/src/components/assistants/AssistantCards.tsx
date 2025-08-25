@@ -52,7 +52,7 @@ export const AssistantCard = ({
         <AssistantIcon size="xs" assistant={assistant} />
         <div className="overflow-hidden text-ellipsis break-words flex-grow">
           <div className="flex items-start justify-start gap-2">
-            <span className="line-clamp-1 text-sm text-black font-semibold leading-tight">
+            <span className="line-clamp-1 text-sm text-strong dark:text-neutral-200 font-semibold leading-tight">
               {assistant.name}
             </span>
             {assistant.tools.map((tool, index) => (

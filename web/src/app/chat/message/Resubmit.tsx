@@ -36,7 +36,7 @@ export const ErrorBanner = ({
   resubmit?: () => void;
 }) => {
   return (
-    <div className="text-red-700 mt-4 text-sm my-auto">
+    <div className="text-red-700 dark:text-red-400 mt-4 text-sm my-auto">
       <Alert variant="broken">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Error</AlertTitle>

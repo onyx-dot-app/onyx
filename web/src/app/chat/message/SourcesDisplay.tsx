@@ -185,7 +185,7 @@ export const SourcesDisplay: React.FC<SourcesDisplayProps> = ({
       }`}
     >
       <div className="flex items-center px-4">
-        <div className="text-black text-lg font-medium">Sources</div>
+        <div className="text-strong dark:text-white text-lg font-medium">Sources</div>
       </div>
       <div
         className={`grid  w-full ${

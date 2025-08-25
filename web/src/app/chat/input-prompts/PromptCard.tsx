@@ -62,7 +62,7 @@ export const PromptCard = ({
   };
 
   return (
-    <div className="border dark:border-none dark:bg-[#333333] rounded-lg p-4 mb-4 relative">
+    <div className="border dark:border-none dark:bg-neutral-700 rounded-lg p-4 mb-4 relative">
       {isEditing ? (
         <>
           <div className="absolute top-2 right-2">

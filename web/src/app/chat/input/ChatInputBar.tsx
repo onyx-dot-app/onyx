@@ -657,7 +657,7 @@ export function ChatInputBar({
                 resize-none
                 px-5
                 py-4
-                dark:text-[#D4D4D4]
+                dark:text-neutral-300
               `}
               autoFocus
               style={{ scrollbarWidth: "thin" }}

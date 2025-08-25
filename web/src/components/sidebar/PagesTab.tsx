@@ -330,7 +330,7 @@ export function PagesTab({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="my-auto mr-auto  group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
+                  className="my-auto mr-auto  group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-strong dark:text-neutral-200 text-xs font-medium leading-normal mobile:hidden"
                   onClick={() => {
                     toggleChatSessionSearchModal?.();
                   }}
@@ -347,7 +347,7 @@ export function PagesTab({
 
           <button
             onClick={handleCreateFolder}
-            className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"
+            className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-strong dark:text-neutral-200 text-xs font-medium leading-normal"
           >
             <FiPlus size={12} className="flex-none" />
             Create Group

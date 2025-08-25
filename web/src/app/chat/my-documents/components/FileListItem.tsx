@@ -187,7 +187,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
 
   return (
     <div
-      className="group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-3 px-4 transition-all ease-in-out"
+      className="group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 py-3 px-4 transition-all ease-in-out"
       onClick={(e) => {
         if (!(e.target as HTMLElement).closest(".action-menu")) {
           onSelect && onSelect(file);

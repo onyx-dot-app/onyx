@@ -11,7 +11,7 @@ export default function CardSection({
   return (
     <div
       className={cn(
-        "p-6 border bg-[#fff] dark:bg-neutral-800 rounded border-neutral-200 dark:border-neutral-700",
+        "p-6 border bg-white dark:bg-neutral-800 rounded border-neutral-200 dark:border-neutral-700",
         className
       )}
     >

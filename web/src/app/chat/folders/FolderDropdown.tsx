@@ -159,13 +159,13 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         >
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 bg-background-sidebar  dark:bg-[#000] relative sticky top-0"
+            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 bg-background-sidebar  dark:bg-neutral-950 relative sticky top-0"
             style={{ zIndex: 10 - index }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
           >
             <button
-              className="flex overflow-hidden bg-background-sidebar dark:bg-[#000] items-center flex-grow"
+              className="flex overflow-hidden bg-background-sidebar dark:bg-neutral-950 items-center flex-grow"
               onClick={() => !isEditing && setIsOpen(!isOpen)}
               {...(isEditing ? {} : listeners)}
             >

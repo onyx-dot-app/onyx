@@ -320,7 +320,7 @@ const AssistantCard: React.FC<{
                       router.push(`/chat?assistantId=${persona.id}`);
                       closeModal();
                     }}
-                    className="hover:bg-neutral-100 dark:hover:bg-neutral-700 dark:bg-[#2E2E2D] hover:text-neutral-900 dark:hover:text-neutral-100 px-2 py-1 gap-x-1 rounded border border-neutral-400 dark:border-neutral-600 flex items-center"
+                    className="hover:bg-neutral-100 dark:hover:bg-neutral-700 dark:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100 px-2 py-1 gap-x-1 rounded border border-neutral-400 dark:border-neutral-600 flex items-center"
                   >
                     <PencilIcon size={12} className="flex-none" />
                     <span className="text-xs">Start Chat</span>
@@ -342,7 +342,7 @@ const AssistantCard: React.FC<{
                         !pinned
                       );
                     }}
-                    className="hover:bg-neutral-100  dark:hover:bg-neutral-700 dark:bg-[#2E2E2D] px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-neutral-400 dark:border-neutral-600 flex items-center w-[65px]"
+                    className="hover:bg-neutral-100  dark:hover:bg-neutral-700 dark:bg-neutral-800 px-2 group cursor-pointer py-1 gap-x-1 relative rounded border border-neutral-400 dark:border-neutral-600 flex items-center w-[65px]"
                   >
                     <PinnedIcon size={12} />
                     {!pinned ? (

@@ -58,7 +58,7 @@ export const SearchResultItem: React.FC<SearchResultItemProps> = ({
       <a
         className={`flex items-center flex-grow ${
           view === "list" ? "w-full" : "w-4/5"
-        } p-3 rounded-lg hover:bg-[#F3F2EA]/60 transition-colors duration-200`}
+        } p-3 rounded-lg hover:bg-neutral-100/60 dark:hover:bg-neutral-800/60 transition-colors duration-200`}
         href="#"
         onClick={(e) => {
           e.preventDefault();

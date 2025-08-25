@@ -61,8 +61,8 @@ export function AgenticToggle({
               className={`
                 ${
                   proSearchEnabled
-                    ? "border-background-200 group-hover:border-[#000] dark:group-hover:border-neutral-300"
-                    : "border-background-200 group-hover:border-[#000] dark:group-hover:border-neutral-300"
+                    ? "border-background-200 group-hover:border-black dark:group-hover:border-neutral-300"
+                    : "border-background-200 group-hover:border-black dark:group-hover:border-neutral-300"
                 }
                  relative inline-flex h-[16px] w-8 items-center rounded-full transition-colors focus:outline-none border animate transition-all duration-200 border-background-200 group-hover:border-[1px]  `}
             >

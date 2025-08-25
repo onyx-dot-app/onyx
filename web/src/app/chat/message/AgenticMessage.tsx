@@ -475,7 +475,7 @@ export const AgenticMessage = ({
                     <>
                       <div className="w-full  py-4 flex flex-col gap-4">
                         <div className="flex items-center gap-x-2 px-4">
-                          <div className="text-black text-lg font-medium">
+                          <div className="text-strong dark:text-white text-lg font-medium">
                             Answer
                           </div>
                         </div>
@@ -502,7 +502,7 @@ export const AgenticMessage = ({
                     </>
                   ) : isComplete ? (
                     error && (
-                      <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
+                      <p className="mt-2 mx-4 text-red-700 dark:text-red-400 text-sm my-auto">
                         <ErrorBanner error={error} resubmit={resubmit} />
                       </p>
                     )

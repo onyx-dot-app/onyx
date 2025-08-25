@@ -48,7 +48,7 @@ export default function EmbeddingSidebar() {
           <div className="mx-3 mt-6 gap-y-1 flex-col flex gap-x-1.5 items-center items-center">
             <Link
               href={"/admin/configuration/search"}
-              className="w-full p-2 bg-[#fff] dark:bg-neutral-950 border-border border dark:border-neutral-800 dark:hover:bg-neutral-900 rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
+              className="w-full p-2 bg-white dark:bg-neutral-950 border-border border dark:border-neutral-800 dark:hover:bg-neutral-900 rounded items-center hover:bg-background-200 cursor-pointer transition-all duration-150 flex gap-x-2"
             >
               <SettingsIcon className="flex-none " />
               <p className="my-auto flex items-center text-sm">

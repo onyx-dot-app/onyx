@@ -34,7 +34,7 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
   openInNewTab,
 }) => {
   const content = (
-    <div className="flex py-1.5 text-sm px-2 gap-x-2 text-black text-sm cursor-pointer rounded hover:bg-background-300">
+    <div className="flex py-1.5 text-sm px-2 gap-x-2 text-strong dark:text-neutral-200 text-sm cursor-pointer rounded hover:bg-background-300">
       {icon}
       {label}
     </div>
@@ -176,7 +176,7 @@ export function UserDropdown({
                 border 
                 border-border 
                 bg-background
-                dark:bg-[#2F2F2F]
+                dark:bg-neutral-800
                 rounded-lg
                 shadow-lg 
                 flex 

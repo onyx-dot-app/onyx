@@ -78,7 +78,7 @@ export default function LLMPopover({
       ? () => trigger
       : () => (
           <button
-            className="dark:text-[#fff] text-[#000] focus:outline-none"
+            className="dark:text-white text-black focus:outline-none"
             data-testid="llm-popover-trigger"
           >
             <ChatInputOption
@@ -154,7 +154,7 @@ export default function LLMPopover({
                   >
                     {icon({
                       size: 16,
-                      className: "flex-none my-auto text-black",
+                      className: "flex-none my-auto text-strong dark:text-white",
                     })}
                     <TruncatedText text={getDisplayNameForModel(modelName)} />
                     {(() => {

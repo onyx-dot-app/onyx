@@ -3422,7 +3422,7 @@ export function ChatPage({
                                   currentPersona={liveAssistant}
                                   messageId={-1}
                                   content={
-                                    <p className="text-red-700 text-sm my-auto">
+                                    <p className="text-red-700 dark:text-red-400 text-sm my-auto">
                                       {loadingError}
                                     </p>
                                   }

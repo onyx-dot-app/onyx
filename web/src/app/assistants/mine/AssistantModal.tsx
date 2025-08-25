@@ -182,7 +182,7 @@ export function AssistantModal({ hideModal }: AssistantModalProps) {
                       onFocus={() => setIsSearchFocused(true)}
                       onBlur={() => setIsSearchFocused(false)}
                       type="text"
-                      className="w-full h-full bg-transparent outline-none text-black"
+                      className="w-full h-full bg-transparent outline-none text-strong dark:text-white"
                     />
                   </div>
                 </div>

@@ -241,7 +241,7 @@ const FilePickerFolderItem: React.FC<{
       >
         <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
           <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
-            <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
+            <FolderIcon className="h-5 w-5 text-neutral-700 dark:text-neutral-300 shrink-0 fill-neutral-700 dark:fill-neutral-300" />
 
             {folder.name.length > 40 ? (
               <TooltipProvider>

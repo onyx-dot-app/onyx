@@ -131,14 +131,14 @@ export function NewTeamModal() {
       className="relative z-[1000]"
     >
       {/* Modal backdrop */}
-      <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-xl border border-neutral-200 dark:border-neutral-700">
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {hasRequestedInvite ? (
               <>
-                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-[#fff]" />
+                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-white" />
                 Join Request Sent
               </>
             ) : (

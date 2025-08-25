@@ -382,7 +382,7 @@ export function SharedChatDisplay({
                               currentPersona={persona}
                               messageId={message.messageId}
                               content={
-                                <p className="text-red-700 text-sm my-auto">
+                                <p className="text-red-700 dark:text-red-400 text-sm my-auto">
                                   {message.message}
                                 </p>
                               }

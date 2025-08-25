@@ -6,7 +6,7 @@ import { Warning } from "@phosphor-icons/react";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 
 const popupVariants = cva(
-  "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-[#fff] z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
+  "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-white z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
   {
     variants: {
       type: {

@@ -85,7 +85,7 @@ export function Citation({
           </span>
         </TooltipTrigger>
         <TooltipContent
-          className="border border-neutral-300  hover:text-neutral-900 bg-neutral-100 dark:!bg-[#000] dark:border-neutral-700"
+          className="border border-neutral-300  hover:text-neutral-900 bg-neutral-100 dark:!bg-neutral-950 dark:border-neutral-700"
           width="mb-2 max-w-lg"
         >
           {document_info?.document ? (

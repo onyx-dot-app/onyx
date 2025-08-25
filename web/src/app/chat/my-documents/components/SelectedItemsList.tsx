@@ -56,7 +56,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                   )}
                 >
                   <div className="flex items-center min-w-0 flex-1">
-                    <FolderIcon className="h-5 w-5 mr-2 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
+                    <FolderIcon className="h-5 w-5 mr-2 text-neutral-700 dark:text-neutral-300 shrink-0 fill-neutral-700 dark:fill-neutral-300" />
 
                     <span className="text-sm font-medium truncate text-neutral-800 dark:text-neutral-100">
                       {truncateString(folder.name, 34)}

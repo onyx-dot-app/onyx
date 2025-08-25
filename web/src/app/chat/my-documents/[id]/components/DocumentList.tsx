@@ -600,7 +600,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 {uploadingFiles.map((uploadingFile, index) => (
                   <div
                     key={`uploading-${index}`}
-                    className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-4 px-4 transition-all ease-in-out ${
+                    className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 py-4 px-4 transition-all ease-in-out ${
                       completedFiles.includes(uploadingFile.name)
                         ? "bg-green-50/30 dark:bg-green-900/10"
                         : ""
