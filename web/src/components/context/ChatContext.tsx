@@ -7,7 +7,7 @@ import {
   Tag,
   ValidSources,
 } from "@/lib/types";
-import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
+import { ChatSession, ChatSessionSharedStatus, InputPrompt } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
 import { useSearchParams } from "next/navigation";
@@ -29,6 +29,7 @@ interface ChatContextProps {
   shouldDisplaySourcesIncompleteModal?: boolean;
   defaultAssistantId?: number;
   refreshChatSessions: () => Promise<void>;
+  updateChatSessionSharedStatus: (chatSessionId: string, sharedStatus: ChatSessionSharedStatus) => void;
   reorderFolders: (displayPriorityMap: Record<number, number>) => void;
   refreshFolders: () => Promise<void>;
   refreshInputPrompts: () => Promise<void>;
@@ -44,6 +45,7 @@ export const ChatProvider: React.FC<{
   value: Omit<
     ChatContextProps,
     | "refreshChatSessions"
+    | "updateChatSessionSharedStatus"
     | "refreshAvailableAssistants"
     | "reorderFolders"
     | "refreshFolders"
@@ -91,6 +93,16 @@ export const ChatProvider: React.FC<{
       console.error("Error refreshing chat sessions:", error);
     }
   };
+
+  const updateChatSessionSharedStatus = (chatSessionId: string, sharedStatus: ChatSessionSharedStatus) => {
+    setChatSessions(prevSessions => 
+      prevSessions.map(session => 
+        session.id === chatSessionId 
+          ? { ...session, shared_status: sharedStatus }
+          : session
+      )
+    );
+  };
   const refreshFolders = async () => {
     const response = await fetch("/api/folder");
     if (!response.ok) throw new Error("Failed to fetch folders");
@@ -114,6 +126,7 @@ export const ChatProvider: React.FC<{
         folders,
         reorderFolders,
         refreshChatSessions,
+        updateChatSessionSharedStatus,
         refreshFolders,
       }}
     >
