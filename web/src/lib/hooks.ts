@@ -485,7 +485,6 @@ export interface LlmDescriptor {
 export interface LlmManager {
   currentLlm: LlmDescriptor;
   updateCurrentLlm: (newOverride: LlmDescriptor) => void;
-  updateCurrentLlmToModelName: (modelName: string) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
@@ -721,7 +720,6 @@ export function useLlmManager(
     updateModelOverrideBasedOnChatSession,
     currentLlm,
     updateCurrentLlm,
-    updateCurrentLlmToModelName,
     temperature,
     updateTemperature,
     imageFilesPresent,

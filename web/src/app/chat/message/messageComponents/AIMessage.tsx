@@ -70,6 +70,14 @@ export function AIMessage({
     displayCompleteRef.current = value;
   };
 
+  const [stopPacketSeen, _setStopPacketSeen] = useState(
+    isStreamingComplete(rawPackets)
+  );
+  const setStopPacketSeen = (value: boolean) => {
+    _setStopPacketSeen(value);
+    stopPacketSeenRef.current = value;
+  };
+
   // Incremental packet processing state
   const lastProcessedIndexRef = useRef<number>(0);
   const citationsRef = useRef<StreamingCitation[]>([]);
@@ -79,9 +87,10 @@ export function AIMessage({
   const groupedPacketsRef = useRef<{ ind: number; packets: Packet[] }[]>([]);
   const finalAnswerComingRef = useRef<boolean>(isFinalAnswerComing(rawPackets));
   const displayCompleteRef = useRef<boolean>(isStreamingComplete(rawPackets));
+  const stopPacketSeenRef = useRef<boolean>(isStreamingComplete(rawPackets));
 
   // Reset incremental state when switching messages or when stream resets
-  useEffect(() => {
+  const resetState = () => {
     lastProcessedIndexRef.current = 0;
     citationsRef.current = [];
     seenCitationDocIdsRef.current = new Set();
@@ -90,16 +99,15 @@ export function AIMessage({
     groupedPacketsRef.current = [];
     finalAnswerComingRef.current = isFinalAnswerComing(rawPackets);
     displayCompleteRef.current = isStreamingComplete(rawPackets);
+    stopPacketSeenRef.current = isStreamingComplete(rawPackets);
+  };
+  useEffect(() => {
+    resetState();
   }, [messageId]);
 
   // If the upstream replaces packets with a shorter list (reset), clear state
   if (lastProcessedIndexRef.current > rawPackets.length) {
-    lastProcessedIndexRef.current = 0;
-    citationsRef.current = [];
-    seenCitationDocIdsRef.current = new Set();
-    documentMapRef.current = new Map();
-    groupedPacketsMapRef.current = new Map();
-    groupedPacketsRef.current = [];
+    resetState();
   }
 
   // Process only the new packets synchronously for this render
@@ -151,15 +159,17 @@ export function AIMessage({
         finalAnswerComingRef.current = true;
       }
 
+      if (packet.obj.type === PacketType.STOP && !stopPacketSeenRef.current) {
+        setStopPacketSeen(true);
+      }
+
       // handles case where we get a Message packet from Claude, and then tool
       // calling packets
       if (
         finalAnswerComingRef.current &&
-        !displayCompleteRef.current &&
+        !stopPacketSeenRef.current &&
         isToolPacket(packet, false)
       ) {
-        console.log("final answer reverted");
-        console.log("packet", packet);
         setFinalAnswerComing(false);
         setDisplayComplete(false);
       }
@@ -307,126 +317,136 @@ export function AIMessage({
                   </div>
 
                   {/* Feedback buttons - only show when streaming is complete */}
-                  {chatState.handleFeedback && displayComplete && (
-                    <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
-                      <TooltipGroup>
-                        <div className="flex items-center gap-x-0.5">
-                          {includeMessageSwitcher && (
-                            <div className="-mx-1">
-                              <MessageSwitcher
-                                currentPage={(currentMessageInd ?? 0) + 1}
-                                totalPages={
-                                  otherMessagesCanSwitchTo?.length || 0
-                                }
-                                handlePrevious={() => {
-                                  const prevMessage = getPreviousMessage();
-                                  if (
-                                    prevMessage !== undefined &&
-                                    onMessageSelection
-                                  ) {
-                                    onMessageSelection(prevMessage);
+                  {chatState.handleFeedback &&
+                    stopPacketSeen &&
+                    displayComplete && (
+                      <div className="flex md:flex-row justify-between items-center w-full mt-1 transition-transform duration-300 ease-in-out transform opacity-100">
+                        <TooltipGroup>
+                          <div className="flex items-center gap-x-0.5">
+                            {includeMessageSwitcher && (
+                              <div className="-mx-1">
+                                <MessageSwitcher
+                                  currentPage={(currentMessageInd ?? 0) + 1}
+                                  totalPages={
+                                    otherMessagesCanSwitchTo?.length || 0
                                   }
-                                }}
-                                handleNext={() => {
-                                  const nextMessage = getNextMessage();
-                                  if (
-                                    nextMessage !== undefined &&
-                                    onMessageSelection
-                                  ) {
-                                    onMessageSelection(nextMessage);
-                                  }
-                                }}
-                              />
-                            </div>
-                          )}
+                                  handlePrevious={() => {
+                                    const prevMessage = getPreviousMessage();
+                                    if (
+                                      prevMessage !== undefined &&
+                                      onMessageSelection
+                                    ) {
+                                      onMessageSelection(prevMessage);
+                                    }
+                                  }}
+                                  handleNext={() => {
+                                    const nextMessage = getNextMessage();
+                                    if (
+                                      nextMessage !== undefined &&
+                                      onMessageSelection
+                                    ) {
+                                      onMessageSelection(nextMessage);
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
 
-                          <CustomTooltip showTick line content="Copy">
-                            <CopyButton
-                              copyAllFn={() =>
-                                copyAll(getTextContent(rawPackets), markdownRef)
-                              }
-                            />
-                          </CustomTooltip>
-
-                          <CustomTooltip showTick line content="Good response">
-                            <HoverableIcon
-                              icon={<LikeFeedback size={16} />}
-                              onClick={() => chatState.handleFeedback("like")}
-                            />
-                          </CustomTooltip>
-
-                          <CustomTooltip showTick line content="Bad response">
-                            <HoverableIcon
-                              icon={<DislikeFeedback size={16} />}
-                              onClick={() =>
-                                chatState.handleFeedback("dislike")
-                              }
-                            />
-                          </CustomTooltip>
-
-                          {chatState.regenerate && (
-                            <CustomTooltip
-                              disabled={isRegenerateDropdownVisible}
-                              showTick
-                              line
-                              content="Regenerate"
-                            >
-                              <RegenerateOption
-                                onDropdownVisibleChange={
-                                  setIsRegenerateDropdownVisible
+                            <CustomTooltip showTick line content="Copy">
+                              <CopyButton
+                                copyAllFn={() =>
+                                  copyAll(
+                                    getTextContent(rawPackets),
+                                    markdownRef
+                                  )
                                 }
-                                selectedAssistant={chatState.assistant}
-                                regenerate={chatState.regenerate}
-                                overriddenModel={chatState.overriddenModel}
                               />
                             </CustomTooltip>
-                          )}
 
-                          {messageId &&
-                            (citations.length > 0 || documentMap.size > 0) && (
-                              <>
-                                {chatState.regenerate && (
-                                  <div className="h-4 w-px bg-border mx-2" />
-                                )}
-                                <CustomTooltip
-                                  showTick
-                                  line
-                                  content={`${uniqueSourceCount} Sources`}
-                                >
-                                  <CitedSourcesToggle
-                                    citations={citations}
-                                    documentMap={documentMap}
-                                    messageId={messageId}
-                                    onToggle={(messageId) => {
-                                      // Toggle sidebar if clicking on the same message
-                                      if (
-                                        selectedMessageForDocDisplay ===
-                                          messageId &&
-                                        documentSidebarVisible
-                                      ) {
-                                        updateCurrentDocumentSidebarVisible(
-                                          false
-                                        );
-                                        updateCurrentSelectedMessageForDocDisplay(
-                                          null
-                                        );
-                                      } else {
-                                        updateCurrentSelectedMessageForDocDisplay(
-                                          messageId
-                                        );
-                                        updateCurrentDocumentSidebarVisible(
-                                          true
-                                        );
-                                      }
-                                    }}
-                                  />
-                                </CustomTooltip>
-                              </>
+                            <CustomTooltip
+                              showTick
+                              line
+                              content="Good response"
+                            >
+                              <HoverableIcon
+                                icon={<LikeFeedback size={16} />}
+                                onClick={() => chatState.handleFeedback("like")}
+                              />
+                            </CustomTooltip>
+
+                            <CustomTooltip showTick line content="Bad response">
+                              <HoverableIcon
+                                icon={<DislikeFeedback size={16} />}
+                                onClick={() =>
+                                  chatState.handleFeedback("dislike")
+                                }
+                              />
+                            </CustomTooltip>
+
+                            {chatState.regenerate && (
+                              <CustomTooltip
+                                disabled={isRegenerateDropdownVisible}
+                                showTick
+                                line
+                                content="Regenerate"
+                              >
+                                <RegenerateOption
+                                  onDropdownVisibleChange={
+                                    setIsRegenerateDropdownVisible
+                                  }
+                                  selectedAssistant={chatState.assistant}
+                                  regenerate={chatState.regenerate}
+                                  overriddenModel={chatState.overriddenModel}
+                                />
+                              </CustomTooltip>
                             )}
-                        </div>
-                      </TooltipGroup>
-                    </div>
-                  )}
+
+                            {messageId &&
+                              (citations.length > 0 ||
+                                documentMap.size > 0) && (
+                                <>
+                                  {chatState.regenerate && (
+                                    <div className="h-4 w-px bg-border mx-2" />
+                                  )}
+                                  <CustomTooltip
+                                    showTick
+                                    line
+                                    content={`${uniqueSourceCount} Sources`}
+                                  >
+                                    <CitedSourcesToggle
+                                      citations={citations}
+                                      documentMap={documentMap}
+                                      messageId={messageId}
+                                      onToggle={(messageId) => {
+                                        // Toggle sidebar if clicking on the same message
+                                        if (
+                                          selectedMessageForDocDisplay ===
+                                            messageId &&
+                                          documentSidebarVisible
+                                        ) {
+                                          updateCurrentDocumentSidebarVisible(
+                                            false
+                                          );
+                                          updateCurrentSelectedMessageForDocDisplay(
+                                            null
+                                          );
+                                        } else {
+                                          updateCurrentSelectedMessageForDocDisplay(
+                                            messageId
+                                          );
+                                          updateCurrentDocumentSidebarVisible(
+                                            true
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </CustomTooltip>
+                                </>
+                              )}
+                          </div>
+                        </TooltipGroup>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

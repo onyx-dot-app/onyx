@@ -38,7 +38,7 @@ export function UserSettingsModal({
   setPopup,
   llmProviders,
   onClose,
-  updateCurrentLlmToModelName,
+  updateCurrentLlm,
   defaultModel,
   ccPairs,
   federatedConnectors,
@@ -46,7 +46,7 @@ export function UserSettingsModal({
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
   llmProviders: LLMProviderDescriptor[];
-  updateCurrentLlmToModelName?: (modelName: string) => void;
+  updateCurrentLlm?: (newOverride: LlmDescriptor) => void;
   onClose: () => void;
   defaultModel: string | null;
   ccPairs?: CCPairBasicInfo[];
@@ -160,8 +160,8 @@ export function UserSettingsModal({
       const response = await setUserDefaultModel(defaultModel);
 
       if (response.ok) {
-        if (defaultModel && updateCurrentLlmToModelName) {
-          updateCurrentLlmToModelName(defaultModel);
+        if (defaultModel && updateCurrentLlm) {
+          updateCurrentLlm(parseLlmDescriptor(defaultModel));
         }
         setPopup({
           message: "Default model updated successfully",
@@ -435,7 +435,7 @@ export function UserSettingsModal({
                       defaultModel
                         ? structureValue(
                             parseLlmDescriptor(defaultModel).provider,
-                            "",
+                            parseLlmDescriptor(defaultModel).name,
                             parseLlmDescriptor(defaultModel).modelName
                           )
                         : null
@@ -449,7 +449,7 @@ export function UserSettingsModal({
                           parseLlmDescriptor(selected);
                         if (modelName && name) {
                           handleChangedefaultModel(
-                            structureValue(provider, "", modelName)
+                            structureValue(name, provider, modelName)
                           );
                         }
                       }
