@@ -8,6 +8,7 @@ import {
   getChatRetentionInfo,
   renameChatSession,
 } from "@/app/chat/lib";
+import { removeChatFromFolder } from "@/app/chat/folders/FolderManagement";
 import { BasicSelectable } from "@/components/BasicClickable";
 import Link from "next/link";
 import {
@@ -17,6 +18,7 @@ import {
   FiShare2,
   FiTrash,
   FiX,
+  FiFolderMinus,
 } from "react-icons/fi";
 import { DefaultDropdownElement } from "@/components/Dropdown";
 import { Popover } from "@/components/popover/Popover";
@@ -95,6 +97,23 @@ export function ChatSessionDisplay({
       setPopoverOpen(false);
     },
     [chatSession, showDeleteModal, refreshChatSessions, refreshFolders]
+  );
+
+  const handleMoveOutOfFolder = useCallback(
+    async () => {
+      if (chatSession.folder_id) {
+        try {
+          await removeChatFromFolder(chatSession.folder_id, chatSession.id);
+          await refreshChatSessions();
+          await refreshFolders();
+          setPopoverOpen(false);
+        } catch (error) {
+          console.error("Failed to move chat out of folder:", error);
+          alert("Failed to move chat out of folder");
+        }
+      }
+    },
+    [chatSession, refreshChatSessions, refreshFolders]
   );
 
   const onRename = useCallback(
@@ -326,7 +345,7 @@ export function ChatSessionDisplay({
                             popover={
                               <div
                                 className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
-                                  isDeleteModalOpen ? "w-64" : "w-32"
+                                  isDeleteModalOpen ? "w-64" : "w-44"
                                 }`}
                               >
                                 {!isDeleteModalOpen ? (
@@ -345,6 +364,13 @@ export function ChatSessionDisplay({
                                         name="Rename"
                                         icon={FiEdit2}
                                         onSelect={() => setIsRenamingChat(true)}
+                                      />
+                                    )}
+                                    {chatSession.folder_id && (
+                                      <DefaultDropdownElement
+                                        name="Move out of folder"
+                                        icon={FiFolderMinus}
+                                        onSelect={handleMoveOutOfFolder}
                                       />
                                     )}
                                     <DefaultDropdownElement
