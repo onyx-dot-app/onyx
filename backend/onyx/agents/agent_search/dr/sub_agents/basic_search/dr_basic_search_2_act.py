@@ -11,6 +11,7 @@ from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
+from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
@@ -18,6 +19,7 @@ from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.models import LlmDoc
 from onyx.context.search.models import InferenceSection
@@ -25,6 +27,7 @@ from onyx.db.connector import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.prompts.dr_prompts import BASE_SEARCH_PROCESSING_PROMPT
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
@@ -95,6 +98,16 @@ def basic_search(
 
     rewritten_query = search_processing.rewritten_query
 
+    # give back the query so we can render it in the UI
+    write_custom_event(
+        iteration_nr,
+        SearchToolDelta(
+            queries=[rewritten_query],
+            documents=[],
+        ),
+        writer,
+    )
+
     implied_start_date = search_processing.time_filter
 
     # Validate time_filter format if it exists
@@ -140,6 +153,18 @@ def basic_search(
                 retrieved_docs = response.top_sections
 
                 break
+
+    # render the retrieved docs in the UI
+    write_custom_event(
+        iteration_nr,
+        SearchToolDelta(
+            queries=[],
+            documents=convert_inference_sections_to_search_docs(
+                retrieved_docs, is_internet=False
+            ),
+        ),
+        writer,
+    )
 
     document_texts_list = []
 

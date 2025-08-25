@@ -8,6 +8,8 @@ from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.server.query_and_chat.streaming_models import SearchToolStart
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -24,6 +26,14 @@ def basic_search_branch(
     iteration_nr = state.iteration_nr
 
     logger.debug(f"Search start for Basic Search {iteration_nr} at {datetime.now()}")
+
+    write_custom_event(
+        iteration_nr,
+        SearchToolStart(
+            is_internet_search=False,
+        ),
+        writer,
+    )
 
     return LoggerUpdate(
         log_messages=[

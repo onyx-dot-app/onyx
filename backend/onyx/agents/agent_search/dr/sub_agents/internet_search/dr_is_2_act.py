@@ -9,6 +9,7 @@ from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
+from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
@@ -16,10 +17,12 @@ from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.models import LlmDoc
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -49,6 +52,16 @@ def internet_search(
     search_query = state.branch_question
     if not search_query:
         raise ValueError("search_query is not set")
+
+    # Write the query to the stream. The start is handled in dr_is_1_branch.py.
+    write_custom_event(
+        iteration_nr,
+        SearchToolDelta(
+            queries=[search_query],
+            documents=[],
+        ),
+        writer,
+    )
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
@@ -84,8 +97,6 @@ def internet_search(
             response = cast(SearchResponseSummary, tool_response.response)
             retrieved_docs = response.top_sections
             break
-
-    # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
 
     document_texts_list = []
 
@@ -149,6 +160,17 @@ def internet_search(
             doc_num + 1: retrieved_doc
             for doc_num, retrieved_doc in enumerate(retrieved_docs[:15])
         }
+
+    write_custom_event(
+        iteration_nr,
+        SearchToolDelta(
+            queries=[],
+            documents=convert_inference_sections_to_search_docs(
+                retrieved_docs, is_internet=True
+            ),
+        ),
+        writer,
+    )
 
     return BranchUpdate(
         branch_iteration_responses=[
