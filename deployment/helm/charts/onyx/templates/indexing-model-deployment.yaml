@@ -24,9 +24,8 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- if .Values.indexCapability.podSecurityContext }}
-      securityContext:
-        {{- toYaml .Values.indexCapability.podSecurityContext | nindent 8 }}
+      {{- if .Values.indexCapability.serviceAccountName }}
+      serviceAccountName: {{ .Values.indexCapability.serviceAccountName }}
       {{- end }}
       containers:
       - name: {{ .Values.indexCapability.name }}
@@ -44,11 +43,5 @@ spec:
           - name: INDEXING_ONLY
             value: "{{ default "True" .Values.indexCapability.indexingOnly }}"
           {{- include "onyx-stack.envSecrets" . | nindent 10}}
-        {{- if .Values.indexCapability.securityContext }}
-        securityContext:
-          {{- toYaml .Values.indexCapability.securityContext | nindent 10 }}
-        {{- end }}
-        {{- if .Values.indexCapability.resources }}
         resources:
-          {{- toYaml .Values.indexCapability.resources | nindent 10 }}
-        {{- end }}
+          {{- toYaml .Values.indexCapability.resources | nindent 12 }}

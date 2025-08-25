@@ -81,3 +81,19 @@ Create env vars from secrets
     {{- end }}
 {{- end }}
 
+{{/*
+Define postgres host
+*/}}
+{{- define "onyx-stack.postgresHost" -}}
+{{- if and .Values.postgres (hasKey .Values.postgres "host") -}}
+  {{- $host := .Values.postgres.host | trim -}}
+  {{- if eq $host "" -}}
+    {{ printf "%s-postgresql" .Release.Name }}
+  {{- else -}}
+    {{ $host }}
+  {{- end -}}
+{{- else -}}
+  {{ printf "%s-postgresql" .Release.Name }}
+{{- end -}}
+{{- end }}
+
