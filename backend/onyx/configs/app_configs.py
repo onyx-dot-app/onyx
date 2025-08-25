@@ -359,6 +359,17 @@ DB_YIELD_PER_DEFAULT = 64
 #####
 POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 
+# Backpressure caps to prevent unbounded docfetching queue growth
+# Maximum number of concurrently active (NOT_STARTED or IN_PROGRESS) indexing attempts across the tenant
+MAX_ACTIVE_DOCFETCHING_ATTEMPTS = int(
+    os.environ.get("MAX_ACTIVE_DOCFETCHING_ATTEMPTS") or 64
+)
+
+# Maximum queued docfetching tasks allowed in the broker before we stop enqueueing new ones
+MAX_DOCFETCHING_QUEUE_LENGTH = int(
+    os.environ.get("MAX_DOCFETCHING_QUEUE_LENGTH") or 200
+)
+
 # View the list here:
 # https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/connectors/factory.py
 # If this is empty, all connectors are enabled, this is an option for security heavy orgs where
