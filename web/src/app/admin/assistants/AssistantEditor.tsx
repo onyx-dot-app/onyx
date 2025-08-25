@@ -638,6 +638,8 @@ export function AssistantEditor({
           values,
           setFieldValue,
           errors,
+          submitForm,
+          validateForm,
           ...formikProps
         }: FormikProps<any>) => {
           function toggleToolInValues(toolId: number) {
@@ -647,6 +649,55 @@ export function AssistantEditor({
             };
             setFieldValue("enabled_tools_map", updatedEnabledToolsMap);
           }
+
+          // Helper function to scroll to the first error field
+          const scrollToFirstError = (errors: Record<string, any>) => {
+            const errorFields = Object.keys(errors);
+            if (errorFields.length === 0) return;
+
+            const firstErrorField = errorFields[0];
+            // Try to find the field element by name attribute or aria-label
+            const fieldElement = 
+              document.querySelector(`[name="${firstErrorField}"]`) ||
+              document.querySelector(`[aria-label*="${firstErrorField}"]`) ||
+              document.querySelector(`input[name="${firstErrorField}"]`) ||
+              document.querySelector(`textarea[name="${firstErrorField}"]`) ||
+              document.querySelector(`select[name="${firstErrorField}"]`) ||
+              // Fallback to finding by field wrapper with error message
+              document.querySelector(`.field-${firstErrorField}`) ||
+              // Look for error message elements that might be near the field
+              document.querySelector(`[class*="error"][class*="${firstErrorField}"]`);
+
+            if (fieldElement) {
+              fieldElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'nearest'
+              });
+              
+              // Focus the field if it's focusable
+              if (fieldElement instanceof HTMLElement && 
+                  (fieldElement.tagName === 'INPUT' || 
+                   fieldElement.tagName === 'TEXTAREA' || 
+                   fieldElement.tagName === 'SELECT')) {
+                setTimeout(() => fieldElement.focus(), 300);
+              }
+            }
+          };
+
+          // Custom submit handler that scrolls to errors
+          const handleFormSubmit = async () => {
+            const validationErrors = await validateForm(values);
+            
+            if (Object.keys(validationErrors).length > 0) {
+              // There are validation errors, scroll to the first one
+              scrollToFirstError(validationErrors);
+              return;
+            }
+            
+            // No validation errors, proceed with normal submission
+            submitForm();
+          };
 
           // model must support image input for image generation
           // to work
@@ -1620,7 +1671,8 @@ export function AssistantEditor({
                   </div>
                   <div className="flex gap-x-2">
                     <Button
-                      type="submit"
+                      type="button"
+                      onClick={handleFormSubmit}
                       disabled={isSubmitting || isRequestSuccessful}
                     >
                       {isUpdate ? "Update" : "Create"}
