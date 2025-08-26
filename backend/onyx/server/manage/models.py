@@ -406,3 +406,16 @@ class StandardAnswerCreationRequest(BaseModel):
                         ["invalid regex pattern", pattern, f"in `keyword`: {err.msg}"]
                     )
                 )
+
+
+class ContainerVersions(BaseModel):
+    danswer: str
+    relational_db: str
+    index: str
+    nginx: str
+
+
+class AllVersions(BaseModel):
+    stable: ContainerVersions
+    dev: ContainerVersions
+    migration: ContainerVersions
