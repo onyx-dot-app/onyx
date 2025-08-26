@@ -30,7 +30,7 @@ def jira_connector() -> JiraConnector:
 def jira_connector_with_jql() -> JiraConnector:
     connector = JiraConnector(
         jira_base_url="https://danswerai.atlassian.net",
-        jql_query="project = \'AS\' AND issuetype = Story",
+        jql_query="project = 'AS' AND issuetype = Story",
         comment_email_blacklist=[],
     )
     connector.load_credentials(
@@ -40,7 +40,6 @@ def jira_connector_with_jql() -> JiraConnector:
         }
     )
     return connector
-
 
 
 @patch(
@@ -134,9 +133,11 @@ def test_jira_connector_basic(reset: None, jira_connector: JiraConnector) -> Non
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_jira_connector_with_jql(reset: None, jira_connector_with_jql: JiraConnector) -> None:
+def test_jira_connector_with_jql(
+    reset: None, jira_connector_with_jql: JiraConnector
+) -> None:
     """Test that JQL query functionality works correctly.
-    
+
     This test verifies that when a JQL query is provided, only issues matching the query are returned.
     The JQL query used is "project = \'AS\' AND issuetype = Story", which should only return Story-type issues.
     """
@@ -145,17 +146,16 @@ def test_jira_connector_with_jql(reset: None, jira_connector_with_jql: JiraConne
         start=0,
         end=time.time(),
     )
-    
+
     # Should only return Story-type issues
     assert len(docs) == 1
-    
+
     # All documents should be Story-type
     for doc in docs:
         assert doc.metadata["issuetype"] == "Story"
-        
+
     # Verify it's the expected Story
     story = docs[0]
     assert story.id == "https://danswerai.atlassian.net/browse/AS-3"
     assert story.semantic_identifier == "AS-3: Magic Answers"
     assert story.metadata["issuetype"] == "Story"
-

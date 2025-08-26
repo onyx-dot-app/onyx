@@ -124,8 +124,8 @@ VERTEXAI_MODEL_NAMES = [
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
-    #"gemini-2.5-pro-preview-06-05",
-    #"gemini-2.5-pro-preview-05-06",
+    # "gemini-2.5-pro-preview-06-05",
+    # "gemini-2.5-pro-preview-05-06",
     # 2.0 flash-lite models
     VERTEXAI_DEFAULT_FAST_MODEL,
     "gemini-2.0-flash-lite-001",
