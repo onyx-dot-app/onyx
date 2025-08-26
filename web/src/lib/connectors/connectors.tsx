@@ -524,7 +524,7 @@ export const connectorConfigs: Record<
                 name: "cql_query",
                 default: "",
                 description:
-                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/ for more details.",
+                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
               },
             ],
           },
@@ -590,7 +590,9 @@ export const connectorConfigs: Record<
                 label: "JQL Query",
                 name: "jql_query",
                 description:
-                  "A custom JQL query to filter Jira issues. IMPORTANT: Do not use a filter for the 'updated' field. Also, do not use the 'ORDER BY' clause, as it could cause issues with our connector polling logic. See https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/ for more details on JQL syntax.",
+                  "A custom JQL query to filter Jira issues." +
+                  "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
+                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
               },
             ],
           },
@@ -628,9 +630,9 @@ export const connectorConfigs: Record<
                 label: "Requested Objects",
                 name: "requested_objects",
                 optional: true,
-                description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.
-
-Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').`,
+                description:
+                  "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'." +
+                  "\n\nHint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').",
               },
             ],
           },
@@ -645,19 +647,18 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
                 name: "custom_query_config",
                 optional: true,
                 isTextArea: true,
-                description: `Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure.
-
-Example:
-{
-  "Account": {
-    "fields": ["Id", "Name", "Industry"],
-    "associations": {
-      "Contact": ["Id", "FirstName", "LastName", "Email"]
-    }
-  }
-}
-
-[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.`,
+                description:
+                  "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure." +
+                  "\n\nExample:" +
+                  "\n{" +
+                  '\n  "Account": {' +
+                  '\n    "fields": ["Id", "Name", "Industry"],' +
+                  '\n    "associations": {' +
+                  '\n      "Contact": ["Id", "FirstName", "LastName", "Email"]' +
+                  "\n    }" +
+                  "\n  }" +
+                  "\n}" +
+                  "\n\n[See our docs](https://docs.onyx.app/connectors/salesforce) for more details.",
               },
             ],
           },
