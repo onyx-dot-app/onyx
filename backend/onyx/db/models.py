@@ -3324,6 +3324,7 @@ class UserFile(Base):
     cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
         "ConnectorCredentialPair", back_populates="user_file"
     )
+
     status: Mapped[UserFileStatus] = mapped_column(
         Enum(UserFileStatus, native_enum=False),
         nullable=False,
@@ -3331,6 +3332,10 @@ class UserFile(Base):
     )
     chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     boost: Mapped[int] = mapped_column(Integer, nullable=False, default=DEFAULT_BOOST)
+    last_accessed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     link_url: Mapped[str | None] = mapped_column(String, nullable=True)
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
