@@ -26,13 +26,7 @@ def configure_redis_iam_auth(connection_kwargs: dict[str, Any]) -> None:
 
     # Ensure SSL is enabled for IAM authentication
     connection_kwargs["ssl"] = True
-
-    # Create SSL context using system CA certificates by default
-    # This works with AWS ElastiCache without requiring additional CA files
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = True
-    ssl_context.verify_mode = ssl.CERT_REQUIRED
-    connection_kwargs["ssl_context"] = ssl_context
+    connection_kwargs["ssl_context"] = create_redis_ssl_context_if_iam()
 
 
 def create_redis_ssl_context_if_iam() -> ssl.SSLContext:
