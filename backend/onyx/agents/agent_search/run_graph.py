@@ -5,8 +5,6 @@ from langchain_core.runnables.schema import CustomStreamEvent
 from langchain_core.runnables.schema import StreamEvent
 from langgraph.graph.state import CompiledStateGraph
 
-from onyx.agents.agent_search.basic.graph_builder import basic_graph_builder
-from onyx.agents.agent_search.basic.states import BasicInput
 from onyx.agents.agent_search.dc_search_analysis.graph_builder import (
     divide_and_conquer_graph_builder,
 )
@@ -23,9 +21,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-GraphInput = BasicInput | DCMainInput | KBMainInput | DRMainInput
-
-_COMPILED_GRAPH: CompiledStateGraph | None = None
+GraphInput = DCMainInput | KBMainInput | DRMainInput
 
 
 def manage_sync_streaming(
@@ -53,15 +49,6 @@ def run_graph(
     ):
 
         yield cast(Packet, event["data"])
-
-
-def run_basic_graph(
-    config: GraphConfig,
-) -> AnswerStream:
-    graph = basic_graph_builder()
-    compiled_graph = graph.compile()
-    input = BasicInput(unused=True)
-    return run_graph(compiled_graph, config, input)
 
 
 def run_kb_graph(

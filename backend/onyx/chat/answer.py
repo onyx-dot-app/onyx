@@ -10,8 +10,6 @@ from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
-from onyx.agents.agent_search.run_graph import run_basic_graph
-from onyx.agents.agent_search.run_graph import run_dc_graph
 from onyx.agents.agent_search.run_graph import run_dr_graph
 from onyx.chat.models import AnswerStream
 from onyx.chat.models import AnswerStreamPart
@@ -21,7 +19,6 @@ from onyx.chat.models import StreamStopReason
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
-from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.context.search.models import RerankingDetails
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import Persona
@@ -138,21 +135,7 @@ class Answer:
             return
 
         # TODO: add toggle in UI with customizable TimeBudget
-        if self.graph_config.inputs.persona:
-            run_langgraph = run_dr_graph
-
-        elif (
-            self.graph_config.inputs.persona
-            and USE_DIV_CON_AGENT
-            and self.graph_config.inputs.persona.description.startswith(
-                "DivCon Beta Agent"
-            )
-        ):
-            run_langgraph = run_dc_graph
-        else:
-            run_langgraph = run_basic_graph
-
-        stream = run_langgraph(self.graph_config)
+        stream = run_dr_graph(self.graph_config)
 
         processed_stream: list[AnswerStreamPart] = []
         for packet in stream:
