@@ -9,7 +9,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.dr.constants import AVERAGE_TOOL_COSTS
 from onyx.agents.agent_search.dr.constants import MAX_CHAT_HISTORY_MESSAGES
 from onyx.agents.agent_search.dr.dr_prompt_builder import (
@@ -23,6 +22,7 @@ from onyx.agents.agent_search.dr.models import DecisionResponse
 from onyx.agents.agent_search.dr.models import DRPromptPurpose
 from onyx.agents.agent_search.dr.models import OrchestrationClarificationInfo
 from onyx.agents.agent_search.dr.models import OrchestratorTool
+from onyx.agents.agent_search.dr.process_llm_stream import process_llm_stream
 from onyx.agents.agent_search.dr.states import MainState
 from onyx.agents.agent_search.dr.states import OrchestrationSetup
 from onyx.agents.agent_search.dr.utils import get_chat_history_string
