@@ -122,6 +122,44 @@ class ProductboardConnector(PollConnector):
                 metadata=metadata,
             )
 
+    def _get_notes(self) -> Generator[Document, None, None]:
+        """Fetch notes, regardless of whether they are linked to features."""
+        for note in self._fetch_documents(
+            initial_link=f"{_PRODUCT_BOARD_BASE_URL}/notes"
+        ):
+            features = cast(list[dict[str, Any]] | None, note.get("features"))
+
+            owner = self._get_owner_email(note)
+            experts = [BasicExpertInfo(email=owner)] if owner else None
+
+            feature_names = [
+                cast(str, f.get("name")) for f in features or [] if f.get("name")
+            ]
+            feature_ids = [
+                cast(str, f.get("id")) for f in features or [] if f.get("id")
+            ]
+
+            metadata: dict[str, str | list[str]] = {"entity_type": "note"}
+            if feature_ids:
+                metadata["feature_ids"] = feature_ids
+            if feature_names:
+                metadata["feature_names"] = feature_names
+
+            yield Document(
+                id=note["id"],
+                sections=[
+                    TextSection(
+                        link=note.get("links", {}).get("html", ""),
+                        text=cast(str, note.get("content") or note.get("text", "")),
+                    )
+                ],
+                semantic_identifier=note.get("title", note["id"]),
+                source=DocumentSource.PRODUCTBOARD,
+                doc_updated_at=time_str_to_utc(note["updatedAt"]),
+                primary_owners=experts,
+                metadata=metadata,
+            )
+
     def _get_components(self) -> Generator[Document, None, None]:
         """A Component is like an epic in Jira. It contains Features"""
         for component in self._fetch_documents(
@@ -230,16 +268,16 @@ class ProductboardConnector(PollConnector):
 
         document_batch: list[Document] = []
 
-        # NOTE: there is a concept of a "Note" in productboard, however
-        # there is no read API for it atm. Additionally, comments are not
-        # included with features. Finally, "Releases" are not fetched atm,
-        # since they do not provide an updatedAt.
+        # NOTE: comments are not included with features. "Releases" are also not
+        # fetched at this time since they do not provide an updatedAt.
         feature_documents = self._get_features()
+        note_documents = self._get_notes()
         component_documents = self._get_components()
         product_documents = self._get_products()
         objective_documents = self._get_objectives()
         for document in chain(
             feature_documents,
+            note_documents,
             component_documents,
             product_documents,
             objective_documents,
