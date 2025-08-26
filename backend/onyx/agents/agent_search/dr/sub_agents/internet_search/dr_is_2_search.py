@@ -20,7 +20,9 @@ from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -36,6 +38,10 @@ def web_search(
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
     parallelization_nr = state.parallelization_nr
+    current_step_nr = state.current_step_nr
+
+    if not current_step_nr:
+        raise ValueError("Current step number is not set. This should not happen.")
 
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
@@ -43,6 +49,15 @@ def web_search(
     search_query = state.branch_question
     if not search_query:
         raise ValueError("search_query is not set")
+
+    write_custom_event(
+        current_step_nr,
+        SearchToolDelta(
+            queries=[search_query],
+            documents=[],
+        ),
+        writer,
+    )
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query

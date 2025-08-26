@@ -11,7 +11,7 @@ from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 def branching_router(state: SubAgentInput) -> list[Send | Hashable]:
     return [
         Send(
-            "act",
+            "search",
             BranchInput(
                 iteration_nr=state.iteration_nr,
                 parallelization_nr=parallelization_nr,

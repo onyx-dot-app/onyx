@@ -16,6 +16,7 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
 )
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
 from onyx.agents.agent_search.dr.sub_agents.states import FetchInput
+from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
@@ -23,12 +24,14 @@ from onyx.agents.agent_search.shared_graph_utils.llm import invoke_llm_json
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.models import LlmDoc
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
+from onyx.server.query_and_chat.streaming_models import SearchToolDelta
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -82,6 +85,7 @@ def web_fetch(
     node_start_time = datetime.now()
     iteration_nr = state.iteration_nr
     parallelization_nr = state.parallelization_nr
+    current_step_nr = state.current_step_nr
 
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
@@ -174,6 +178,17 @@ def web_fetch(
             doc_num + 1: retrieved_doc
             for doc_num, retrieved_doc in enumerate(retrieved_docs[:15])
         }
+
+    write_custom_event(
+        current_step_nr,
+        SearchToolDelta(
+            queries=[],
+            documents=convert_inference_sections_to_search_docs(
+                retrieved_docs, is_internet=True
+            ),
+        ),
+        writer,
+    )
 
     return BranchUpdate(
         branch_iteration_responses=[
