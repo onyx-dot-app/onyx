@@ -232,7 +232,7 @@ export function AIMessage({
   return (
     <div
       // for e2e tests
-      id={displayComplete ? "onyx-ai-message" : undefined}
+      data-testid={displayComplete ? "onyx-ai-message" : undefined}
       className="py-5 ml-4 lg:px-5 relative flex"
     >
       <div className="mx-auto w-[90%] max-w-message-max">
