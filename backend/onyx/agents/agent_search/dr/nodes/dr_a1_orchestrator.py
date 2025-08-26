@@ -33,8 +33,8 @@ from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.kg.utils.extraction_utils import get_entity_types_str
 from onyx.kg.utils.extraction_utils import get_relationship_types_str
 from onyx.prompts.dr_prompts import DEFAULLT_DECISION_PROMPT
+from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import SUFFICIENT_INFORMATION_STRING
-from onyx.server.query_and_chat.streaming_models import ReasoningDelta
 from onyx.server.query_and_chat.streaming_models import ReasoningStart
 from onyx.server.query_and_chat.streaming_models import SectionEnd
 from onyx.utils.logger import setup_logger
@@ -354,14 +354,39 @@ def orchestrator(
                 writer,
             )
 
-            write_custom_event(
-                current_step_nr,
-                ReasoningDelta(
-                    reasoning=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
-                    type="reasoning_delta",
-                ),
-                writer,
+            start_time = datetime.now()
+
+            repeat_plan_prompt = REPEAT_PROMPT.build(
+                original_information=f"{HIGH_LEVEL_PLAN_PREFIX}\n\n {plan_of_record.plan}"
             )
+
+            _, _, _ = run_with_timeout(
+                80,
+                lambda: stream_llm_answer(
+                    llm=graph_config.tooling.primary_llm,
+                    prompt=repeat_plan_prompt,
+                    event_name="basic_response",
+                    writer=writer,
+                    agent_answer_level=0,
+                    agent_answer_question_num=0,
+                    agent_answer_type="agent_level_answer",
+                    timeout_override=60,
+                    answer_piece="reasoning_delta",
+                    ind=current_step_nr,
+                ),
+            )
+
+            end_time = datetime.now()
+            logger.debug(f"Time taken for plan streaming: {end_time - start_time}")
+
+            # write_custom_event(
+            #     current_step_nr,
+            #     ReasoningDelta(
+            #         reasoning=f"{HIGH_LEVEL_PLAN_PREFIX} {plan_of_record.plan}\n\n",
+            #         type="reasoning_delta",
+            #     ),
+            #     writer,
+            # )
 
             write_custom_event(
                 current_step_nr,
@@ -429,13 +454,34 @@ def orchestrator(
             writer,
         )
 
-        write_custom_event(
-            current_step_nr,
-            ReasoningDelta(
-                reasoning=reasoning_result,
-            ),
-            writer,
+        repeat_reasoning_prompt = REPEAT_PROMPT.build(
+            original_information=reasoning_result
         )
+
+        _, _, _ = run_with_timeout(
+            80,
+            lambda: stream_llm_answer(
+                llm=graph_config.tooling.primary_llm,
+                prompt=repeat_reasoning_prompt,
+                event_name="basic_response",
+                writer=writer,
+                agent_answer_level=0,
+                agent_answer_question_num=0,
+                agent_answer_type="agent_level_answer",
+                timeout_override=60,
+                answer_piece="reasoning_delta",
+                ind=current_step_nr,
+                # max_tokens=None,
+            ),
+        )
+
+        # write_custom_event(
+        #     current_step_nr,
+        #     ReasoningDelta(
+        #         reasoning=reasoning_result,
+        #     ),
+        #     writer,
+        # )
 
         write_custom_event(
             current_step_nr,

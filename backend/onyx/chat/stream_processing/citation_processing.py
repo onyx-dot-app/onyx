@@ -324,3 +324,73 @@ class CitationProcessorGraph:
                 )
 
         return final_processed_str, final_citation_info
+
+
+class StreamExtractionProcessor:
+    def __init__(self, extraction_pattern: str | None = None):
+        self.extraction_pattern = extraction_pattern or "extraction_pattern"
+        self.inside_extraction = False
+        self.buffer = ""  # Buffer to accumulate tokens for tag detection
+
+        # Create dynamic patterns based on extraction_pattern
+        self.start_tag = f"<{self.extraction_pattern}>"
+        self.end_tag = f"</{self.extraction_pattern}>"
+
+    def process_token(self, token: str | None) -> bool | None:
+        if token is None:
+            # End of stream - no return value needed
+            return None
+
+        self.buffer += token
+
+        # Check for complete start tag
+        if self.start_tag in self.buffer and not self.inside_extraction:
+            start_pos = self.buffer.find(self.start_tag)
+            after_tag = self.buffer[start_pos + len(self.start_tag) :]
+
+            # Set state and update buffer
+            self.buffer = after_tag
+            self.inside_extraction = True
+
+            # If there's content after the tag, process it recursively
+            if after_tag:
+                return self.process_token("")
+            return self.inside_extraction
+
+        # Check for complete end tag
+        if self.end_tag in self.buffer and self.inside_extraction:
+            end_pos = self.buffer.find(self.end_tag)
+            after_tag = self.buffer[end_pos + len(self.end_tag) :]
+
+            # Set state and update buffer
+            self.inside_extraction = False
+            self.buffer = after_tag
+
+            # If there's content after the tag, process it recursively
+            if after_tag:
+                return self.process_token("")
+            return self.inside_extraction
+
+        # Check if we might be in the middle of a tag
+        if self._might_be_partial_tag(self.buffer):
+            # Hold buffer, might be incomplete tag - return current state
+            return self.inside_extraction
+
+        # No complete or potential tags found, return current state
+        # Clear buffer since we're processing the token
+        self.buffer = ""
+        return self.inside_extraction
+
+    def _might_be_partial_tag(self, text: str) -> bool:
+        """Check if text might be the start of an opening or closing extraction tag"""
+        # Check for partial start tag
+        for i in range(1, len(self.start_tag) + 1):
+            if text.endswith(self.start_tag[:i]):
+                return True
+
+        # Check for partial end tag
+        for i in range(1, len(self.end_tag) + 1):
+            if text.endswith(self.end_tag[:i]):
+                return True
+
+        return False

@@ -55,8 +55,8 @@ from onyx.prompts.dr_prompts import DECISION_PROMPT_WO_TOOL_CALLING
 from onyx.prompts.dr_prompts import DEFAULT_DR_SYSTEM_PROMPT
 from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_W_TOOL_CALLING
 from onyx.prompts.dr_prompts import EVAL_SYSTEM_PROMPT_WO_TOOL_CALLING
+from onyx.prompts.dr_prompts import REPEAT_PROMPT
 from onyx.prompts.dr_prompts import TOOL_DESCRIPTION
-from onyx.server.query_and_chat.streaming_models import MessageDelta
 from onyx.server.query_and_chat.streaming_models import MessageStart
 from onyx.server.query_and_chat.streaming_models import OverallStop
 from onyx.server.query_and_chat.streaming_models import SectionEnd
@@ -357,6 +357,9 @@ def clarifier(
 
     message_id = graph_config.persistence.message_id
 
+    # Perform a commit to ensure the message_id is set and saved
+    db_session.commit()
+
     # get the connected tools and format for the Deep Research flow
     kg_enabled = graph_config.behavior.kg_config_settings.KG_ENABLED
     db_session = graph_config.persistence.db_session
@@ -593,6 +596,8 @@ def clarifier(
 
     # Continue, as external knowledge is required.
 
+    current_step_nr += 1
+
     clarification = None
 
     if research_type != ResearchType.THOUGHTFUL:
@@ -644,7 +649,7 @@ def clarifier(
                     clarification_response=None,
                 )
                 write_custom_event(
-                    0,
+                    current_step_nr,
                     MessageStart(
                         content="",
                         final_documents=None,
@@ -652,17 +657,37 @@ def clarifier(
                     writer,
                 )
 
-                write_custom_event(
-                    0,
-                    MessageDelta(
-                        content=clarification_response.clarification_question,
-                        type="message_delta",
-                    ),
-                    writer,
+                repeat_prompt = REPEAT_PROMPT.build(
+                    original_information=clarification_response.clarification_question
                 )
 
+                _, _, _ = run_with_timeout(
+                    80,
+                    lambda: stream_llm_answer(
+                        llm=graph_config.tooling.primary_llm,
+                        prompt=repeat_prompt,
+                        event_name="basic_response",
+                        writer=writer,
+                        agent_answer_level=0,
+                        agent_answer_question_num=0,
+                        agent_answer_type="agent_level_answer",
+                        timeout_override=60,
+                        answer_piece="message_delta",
+                        ind=current_step_nr,
+                        # max_tokens=None,
+                    ),
+                )
+                # write_custom_event(
+                #     0,
+                #     MessageDelta(
+                #         content=clarification_response.clarification_question,
+                #         type="message_delta",
+                #     ),
+                #     writer,
+                # )
+
                 write_custom_event(
-                    0,
+                    current_step_nr,
                     SectionEnd(
                         type="section_end",
                     ),

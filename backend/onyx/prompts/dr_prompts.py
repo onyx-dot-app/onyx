@@ -180,6 +180,83 @@ Here are the relationship types that are available in the knowledge graph:
 )
 
 
+ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT_STREAM = PromptTemplate(
+    f"""
+You are great  at analyzing a question and breaking it up into a \
+series of high-level, answerable sub-questions.
+
+Given the user query and the list of available tools, your task is to devise a high-level plan \
+consisting of a list of the iterations, each iteration consisting of the \
+aspects to investigate, so that by the end of the process you have gathered sufficient \
+information to generate a well-researched and highly relevant answer to the user query.
+
+Note that the plan will only be used as a guideline, and a separate agent will use your plan along \
+with the results from previous iterations to generate the specific questions to send to the tool for each \
+iteration. Thus you should not be too specific in your plan as some steps could be dependent on \
+previous steps.
+
+Assume that all steps will be executed sequentially, so the answers of earlier steps will be known \
+at later steps. To capture that, you can refer to earlier results in later steps. (Example of a 'later'\
+question: 'find information for each result of step 3.')
+
+You have these ---num_available_tools--- tools available, \
+---available_tools---.
+
+---tool_descriptions---
+
+---kg_types_descriptions---
+
+Here is uploaded user context (if any):
+{SEPARATOR_LINE}
+---uploaded_context---
+{SEPARATOR_LINE}
+
+Most importantly, here is the question that you must devise a plan for answering:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+Finally, here are the past few chat messages for reference (if any). \
+Note that the chat history may already contain the answer to the user question, in which case you can \
+skip straight to the {CLOSER}, or the user question may be a follow-up to a previous question. \
+In any case, do not confuse the below with the user query. It is only there to provide context.
+{SEPARATOR_LINE}
+---chat_history_string---
+{SEPARATOR_LINE}
+
+Also, the current time is ---current_time---. Consider that if the question involves dates or \
+time periods.
+
+GUIDELINES:
+   - the plan needs to ensure that a) the problem is fully understood,  b) the right questions are \
+asked, c) the proper information is gathered, so that the final answer is well-researched and highly relevant, \
+and shows deep understanding of the problem. As an example, if a question pertains to \
+positioning a solution in some market, the plan should include understanding the market in full, \
+including the types of customers and user personas, the competitors and their positioning, etc.
+   - again, as future steps can depend on earlier ones, the steps should be fairly high-level. \
+For example, if the question is 'which jiras address the main problems Nike has?', a good plan may be:
+   --
+   1) identify the main problem that Nike has
+   2) find jiras that address the problem identified in step 1
+   3) generate the final answer
+   --
+   - the last step should be something like 'generate the final answer' or maybe something more specific.
+
+Please first reason briefly (1-2 sentences) and then provide the plan. Wrap your reasoning into \
+the tokens <reasoning> and </reasoning>, and then articulate the plan wrapped in <plan> and </plan> tokens, as in:
+<reasoning> [your reasoning in 1-2 sentences] </reasoning>
+<plan>
+1. [step 1]
+2. [step 2]
+...
+n. [step n]
+</plan>
+
+ANSWER:
+"""
+)
+
+
 ORCHESTRATOR_DEEP_INITIAL_PLAN_PROMPT = PromptTemplate(
     f"""
 You are great  at analyzing a question and breaking it up into a \
@@ -1115,6 +1192,17 @@ ANSWER:
 """
 )
 
+REPEAT_PROMPT = PromptTemplate(
+    """
+You have been passed information and your simple task is to repeat the information VERBATIM.
+
+Here is the original information:
+
+---original_information---
+
+YOUR VERBATIM REPEAT of the original information:
+"""
+)
 
 BASE_SEARCH_PROCESSING_PROMPT = PromptTemplate(
     f"""\
