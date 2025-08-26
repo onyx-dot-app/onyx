@@ -200,8 +200,11 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {queries.slice(0, queriesToShow).map((query, index) => (
               <div
                 key={index}
-                className="text-xs"
-                style={{ animationDelay: `${index * 100}ms` }}
+                className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                style={{
+                  animationDelay: `${index * 30}ms`,
+                  animationFillMode: "backwards",
+                }}
               >
                 <SourceChip2
                   icon={<FiSearch size={10} />}
@@ -212,8 +215,11 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {/* Show a blurb if there are more queries than we are displaying */}
             {queries.length > queriesToShow && (
               <div
-                className="text-xs"
-                style={{ animationDelay: `${queriesToShow * 100}ms` }}
+                className="text-xs animate-in fade-in slide-in-from-left-2 duration-150"
+                style={{
+                  animationDelay: `${queriesToShow * 30}ms`,
+                  animationFillMode: "backwards",
+                }}
               >
                 <SourceChip2
                   title={`${queries.length - queriesToShow} more...`}
@@ -240,8 +246,11 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {results.slice(0, resultsToShow).map((result, index) => (
               <div
                 key={result.document_id}
-                className=""
-                style={{ animationDelay: `${index * 100}ms` }}
+                className="animate-in fade-in slide-in-from-left-2 duration-150"
+                style={{
+                  animationDelay: `${index * 30}ms`,
+                  animationFillMode: "backwards",
+                }}
               >
                 <div className="text-xs">
                   <SourceChip2
@@ -262,11 +271,12 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {/* Show a blurb if there are more results than we are displaying */}
             {results.length > resultsToShow && (
               <div
-                className=""
+                className="animate-in fade-in slide-in-from-left-2 duration-150"
                 style={{
                   animationDelay: `${
-                    Math.min(resultsToShow, results.length) * 100
+                    Math.min(resultsToShow, results.length) * 30
                   }ms`,
+                  animationFillMode: "backwards",
                 }}
               >
                 <div className="text-xs">

@@ -19,6 +19,9 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.utils import chunks_or_sections_to_search_docs
 from onyx.db.models import ChatMessage
 from onyx.db.models import SearchDoc
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
 
 
 CITATION_PREFIX = "CITE:"
@@ -75,10 +78,7 @@ def aggregate_context(
     ):
 
         iteration_tool = iteration_response.tool
-        if iteration_tool == "InternetSearchTool":
-            is_internet = True
-        else:
-            is_internet = False
+        is_internet = iteration_tool == InternetSearchTool._NAME
 
         for cited_doc in iteration_response.cited_documents.values():
             unrolled_inference_sections.append(cited_doc)

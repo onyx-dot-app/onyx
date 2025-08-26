@@ -158,7 +158,7 @@ export const MemoizedLink = memo(
         : undefined;
 
     if (value?.toString().startsWith("*")) {
-      return <BlinkingDot />;
+      return <BlinkingDot addMargin />;
     } else if (value?.toString().startsWith("[")) {
       return (
         <>

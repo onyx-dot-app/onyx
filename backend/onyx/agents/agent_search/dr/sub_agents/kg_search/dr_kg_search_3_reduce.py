@@ -52,13 +52,11 @@ def kg_search_reducer(
             doc_list.append(x)
 
     retrieved_search_docs = convert_inference_sections_to_search_docs(doc_list)
-
-    if len(queries) == 1:
-        kg_answer: str | None = (
-            "The Knowledge Graph Answer:\n\n" + new_updates[0].answer
-        )
-    else:
-        kg_answer = None
+    kg_answer = (
+        "The Knowledge Graph Answer:\n\n" + new_updates[0].answer
+        if len(queries) == 1
+        else None
+    )
 
     if len(retrieved_search_docs) > 0:
         write_custom_event(
