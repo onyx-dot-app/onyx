@@ -37,11 +37,8 @@ class OrchestrationClarificationInfo(BaseModel):
     clarification_response: str | None = None
 
 
-class SurfaceSearchAnswer(BaseModel):
+class WebSearchAnswer(BaseModel):
     urls_to_open: list[str]
-    need_additional_search: bool
-    additional_search_query: str
-    reasoning: str
 
 
 class SearchAnswer(BaseModel):
@@ -92,6 +89,7 @@ class IterationAnswer(BaseModel):
     background_info: str | None = None
     claims: list[str] | None = None
     additional_data: dict[str, str] | None = None
+    urls_to_open: list[str] | None = None
 
 
 class AggregatedDRContext(BaseModel):

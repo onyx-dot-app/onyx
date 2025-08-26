@@ -60,13 +60,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchOnlyTool,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetUrlOpenTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -121,12 +115,6 @@ def _get_available_tools(
             # )
             tool_info.llm_path = DRPath.INTERNET_SEARCH.value
             tool_info.path = DRPath.INTERNET_SEARCH
-        elif isinstance(tool, InternetSearchOnlyTool):
-            tool_info.llm_path = DRPath.INTERNET_SEARCH_ONLY.value
-            tool_info.path = DRPath.INTERNET_SEARCH_ONLY
-        elif isinstance(tool, InternetUrlOpenTool):
-            tool_info.llm_path = DRPath.INTERNET_URL_OPEN.value
-            tool_info.path = DRPath.INTERNET_URL_OPEN
         elif isinstance(tool, SearchTool) and len(active_source_types) > 0:
             # tool_info.metadata["summary_signature"] = SEARCH_RESPONSE_SUMMARY_ID
             tool_info.llm_path = DRPath.INTERNAL_SEARCH.value
@@ -149,8 +137,6 @@ def _get_available_tools(
 
         tool_info.description = TOOL_DESCRIPTION.get(tool_info.path, tool.description)
         tool_info.cost = AVERAGE_TOOL_COSTS[tool_info.path]
-
-        # TODO: handle custom tools with same name as other tools (e.g., CLOSER)
         available_tools[tool_info.llm_path] = tool_info
 
     # make sure KG isn't enabled without internal search

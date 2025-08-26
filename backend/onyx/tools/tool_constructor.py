@@ -18,8 +18,6 @@ from onyx.configs.app_configs import OAUTH_CLIENT_ID
 from onyx.configs.app_configs import OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import OKTA_API_TOKEN
 from onyx.configs.app_configs import OPENID_CONFIG_URL
-from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_CHUNKS
-from onyx.configs.chat_configs import NUM_INTERNET_SEARCH_RESULTS
 from onyx.configs.constants import TMP_DRALPHA_PERSONA_NAME
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.enums import LLMEvaluationType
@@ -44,13 +42,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchOnlyTool,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetUrlOpenTool,
 )
 from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
     KnowledgeGraphTool,
@@ -266,67 +258,13 @@ def construct_tools(
 
                 try:
                     tool_dict[db_tool_model.id] = [
-                        InternetSearchTool(
-                            tool_id=db_tool_model.id,
-                            db_session=db_session,
-                            persona=persona,
-                            prompt_config=prompt_config,
-                            llm=llm,
-                            document_pruning_config=internet_search_tool_config.document_pruning_config,
-                            answer_style_config=internet_search_tool_config.answer_style_config,
-                            provider=None,  # Will use default provider
-                            num_results=NUM_INTERNET_SEARCH_RESULTS,
-                            max_chunks=NUM_INTERNET_SEARCH_CHUNKS,
-                        )
+                        InternetSearchTool(tool_id=db_tool_model.id)
                     ]
                 except ValueError as e:
                     logger.error(f"Failed to initialize Internet Search Tool: {e}")
                     raise ValueError(
                         "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
                     )
-
-            # Handle Internet Search Only Tool
-            elif tool_cls.__name__ == InternetSearchOnlyTool.__name__:
-                if not internet_search_tool_config:
-                    internet_search_tool_config = InternetSearchToolConfig()
-
-                try:
-                    tool_dict[db_tool_model.id] = [
-                        InternetSearchOnlyTool(
-                            tool_id=db_tool_model.id,
-                            db_session=db_session,
-                            persona=persona,
-                            prompt_config=prompt_config,
-                            llm=llm,
-                            document_pruning_config=internet_search_tool_config.document_pruning_config,
-                            answer_style_config=internet_search_tool_config.answer_style_config,
-                            provider=None,  # Will use default provider
-                            num_results=NUM_INTERNET_SEARCH_RESULTS,
-                        )
-                    ]
-                except ValueError as e:
-                    logger.error(f"Failed to initialize Internet Search Only Tool: {e}")
-                    raise ValueError(
-                        "Internet search tool requires a Bing or Exa API key, please contact your Onyx admin to get it added!"
-                    )
-
-            # Handle Internet URL Open Tool
-            elif tool_cls.__name__ == InternetUrlOpenTool.__name__:
-                if not internet_search_tool_config:
-                    internet_search_tool_config = InternetSearchToolConfig()
-
-                tool_dict[db_tool_model.id] = [
-                    InternetUrlOpenTool(
-                        tool_id=db_tool_model.id,
-                        db_session=db_session,
-                        persona=persona,
-                        prompt_config=prompt_config,
-                        llm=llm,
-                        document_pruning_config=internet_search_tool_config.document_pruning_config,
-                        answer_style_config=internet_search_tool_config.answer_style_config,
-                    )
-                ]
-
             # Handle Okta Profile Tool
             elif tool_cls.__name__ == OktaProfileTool.__name__:
                 if not user_oauth_token:

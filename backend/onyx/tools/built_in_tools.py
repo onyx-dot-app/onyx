@@ -6,19 +6,17 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+    get_available_providers,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
 from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
 from onyx.db.models import Persona
 from onyx.db.models import Tool as ToolDBModel
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-    InternetSearchOnlyTool,
-    InternetUrlOpenTool,
-)
-from onyx.tools.tool_implementations.internet_search.providers import (
-    get_available_providers,
 )
 from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
@@ -67,24 +65,6 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 ),
                 in_code_tool_id=InternetSearchTool.__name__,
                 display_name=InternetSearchTool._DISPLAY_NAME,
-            ),
-            InCodeToolInfo(
-                cls=InternetSearchOnlyTool,
-                description=(
-                    "The Internet Search Only Action allows the assistant "
-                    "to search the internet and return search results with metadata."
-                ),
-                in_code_tool_id=InternetSearchOnlyTool.__name__,
-                display_name=InternetSearchOnlyTool._DISPLAY_NAME,
-            ),
-            InCodeToolInfo(
-                cls=InternetUrlOpenTool,
-                description=(
-                    "The Internet URL Open Action allows the assistant "
-                    "to open specific URLs and fetch their content."
-                ),
-                in_code_tool_id=InternetUrlOpenTool.__name__,
-                display_name=InternetUrlOpenTool._DISPLAY_NAME,
             ),
         ]
         if (bool(get_available_providers()))

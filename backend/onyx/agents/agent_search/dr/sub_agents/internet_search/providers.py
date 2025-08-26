@@ -1,19 +1,63 @@
+from datetime import datetime
+from enum import Enum
 from typing import Any
+from typing import Literal
 
 import requests
 from pydantic import BaseModel
+from pydantic import field_validator
 
 from onyx.configs.chat_configs import EXA_API_KEY
 from onyx.configs.chat_configs import GOOGLE_CLOUD_API_KEY
 from onyx.configs.chat_configs import GOOGLE_PROGRAMMABLE_SEARCH_ENGINE_ID
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
-from onyx.tools.tool_implementations.internet_search.models import InternetSearchResult
-from onyx.tools.tool_implementations.internet_search.models import ProviderConfig
-from onyx.tools.tool_implementations.internet_search.models import ProviderType
+from onyx.context.search.models import InferenceSection
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
+MAX_CONTENT_LENGTH = 1_048_576
 logger = setup_logger()
+
+
+class InternetSearchResponseSummary(BaseModel):
+    query: str
+    top_sections: list[InferenceSection]
+
+
+class InternetSearchResult(BaseModel):
+    title: str
+    link: str
+    full_content: str
+    published_date: datetime | None = None
+    rag_context: str | None = None
+
+    @field_validator("full_content")
+    @classmethod
+    def validate_content_length(cls, v: str) -> str:
+        """Truncate content if it exceeds maximum length to prevent memory issues."""
+        if len(v) > MAX_CONTENT_LENGTH:
+            return v[:MAX_CONTENT_LENGTH] + "... [Content truncated due to length]"
+        return v
+
+
+class ProviderType(Enum):
+    """Enum for internet search provider types"""
+
+    GOOGLE = "google"
+    EXA = "exa"
+
+
+class ProviderConfig(BaseModel):
+    api_key: str | None = None
+    api_base: str
+    headers: dict[str, str]
+    query_param_name: str
+    num_results_param: str
+    search_params: dict[str, Any]
+    request_method: Literal["GET", "POST"]
+    results_path: list[str]
+    result_mapping: dict[str, str]
+    global_fields: dict[str, list[str]] = {}
 
 
 PROVIDER_CONFIGS = {
@@ -250,14 +294,3 @@ def get_default_provider() -> InternetSearchProvider | None:
 
     logger.warning("No internet search providers found")
     return None
-
-
-def get_provider_by_name(name: str) -> InternetSearchProvider | None:
-    """Get a specific provider by name"""
-    providers = get_available_providers()
-
-    if not providers or name not in providers:
-        logger.warning(f"Internet search provider '{name}' not found")
-        return None
-
-    return providers[name]
