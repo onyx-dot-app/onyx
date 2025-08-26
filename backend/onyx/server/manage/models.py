@@ -409,7 +409,7 @@ class StandardAnswerCreationRequest(BaseModel):
 
 
 class ContainerVersions(BaseModel):
-    danswer: str
+    onyx: str
     relational_db: str
     index: str
     nginx: str

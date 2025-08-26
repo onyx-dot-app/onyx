@@ -9,6 +9,8 @@ from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import user_needs_to_be_verified
 from onyx.configs.app_configs import AUTH_TYPE
+from onyx.configs.app_configs import DEV_VERSION_PATTERN
+from onyx.configs.app_configs import STABLE_VERSION_PATTERN
 from onyx.server.manage.models import AllVersions
 from onyx.server.manage.models import AuthTypeResponse
 from onyx.server.manage.models import ContainerVersions
@@ -42,10 +44,6 @@ def get_versions() -> AllVersions:
     """
     Fetches the latest stable and beta versions of Onyx Docker images
     """
-    # Define strict version patterns
-    STABLE_VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
-    DEV_VERSION_PATTERN = re.compile(r"^v(\d+)\.(\d+)\.(\d+)-beta\.(\d+)$")
-
     # Fetch the latest tags from DockerHub for each Onyx component
     dockerhub_repos = [
         "onyxdotapp/onyx-model-server",
@@ -90,7 +88,7 @@ def get_versions() -> AllVersions:
     if not dev_tags:
         raise HTTPException(
             status_code=500,
-            detail="No valid dev versions found matching pattern v(number).(number).(number)-beta",
+            detail="No valid dev versions found matching pattern v(number).(number).(number)-beta.(number)",
         )
     if not stable_tags:
         raise HTTPException(
@@ -120,19 +118,19 @@ def get_versions() -> AllVersions:
 
     return AllVersions(
         stable=ContainerVersions(
-            danswer=latest_stable_version,
+            onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
             index="vespaengine/vespa:8.277.17",
             nginx="nginx:1.23.4-alpine",
         ),
         dev=ContainerVersions(
-            danswer=latest_dev_version,
+            onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
             index="vespaengine/vespa:8.277.17",
             nginx="nginx:1.23.4-alpine",
         ),
         migration=ContainerVersions(
-            danswer="airgapped-intfloat-nomic-migration",
+            onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
             index="vespaengine/vespa:8.277.17",
             nginx="nginx:1.23.4-alpine",
