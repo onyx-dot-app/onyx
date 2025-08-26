@@ -3346,6 +3346,19 @@ class UserFile(Base):
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
+class Project__UserFile(Base):
+    __tablename__ = "project__user_file"
+
+    project_id: Mapped[int] = mapped_column(ForeignKey("project.id"), primary_key=True)
+    user_file_id: Mapped[str] = mapped_column(
+        ForeignKey("user_file.id"), primary_key=True
+    )
+
+    project: Mapped["UserFolder"] = relationship(
+        "UserFolder", back_populates="user_files"
+    )
+
+
 """
 Multi-tenancy related tables
 """
