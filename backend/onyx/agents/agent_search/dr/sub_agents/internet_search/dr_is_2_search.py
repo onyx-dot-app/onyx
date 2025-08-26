@@ -7,11 +7,11 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import WebSearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
-    get_default_provider,
+from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+    InternetSearchResult,
 )
 from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
-    InternetSearchResult,
+    get_default_provider,
 )
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
