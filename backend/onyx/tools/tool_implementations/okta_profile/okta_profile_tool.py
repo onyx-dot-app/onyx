@@ -39,7 +39,9 @@ class OIDCConfig(BaseModel):
 
 class OktaProfileTool(BaseTool):
     _NAME = "get_okta_profile"
-    _DESCRIPTION = "This tool is used to get the user's profile information."
+    _DESCRIPTION = """The Okta Profile Action allows the assistant to fetch the current \
+user's information from Okta. It could include the user's name, email, phone number, \
+address as well as other information like who they report to and who reports to them."""
     _DISPLAY_NAME = "Okta Profile"
 
     def __init__(
@@ -49,6 +51,7 @@ class OktaProfileTool(BaseTool):
         client_secret: str,
         openid_config_url: str,
         okta_api_token: str,
+        tool_id: int,
         request_timeout_sec: int = 15,
     ) -> None:
         self.access_token = access_token
@@ -64,6 +67,12 @@ class OktaProfileTool(BaseTool):
         self.okta_api_token = okta_api_token
 
         self._oidc_config: OIDCConfig | None = None
+
+        self._id = tool_id
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

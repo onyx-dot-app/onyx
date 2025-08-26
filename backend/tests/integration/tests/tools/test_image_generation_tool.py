@@ -21,6 +21,7 @@ def dalle3_tool() -> ImageGenerationTool:
         pytest.skip("OPENAI_API_KEY environment variable not set")
 
     return ImageGenerationTool(
+        tool_id=0,  # dummy ID
         api_key=api_key,
         api_base=None,
         api_version=None,
@@ -37,6 +38,7 @@ def gpt_image_tool() -> ImageGenerationTool:
         pytest.skip("OPENAI_API_KEY environment variable not set")
 
     return ImageGenerationTool(
+        tool_id=0,  # dummy ID
         api_key=api_key,
         api_base=None,
         api_version=None,
@@ -78,6 +80,7 @@ def test_dalle3_with_base64_format() -> None:
 
     # Create tool with base64 format
     tool = ImageGenerationTool(
+        tool_id=0,  # dummy ID,
         api_key=api_key,
         api_base=None,
         api_version=None,
@@ -130,6 +133,7 @@ def test_gpt_image_1_with_url_format_fails() -> None:
     # This should fail during tool creation since gpt-image-1 doesn't support URL format
     with pytest.raises(ValueError, match="gpt-image-1 does not support URL format"):
         ImageGenerationTool(
+            tool_id=0,  # dummy ID
             api_key=api_key,
             api_base=None,
             api_version=None,

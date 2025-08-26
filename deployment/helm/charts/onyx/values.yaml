@@ -513,6 +513,7 @@ slackbot:
     limits:
       cpu: "1000m"
       memory: "2000Mi"
+
 celery_worker_docfetching:
   replicaCount: 1
   autoscaling:

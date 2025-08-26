@@ -669,8 +669,8 @@ that should be used to analyze each object/each source (or 'the object' that fit
 }}
 
 Do not include any other text or explanations.
-
 """
+
 SOURCE_DETECTION_PROMPT = f"""
 You are an expert in generating, understanding and analyzing SQL statements.
 
@@ -773,11 +773,29 @@ Please structure your answer using <reasoning>, </reasoning>,<sql>, </sql> start
 """.strip()
 
 
-SIMPLE_SQL_PROMPT = f"""
-You are an expert in generating a SQL statement that only uses ONE TABLE that captures RELATIONSHIPS \
-between TWO ENTITIES. The table has the following structure:
+ENTITY_TABLE_DESCRIPTION = f"""\
+ - Table name: entity_table
+ - Columns:
+   - entity (str): The name of the ENTITY, combining the nature of the entity and the id of the entity. \
+It is of the form <entity_type>::<entity_name> [example: ACCOUNT::625482894].
+   - entity_type (str): the type of the entity [example: ACCOUNT].
+   - entity_attributes (json): the attributes of the entity [example: {{"priority": "high", "status": "active"}}]
+   - source_document (str): the id of the document that contains the entity. Note that the combination of \
+id_name and source_document IS UNIQUE!
+   - source_date (timestamp): the 'event' date of the source document [example: 2025-04-25 21:43:31.054741+00]
 
 {SEPARATOR_LINE}
+
+Importantly, here are the entity (node) types that you can use, with a short description of what they mean. You may need to \
+identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
+their values, if provided. Of particular importance is the 'subtype' attribute, if provided, as this is how \
+the entity type may also often be referred to.
+{SEPARATOR_LINE}
+---entity_types---
+{SEPARATOR_LINE}
+"""
+
+RELATIONSHIP_TABLE_DESCRIPTION = f"""\
  - Table name: relationship_table
  - Columns:
    - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
@@ -803,17 +821,27 @@ id_name and source_document IS UNIQUE!
 
 Importantly, here are the entity (node) types that you can use, with a short description of what they mean. You may need to \
 identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
-their values, if provided.
+their values, if provided. Of particular importance is the 'subtype' attribute, if provided, as this is how \
+the entity type may also often be referred to.
 {SEPARATOR_LINE}
 ---entity_types---
 {SEPARATOR_LINE}
 
-Here are the relationship types that are in the table, denoted as <source_entity_type>__<relationship_type>__<target_entity_type>:
+Here are the relationship types that are in the table, denoted as <source_entity_type>__<relationship_type>__<target_entity_type>.
+In the table, the actual relationships are not quite of this form, but each <entity_type> is followed by '::<entity_name>' \
+in the relationship id as shown above.
 {SEPARATOR_LINE}
 ---relationship_types---
 {SEPARATOR_LINE}
-In the table, the actual relationships are not quite of this form, but each <entity_type> is followed by ':<entity_name>' in the \
-relationship id as shown above..
+"""
+
+
+SIMPLE_SQL_PROMPT = f"""
+You are an expert in generating a SQL statement that only uses ONE TABLE that captures RELATIONSHIPS \
+between TWO ENTITIES. The table has the following structure:
+
+{SEPARATOR_LINE}
+{RELATIONSHIP_TABLE_DESCRIPTION}
 
 Here is the question you are supposed to translate into a SQL statement:
 {SEPARATOR_LINE}
@@ -936,7 +964,7 @@ Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> star
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
 """.strip()
 
-
+# TODO: remove following before merging after enough testing
 SIMPLE_SQL_CORRECTION_PROMPT = f"""
 You are an expert in reviewing and fixing SQL statements.
 
@@ -949,7 +977,7 @@ Guidance:
 SELECT statement as well! And it needs to be in the EXACT FORM! So if a \
 conversion took place, make sure to include the conversion in the SELECT and the ORDER BY clause!
  - never should 'source_document' be in the SELECT clause! Remove if present!
- - if there are joins, they must be on entities, never sour ce documents
+ - if there are joins, they must be on entities, never source documents
  - if there are joins, consider the possibility that the second entity does not exist for all examples.\
  Therefore consider using LEFT joins (or RIGHT joins) as appropriate.
 
@@ -969,26 +997,7 @@ You are an expert in generating a SQL statement that only uses ONE TABLE that ca
 and their attributes and other data. The table has the following structure:
 
 {SEPARATOR_LINE}
- - Table name: entity_table
- - Columns:
-   - entity (str): The name of the ENTITY, combining the nature of the entity and the id of the entity. \
-It is of the form <entity_type>::<entity_name> [example: ACCOUNT::625482894].
-   - entity_type (str): the type of the entity [example: ACCOUNT].
-   - entity_attributes (json): the attributes of the entity [example: {{"priority": "high", "status": "active"}}]
-   - source_document (str): the id of the document that contains the entity. Note that the combination of \
-id_name and source_document IS UNIQUE!
-   - source_date (timestamp): the 'event' date of the source document [example: 2025-04-25 21:43:31.054741+00]
-
-
-{SEPARATOR_LINE}
-Importantly, here are the entity (node) types that you can use, with a short description of what they mean. You may need to \
-identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
-their values, if provided. Of particular importance is the 'subtype' attribute, if provided, as this is how \
-the entity type may also often be referred to.
-{SEPARATOR_LINE}
----entity_types---
-{SEPARATOR_LINE}
-
+{ENTITY_TABLE_DESCRIPTION}
 
 Here is the question you are supposed to translate into a SQL statement:
 {SEPARATOR_LINE}
@@ -1077,33 +1086,55 @@ Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> star
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
 """.strip()
 
+SIMPLE_SQL_ERROR_FIX_PROMPT = f"""
+You are an expert at fixing SQL statements. You will be provided with a SQL statement that aims to address \
+a question, but it contains an error. Your task is to fix the SQL statement, based on the error message.
 
-SQL_AGGREGATION_REMOVAL_PROMPT = f"""
-You are a SQL expert. You were provided with a SQL statement that returns an aggregation, and you are \
-tasked to show the underlying objects that were aggregated. For this you need to remove the aggregate functions \
-from the SQL statement in the correct way.
+Here is the description of the table that the SQL statement is supposed to use:
+---table_description---
 
-Additional rules:
- - if you see a 'select count(*)', you should NOT convert \
-that to 'select *...', but rather return the corresponding id_name, entity_type_id_name, name, and document_id.  \
-As in: 'select <table, if necessary>.id_name, <table, if necessary>.entity_type_id_name, \
-<table, if necessary>.name, <table, if necessary>.document_id ...'. \
-The id_name is always the primary index, and those should be returned, along with the type (entity_type_id_name), \
-the name (name) of the objects, and the document_id (document_id) of the object.
-- Add a limit of 30 to the select statement.
-- Don't change anything else.
-- The final select statement needs obviously to be a valid SQL statement.
+Here is the question you are supposed to translate into a SQL statement:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
 
-Here is the SQL statement you are supposed to remove the aggregate functions from:
+Here is the SQL statement that you should fix:
 {SEPARATOR_LINE}
 ---sql_statement---
 {SEPARATOR_LINE}
 
+Here is the error message that was returned:
+{SEPARATOR_LINE}
+---error_message---
+{SEPARATOR_LINE}
+
+Note that in the case the error states the sql statement did not return any results, it is possible that the \
+sql statement is correct, but the question is not addressable with the information in the knowledge graph. \
+If you are absolutely certain that is the case, you may return the original sql statement.
+
+Here are a couple common errors that you may encounter:
+- source_document is in the SELECT clause -> remove it
+- columns used in ORDER BY must also appear in the SELECT DISTINCT clause
+- consider carefully the type of the columns you are using, especially for attributes. You may need to cast them
+- dates are ALWAYS in string format of the form YYYY-MM-DD, for source date as well as for date-like the attributes! \
+So please use that format, particularly if you use data comparisons (>, <, ...)
+- attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
+"attributes ->> '<attribute>' = '<attribute value>'" (or "attributes ? '<attribute>'" to check for existence).
+- if you are using joins and the sql returned no joins, make sure you are using the appropriate join type (LEFT, RIGHT, etc.) \
+it is possible that the second entity does not exist for all examples.
+- (ignore if using entity_table) if using the relationship_table and the sql returned no results, make sure you are \
+selecting the correct column! Use the available relationship types to determine whether to use the source or target entity.
+
+APPROACH:
+Please think through this step by step. Please also bear in mind that the sql statement is written in postgres syntax.
+
+Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
+
 Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
 
-<reasoning>[your short step-by step thinking]</reasoning>
-<sql>[the SQL statement without the aggregate functions]</sql>
-""".strip()
+<reasoning>[think through the logic but do so extremely briefly! Not more than 3-4 sentences.]</reasoning>
+<sql>[the SQL statement that you generate to satisfy the task]</sql>
+"""
 
 
 SEARCH_FILTER_CONSTRUCTION_PROMPT = f"""

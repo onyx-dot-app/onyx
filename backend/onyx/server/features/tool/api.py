@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import User
 from onyx.db.tools import create_tool
 from onyx.db.tools import delete_tool
@@ -27,6 +28,9 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
+)
+from onyx.tools.tool_implementations.knowledge_graph.knowledge_graph_tool import (
+    KnowledgeGraphTool,
 )
 from onyx.tools.utils import is_image_generation_available
 
@@ -149,9 +153,19 @@ def list_tools(
     _: User | None = Depends(current_user),
 ) -> list[ToolSnapshot]:
     tools = get_tools(db_session)
+
+    kg_configs = get_kg_config_settings()
+    kg_available = kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
+
     return [
         ToolSnapshot.from_model(tool)
         for tool in tools
-        if tool.in_code_tool_id != ImageGenerationTool._NAME
-        or is_image_generation_available(db_session=db_session)
+        if (
+            tool.display_name != KnowledgeGraphTool._DISPLAY_NAME
+            and (
+                tool.in_code_tool_id != ImageGenerationTool._NAME
+                or is_image_generation_available(db_session=db_session)
+            )
+        )
+        or (tool.display_name == KnowledgeGraphTool._DISPLAY_NAME and kg_available)
     ]

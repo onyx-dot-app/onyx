@@ -37,8 +37,8 @@ import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 
@@ -622,7 +622,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, provider: provider.provider };
+        return { ...model, provider: provider.provider, name: provider.name };
       }
     }
     return { name: "", provider: "", modelName: "" };
@@ -637,6 +637,11 @@ export function useLlmManager(
   // Manually set the LLM
   const updateCurrentLlm = (newLlm: LlmDescriptor) => {
     setCurrentLlm(newLlm);
+    setUserHasManuallyOverriddenLLM(true);
+  };
+
+  const updateCurrentLlmToModelName = (modelName: string) => {
+    setCurrentLlm(getValidLlmDescriptor(modelName));
     setUserHasManuallyOverriddenLLM(true);
   };
 

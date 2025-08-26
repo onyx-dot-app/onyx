@@ -47,6 +47,9 @@
     --background-chat-selected: #e6e3dd;
     --background-sidebar: #f5f3ee;
 
+    --blue-highlight: #e7effc;
+    --blue-highlight-text: #0052cc;
+
     /* borders & input (keep if not same as neutral) */
     --border: #e5e7eb; /* slightly different than #e5e5e5 */
     --border-light: #f5f5f5;
@@ -494,7 +497,6 @@ textarea {
 }
 
 .loading-text {
-  display: inline-block;
   color: #e5e5e5;
 
   background: linear-gradient(
@@ -508,7 +510,7 @@ textarea {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmerTransition 1.5s ease-out infinite;
+  animation: shimmerTransition 2.5s ease-out infinite;
 }
 
 .dark .loading-text {

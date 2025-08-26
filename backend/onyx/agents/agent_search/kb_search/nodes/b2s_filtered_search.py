@@ -7,11 +7,6 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
-from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
-from onyx.agents.agent_search.kb_search.graph_utils import (
-    stream_write_step_answer_explicit,
-)
-from onyx.agents.agent_search.kb_search.graph_utils import write_custom_event
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import ConsolidatedResearchUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -25,7 +20,6 @@ from onyx.agents.agent_search.shared_graph_utils.calculations import (
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.chat.models import SubQueryPiece
 from onyx.configs.kg_configs import KG_FILTERED_SEARCH_TIMEOUT
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.models import InferenceSection
@@ -49,7 +43,7 @@ def filtered_search(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     search_tool = graph_config.tooling.search_tool
-    question = graph_config.inputs.prompt_builder.raw_user_query
+    question = state.question
 
     if not search_tool:
         raise ValueError("search_tool is not provided")
@@ -71,18 +65,6 @@ def filtered_search(
     logger.debug("Starting filtered search")
     logger.debug(f"kg_entity_filters: {kg_entity_filters}")
     logger.debug(f"kg_relationship_filters: {kg_relationship_filters}")
-
-    # Step 4 - stream out the research query
-    write_custom_event(
-        "subqueries",
-        SubQueryPiece(
-            sub_query="Conduct a filtered search",
-            level=0,
-            level_question_num=_KG_STEP_NR,
-            query_id=1,
-        ),
-        writer,
-    )
 
     retrieved_docs = cast(
         list[InferenceSection],
@@ -164,12 +146,6 @@ def filtered_search(
         raise ValueError(f"Error in filtered_search: {e}")
 
     step_answer = "Filtered search is complete."
-
-    stream_write_step_answer_explicit(
-        writer, answer=step_answer, level=0, step_nr=_KG_STEP_NR
-    )
-
-    stream_close_step_answer(writer, level=0, step_nr=_KG_STEP_NR)
 
     return ConsolidatedResearchUpdate(
         consolidated_research_object_results_str=filtered_search_answer,

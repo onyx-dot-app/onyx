@@ -47,7 +47,6 @@ def get_answer_from_query(
             filters=filters,
             enable_auto_detect_filters=False,
         ),
-        return_contexts=True,
         skip_gen_ai_answer_generation=only_retrieve_docs,
     )
 

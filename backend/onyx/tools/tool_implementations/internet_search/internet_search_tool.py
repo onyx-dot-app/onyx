@@ -89,6 +89,7 @@ class InternetSearchTool(Tool[None]):
 
     def __init__(
         self,
+        tool_id: int,
         db_session: Session,
         persona: Persona,
         prompt_config: PromptConfig,
@@ -143,7 +144,13 @@ class InternetSearchTool(Tool[None]):
             )
         )
 
+        self._id = tool_id
+
     """For explicit tool calling"""
+
+    @property
+    def id(self) -> int:
+        return self._id
 
     @property
     def name(self) -> str:

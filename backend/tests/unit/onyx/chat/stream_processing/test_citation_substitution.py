@@ -2,12 +2,12 @@ from datetime import datetime
 
 import pytest
 
-from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
 from onyx.chat.stream_processing.citation_processing import CitationProcessor
 from onyx.chat.stream_processing.utils import DocumentIdOrderMapping
 from onyx.configs.constants import DocumentSource
+from onyx.server.query_and_chat.streaming_models import CitationInfo
 
 
 """

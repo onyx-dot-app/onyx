@@ -6,7 +6,7 @@ import { ChatSession } from "@/app/chat/interfaces";
 import Link from "next/link";
 import { pageType } from "@/components/sidebar/types";
 import { useRouter } from "next/navigation";
-import { ChatBanner } from "@/app/chat/ChatBanner";
+import { ChatBanner } from "@/app/chat/components/ChatBanner";
 import LogoWithText from "../header/LogoWithText";
 import { NewChatIcon } from "../icons/icons";
 import { SettingsContext } from "../settings/SettingsProvider";

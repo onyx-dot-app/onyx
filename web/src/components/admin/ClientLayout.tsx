@@ -31,7 +31,7 @@ import { usePathname } from "next/navigation";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useContext, useState } from "react";
 import { MdOutlineCreditCard } from "react-icons/md";
-import { UserSettingsModal } from "@/app/chat/modal/UserSettingsModal";
+import { UserSettingsModal } from "@/app/chat/components/modal/UserSettingsModal";
 import { usePopup } from "./connectors/Popup";
 import { useChatContext } from "../context/ChatContext";
 import {

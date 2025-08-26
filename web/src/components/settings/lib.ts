@@ -58,7 +58,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           notifications: [],
           needs_reindexing: false,
           anonymous_user_enabled: false,
-          pro_search_enabled: true,
+          deep_research_enabled: false,
           temperature_override_enabled: true,
           query_history_type: QueryHistoryType.NORMAL,
         };
@@ -113,8 +113,8 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
       }
     }
 
-    if (settings.pro_search_enabled == null) {
-      settings.pro_search_enabled = true;
+    if (settings.deep_research_enabled == null) {
+      settings.deep_research_enabled = false;
     }
 
     const webVersion = getWebVersion();

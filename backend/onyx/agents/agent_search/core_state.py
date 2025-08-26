@@ -10,6 +10,7 @@ class CoreState(BaseModel):
     """
 
     log_messages: Annotated[list[str], add] = []
+    current_step_nr: int = 1
 
 
 class SubgraphCoreState(BaseModel):

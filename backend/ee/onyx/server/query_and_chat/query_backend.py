@@ -20,8 +20,8 @@ from ee.onyx.server.query_and_chat.models import StandardAnswerResponse
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import prepare_chat_message_request
+from onyx.chat.models import AnswerStream
 from onyx.chat.models import PersonaOverrideConfig
-from onyx.chat.process_message import ChatPacketStream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.models import SavedSearchDocWithContent
@@ -140,7 +140,7 @@ def get_answer_stream(
     query_request: OneShotQARequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-) -> ChatPacketStream:
+) -> AnswerStream:
     query = query_request.messages[0].message
     logger.notice(f"Received query for Answer API: {query}")
 
@@ -205,7 +205,6 @@ def get_answer_stream(
         new_msg_req=request,
         user=user,
         db_session=db_session,
-        include_contexts=query_request.return_contexts,
     )
 
     return packets

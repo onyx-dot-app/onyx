@@ -7,7 +7,7 @@ import {
   deleteChatSession,
   getChatRetentionInfo,
   renameChatSession,
-} from "@/app/chat/lib";
+} from "@/app/chat/services/lib";
 import { BasicSelectable } from "@/components/BasicClickable";
 import Link from "next/link";
 import {
@@ -20,7 +20,7 @@ import {
 } from "react-icons/fi";
 import { DefaultDropdownElement } from "@/components/Dropdown";
 import { Popover } from "@/components/popover/Popover";
-import { ShareChatSessionModal } from "@/app/chat/modal/ShareChatSessionModal";
+import { ShareChatSessionModal } from "@/app/chat/components/modal/ShareChatSessionModal";
 import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { DragHandle } from "@/components/table/DragHandle";

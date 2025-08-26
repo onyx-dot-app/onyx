@@ -9,15 +9,14 @@ from slack_sdk import WebClient
 from slack_sdk.models.blocks import SectionBlock
 
 from onyx.chat.chat_utils import prepare_chat_message_request
-from onyx.chat.models import ChatOnyxBotResponse
-from onyx.chat.process_message import gather_stream_for_slack
+from onyx.chat.models import ChatBasicResponse
+from onyx.chat.process_message import gather_stream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.onyxbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
 from onyx.configs.onyxbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
 from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
-from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
 from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.enums import OptionalSearchSetting
@@ -180,7 +179,7 @@ def handle_regular_answer(
         new_message_request: CreateChatMessageRequest,
         # pass in `None` to make the answer based on public documents only
         onyx_user: User | None,
-    ) -> ChatOnyxBotResponse:
+    ) -> ChatBasicResponse:
         with get_session_with_current_tenant() as db_session:
             packets = stream_chat_message_objects(
                 new_msg_req=new_message_request,
@@ -189,8 +188,7 @@ def handle_regular_answer(
                 bypass_acl=bypass_acl,
                 single_message_history=single_message_history,
             )
-
-            answer = gather_stream_for_slack(packets)
+            answer = gather_stream(packets)
 
         if answer.error_msg:
             raise RuntimeError(answer.error_msg)
@@ -325,28 +323,7 @@ def handle_regular_answer(
             client=client,
         )
 
-    if answer.answer_valid is False:
-        logger.notice(
-            "Answer was evaluated to be invalid, throwing it away without responding."
-        )
-        update_emote_react(
-            emoji=DANSWER_FOLLOWUP_EMOJI,
-            channel=message_info.channel_to_respond,
-            message_ts=message_info.msg_to_respond,
-            remove=False,
-            client=client,
-        )
-
-        if answer.answer:
-            logger.debug(answer.answer)
-        return True
-
-    retrieval_info = answer.docs
-    if not retrieval_info and expecting_search_result:
-        # This should not happen, even with no docs retrieved, there is still info returned
-        raise RuntimeError("Failed to retrieve docs, cannot answer question.")
-
-    top_docs = retrieval_info.top_documents if retrieval_info else []
+    top_docs = answer.top_documents
     if not top_docs and expecting_search_result:
         logger.error(
             f"Unable to answer question: '{user_message}' - no documents found"
@@ -379,7 +356,7 @@ def handle_regular_answer(
     if (
         expecting_search_result
         and only_respond_if_citations
-        and not answer.citations
+        and not answer.cited_documents
         and not message_info.bypass_filters
     ):
         logger.error(
