@@ -4,7 +4,6 @@ from langgraph.types import Send
 
 from onyx.agents.agent_search.dr.constants import MAX_DR_PARALLEL_SEARCH
 from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
-from onyx.agents.agent_search.dr.sub_agents.states import FetchInput
 from onyx.agents.agent_search.dr.sub_agents.states import SubAgentInput
 
 
@@ -34,16 +33,16 @@ def fetch_router(state: SubAgentInput) -> list[Send | Hashable]:
     return [
         Send(
             "fetch",
-            FetchInput(
+            BranchInput(
                 iteration_nr=state.iteration_nr,
-                parallelization_nr=0,
-                branch_question="",
                 context=state.context,
+                branch_question=state.query_list[0],
                 tools_used=state.tools_used,
                 available_tools=state.available_tools,
                 assistant_system_prompt=state.assistant_system_prompt,
                 assistant_task_prompt=state.assistant_task_prompt,
                 urls_to_open=state.urls_to_open,
+                current_step_nr=state.current_step_nr,
             ),
         )
     ]

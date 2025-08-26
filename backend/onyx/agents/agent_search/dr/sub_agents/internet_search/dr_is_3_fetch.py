@@ -4,7 +4,6 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
@@ -14,8 +13,8 @@ from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
 from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
     get_default_provider,
 )
+from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
-from onyx.agents.agent_search.dr.sub_agents.states import FetchInput
 from onyx.agents.agent_search.dr.utils import convert_inference_sections_to_search_docs
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
@@ -76,7 +75,7 @@ def _dummy_inference_section_from_internet_search_result(
 
 
 def web_fetch(
-    state: FetchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
+    state: BranchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> BranchUpdate:
     """
     LangGraph node to fetch content from URLs and process the results.
@@ -90,6 +89,13 @@ def web_fetch(
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
     urls_to_open = state.urls_to_open
+    search_query = state.branch_question
+    if not search_query:
+        raise ValueError("search_query is not set")
+
+    if not state.available_tools:
+        raise ValueError("available_tools is not set")
+    is_tool_info = state.available_tools[state.tools_used[-1]]
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
@@ -193,11 +199,11 @@ def web_fetch(
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
-                tool=DRPath.INTERNET_SEARCH.value,
-                tool_id=1,  # TODO Remove magic number
+                tool=is_tool_info.llm_path,
+                tool_id=is_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
-                question=state.branch_question or "",
+                question=search_query,
                 answer=answer_string,
                 claims=claims,
                 cited_documents=cited_documents,

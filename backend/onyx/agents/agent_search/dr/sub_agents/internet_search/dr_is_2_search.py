@@ -4,7 +4,6 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import WebSearchAnswer
 from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
@@ -45,6 +44,10 @@ def web_search(
 
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
+
+    if not state.available_tools:
+        raise ValueError("available_tools is not set")
+    is_tool_info = state.available_tools[state.tools_used[-1]]
 
     search_query = state.branch_question
     if not search_query:
@@ -98,7 +101,7 @@ def web_search(
         ]
     )
     agent_decision_prompt = f"""
-You are an intelligent agent tasked with gathering information from the internet to answer: "{base_question}"
+You are tasked with gathering information from the internet to answer: "{base_question}"
 
 You have performed a search and received the following results:
 
@@ -115,7 +118,6 @@ Based on the search results above, please make your decision and return a JSON o
 }}
 
 Guidelines:
-- Select relevant URLs to open
 - Consider the title, snippet, and URL when making decisions
 - Focus on quality over quantity
 - Prefer: official docs, primary data, reputable organizations, recent posts for fast-moving topics.
@@ -134,8 +136,8 @@ Guidelines:
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
-                tool=DRPath.INTERNET_SEARCH.value,
-                tool_id=1,  # TODO Remove magic number
+                tool=is_tool_info.llm_path,
+                tool_id=is_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
                 question=search_query,

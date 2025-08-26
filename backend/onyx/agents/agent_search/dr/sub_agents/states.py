@@ -45,8 +45,6 @@ class BranchInput(SubAgentInput):
 
 
 class FetchInput(SubAgentInput):
-    parallelization_nr: int = 0
-    branch_question: str | None = None
     urls_to_open: list[str] = []
 
 
