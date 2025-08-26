@@ -200,7 +200,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {queries.slice(0, queriesToShow).map((query, index) => (
               <div
                 key={index}
-                className="text-xs animate-in fade-in slide-in-from-left-2 duration-300"
+                className="text-xs"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 <SourceChip2
@@ -212,7 +212,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {/* Show a blurb if there are more queries than we are displaying */}
             {queries.length > queriesToShow && (
               <div
-                className="text-xs animate-in fade-in slide-in-from-left-2 duration-300"
+                className="text-xs"
                 style={{ animationDelay: `${queriesToShow * 100}ms` }}
               >
                 <SourceChip2
@@ -240,7 +240,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {results.slice(0, resultsToShow).map((result, index) => (
               <div
                 key={result.document_id}
-                className="animate-in fade-in slide-in-from-left-2 duration-300"
+                className=""
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 <div className="text-xs">
@@ -262,7 +262,7 @@ export const SearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             {/* Show a blurb if there are more results than we are displaying */}
             {results.length > resultsToShow && (
               <div
-                className="animate-in fade-in slide-in-from-left-2 duration-300"
+                className=""
                 style={{
                   animationDelay: `${
                     Math.min(resultsToShow, results.length) * 100

@@ -153,7 +153,7 @@ function MultiToolRenderer({
     const latestToolIndex = toolsToDisplay.length - 1;
 
     return (
-      <div className="mb-4 relative border border-border-medium rounded-lg p-4">
+      <div className="mb-4 relative border border-border-medium rounded-lg p-4 shadow">
         <div className="relative">
           <div>
             {toolsToDisplay.map((toolGroup, index) => {
@@ -180,7 +180,7 @@ function MultiToolRenderer({
                       }
                     }}
                     animate
-                    stopPacketSeen
+                    stopPacketSeen={stopPacketSeen}
                     useShortRenderer={!isStreamingExpanded}
                   >
                     {({ icon, content, status, expandedText }) => {
@@ -234,7 +234,7 @@ function MultiToolRenderer({
                             {icon ? icon({ size: 14 }) : null}
                             {status}
                             {toolsToDisplay.length > 1 && isLastItem && (
-                              <div className="ml-1 transition-transform duration-300 ease-in-out">
+                              <div className="ml-1">
                                 {isStreamingExpanded ? (
                                   <FiChevronDown size={14} />
                                 ) : (
@@ -315,7 +315,7 @@ function MultiToolRenderer({
                     }
                   }}
                   animate
-                  stopPacketSeen
+                  stopPacketSeen={stopPacketSeen}
                   useShortRenderer={false}
                 >
                   {({ icon, content, status, expandedText }) => (
