@@ -56,7 +56,7 @@ def get_versions() -> AllVersions:
         url = f"https://hub.docker.com/v2/repositories/{repo}/tags"
         tags = []
         for _ in range(pages):
-            response = requests.get(url)
+            response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
             tags.extend(
