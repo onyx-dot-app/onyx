@@ -8,7 +8,7 @@ from tests.integration.connector_job_tests.jira.conftest import JiraTestEnvSetup
 
 
 @pytest.mark.xfail(reason="Needs to be tested for flakiness")
-def test_jira_permission_sync(
+def test_jira_permission_sync_full(
     reset: None,
     jira_test_env_setup: JiraTestEnvSetupTuple,
 ) -> None:
