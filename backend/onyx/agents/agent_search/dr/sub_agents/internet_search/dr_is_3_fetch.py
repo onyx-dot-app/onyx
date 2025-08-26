@@ -4,11 +4,18 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.dr.enums import DRPath
 from onyx.agents.agent_search.dr.enums import ResearchType
 from onyx.agents.agent_search.dr.models import IterationAnswer
 from onyx.agents.agent_search.dr.models import SearchAnswer
-from onyx.agents.agent_search.dr.sub_agents.states import BranchInput
+from onyx.agents.agent_search.dr.sub_agents.internet_search.models import (
+    InternetContent,
+)
+from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+    get_default_provider,
+)
 from onyx.agents.agent_search.dr.sub_agents.states import BranchUpdate
+from onyx.agents.agent_search.dr.sub_agents.states import FetchInput
 from onyx.agents.agent_search.dr.utils import extract_document_citations
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
 from onyx.agents.agent_search.models import GraphConfig
@@ -18,25 +25,58 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.utils import create_question_prompt
 from onyx.chat.models import LlmDoc
+from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.dr_prompts import INTERNAL_SEARCH_PROMPTS
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    INTERNET_SEARCH_RESPONSE_SUMMARY_ID,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
-from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def internet_search(
-    state: BranchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
+def _truncate_search_result_content(content: str, max_chars: int = 10000) -> str:
+    """Truncate search result content to a maximum number of characters"""
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars] + "..."
+
+
+def _dummy_inference_section_from_internet_search_result(
+    result: InternetContent,
+) -> InferenceSection:
+    truncated_content = _truncate_search_result_content(result.full_content)
+    return InferenceSection(
+        center_chunk=InferenceChunk(
+            chunk_id=0,
+            blurb=result.title,
+            content=truncated_content,
+            source_links={0: result.link},
+            section_continuation=False,
+            document_id="INTERNET_SEARCH_DOC_" + result.link,
+            source_type=DocumentSource.WEB,
+            semantic_identifier=result.link,
+            title=result.title,
+            boost=1,
+            recency_bias=1.0,
+            score=1.0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+            doc_summary=truncated_content,
+            chunk_context=truncated_content,
+            updated_at=datetime.now(),  # TODO: Add published date
+            image_file_id=None,
+        ),
+        chunks=[],
+        combined_content=truncated_content,
+    )
+
+
+def web_fetch(
+    state: FetchInput, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> BranchUpdate:
     """
-    LangGraph node to perform a internet search as part of the DR process.
+    LangGraph node to fetch content from URLs and process the results.
     """
 
     node_start_time = datetime.now()
@@ -45,51 +85,39 @@ def internet_search(
 
     assistant_system_prompt = state.assistant_system_prompt
     assistant_task_prompt = state.assistant_task_prompt
-
-    search_query = state.branch_question
-    if not search_query:
-        raise ValueError("search_query is not set")
+    urls_to_open = state.urls_to_open
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     base_question = graph_config.inputs.prompt_builder.raw_user_query
     research_type = graph_config.behavior.research_type
 
     logger.debug(
-        f"Search start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"Web Fetch for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
     if graph_config.inputs.persona is None:
         raise ValueError("persona is not set")
 
-    if not state.available_tools:
-        raise ValueError("available_tools is not set")
+    provider = get_default_provider()
+    if provider is None:
+        raise ValueError("No internet search provider found")
 
-    is_tool_info = state.available_tools[state.tools_used[-1]]
-    internet_search_tool = cast(InternetSearchTool, is_tool_info.tool_object)
-
-    if internet_search_tool.provider is None:
-        raise ValueError(
-            "internet_search_tool.provider is not set. This should not happen."
-        )
-
-    # Update search parameters
-    internet_search_tool.max_chunks = 10
-    internet_search_tool.provider.num_results = 10
-
+    # Fetch content from URLs
     retrieved_docs: list[InferenceSection] = []
+    try:
+        retrieved_docs = [
+            _dummy_inference_section_from_internet_search_result(result)
+            for result in provider.contents(urls_to_open)
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching URLs: {e}")
 
-    for tool_response in internet_search_tool.run(internet_search_query=search_query):
-        # get retrieved docs to send to the rest of the graph
-        if tool_response.id == INTERNET_SEARCH_RESPONSE_SUMMARY_ID:
-            response = cast(SearchResponseSummary, tool_response.response)
-            retrieved_docs = response.top_sections
-            break
+    if not retrieved_docs:
+        logger.warning("No content retrieved from URLs")
 
-    # stream_write_step_answer_explicit(writer, step_nr=1, answer=full_answer)
-
+    # Process documents and build context
     document_texts_list = []
-
-    for doc_num, retrieved_doc in enumerate(retrieved_docs[:15]):
+    for doc_num, retrieved_doc in enumerate(retrieved_docs):
         if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
             raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")
         chunk_text = build_document_context(retrieved_doc, doc_num + 1)
@@ -98,20 +126,18 @@ def internet_search(
     document_texts = "\n\n".join(document_texts_list)
 
     logger.debug(
-        f"Search end/LLM start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
+        f"Fetch end/LLM start for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
     )
 
-    # Built prompt
-
+    # Process with LLM based on research type
     if research_type == ResearchType.DEEP:
         search_prompt = INTERNAL_SEARCH_PROMPTS[research_type].build(
-            search_query=search_query,
+            search_query=state.branch_question or "",
             base_question=base_question,
             document_text=document_texts,
         )
 
         # Run LLM
-
         search_answer_json = invoke_llm_json(
             llm=graph_config.tooling.primary_llm,
             prompt=create_question_prompt(
@@ -119,14 +145,13 @@ def internet_search(
             ),
             schema=SearchAnswer,
             timeout_override=40,
-            # max_tokens=3000,
         )
 
         logger.debug(
             f"LLM/all done for Internet Search {iteration_nr}.{parallelization_nr} at {datetime.now()}"
         )
 
-        # get cited documents
+        # Get cited documents
         answer_string = search_answer_json.answer
         claims = search_answer_json.claims or []
         reasoning = search_answer_json.reasoning or ""
@@ -153,22 +178,23 @@ def internet_search(
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
-                tool=is_tool_info.llm_path,
-                tool_id=is_tool_info.tool_id,
+                tool=DRPath.INTERNET_SEARCH.value,
+                tool_id=1,  # TODO Remove magic number
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
-                question=search_query,
+                question=state.branch_question or "",
                 answer=answer_string,
                 claims=claims,
                 cited_documents=cited_documents,
                 reasoning=reasoning,
                 additional_data=None,
+                urls_to_open=urls_to_open,
             )
         ],
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="internet_search",
-                node_name="searching",
+                node_name="fetching",
                 node_start_time=node_start_time,
             )
         ],

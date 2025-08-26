@@ -94,7 +94,6 @@ def _get_available_tools(
         include_kg = persona.name == TMP_DRALPHA_PERSONA_NAME and kg_enabled
     else:
         include_kg = False
-
     for tool in graph_config.tooling.tools:
         tool_info = OrchestratorTool(
             tool_id=tool.id,
@@ -138,8 +137,6 @@ def _get_available_tools(
 
         tool_info.description = TOOL_DESCRIPTION.get(tool_info.path, tool.description)
         tool_info.cost = AVERAGE_TOOL_COSTS[tool_info.path]
-
-        # TODO: handle custom tools with same name as other tools (e.g., CLOSER)
         available_tools[tool_info.llm_path] = tool_info
 
     # make sure KG isn't enabled without internal search

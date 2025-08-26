@@ -6,17 +6,17 @@ from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.dr.sub_agents.internet_search.providers import (
+    get_default_provider,
+)
+from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
+    InternetSearchTool,
+)
 from onyx.configs.app_configs import OKTA_PROFILE_TOOL_ENABLED
 from onyx.db.models import Persona
 from onyx.db.models import Tool as ToolDBModel
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
-)
-from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
-    InternetSearchTool,
-)
-from onyx.tools.tool_implementations.internet_search.providers import (
-    get_available_providers,
 )
 from onyx.tools.tool_implementations.okta_profile.okta_profile_tool import (
     OktaProfileTool,
@@ -54,7 +54,7 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
     ),
-    # Show internet search tool if any providers are available
+    # Show internet search tools if any providers are available
     *(
         [
             InCodeToolInfo(
@@ -65,9 +65,9 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
                 ),
                 in_code_tool_id=InternetSearchTool.__name__,
                 display_name=InternetSearchTool._DISPLAY_NAME,
-            )
+            ),
         ]
-        if (bool(get_available_providers()))
+        if (bool(get_default_provider()))
         else []
     ),
     InCodeToolInfo(
