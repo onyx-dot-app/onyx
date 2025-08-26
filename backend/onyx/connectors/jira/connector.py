@@ -257,7 +257,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
         """Get the JQL query based on configuration and time range
-        
+
         If a custom JQL query is provided, it will be used and combined with time constraints.
         Otherwise, the query will be constructed based on project key (if provided).
         """
@@ -273,7 +273,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         # If custom JQL query is provided, use it and combine with time constraints
         if self.jql_query:
             return f"({self.jql_query}) AND {time_jql}"
-        
+
         # Otherwise, use project key if provided
         if self.jira_project:
             base_jql = f"project = {self.quoted_jira_project}"
@@ -381,23 +381,27 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
 
         yield slim_doc_batch
 
-
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
             raise ConnectorMissingCredentialError("Jira")
-            
+
         # If a custom JQL query is set, validate it's valid
         if self.jql_query:
             try:
                 # Try to execute the JQL query with a small limit to validate its syntax
                 # Use next(iter(...), None) to get just the first result without
                 # forcing evaluation of all results
-                next(iter(_perform_jql_search(
-                    jira_client=self.jira_client,
-                    jql=self.jql_query,
-                    start=0,
-                    max_results=1,
-                )), None)
+                next(
+                    iter(
+                        _perform_jql_search(
+                            jira_client=self.jira_client,
+                            jql=self.jql_query,
+                            start=0,
+                            max_results=1,
+                        )
+                    ),
+                    None,
+                )
             except Exception as e:
                 self._handle_jira_connector_settings_error(e)
 
@@ -413,11 +417,11 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
                 # Try to list projects to validate access
                 self.jira_client.projects()
             except Exception as e:
-                self._handle_jira_connector_setting_error(e)
+                self._handle_jira_connector_settings_error(e)
 
     def _handle_jira_connector_settings_error(self, e: Exception) -> None:
         """Helper method to handle Jira API errors consistently.
-        
+
         Extracts error messages from the Jira API response for all status codes when possible,
         providing more user-friendly error messages.
 
@@ -439,7 +443,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             )
         elif status_code == 403:
             raise InsufficientPermissionsError(
-                f"Your Jira token does not have sufficient permissions for this configuration (HTTP 403)."
+                "Your Jira token does not have sufficient permissions for this configuration (HTTP 403)."
             )
         elif status_code == 429:
             raise ConnectorValidationError(
@@ -449,9 +453,13 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
         # Try to extract original error message from the response
         error_message = getattr(e, "text", None)
         if error_message is None:
-            raise UnexpectedValidationError(f"Unexpected Jira error during validation: {e}")
+            raise UnexpectedValidationError(
+                f"Unexpected Jira error during validation: {e}"
+            )
 
-        raise ConnectorValidationError(f"Validation failed due to Jira error: {error_message}")
+        raise ConnectorValidationError(
+            f"Validation failed due to Jira error: {error_message}"
+        )
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> JiraConnectorCheckpoint:
