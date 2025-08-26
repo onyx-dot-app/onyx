@@ -15,6 +15,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.prompts.dr_prompts import CUSTOM_TOOL_PREP_PROMPT
 from onyx.prompts.dr_prompts import CUSTOM_TOOL_USE_PROMPT
+from onyx.prompts.dr_prompts import OKTA_TOOL_USE_SPECIAL_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -97,12 +98,17 @@ def generic_internal_tool_act(
     tool_result_str = json.dumps(final_data, ensure_ascii=False)
 
     tool_str = (
-        f"Tool used: {generic_internal_tool_name}\n"
+        f"Tool used: {generic_internal_tool.display_name}\n"
         f"Description: {generic_internal_tool_info.description}\n"
         f"Result: {tool_result_str}"
     )
 
-    tool_summary_prompt = CUSTOM_TOOL_USE_PROMPT.build(
+    if generic_internal_tool.display_name == "Okta Profile":
+        tool_prompt = OKTA_TOOL_USE_SPECIAL_PROMPT
+    else:
+        tool_prompt = CUSTOM_TOOL_USE_PROMPT
+
+    tool_summary_prompt = tool_prompt.build(
         query=branch_query, base_question=base_question, tool_response=tool_str
     )
     answer_string = str(
@@ -118,7 +124,7 @@ def generic_internal_tool_act(
     return BranchUpdate(
         branch_iteration_responses=[
             IterationAnswer(
-                tool=generic_internal_tool_name,
+                tool=generic_internal_tool.llm_name,
                 tool_id=generic_internal_tool_info.tool_id,
                 iteration_nr=iteration_nr,
                 parallelization_nr=parallelization_nr,
@@ -128,7 +134,7 @@ def generic_internal_tool_act(
                 cited_documents={},
                 reasoning="",
                 additional_data=None,
-                response_type="string",
+                response_type="text",
                 data=answer_string,
             )
         ],

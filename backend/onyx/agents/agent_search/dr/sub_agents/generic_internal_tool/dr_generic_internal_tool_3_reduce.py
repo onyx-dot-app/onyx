@@ -46,6 +46,7 @@ def generic_internal_tool_reducer(
         write_custom_event(
             current_step_nr,
             CustomToolStart(
+                type="custom_tool_start",
                 tool_name=new_update.tool,
             ),
             writer,
@@ -54,6 +55,7 @@ def generic_internal_tool_reducer(
         write_custom_event(
             current_step_nr,
             CustomToolDelta(
+                type="custom_tool_delta",
                 tool_name=new_update.tool,
                 response_type=new_update.response_type,
                 data=new_update.data,
