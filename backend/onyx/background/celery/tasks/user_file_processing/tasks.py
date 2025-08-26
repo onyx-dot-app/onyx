@@ -6,6 +6,10 @@ from redis.lock import Lock as RedisLock
 from sqlalchemy import select
 
 from onyx.background.celery.apps.app_base import task_logger
+from onyx.background.celery.celery_utils import httpx_init_vespa_pool
+from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
+from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
@@ -16,6 +20,15 @@ from onyx.connectors.models import Document
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import UserFile
+from onyx.db.search_settings import get_active_search_settings_list
+from onyx.document_index.factory import get_default_document_index
+from onyx.httpx.httpx_pool import HttpxPool
+from onyx.indexing.adapters.user_file_indexing_adapter import UserFileIndexingAdapter
+from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_pipeline import run_indexing_pipeline
+from onyx.natural_language_processing.search_nlp_models import (
+    InformationContentClassificationModel,
+)
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -130,9 +143,67 @@ def process_single_user_file(self: Task, *, user_file_id: int, tenant_id: str) -
             )
             connector.load_credentials({})
 
+            # 20 is the documented default for httpx max_keepalive_connections
+            if MANAGED_VESPA:
+                httpx_init_vespa_pool(
+                    20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
+                )
+            else:
+                httpx_init_vespa_pool(20)
+
+            search_settings_list = get_active_search_settings_list(db_session)
+
+            current_search_settings = next(
+                search_settings_instance
+                for search_settings_instance in search_settings_list
+                if search_settings_instance.status.is_current()
+            )
+
+            if not current_search_settings:
+                raise RuntimeError(
+                    f"process_single_user_file - No current search settings found for tenant={tenant_id}"
+                )
+
             try:
                 for batch in connector.load_from_state():
                     documents.extend(batch)
+
+                adapter = UserFileIndexingAdapter(
+                    tenant_id=tenant_id,
+                    db_session=db_session,
+                )
+
+                # Set up indexing pipeline components
+                embedding_model = DefaultIndexingEmbedder.from_db_search_settings(
+                    search_settings=current_search_settings,
+                )
+
+                information_content_classification_model = (
+                    InformationContentClassificationModel()
+                )
+
+                document_index = get_default_document_index(
+                    current_search_settings,
+                    None,
+                    httpx_client=HttpxPool.get("vespa"),
+                )
+                # real work happens here!
+                index_pipeline_result = run_indexing_pipeline(
+                    embedder=embedding_model,
+                    information_content_classification_model=information_content_classification_model,
+                    document_index=document_index,
+                    ignore_time_skip=True,  # Documents are already filtered during extraction
+                    db_session=db_session,
+                    tenant_id=tenant_id,
+                    document_batch=documents,
+                    request_id=None,
+                    adapter=adapter,
+                )
+
+                task_logger.info(
+                    f"process_single_user_file - Indexing pipeline completed ={index_pipeline_result}"
+                )
+
             except Exception as e:
                 task_logger.exception(
                     f"process_single_user_file - Error id={user_file_id}: {e}"
@@ -141,16 +212,6 @@ def process_single_user_file(self: Task, *, user_file_id: int, tenant_id: str) -
                 db_session.add(uf)
                 db_session.commit()
                 return None
-
-            # Update status based on whether any documents were produced
-            if documents:
-                uf.status = UserFileStatus.COMPLETED
-            else:
-                # If no documents could be produced (e.g., unsupported type), mark as failed
-                uf.status = UserFileStatus.FAILED
-
-            db_session.add(uf)
-            db_session.commit()
 
         elapsed = time.monotonic() - start
         task_logger.info(

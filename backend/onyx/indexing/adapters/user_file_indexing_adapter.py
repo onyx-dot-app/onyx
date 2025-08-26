@@ -1,3 +1,4 @@
+import contextlib
 import time
 from collections.abc import Generator
 
@@ -43,50 +44,45 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[int]) -> b
     return True
 
 
-def _prepare_to_modify_user_files(
-    db_session: Session, user_file_ids: list[int]
-) -> Generator[TransactionalContext, None, None]:
-    db_session.commit()  # ensure that we're not in a transaction
-    lock_acquired = False
-    for i in range(_NUM_LOCK_ATTEMPTS):
-        try:
-            with db_session.begin() as transaction:
-                lock_acquired = _acquire_user_file_locks(
-                    db_session=db_session, user_file_ids=user_file_ids
-                )
-                if lock_acquired:
-                    yield transaction
-                    break
-        except OperationalError as e:
-            logger.warning(
-                f"Failed to acquire locks for user files on attempt {i}, retrying. Error: {e}"
-            )
-
-        time.sleep(retry_delay)
-
-    if not lock_acquired:
-        raise RuntimeError(
-            f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts "
-            f"for user files: {user_file_ids}"
-        )
-
-
 class UserFileIndexingAdapter:
     def __init__(self, tenant_id: str, db_session: Session):
         self.tenant_id = tenant_id
         self.db_session = db_session
 
-    def prepare(self, documents: list[Document]):
+    def prepare(self, documents: list[Document]) -> DocumentBatchPrepareContext:
         return DocumentBatchPrepareContext(
             updatable_docs=documents,
             id_to_db_doc_map={doc.id: doc for doc in documents},
         )
 
-    def lock_context(self, user_file_id: int):
-        with _prepare_to_modify_user_files(
-            self.db_session, [user_file_id]
-        ) as transaction:
-            yield transaction
+    @contextlib.contextmanager
+    def lock_context(
+        self, documents: list[Document]
+    ) -> Generator[TransactionalContext, None, None]:
+        self.db_session.commit()  # ensure that we're not in a transaction
+        lock_acquired = False
+        for i in range(_NUM_LOCK_ATTEMPTS):
+            try:
+                with self.db_session.begin() as transaction:
+                    lock_acquired = _acquire_user_file_locks(
+                        db_session=self.db_session,
+                        user_file_ids=[doc.id for doc in documents],
+                    )
+                    if lock_acquired:
+                        yield transaction
+                        break
+            except OperationalError as e:
+                logger.warning(
+                    f"Failed to acquire locks for user files on attempt {i}, retrying. Error: {e}"
+                )
+
+            time.sleep(retry_delay)
+
+        if not lock_acquired:
+            raise RuntimeError(
+                f"Failed to acquire locks after {_NUM_LOCK_ATTEMPTS} attempts "
+                f"for user files: {[doc.id for doc in documents]}"
+            )
 
     def build_metadata_aware_chunks(
         self,
@@ -166,7 +162,12 @@ class UserFileIndexingAdapter:
             user_file_id_to_token_count={},
         )
 
-    def post_index(self, context: DocumentBatchPrepareContext):
-        for user_file_id in context.updatable_docs:
-            user_file = context.id_to_db_doc_map[user_file_id]
+    def post_index(self, context: DocumentBatchPrepareContext) -> None:
+        user_file_ids = [doc.id for doc in context.updatable_docs]
+
+        user_files = (
+            self.db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
+        )
+        for user_file in user_files:
             user_file.status = UserFileStatus.COMPLETED
+        self.db_session.commit()
